@@ -1,0 +1,208 @@
+import { useOrganization, useUser } from '@clerk/react'
+import { NavLink, useLocation } from 'react-router-dom'
+import {
+  LayoutDashboard,
+  CalendarDays,
+  ClipboardCheck,
+  FileText,
+  Users,
+  Search,
+  Building2,
+  X,
+  Globe,
+} from 'lucide-react'
+import { cn } from '@/shared/lib/cn'
+import { useQuery } from 'convex/react'
+import { api } from '../../../convex/_generated/api'
+
+interface NavItem {
+  label: string
+  path: string
+  icon: React.ReactNode
+  roles: string[]
+}
+
+const navItems: NavItem[] = [
+  {
+    label: 'Dashboard',
+    path: '/',
+    icon: <LayoutDashboard className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator'],
+  },
+  {
+    label: 'Today',
+    path: '/caregiver/today',
+    icon: <CalendarDays className="h-4 w-4" />,
+    roles: ['org:caregiver'],
+  },
+  {
+    label: 'Review',
+    path: '/coordinator/review',
+    icon: <ClipboardCheck className="h-4 w-4" />,
+    roles: ['org:coordinator', 'org:admin'],
+  },
+  {
+    label: 'Knowledge',
+    path: '/search',
+    icon: <Search className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator', 'org:caregiver'],
+  },
+  {
+    label: 'Billing',
+    path: '/coordinator/billing',
+    icon: <FileText className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator'],
+  },
+  {
+    label: 'Clients',
+    path: '/clients',
+    icon: <Users className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator'],
+  },
+  {
+    label: 'Team',
+    path: '/team',
+    icon: <Building2 className="h-4 w-4" />,
+    roles: ['org:admin'],
+  },
+]
+
+const platformNavItem: NavItem = {
+  label: 'Platform',
+  path: '/platform',
+  icon: <Globe className="h-4 w-4" />,
+  roles: [],
+}
+
+interface SidebarProps {
+  mobileOpen?: boolean
+  onMobileClose?: () => void
+}
+
+export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
+  const { organization } = useOrganization()
+  const { user } = useUser()
+  const location = useLocation()
+
+  const clerkOrgId = organization?.id
+  const member = useQuery(api.members.me, clerkOrgId ? { clerkOrgId } : 'skip')
+
+  const role = member?.role ?? 'org:caregiver'
+
+  const isPlatformAdmin = useQuery(api.platform.isAdmin)
+
+  const visibleItems = navItems.filter((item) => item.roles.includes(role))
+  const itemsWithPlatform = isPlatformAdmin
+    ? [...visibleItems, platformNavItem]
+    : visibleItems
+
+  return (
+    <>
+      <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[240px] flex-col bg-atria-sidebar text-atria-sidebar-text lg:flex">
+        <SidebarContent
+          locationPath={location.pathname}
+          role={role}
+          userName={user?.fullName ?? 'User'}
+          userInitial={user?.firstName?.[0] ?? 'U'}
+          visibleItems={itemsWithPlatform}
+        />
+      </aside>
+
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            className="absolute inset-0 bg-black/35"
+            aria-label="Close navigation"
+            onClick={onMobileClose}
+          />
+          <aside className="relative flex h-full w-[280px] max-w-[82vw] flex-col bg-atria-sidebar text-atria-sidebar-text shadow-xl">
+            <button
+              className="absolute right-3 top-3 rounded-md p-2 text-atria-sidebar-text hover:bg-white/10 hover:text-white"
+              aria-label="Close navigation"
+              onClick={onMobileClose}
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <SidebarContent
+              locationPath={location.pathname}
+              onNavigate={onMobileClose}
+              role={role}
+              userName={user?.fullName ?? 'User'}
+              userInitial={user?.firstName?.[0] ?? 'U'}
+              visibleItems={itemsWithPlatform}
+            />
+          </aside>
+        </div>
+      )}
+    </>
+  )
+}
+
+function SidebarContent({
+  locationPath,
+  onNavigate,
+  role,
+  userInitial,
+  userName,
+  visibleItems,
+}: {
+  locationPath: string
+  onNavigate?: () => void
+  role: string
+  userInitial: string
+  userName: string
+  visibleItems: NavItem[]
+}) {
+  return (
+    <>
+      <div className="flex h-16 items-center gap-2 border-b border-white/5 px-4">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-atria-accent">
+          <span className="text-xs font-bold text-white">A</span>
+        </div>
+        <span className="text-sm font-semibold tracking-tight text-white">
+          ATRIA-X
+        </span>
+      </div>
+
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+        {visibleItems.map((item) => {
+          const isActive = locationPath === item.path
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              onClick={onNavigate}
+              className={cn(
+                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-white/10 text-white'
+                  : 'hover:bg-white/5 hover:text-white',
+              )}
+            >
+              {item.icon}
+              {item.label}
+            </NavLink>
+          )
+        })}
+      </nav>
+
+      <div className="border-t border-white/5 px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-atria-accent/20">
+            <span className="text-xs font-semibold text-atria-accent">
+              {userInitial}
+            </span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-medium text-white">
+              {userName}
+            </p>
+            <p className="truncate text-[11px] text-atria-sidebar-text/60">
+              {role.replace('org:', '')}
+            </p>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}

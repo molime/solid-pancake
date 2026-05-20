@@ -1,0 +1,32 @@
+import type { PropsWithChildren } from 'react'
+import { cva, type VariantProps } from 'class-variance-authority'
+import { cn } from '@/shared/lib/cn'
+
+const badgeStyles = cva(
+  'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
+  {
+    variants: {
+      variant: {
+        default: 'bg-atria-bg text-atria-muted',
+        success: 'bg-atria-success-bg text-atria-success',
+        warning: 'bg-atria-warning-bg text-atria-warning',
+        danger: 'bg-atria-danger-bg text-atria-danger',
+        info: 'bg-atria-info-bg text-atria-info',
+        accent: 'bg-atria-accent/10 text-atria-accent',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+    },
+  },
+)
+
+type BadgeProps = PropsWithChildren<
+  React.HTMLAttributes<HTMLSpanElement> & VariantProps<typeof badgeStyles>
+>
+
+export function Badge({ children, className, variant }: BadgeProps) {
+  return (
+    <span className={cn(badgeStyles({ variant }), className)}>{children}</span>
+  )
+}

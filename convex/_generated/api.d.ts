@@ -1,0 +1,79 @@
+/* eslint-disable */
+/**
+ * Generated `api` utility.
+ *
+ * THIS CODE IS AUTOMATICALLY GENERATED.
+ *
+ * To regenerate, run `npx convex dev`.
+ * @module
+ */
+
+import type * as audit from "../audit.js";
+import type * as authHelpers from "../authHelpers.js";
+import type * as billing from "../billing.js";
+import type * as clients from "../clients.js";
+import type * as embedding from "../embedding.js";
+import type * as files from "../files.js";
+import type * as members from "../members.js";
+import type * as platform from "../platform.js";
+import type * as reviews from "../reviews.js";
+import type * as search from "../search.js";
+import type * as seed from "../seed.js";
+import type * as shiftLifecycle from "../shiftLifecycle.js";
+import type * as shiftQueries from "../shiftQueries.js";
+import type * as shiftValidation from "../shiftValidation.js";
+import type * as shifts from "../shifts.js";
+import type * as tenants from "../tenants.js";
+
+import type {
+  ApiFromModules,
+  FilterApi,
+  FunctionReference,
+} from "convex/server";
+
+declare const fullApi: ApiFromModules<{
+  audit: typeof audit;
+  authHelpers: typeof authHelpers;
+  billing: typeof billing;
+  clients: typeof clients;
+  embedding: typeof embedding;
+  files: typeof files;
+  members: typeof members;
+  platform: typeof platform;
+  reviews: typeof reviews;
+  search: typeof search;
+  seed: typeof seed;
+  shiftLifecycle: typeof shiftLifecycle;
+  shiftQueries: typeof shiftQueries;
+  shiftValidation: typeof shiftValidation;
+  shifts: typeof shifts;
+  tenants: typeof tenants;
+}>;
+
+/**
+ * A utility for referencing Convex functions in your app's public API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = api.myModule.myFunction;
+ * ```
+ */
+export declare const api: FilterApi<
+  typeof fullApi,
+  FunctionReference<any, "public">
+>;
+
+/**
+ * A utility for referencing Convex functions in your app's internal API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = internal.myModule.myFunction;
+ * ```
+ */
+export declare const internal: FilterApi<
+  typeof fullApi,
+  FunctionReference<any, "internal">
+>;
+
+export declare const components: {};
