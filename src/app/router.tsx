@@ -4,7 +4,8 @@ import { Suspense, lazy, type ReactNode } from 'react'
 import { AppShell } from './shell/AppShell'
 import { PlatformShell } from './shell/PlatformShell'
 import { SelectAgencyPage } from './auth/SelectAgencyPage'
-import { TenantRoleRouteGuard } from './shell/RouteGuard'
+import { SignedInRouteGuard, TenantRoleRouteGuard } from './shell/RouteGuard'
+import { AppLoader } from '@/shared/ui/AppLoader'
 
 const DashboardPage = lazy(() =>
   import('@/features/dashboard/pages/DashboardPage').then((module) => ({
@@ -51,13 +52,7 @@ const SearchPage = lazy(() =>
 
 function RouteSuspense({ children }: { children: ReactNode }) {
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-full items-center justify-center">
-          <div className="text-sm text-atria-muted">Loading…</div>
-        </div>
-      }
-    >
+    <Suspense fallback={<AppLoader label="Preparing workspace" />}>
       {children}
     </Suspense>
   )
@@ -95,16 +90,25 @@ export function AppRouter() {
       <Route
         path="/create-agency"
         element={
-          <div className="flex min-h-screen items-center justify-center bg-atria-bg p-4">
-            <CreateOrganization
-              routing="path"
-              path="/create-agency"
-              afterCreateOrganizationUrl="/select-agency"
-            />
-          </div>
+          <SignedInRouteGuard>
+            <div className="flex min-h-screen items-center justify-center bg-atria-bg p-4">
+              <CreateOrganization
+                routing="path"
+                path="/create-agency"
+                afterCreateOrganizationUrl="/select-agency"
+              />
+            </div>
+          </SignedInRouteGuard>
         }
       />
-      <Route path="/select-agency" element={<SelectAgencyPage />} />
+      <Route
+        path="/select-agency"
+        element={
+          <SignedInRouteGuard>
+            <SelectAgencyPage />
+          </SignedInRouteGuard>
+        }
+      />
       <Route element={<PlatformShell />}>
         <Route
           path="platform"

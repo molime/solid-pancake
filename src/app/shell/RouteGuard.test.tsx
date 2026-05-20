@@ -87,7 +87,7 @@ describe('TenantRouteGuard', () => {
       </TenantRouteGuard>,
     )
 
-    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    expect(screen.getByText('Preparing ATRIA-X')).toBeInTheDocument()
     expect(screen.queryByTestId('protected')).not.toBeInTheDocument()
   })
 
@@ -101,7 +101,7 @@ describe('TenantRouteGuard', () => {
       </TenantRouteGuard>,
     )
 
-    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    expect(screen.getByText('Preparing ATRIA-X')).toBeInTheDocument()
   })
 
   it('shows loading spinner while membership query is loading', () => {
@@ -119,7 +119,7 @@ describe('TenantRouteGuard', () => {
       </TenantRouteGuard>,
     )
 
-    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    expect(screen.getByText('Opening agency workspace')).toBeInTheDocument()
   })
 
   it('redirects to /sign-in when not signed in', () => {
@@ -129,7 +129,7 @@ describe('TenantRouteGuard', () => {
       orgLoaded: true,
       organization: null,
     })
-    mockMembership(null)
+    mockMembership(undefined)
 
     render(
       <TenantRouteGuard>
@@ -139,6 +139,7 @@ describe('TenantRouteGuard', () => {
 
     expect(screen.getByText('Navigate to /sign-in')).toBeInTheDocument()
     expect(mockNavigate).toHaveBeenCalledWith('/sign-in')
+    expect(useQuery).not.toHaveBeenCalled()
   })
 
   it('redirects to /select-agency when signed in but has no organization', () => {
@@ -216,7 +217,7 @@ describe('SignedInRouteGuard', () => {
       </SignedInRouteGuard>,
     )
 
-    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    expect(screen.getByText('Preparing ATRIA-X')).toBeInTheDocument()
   })
 
   it('redirects to /sign-in when not signed in', () => {
@@ -269,7 +270,7 @@ describe('TenantRoleRouteGuard', () => {
       </TenantRoleRouteGuard>,
     )
 
-    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    expect(screen.getByText('Checking access')).toBeInTheDocument()
   })
 
   it('renders children for an allowed role', () => {

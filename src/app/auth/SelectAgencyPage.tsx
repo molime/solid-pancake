@@ -13,6 +13,7 @@ import { Button } from '@/shared/ui/Button'
 import { Badge } from '@/shared/ui/Badge'
 import { useMutation } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
+import { AppLoader } from '@/shared/ui/AppLoader'
 
 type PendingOrg = {
   id: string
@@ -142,11 +143,7 @@ export function SelectAgencyPage() {
   }
 
   if (!isLoaded) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-atria-bg">
-        <div className="text-sm text-atria-muted">Loading organizations…</div>
-      </div>
-    )
+    return <AppLoader fullScreen label="Finding your agencies" />
   }
 
   return (
@@ -156,7 +153,9 @@ export function SelectAgencyPage() {
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-atria-accent mb-3">
             <Building2 className="h-5 w-5 text-white" />
           </div>
-          <h1 className="text-xl font-semibold text-atria-ink">Select Agency</h1>
+          <h1 className="text-xl font-semibold text-atria-ink">
+            Select Agency
+          </h1>
           <p className="text-sm text-atria-muted mt-1">
             Choose an agency organization to access ATRIA-X operations.
           </p>

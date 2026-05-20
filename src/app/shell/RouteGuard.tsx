@@ -3,32 +3,42 @@ import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { Navigate } from 'react-router-dom'
 import type { PropsWithChildren } from 'react'
+import { AppLoader } from '@/shared/ui/AppLoader'
 
 type TenantRole = 'org:admin' | 'org:coordinator' | 'org:caregiver'
 
 export function TenantRouteGuard({ children }: PropsWithChildren) {
-  const { isLoaded, organization } = useOrganization()
   const { isLoaded: authLoaded, isSignedIn } = useAuth()
 
-  const membership = useQuery(
-    api.members.checkMembership,
-    organization?.id ? { clerkOrgId: organization.id } : 'skip',
-  )
-
-  if (!authLoaded || !isLoaded || membership === undefined) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-atria-bg">
-        <div className="text-sm text-atria-muted">Loading…</div>
-      </div>
-    )
+  if (!authLoaded) {
+    return <AppLoader fullScreen />
   }
 
   if (!isSignedIn) {
     return <Navigate to="/sign-in" replace />
   }
 
+  return <TenantMembershipGuard>{children}</TenantMembershipGuard>
+}
+
+function TenantMembershipGuard({ children }: PropsWithChildren) {
+  const { isLoaded, organization } = useOrganization()
+
+  const membership = useQuery(
+    api.members.checkMembership,
+    isLoaded && organization ? { clerkOrgId: organization.id } : 'skip',
+  )
+
+  if (!isLoaded) {
+    return <AppLoader fullScreen />
+  }
+
   if (!organization) {
     return <Navigate to="/select-agency" replace />
+  }
+
+  if (membership === undefined) {
+    return <AppLoader fullScreen label="Opening agency workspace" />
   }
 
   if (!membership) {
@@ -42,11 +52,7 @@ export function SignedInRouteGuard({ children }: PropsWithChildren) {
   const { isLoaded, isSignedIn } = useAuth()
 
   if (!isLoaded) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-atria-bg">
-        <div className="text-sm text-atria-muted">Loading…</div>
-      </div>
-    )
+    return <AppLoader fullScreen />
   }
 
   if (!isSignedIn) {
@@ -67,11 +73,7 @@ export function TenantRoleRouteGuard({
   )
 
   if (!organization || member === undefined) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-atria-bg">
-        <div className="text-sm text-atria-muted">Loading…</div>
-      </div>
-    )
+    return <AppLoader fullScreen label="Checking access" />
   }
 
   if (!member) {
