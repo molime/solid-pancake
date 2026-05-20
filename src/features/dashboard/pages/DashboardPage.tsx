@@ -54,7 +54,7 @@ export function DashboardPage() {
       badge: 'danger' as const,
     },
     {
-      label: 'Ready to export',
+      label: 'Ready to invoice',
       count: stats?.billingReady ?? 0,
       icon: <DollarSign className="h-4 w-4 text-atria-success" />,
       badge: 'success' as const,
@@ -162,7 +162,7 @@ export function DashboardPage() {
                 ${stats?.dollarsAtRisk?.toFixed(2) ?? '0.00'}
               </span>
               <span className="text-sm text-atria-muted">
-                in billing-ready shifts awaiting export
+                in billing-ready shifts awaiting invoice creation
               </span>
             </div>
           </CardContent>

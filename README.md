@@ -14,8 +14,8 @@ This matches the product rule: **no billed service without complete, validated d
 
 | Role | Navigation | Key Actions |
 |------|------------|-------------|
-| **Agency Admin** | Dashboard, Review, Billing, Clients, Team, Knowledge | Manage the agency, invite team members, change roles, manage clients, seed demo data, review as escalation, and create billing export batches |
-| **Coordinator** | Dashboard, Review, Billing, Clients, Knowledge | Review submitted shifts, approve or request correction, download proof, and preview/export billing-ready lines |
+| **Agency Admin** | Dashboard, Review, Billing, Clients, Team, Knowledge | Manage the agency, invite team members, change roles, manage clients, seed demo data, review as escalation, and create invoices from approved shifts |
+| **Coordinator** | Dashboard, Review, Billing, Clients, Knowledge | Review submitted shifts, approve or request correction, download proof, and create billing invoices |
 | **Caregiver** | Today, Knowledge | Document assigned shifts, complete task checklists, upload required proof, and read agency knowledge docs |
 | **Platform Admin** | Platform | Internal ATRIA-X role for listing tenants and seeing member/client/shift counts |
 
@@ -29,7 +29,7 @@ Agency admins do not use the caregiver **Today** workflow in normal operation. T
 - Role-aware navigation plus server-side tenant and role checks.
 - Caregiver shift documentation workflow with native time inputs, required note fields, required proof upload, and Convex Storage proof removal.
 - Coordinator review workflow with proof download, approval, correction requests, and review history.
-- Billing ledger with unexported billing-ready lines and export batch creation.
+- Billing workflow with ready-to-invoice lines, caregiver/date filters, invoice creation, CSV download, and a full billing ledger.
 - Knowledge search with debounced vector search, deterministic 32-dimension embeddings, and admin/coordinator article creation.
 - Knowledge visibility options for all staff or admins/coordinators only.
 - Team management with Clerk invitations and role assignment synced to Convex.
@@ -136,7 +136,7 @@ Important feature folders:
 ```text
 src/features/caregiver      Shift documentation UI and validation drafts
 src/features/coordinator    Review queue and decision UI
-src/features/billing        Billing ledger and export batches
+src/features/billing        Billing invoice creation, CSV downloads, and ledger
 src/features/clients        Agency client list and creation
 src/features/team           Clerk invitation and role management
 src/features/search         Knowledge search and article creation
@@ -153,7 +153,7 @@ src/features/platform       Platform admin tenant listing
 - Platform admins are not agency admins. They are tracked separately in `platformAdmins`.
 - Proof upload uses Convex Storage plus metadata in the `files` table.
 - Knowledge docs are text articles in `complianceDocs`; file attachments for knowledge docs are not implemented yet.
-- Billing export currently creates export batches. It does not download a CSV file yet.
+- Billing keeps the original Convex `exportBatches` table for compatibility, but the UI presents those records as invoices with invoice numbers and CSV downloads.
 - Full signed-in Playwright E2E needs dedicated Clerk test credentials. Current Playwright tests cover unauthenticated route smoke checks.
-- The auth provider requires a Clerk JWT template named `convex` with `aud: "convex"` and organization claims.
+- Convex auth uses Clerk's default session token. Clerk organization claims must be present, and `CLERK_JWT_ISSUER_DOMAIN` must match the Clerk instance.
 - Secrets should stay in `.env.local`; only `.env.example` is committed.

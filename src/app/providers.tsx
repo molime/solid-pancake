@@ -2,11 +2,19 @@ import { ClerkProvider, useAuth } from '@clerk/react'
 import { ConvexReactClient } from 'convex/react'
 import { ConvexProviderWithAuth } from 'convex/react'
 import type { PropsWithChildren, ReactElement } from 'react'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, useNavigate } from 'react-router-dom'
 import { useCallback, useMemo, useRef } from 'react'
 
 const ClerkProviderFromEnv = ClerkProvider as unknown as (
-  props: PropsWithChildren & { publishableKey?: string },
+  props: PropsWithChildren & {
+    publishableKey?: string
+    routerPush?: (to: string) => void
+    routerReplace?: (to: string) => void
+    signInUrl?: string
+    signUpUrl?: string
+    signInFallbackRedirectUrl?: string
+    signUpFallbackRedirectUrl?: string
+  },
 ) => ReactElement
 
 const convex = new ConvexReactClient(
@@ -52,9 +60,27 @@ function useAuthFromClerk() {
 
 export function AppProviders({ children }: PropsWithChildren) {
   return (
-    <ClerkProviderFromEnv publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}>
+    <BrowserRouter>
+      <ClerkWithRouter>{children}</ClerkWithRouter>
+    </BrowserRouter>
+  )
+}
+
+function ClerkWithRouter({ children }: PropsWithChildren) {
+  const navigate = useNavigate()
+
+  return (
+    <ClerkProviderFromEnv
+      publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}
+      routerPush={(to) => navigate(to)}
+      routerReplace={(to) => navigate(to, { replace: true })}
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
+      signInFallbackRedirectUrl="/select-agency"
+      signUpFallbackRedirectUrl="/select-agency"
+    >
       <ConvexProviderWithAuth client={convex} useAuth={useAuthFromClerk}>
-        <BrowserRouter>{children}</BrowserRouter>
+        {children}
       </ConvexProviderWithAuth>
     </ClerkProviderFromEnv>
   )

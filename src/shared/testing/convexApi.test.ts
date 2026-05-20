@@ -60,9 +60,12 @@ describe('Convex source exports', () => {
     expect(mod).toHaveProperty('requestCorrection')
   })
 
-  it('billing.ts exports createExportBatch', async () => {
+  it('billing.ts exports invoice functions', async () => {
     const mod = await import('../../../convex/billing')
+    expect(mod).toHaveProperty('createInvoice')
     expect(mod).toHaveProperty('createExportBatch')
+    expect(mod).toHaveProperty('invoices')
+    expect(mod).toHaveProperty('invoiceDetails')
   })
 
   it('audit.ts exports record', async () => {

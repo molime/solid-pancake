@@ -50,7 +50,9 @@ export const approve = mutation({
 
     const blockers = validateShiftDocumentation(note, tasks)
     if (blockers.length > 0) {
-      throw new Error(`Incomplete documentation cannot be approved: ${blockers.join(' ')}`)
+      throw new Error(
+        `Incomplete documentation cannot be approved: ${blockers.join(' ')}`,
+      )
     }
 
     const hours = calculateDocumentedHours(note.startTime, note.endTime)
@@ -112,7 +114,9 @@ export const requestCorrection = mutation({
     assertTenantDoc(shift, tenantId)
 
     if (shift.status !== 'submitted' && shift.status !== 'billing_ready') {
-      throw new Error('Can only return submitted or approved shifts for correction.')
+      throw new Error(
+        'Can only return submitted or approved shifts for correction.',
+      )
     }
 
     if (shift.status === 'billing_ready') {
@@ -127,7 +131,7 @@ export const requestCorrection = mutation({
         assertTenantDoc(line, tenantId)
         if (line.exportBatchId) {
           throw new Error(
-            'Exported billing lines cannot be returned for correction without a reversal.',
+            'Invoiced billing lines cannot be returned for correction without a reversal.',
           )
         }
         await ctx.db.delete(line._id)

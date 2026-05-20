@@ -1,9 +1,52 @@
-import { describe, it, expect } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 
-describe('Auth adapter source', () => {
-  it('providers module loads without error', async () => {
-    const mod = await import('./providers')
-    expect(mod).toHaveProperty('AppProviders')
+const mocks = vi.hoisted(() => ({
+  clerkProvider: vi.fn(
+    ({ children }: { children: React.ReactNode }) => children,
+  ),
+}))
+
+vi.mock('@clerk/react', () => ({
+  ClerkProvider: mocks.clerkProvider,
+  useAuth: () => ({
+    isLoaded: true,
+    isSignedIn: false,
+    getToken: vi.fn(),
+    orgId: null,
+    orgRole: null,
+  }),
+}))
+
+vi.mock('convex/react', () => ({
+  ConvexReactClient: vi.fn(),
+  ConvexProviderWithAuth: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="convex-provider">{children}</div>
+  ),
+}))
+
+describe('AppProviders', () => {
+  it('connects Clerk routing to React Router', async () => {
+    const { AppProviders } = await import('./providers')
+
+    render(
+      <AppProviders>
+        <div>App child</div>
+      </AppProviders>,
+    )
+
+    expect(screen.getByText('App child')).toBeInTheDocument()
+    expect(mocks.clerkProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        signInUrl: '/sign-in',
+        signUpUrl: '/sign-up',
+        signInFallbackRedirectUrl: '/select-agency',
+        signUpFallbackRedirectUrl: '/select-agency',
+        routerPush: expect.any(Function),
+        routerReplace: expect.any(Function),
+      }),
+      undefined,
+    )
   })
 })
 

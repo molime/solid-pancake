@@ -6,10 +6,12 @@ export default defineSchema({
     clerkOrgId: v.string(),
     name: v.string(),
     slug: v.string(),
-    billingSettings: v.optional(v.object({
-      defaultRate: v.number(),
-      exportFormat: v.union(v.literal('csv'), v.literal('json')),
-    })),
+    billingSettings: v.optional(
+      v.object({
+        defaultRate: v.number(),
+        exportFormat: v.union(v.literal('csv'), v.literal('json')),
+      }),
+    ),
     createdAt: v.string(),
   })
     .index('by_clerk_org_id', ['clerkOrgId'])
@@ -57,7 +59,11 @@ export default defineSchema({
     rate: v.number(),
   })
     .index('by_tenant_caregiver_status', ['tenantId', 'caregiverId', 'status'])
-    .index('by_tenant_coordinator_status', ['tenantId', 'coordinatorId', 'status'])
+    .index('by_tenant_coordinator_status', [
+      'tenantId',
+      'coordinatorId',
+      'status',
+    ])
     .index('by_tenant_status_start', ['tenantId', 'status', 'scheduledStart']),
 
   progressNotes: defineTable({
@@ -108,6 +114,14 @@ export default defineSchema({
     name: v.string(),
     exportedAt: v.string(),
     exportedBy: v.string(),
+    invoiceNumber: v.optional(v.string()),
+    periodStart: v.optional(v.string()),
+    periodEnd: v.optional(v.string()),
+    caregiverId: v.optional(v.string()),
+    caregiverName: v.optional(v.string()),
+    caregiverEmail: v.optional(v.string()),
+    lineCount: v.optional(v.number()),
+    totalAmount: v.optional(v.number()),
   }).index('by_tenant', ['tenantId']),
 
   complianceDocs: defineTable({
@@ -121,10 +135,7 @@ export default defineSchema({
       v.literal('policy'),
     ),
     visibility: v.optional(
-      v.union(
-        v.literal('all_staff'),
-        v.literal('admins_coordinators'),
-      ),
+      v.union(v.literal('all_staff'), v.literal('admins_coordinators')),
     ),
     embedding: v.array(v.float64()),
   })
@@ -154,10 +165,7 @@ export default defineSchema({
     fileName: v.string(),
     contentType: v.optional(v.string()),
     size: v.optional(v.number()),
-    linkedType: v.union(
-      v.literal('shiftTask'),
-      v.literal('complianceDoc'),
-    ),
+    linkedType: v.union(v.literal('shiftTask'), v.literal('complianceDoc')),
     linkedId: v.string(),
     visibility: v.union(
       v.literal('all_staff'),

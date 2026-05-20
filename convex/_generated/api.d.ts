@@ -11,6 +11,7 @@
 import type * as audit from "../audit.js";
 import type * as authHelpers from "../authHelpers.js";
 import type * as billing from "../billing.js";
+import type * as billingHelpers from "../billingHelpers.js";
 import type * as clients from "../clients.js";
 import type * as embedding from "../embedding.js";
 import type * as files from "../files.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   audit: typeof audit;
   authHelpers: typeof authHelpers;
   billing: typeof billing;
+  billingHelpers: typeof billingHelpers;
   clients: typeof clients;
   embedding: typeof embedding;
   files: typeof files;
