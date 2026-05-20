@@ -12,12 +12,12 @@ This matches the product rule: **no billed service without complete, validated d
 
 ## Roles
 
-| Role | Navigation | Key Actions |
-|------|------------|-------------|
-| **Agency Admin** | Dashboard, Review, Billing, Clients, Team, Knowledge | Manage the agency, invite team members, change roles, manage clients, seed demo data, review as escalation, and create invoices from approved shifts |
-| **Coordinator** | Dashboard, Review, Billing, Clients, Knowledge | Review submitted shifts, approve or request correction, download proof, and create billing invoices |
-| **Caregiver** | Today, Knowledge | Document assigned shifts, complete task checklists, upload required proof, and read agency knowledge docs |
-| **Platform Admin** | Platform | Internal ATRIA-X role for listing tenants and seeing member/client/shift counts |
+| Role               | Navigation                                           | Key Actions                                                                                                                                          |
+| ------------------ | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Agency Admin**   | Dashboard, Review, Billing, Clients, Team, Knowledge | Manage the agency, invite team members, change roles, manage clients, seed demo data, review as escalation, and create invoices from approved shifts |
+| **Coordinator**    | Dashboard, Review, Billing, Clients, Knowledge       | Review submitted shifts, approve or request correction, download proof, and create billing invoices                                                  |
+| **Caregiver**      | Today, Knowledge                                     | Document assigned shifts, complete task checklists, upload required proof, and read agency knowledge docs                                            |
+| **Platform Admin** | Platform                                             | Internal ATRIA-X role for listing tenants and seeing member/client/shift counts                                                                      |
 
 Agency admins do not use the caregiver **Today** workflow in normal operation. The **Today** nav item is caregiver-only. Platform admin access is separate from agency roles and is controlled by the `platformAdmins` Convex table.
 
@@ -32,7 +32,7 @@ Agency admins do not use the caregiver **Today** workflow in normal operation. T
 - Billing workflow with ready-to-invoice lines, caregiver/date filters, invoice creation, CSV download, and a full billing ledger.
 - Knowledge search with debounced vector search, deterministic 32-dimension embeddings, and admin/coordinator article creation.
 - Knowledge visibility options for all staff or admins/coordinators only.
-- Team management with Clerk invitations and role assignment synced to Convex.
+- Team management with server-created Clerk invitations, ATRIA-X invite redirects, and role assignment synced to Convex.
 - Platform admin page at `/platform` for listing all tenants.
 - Demo data seeding from the dashboard with idempotent upserts and partial repair.
 
@@ -73,6 +73,7 @@ Convex also needs the Clerk issuer domain set on the deployment:
 
 ```bash
 npx convex env set CLERK_JWT_ISSUER_DOMAIN https://capable-macaw-17.clerk.accounts.dev
+npx convex env set CLERK_SECRET_KEY sk_test_...
 ```
 
 Start the app:
@@ -156,4 +157,5 @@ src/features/platform       Platform admin tenant listing
 - Billing keeps the original Convex `exportBatches` table for compatibility, but the UI presents those records as invoices with invoice numbers and CSV downloads.
 - Full signed-in Playwright E2E needs dedicated Clerk test credentials. Current Playwright tests cover unauthenticated route smoke checks.
 - Convex auth uses Clerk's default session token. Clerk organization claims must be present, and `CLERK_JWT_ISSUER_DOMAIN` must match the Clerk instance.
+- Clerk organization invitations are created server-side so invite emails redirect to `/accept-invitation` in ATRIA-X. This requires `CLERK_SECRET_KEY` in Convex environment variables.
 - Secrets should stay in `.env.local`; only `.env.example` is committed.

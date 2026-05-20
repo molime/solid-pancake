@@ -88,6 +88,19 @@ export function AppRouter() {
         }
       />
       <Route
+        path="/accept-invitation/*"
+        element={
+          <div className="flex min-h-screen items-center justify-center bg-atria-bg p-4">
+            <SignUp
+              routing="path"
+              path="/accept-invitation"
+              signInUrl="/sign-in"
+              fallbackRedirectUrl="/select-agency"
+            />
+          </div>
+        }
+      />
+      <Route
         path="/create-agency"
         element={
           <SignedInRouteGuard>

@@ -1,5 +1,5 @@
 import { useOrganization, useUser } from '@clerk/react'
-import { useQuery, useMutation } from 'convex/react'
+import { useAction, useQuery, useMutation } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import {
   Table,
@@ -123,6 +123,7 @@ export function TeamPage() {
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
   const updateRole = useMutation(api.members.updateRole)
+  const createInvitation = useAction(api.invitations.create)
 
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<RoleValue>('org:caregiver')
@@ -209,16 +210,25 @@ export function TeamPage() {
   }, [organization, organization?.id, orgLoaded, clerkOrgId])
 
   const handleInvite = useCallback(async () => {
-    if (!organization || !inviteEmail.trim() || !clerkOrgId) return
+    if (!inviteEmail.trim() || !clerkOrgId) return
     setIsInviting(true)
     setInviteError(null)
     setInviteSuccess(null)
 
     try {
-      const invitation = (await organization.inviteMember({
+      const created = await createInvitation({
+        clerkOrgId,
         emailAddress: inviteEmail.trim(),
-        role: 'org:member',
-      })) as ClerkInvitation
+        role: inviteRole,
+        appBaseUrl: window.location.origin,
+      })
+      const invitation = fromCache({
+        id: created.id,
+        emailAddress: created.emailAddress,
+        role: created.role,
+        status: created.status,
+        createdAt: created.createdAt,
+      })
 
       // Cache the invitation locally so it survives navigation
       addCachedInvitation(clerkOrgId, {
@@ -252,7 +262,7 @@ export function TeamPage() {
     } finally {
       setIsInviting(false)
     }
-  }, [organization, inviteEmail, clerkOrgId, loadInvitations])
+  }, [createInvitation, inviteEmail, inviteRole, clerkOrgId, loadInvitations])
 
   const handleRevoke = useCallback(
     async (invitation: ClerkInvitation) => {

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { TeamPage } from './TeamPage'
 
 const mocks = {
-  inviteMember: vi.fn(),
+  createInvitation: vi.fn(),
   updateMember: vi.fn(),
   updateRole: vi.fn(),
   getInvitations: vi.fn(),
@@ -12,9 +12,8 @@ const mocks = {
 }
 
 vi.mock('@clerk/react', async () => {
-  const actual = await vi.importActual<typeof import('@clerk/react')>(
-    '@clerk/react',
-  )
+  const actual =
+    await vi.importActual<typeof import('@clerk/react')>('@clerk/react')
   return {
     ...actual,
     useOrganization: vi.fn(),
@@ -23,9 +22,8 @@ vi.mock('@clerk/react', async () => {
 })
 
 vi.mock('convex/react', async () => {
-  const actual = await vi.importActual<typeof import('convex/react')>(
-    'convex/react',
-  )
+  const actual =
+    await vi.importActual<typeof import('convex/react')>('convex/react')
   return {
     ...actual,
     useQuery: vi.fn(),
@@ -33,6 +31,7 @@ vi.mock('convex/react', async () => {
       if (api?.members?.updateRole) return mocks.updateRole
       return vi.fn()
     }),
+    useAction: vi.fn(() => mocks.createInvitation),
   }
 })
 
@@ -66,9 +65,10 @@ function mockTeamState(options: {
     isLoaded: true,
     organization: {
       id: 'org_123',
-      inviteMember: mocks.inviteMember,
       updateMember: mocks.updateMember,
-      getInvitations: mocks.getInvitations.mockResolvedValue({ data: invitations }),
+      getInvitations: mocks.getInvitations.mockResolvedValue({
+        data: invitations,
+      }),
     },
   } as unknown as ReturnType<typeof useOrganization>)
 
@@ -84,8 +84,14 @@ describe('TeamPage', () => {
     vi.clearAllMocks()
   })
 
-  it('invites a member as org:member regardless of selected ATRIA-X role', async () => {
-    mocks.inviteMember.mockResolvedValueOnce({ status: 'pending' })
+  it('creates caregiver invitations through the server redirect flow', async () => {
+    mocks.createInvitation.mockResolvedValueOnce({
+      id: 'inv_1',
+      emailAddress: 'caregiver@agency.com',
+      role: 'org:member',
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    })
 
     mockTeamState({
       members: [
@@ -112,16 +118,24 @@ describe('TeamPage', () => {
     await userEvent.click(sendButton)
 
     await waitFor(() => {
-      expect(mocks.inviteMember).toHaveBeenCalledTimes(1)
+      expect(mocks.createInvitation).toHaveBeenCalledTimes(1)
     })
-    expect(mocks.inviteMember).toHaveBeenCalledWith({
+    expect(mocks.createInvitation).toHaveBeenCalledWith({
+      clerkOrgId: 'org_123',
       emailAddress: 'caregiver@agency.com',
-      role: 'org:member',
+      role: 'org:caregiver',
+      appBaseUrl: window.location.origin,
     })
   })
 
-  it('invites a coordinator as org:member in Clerk', async () => {
-    mocks.inviteMember.mockResolvedValueOnce({ status: 'pending' })
+  it('passes coordinator intent to the server invitation flow', async () => {
+    mocks.createInvitation.mockResolvedValueOnce({
+      id: 'inv_2',
+      emailAddress: 'coordinator@agency.com',
+      role: 'org:member',
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    })
 
     mockTeamState({
       members: [
@@ -148,11 +162,13 @@ describe('TeamPage', () => {
     await userEvent.click(sendButton)
 
     await waitFor(() => {
-      expect(mocks.inviteMember).toHaveBeenCalledTimes(1)
+      expect(mocks.createInvitation).toHaveBeenCalledTimes(1)
     })
-    expect(mocks.inviteMember).toHaveBeenCalledWith({
+    expect(mocks.createInvitation).toHaveBeenCalledWith({
+      clerkOrgId: 'org_123',
       emailAddress: 'coordinator@agency.com',
-      role: 'org:member',
+      role: 'org:coordinator',
+      appBaseUrl: window.location.origin,
     })
   })
 
@@ -321,7 +337,13 @@ describe('TeamPage', () => {
   })
 
   it('refreshes invitations list after sending an invite', async () => {
-    mocks.inviteMember.mockResolvedValueOnce({ status: 'pending' })
+    mocks.createInvitation.mockResolvedValueOnce({
+      id: 'inv_3',
+      emailAddress: 'new@agency.com',
+      role: 'org:member',
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    })
 
     mockTeamState({
       members: [
@@ -346,7 +368,7 @@ describe('TeamPage', () => {
     await userEvent.click(sendButton)
 
     await waitFor(() => {
-      expect(mocks.inviteMember).toHaveBeenCalledTimes(1)
+      expect(mocks.createInvitation).toHaveBeenCalledTimes(1)
     })
     await waitFor(() => {
       expect(mocks.getInvitations).toHaveBeenCalledTimes(2)
@@ -354,7 +376,13 @@ describe('TeamPage', () => {
   })
 
   it('shows "already a member" message when invitee is already in the org', async () => {
-    mocks.inviteMember.mockResolvedValueOnce({ status: 'accepted' })
+    mocks.createInvitation.mockResolvedValueOnce({
+      id: 'inv_4',
+      emailAddress: 'existing@agency.com',
+      role: 'org:member',
+      status: 'accepted',
+      createdAt: new Date().toISOString(),
+    })
 
     mockTeamState({
       members: [

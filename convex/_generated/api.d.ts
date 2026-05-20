@@ -15,6 +15,7 @@ import type * as billingHelpers from "../billingHelpers.js";
 import type * as clients from "../clients.js";
 import type * as embedding from "../embedding.js";
 import type * as files from "../files.js";
+import type * as invitations from "../invitations.js";
 import type * as members from "../members.js";
 import type * as platform from "../platform.js";
 import type * as reviews from "../reviews.js";
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   clients: typeof clients;
   embedding: typeof embedding;
   files: typeof files;
+  invitations: typeof invitations;
   members: typeof members;
   platform: typeof platform;
   reviews: typeof reviews;

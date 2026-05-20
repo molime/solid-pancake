@@ -94,6 +94,11 @@ describe('Convex source exports', () => {
     expect(mod).toHaveProperty('remove')
   })
 
+  it('invitations.ts exports create', async () => {
+    const mod = await import('../../../convex/invitations')
+    expect(mod).toHaveProperty('create')
+  })
+
   it('seed.ts exports seedAgency', async () => {
     const mod = await import('../../../convex/seed')
     expect(mod).toHaveProperty('seedAgency')
