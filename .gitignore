@@ -30,6 +30,9 @@ playwright-report/
 # Convex local cache
 .convex/
 
+# Vercel local project link
+.vercel/
+
 # OS and editor files
 .DS_Store
 .vscode/*
