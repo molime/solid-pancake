@@ -60,6 +60,19 @@ export const create = mutation({
   },
 })
 
+const serviceAddressValidator = v.optional(
+  v.object({
+    line1: v.string(),
+    line2: v.optional(v.string()),
+    city: v.string(),
+    state: v.string(),
+    postalCode: v.string(),
+    country: v.optional(v.string()),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+  }),
+)
+
 export const update = mutation({
   args: {
     clerkOrgId: v.string(),
@@ -93,6 +106,62 @@ export const update = mutation({
     if (args.riskFlags !== undefined) patch.riskFlags = args.riskFlags
 
     await ctx.db.patch(args.clientId, patch)
+    return args.clientId
+  },
+})
+
+export const updateServiceAddress = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    clientId: v.id('clients'),
+    serviceAddress: serviceAddressValidator,
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:coordinator',
+    ])
+
+    const client = await ctx.db.get(args.clientId)
+    if (!client) throw new Error('Client not found.')
+    assertTenantDoc(client, tenantId)
+
+    if (args.serviceAddress !== undefined) {
+      if (
+        args.serviceAddress.latitude !== undefined ||
+        args.serviceAddress.longitude !== undefined
+      ) {
+        if (
+          args.serviceAddress.latitude === undefined ||
+          args.serviceAddress.longitude === undefined
+        ) {
+          throw new Error(
+            'Latitude and longitude must both be provided or both omitted.',
+          )
+        }
+
+        if (
+          !Number.isFinite(args.serviceAddress.latitude) ||
+          args.serviceAddress.latitude < -90 ||
+          args.serviceAddress.latitude > 90
+        ) {
+          throw new Error('latitude must be between -90 and 90.')
+        }
+
+        if (
+          !Number.isFinite(args.serviceAddress.longitude) ||
+          args.serviceAddress.longitude < -180 ||
+          args.serviceAddress.longitude > 180
+        ) {
+          throw new Error('longitude must be between -180 and 180.')
+        }
+      }
+    }
+
+    await ctx.db.patch(args.clientId, {
+      serviceAddress: args.serviceAddress,
+    })
+
     return args.clientId
   },
 })

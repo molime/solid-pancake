@@ -22,6 +22,29 @@ type ShiftDetails = FunctionReturnType<typeof api.shiftQueries.getWithDetails>
 type TaskId = ShiftDetails['tasks'][number]['_id']
 type TaskDraftList = TaskDraft<TaskId>[]
 
+type BrowserLocation = {
+  latitude: number
+  longitude: number
+  accuracyMeters: number
+}
+
+async function getCurrentLocation(): Promise<BrowserLocation | undefined> {
+  if (!navigator.geolocation) return undefined
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracyMeters: position.coords.accuracy,
+        })
+      },
+      () => resolve(undefined),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+    )
+  })
+}
+
 export function ShiftDocumentationForm({
   clerkOrgId,
   shiftId,
@@ -67,35 +90,57 @@ function ShiftDocumentationEditor({
     createTaskDrafts(details.tasks),
   )
   const [nowMs] = useState(() => Date.now())
-  const submit = useMutation(api.shifts.submitDocumentation)
-  const startDocumentation = useMutation(api.shifts.startDocumentation)
+  const clockIn = useMutation(api.shifts.clockIn)
+  const clockOut = useMutation(api.shifts.clockOut)
 
   const blockers = useMemo(
     () => validateDocumentationDraft(note, taskUpdates, details.tasks),
     [note, taskUpdates, details.tasks],
   )
 
-  const editable =
-    details.shift.status === 'in_progress' ||
-    details.shift.status === 'needs_correction'
-  const canSubmit = blockers.length === 0 && editable
   const scheduledStartMs = Date.parse(details.shift.scheduledStart)
   const isScheduledDue =
     Number.isFinite(scheduledStartMs) && scheduledStartMs <= nowMs
-  const canStartDocumentation =
-    details.shift.status === 'scheduled' && isScheduledDue
+  const hasClockIn = Boolean(details.shift.clockInAt)
+  const hasClockOut = Boolean(details.shift.clockOutAt)
 
-  const handleSubmit = async () => {
-    await submit({
-      clerkOrgId,
-      shiftId,
-      note,
-      tasks: taskUpdates,
-    })
+  const editable =
+    (details.shift.status === 'in_progress' ||
+      details.shift.status === 'needs_correction') &&
+    hasClockIn &&
+    (details.shift.status === 'needs_correction' || !hasClockOut)
+  const canClockIn =
+    !hasClockIn &&
+    !hasClockOut &&
+    isScheduledDue &&
+    (details.shift.status === 'scheduled' ||
+      details.shift.status === 'in_progress')
+  const canClockOut = editable && blockers.length === 0
+
+  const handleClockIn = async () => {
+    try {
+      const location = await getCurrentLocation()
+      await clockIn({ clerkOrgId, shiftId, location })
+    } catch (err) {
+      console.error('Clock in error:', err)
+      alert(err instanceof Error ? err.message : 'Clock in failed')
+    }
   }
 
-  const handleStartDocumentation = async () => {
-    await startDocumentation({ clerkOrgId, shiftId })
+  const handleClockOut = async () => {
+    try {
+      const location = await getCurrentLocation()
+      await clockOut({
+        clerkOrgId,
+        shiftId,
+        location,
+        note,
+        tasks: taskUpdates,
+      })
+    } catch (err) {
+      console.error('Clock out error:', err)
+      alert(err instanceof Error ? err.message : 'Clock out failed')
+    }
   }
 
   return (
@@ -190,24 +235,24 @@ function ShiftDocumentationEditor({
           </div>
         )}
 
+        {canClockIn && (
+          <Button
+            variant="primary"
+            className="w-full"
+            onClick={handleClockIn}
+          >
+            Clock In
+          </Button>
+        )}
+
         {editable && (
           <Button
             variant="primary"
             className="w-full"
-            disabled={!canSubmit}
-            onClick={handleSubmit}
+            disabled={!canClockOut}
+            onClick={handleClockOut}
           >
-            Submit Documentation
-          </Button>
-        )}
-
-        {canStartDocumentation && (
-          <Button
-            variant="primary"
-            className="w-full"
-            onClick={handleStartDocumentation}
-          >
-            Start Documentation
+            Clock Out & Submit
           </Button>
         )}
 

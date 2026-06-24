@@ -1,12 +1,18 @@
 import { v } from 'convex/values'
 import { mutation, type MutationCtx } from './_generated/server'
 import { requireTenantRole, assertTenantDoc } from './authHelpers'
-import { api } from './_generated/api'
+import { internal } from './_generated/api'
 import { mergeTaskUpdates, validateShiftDocumentation } from './shiftValidation'
 import {
   initialShiftStatusForStart,
   isScheduledStartDue,
 } from './shiftLifecycle'
+import {
+  resolveShiftServiceTarget,
+  validatePunchLocation,
+  type LocationInput,
+} from './locationValidation'
+import { DEFAULT_SHIFT_GEOFENCE } from './tenantSettings'
 import type { Id } from './_generated/dataModel'
 
 const DEFAULT_REQUIRED_PROOF_TASK = 'Upload shift documentation proof'
@@ -41,6 +47,279 @@ function validateRate(rate: number) {
   if (!Number.isFinite(rate) || rate <= 0) {
     throw new Error('Rate must be greater than zero.')
   }
+}
+
+async function loadShift(
+  ctx: MutationCtx,
+  tenantId: Id<'tenants'>,
+  shiftId: Id<'shifts'>,
+) {
+  const shift = await ctx.db.get(shiftId)
+  if (!shift) throw new Error('Shift not found.')
+  assertTenantDoc(shift, tenantId)
+  return shift
+}
+
+async function loadProgressNote(
+  ctx: MutationCtx,
+  tenantId: Id<'tenants'>,
+  shiftId: Id<'shifts'>,
+) {
+  const note = await ctx.db
+    .query('progressNotes')
+    .withIndex('by_tenant_shift', (q) =>
+      q.eq('tenantId', tenantId).eq('shiftId', shiftId),
+    )
+    .unique()
+
+  if (!note) throw new Error('Progress note not found.')
+  assertTenantDoc(note, tenantId)
+  return note
+}
+
+async function loadShiftTasks(
+  ctx: MutationCtx,
+  tenantId: Id<'tenants'>,
+  shiftId: Id<'shifts'>,
+) {
+  const tasks = await ctx.db
+    .query('shiftTasks')
+    .withIndex('by_tenant_shift', (q) =>
+      q.eq('tenantId', tenantId).eq('shiftId', shiftId),
+    )
+    .collect()
+
+  for (const task of tasks) assertTenantDoc(task, tenantId)
+  return tasks
+}
+
+async function findPunch(
+  ctx: MutationCtx,
+  tenantId: Id<'tenants'>,
+  shiftId: Id<'shifts'>,
+  punchType: 'clock_in' | 'clock_out',
+) {
+  return ctx.db
+    .query('timePunches')
+    .withIndex('by_tenant_shift_type', (q) =>
+      q.eq('tenantId', tenantId).eq('shiftId', shiftId).eq('punchType', punchType),
+    )
+    .unique()
+}
+
+async function assertClockInPunchExists(
+  ctx: MutationCtx,
+  tenantId: Id<'tenants'>,
+  shiftId: Id<'shifts'>,
+) {
+  const existing = await findPunch(ctx, tenantId, shiftId, 'clock_in')
+  if (!existing) {
+    throw new Error(
+      'You must clock in before you can document or submit this shift.',
+    )
+  }
+}
+
+async function assertClockOutPunchExists(
+  ctx: MutationCtx,
+  tenantId: Id<'tenants'>,
+  shiftId: Id<'shifts'>,
+) {
+  const existing = await findPunch(ctx, tenantId, shiftId, 'clock_out')
+  if (!existing) {
+    throw new Error(
+      'You must clock out before this shift can be submitted.',
+    )
+  }
+}
+
+async function getShiftGeofence(
+  ctx: MutationCtx,
+  tenantId: Id<'tenants'>,
+) {
+  const settings = await ctx.db
+    .query('tenantSettings')
+    .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+    .unique()
+
+  return settings?.shiftGeofence ?? DEFAULT_SHIFT_GEOFENCE
+}
+
+async function validateClockPunchLocation(
+  ctx: MutationCtx,
+  tenantId: Id<'tenants'>,
+  shift: {
+    clientId: Id<'clients'>
+    serviceLocationOverride?: {
+      label: string
+      latitude: number
+      longitude: number
+      radiusMeters?: number
+    } | null
+  },
+  location: LocationInput | undefined,
+  punchType: 'clock_in' | 'clock_out',
+) {
+  const geofence = await getShiftGeofence(ctx, tenantId)
+  const required =
+    geofence.enabled &&
+    (punchType === 'clock_in'
+      ? geofence.enforceClockIn
+      : geofence.enforceClockOut)
+
+  const client = await ctx.db.get(shift.clientId)
+  if (!client) throw new Error('Client not found.')
+  assertTenantDoc(client, tenantId)
+
+  const target = resolveShiftServiceTarget(shift, client, geofence)
+
+  return validatePunchLocation({
+    location,
+    target,
+    required,
+    maxAccuracyMeters: geofence.maxAccuracyMeters,
+  })
+}
+
+async function submitShift(
+  ctx: MutationCtx,
+  args: {
+    clerkOrgId: string
+    shiftId: Id<'shifts'>
+    note: {
+      startTime: string
+      endTime: string
+      servicesProvided: string
+      clientResponse: string
+      narrative: string
+    }
+    tasks: {
+      taskId: Id<'shiftTasks'>
+      status: 'pending' | 'complete'
+      proofUrl?: string
+      proofName?: string
+    }[]
+  },
+  actor: { subject: string; role: string },
+) {
+  const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+    'org:admin',
+    'org:coordinator',
+    'org:caregiver',
+  ])
+
+  const shift = await loadShift(ctx, tenantId, args.shiftId)
+
+  if (actor.role === 'org:caregiver' && shift.caregiverId !== actor.subject) {
+    throw new Error('Caregivers can only submit their assigned shifts.')
+  }
+
+  if (shift.status !== 'in_progress' && shift.status !== 'needs_correction') {
+    throw new Error('Only in-progress or corrected shifts can be submitted.')
+  }
+
+  await assertClockInPunchExists(ctx, tenantId, args.shiftId)
+  await assertClockOutPunchExists(ctx, tenantId, args.shiftId)
+
+  const existingNote = await loadProgressNote(ctx, tenantId, args.shiftId)
+  const existingTasks = await loadShiftTasks(ctx, tenantId, args.shiftId)
+
+  const mergedTasks = mergeTaskUpdates(existingTasks, args.tasks)
+  const blockers = validateShiftDocumentation(args.note, mergedTasks)
+  if (blockers.length > 0) {
+    throw new Error(`Incomplete documentation: ${blockers.join(' ')}`)
+  }
+
+  await ctx.db.patch(existingNote._id, {
+    startTime: args.note.startTime,
+    endTime: args.note.endTime,
+    servicesProvided: args.note.servicesProvided,
+    clientResponse: args.note.clientResponse,
+    narrative: args.note.narrative,
+    submittedBy: actor.subject,
+    submittedAt: new Date().toISOString(),
+  })
+
+  for (const task of mergedTasks) {
+    await ctx.db.patch(task._id, {
+      status: task.status,
+      proofUrl: task.proofUrl,
+      proofName: task.proofName,
+    })
+  }
+
+  await ctx.db.patch(args.shiftId, { status: 'submitted' })
+
+  await ctx.runMutation(internal.audit.record, {
+    clerkOrgId: args.clerkOrgId,
+    action: 'shift_submitted',
+    shiftId: args.shiftId,
+    previousStatus: shift.status,
+    nextStatus: 'submitted',
+  })
+
+  return args.shiftId
+}
+
+async function recordClockPunch(
+  ctx: MutationCtx,
+  args: {
+    clerkOrgId: string
+    shiftId: Id<'shifts'>
+    caregiverId: string
+    punchType: 'clock_in' | 'clock_out'
+    location?: LocationInput
+  },
+) {
+  const now = new Date().toISOString()
+  const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+    'org:admin',
+    'org:coordinator',
+    'org:caregiver',
+  ])
+
+  const shift = await loadShift(ctx, tenantId, args.shiftId)
+  const locationEvidence = await validateClockPunchLocation(
+    ctx,
+    tenantId,
+    shift,
+    args.location,
+    args.punchType,
+  )
+
+  const existing = await findPunch(ctx, tenantId, args.shiftId, args.punchType)
+  if (existing) {
+    return existing._id
+  }
+
+  const punchId = await ctx.db.insert('timePunches', {
+    tenantId,
+    shiftId: args.shiftId,
+    caregiverId: args.caregiverId,
+    punchType: args.punchType,
+    at: now,
+    source: 'atriax',
+    location: locationEvidence,
+    adpSyncStatus: 'pending_credentials',
+    createdAt: now,
+  })
+
+  await ctx.runMutation(internal.audit.record, {
+    clerkOrgId: args.clerkOrgId,
+    action: `shift_${args.punchType === 'clock_in' ? 'clocked_in' : 'clocked_out'}`,
+    shiftId: args.shiftId,
+    metadata: {
+      punchId: punchId as string,
+      withinGeofence: locationEvidence?.withinGeofence ?? null,
+      distanceMeters: locationEvidence?.distanceMeters ?? null,
+    },
+  })
+
+  await ctx.scheduler.runAfter(0, internal.adpSync.adpSyncPunch, {
+    punchId,
+  })
+
+  return punchId
 }
 
 export const create = mutation({
@@ -232,10 +511,8 @@ export const startDocumentation = mutation({
 
     await ctx.db.patch(args.shiftId, { status: 'in_progress' })
 
-    await ctx.runMutation(api.audit.record, {
+    await ctx.runMutation(internal.audit.record, {
       clerkOrgId: args.clerkOrgId,
-      actorId: identity.subject,
-      actorRole: role,
       action: 'shift_started',
       shiftId: args.shiftId,
       previousStatus: 'scheduled',
@@ -243,6 +520,50 @@ export const startDocumentation = mutation({
     })
 
     return args.shiftId
+  },
+})
+
+export const updateProgressNote = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    shiftId: v.id('shifts'),
+    startTime: v.optional(v.string()),
+    endTime: v.optional(v.string()),
+    servicesProvided: v.optional(v.string()),
+    clientResponse: v.optional(v.string()),
+    narrative: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity, role } = await requireTenantRole(
+      ctx,
+      args.clerkOrgId,
+      ['org:caregiver', 'org:coordinator', 'org:admin'],
+    )
+
+    const shift = await loadShift(ctx, tenantId, args.shiftId)
+
+    if (role === 'org:caregiver' && shift.caregiverId !== identity.subject) {
+      throw new Error('Caregivers can only update their assigned shifts.')
+    }
+
+    if (shift.status !== 'in_progress' && shift.status !== 'needs_correction') {
+      throw new Error('Only in-progress or corrected shifts can be updated.')
+    }
+
+    await assertClockInPunchExists(ctx, tenantId, args.shiftId)
+
+    const note = await loadProgressNote(ctx, tenantId, args.shiftId)
+    const patch: Record<string, string> = {}
+    if (args.startTime !== undefined) patch.startTime = args.startTime
+    if (args.endTime !== undefined) patch.endTime = args.endTime
+    if (args.servicesProvided !== undefined) {
+      patch.servicesProvided = args.servicesProvided
+    }
+    if (args.clientResponse !== undefined) patch.clientResponse = args.clientResponse
+    if (args.narrative !== undefined) patch.narrative = args.narrative
+
+    await ctx.db.patch(note._id, patch)
+    return note._id
   },
 })
 
@@ -267,77 +588,268 @@ export const submitDocumentation = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    const { identity, role } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:caregiver',
+      'org:coordinator',
+      'org:admin',
+    ])
+
+    return submitShift(ctx, args, { subject: identity.subject, role })
+  },
+})
+
+export const clockIn = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    shiftId: v.id('shifts'),
+    location: v.optional(
+      v.object({
+        latitude: v.number(),
+        longitude: v.number(),
+        accuracyMeters: v.number(),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity } = await requireTenantRole(
+      ctx,
+      args.clerkOrgId,
+      ['org:caregiver'],
+    )
+
+    const shift = await loadShift(ctx, tenantId, args.shiftId)
+
+    if (shift.caregiverId !== identity.subject) {
+      throw new Error('Caregivers can only clock in to their assigned shifts.')
+    }
+
+    if (!isScheduledStartDue(shift.scheduledStart)) {
+      throw new Error(
+        'Future shifts cannot be clocked in before their scheduled start.',
+      )
+    }
+
+    if (shift.status !== 'scheduled' && shift.status !== 'in_progress') {
+      throw new Error(
+        'This shift has already been submitted or completed and cannot be clocked in again.',
+      )
+    }
+
+    const existing = await findPunch(ctx, tenantId, args.shiftId, 'clock_in')
+    if (existing) {
+      return { punchId: existing._id, clockInAt: shift.clockInAt }
+    }
+
+    const punchId = await recordClockPunch(ctx, {
+      clerkOrgId: args.clerkOrgId,
+      shiftId: args.shiftId,
+      caregiverId: shift.caregiverId,
+      punchType: 'clock_in',
+      location: args.location,
+    })
+
+    const now = new Date().toISOString()
+    await ctx.db.patch(args.shiftId, {
+      status: 'in_progress',
+      clockInAt: now,
+    })
+
+    return { punchId, clockInAt: now }
+  },
+})
+
+export const clockOut = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    shiftId: v.id('shifts'),
+    location: v.optional(
+      v.object({
+        latitude: v.number(),
+        longitude: v.number(),
+        accuracyMeters: v.number(),
+      }),
+    ),
+    note: v.optional(
+      v.object({
+        startTime: v.string(),
+        endTime: v.string(),
+        servicesProvided: v.string(),
+        clientResponse: v.string(),
+        narrative: v.string(),
+      }),
+    ),
+    tasks: v.optional(
+      v.array(
+        v.object({
+          taskId: v.id('shiftTasks'),
+          status: v.union(v.literal('pending'), v.literal('complete')),
+          proofUrl: v.optional(v.string()),
+          proofName: v.optional(v.string()),
+        }),
+      ),
+    ),
+  },
+  handler: async (ctx, args) => {
     const { tenantId, identity, role } = await requireTenantRole(
       ctx,
       args.clerkOrgId,
-      ['org:caregiver', 'org:coordinator', 'org:admin'],
+      ['org:caregiver'],
     )
 
-    const shift = await ctx.db.get(args.shiftId)
-    if (!shift) throw new Error('Shift not found.')
-    assertTenantDoc(shift, tenantId)
+    const shift = await loadShift(ctx, tenantId, args.shiftId)
 
-    if (role === 'org:caregiver' && shift.caregiverId !== identity.subject) {
-      throw new Error('Caregivers can only submit their assigned shifts.')
+    if (shift.caregiverId !== identity.subject) {
+      throw new Error('Caregivers can only clock out of their assigned shifts.')
     }
 
     if (shift.status !== 'in_progress' && shift.status !== 'needs_correction') {
-      throw new Error('Only in-progress or corrected shifts can be submitted.')
+      throw new Error('Only in-progress or corrected shifts can be clocked out.')
     }
 
-    const existingNote = await ctx.db
-      .query('progressNotes')
-      .withIndex('by_tenant_shift', (q) =>
-        q.eq('tenantId', tenantId).eq('shiftId', args.shiftId),
-      )
-      .unique()
+    await assertClockInPunchExists(ctx, tenantId, args.shiftId)
 
-    if (!existingNote) throw new Error('Progress note not found.')
-    assertTenantDoc(existingNote, tenantId)
-
-    const existingTasks = await ctx.db
-      .query('shiftTasks')
-      .withIndex('by_tenant_shift', (q) =>
-        q.eq('tenantId', tenantId).eq('shiftId', args.shiftId),
-      )
-      .collect()
-
-    for (const task of existingTasks) assertTenantDoc(task, tenantId)
-
-    const mergedTasks = mergeTaskUpdates(existingTasks, args.tasks)
-    const blockers = validateShiftDocumentation(args.note, mergedTasks)
+    const existingTasks = await loadShiftTasks(ctx, tenantId, args.shiftId)
+    const note = args.note ??
+      (await loadProgressNote(ctx, tenantId, args.shiftId))
+    const mergedTasks = args.tasks
+      ? mergeTaskUpdates(existingTasks, args.tasks)
+      : existingTasks
+    const blockers = validateShiftDocumentation(note, mergedTasks)
     if (blockers.length > 0) {
       throw new Error(`Incomplete documentation: ${blockers.join(' ')}`)
     }
 
-    await ctx.db.patch(existingNote._id, {
-      startTime: args.note.startTime,
-      endTime: args.note.endTime,
-      servicesProvided: args.note.servicesProvided,
-      clientResponse: args.note.clientResponse,
-      narrative: args.note.narrative,
-      submittedBy: identity.subject,
-      submittedAt: new Date().toISOString(),
-    })
+    const existingClockOut = await findPunch(
+      ctx,
+      tenantId,
+      args.shiftId,
+      'clock_out',
+    )
 
-    for (const task of mergedTasks) {
-      await ctx.db.patch(task._id, {
-        status: task.status,
-        proofUrl: task.proofUrl,
-        proofName: task.proofName,
+    let punchId: Id<'timePunches'>
+    let clockOutAt: string
+
+    if (existingClockOut) {
+      punchId = existingClockOut._id
+      clockOutAt = shift.clockOutAt ?? existingClockOut.at
+    } else {
+      const locationEvidence = await validateClockPunchLocation(
+        ctx,
+        tenantId,
+        shift,
+        args.location,
+        'clock_out',
+      )
+
+      const now = new Date().toISOString()
+
+      punchId = await ctx.db.insert('timePunches', {
+        tenantId,
+        shiftId: args.shiftId,
+        caregiverId: shift.caregiverId,
+        punchType: 'clock_out',
+        at: now,
+        source: 'atriax',
+        location: locationEvidence,
+        adpSyncStatus: 'pending_credentials',
+        createdAt: now,
       })
+
+      await ctx.runMutation(internal.audit.record, {
+        clerkOrgId: args.clerkOrgId,
+        action: 'shift_clocked_out',
+        shiftId: args.shiftId,
+        metadata: {
+          punchId: punchId as string,
+          withinGeofence: locationEvidence?.withinGeofence ?? null,
+          distanceMeters: locationEvidence?.distanceMeters ?? null,
+        },
+      })
+
+      await ctx.scheduler.runAfter(0, internal.adpSync.adpSyncPunch, {
+        punchId,
+      })
+
+      await ctx.db.patch(args.shiftId, { clockOutAt: now })
+      clockOutAt = now
     }
 
-    await ctx.db.patch(args.shiftId, { status: 'submitted' })
+    await submitShift(
+      ctx,
+      {
+        clerkOrgId: args.clerkOrgId,
+        shiftId: args.shiftId,
+        note: {
+          startTime: note.startTime,
+          endTime: note.endTime,
+          servicesProvided: note.servicesProvided,
+          clientResponse: note.clientResponse,
+          narrative: note.narrative,
+        },
+        tasks: mergedTasks.map((task) => ({
+          taskId: task._id,
+          status: task.status,
+          proofUrl: task.proofUrl,
+          proofName: task.proofName,
+        })),
+      },
+      { subject: identity.subject, role },
+    )
 
-    await ctx.runMutation(api.audit.record, {
-      clerkOrgId: args.clerkOrgId,
-      actorId: identity.subject,
-      actorRole: role,
-      action: 'shift_submitted',
-      shiftId: args.shiftId,
-      previousStatus: shift.status,
-      nextStatus: 'submitted',
+    return { punchId, clockOutAt }
+  },
+})
+
+export const updateServiceLocationOverride = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    shiftId: v.id('shifts'),
+    serviceLocationOverride: v.optional(
+      v.object({
+        label: v.string(),
+        addressLine: v.optional(v.string()),
+        latitude: v.number(),
+        longitude: v.number(),
+        radiusMeters: v.optional(v.number()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:coordinator',
+    ])
+
+    await loadShift(ctx, tenantId, args.shiftId)
+
+    if (args.serviceLocationOverride !== undefined) {
+      if (
+        !Number.isFinite(args.serviceLocationOverride.latitude) ||
+        args.serviceLocationOverride.latitude < -90 ||
+        args.serviceLocationOverride.latitude > 90
+      ) {
+        throw new Error('latitude must be between -90 and 90.')
+      }
+
+      if (
+        !Number.isFinite(args.serviceLocationOverride.longitude) ||
+        args.serviceLocationOverride.longitude < -180 ||
+        args.serviceLocationOverride.longitude > 180
+      ) {
+        throw new Error('longitude must be between -180 and 180.')
+      }
+
+      if (
+        args.serviceLocationOverride.radiusMeters !== undefined &&
+        (!Number.isFinite(args.serviceLocationOverride.radiusMeters) ||
+          args.serviceLocationOverride.radiusMeters <= 0)
+      ) {
+        throw new Error('radiusMeters must be greater than zero.')
+      }
+    }
+
+    await ctx.db.patch(args.shiftId, {
+      serviceLocationOverride: args.serviceLocationOverride,
     })
 
     return args.shiftId

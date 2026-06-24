@@ -1,12 +1,10 @@
 import { v } from 'convex/values'
-import { mutation, query } from './_generated/server'
-import { requireTenantRole } from './authHelpers'
+import { internalMutation, query } from './_generated/server'
+import { requireTenantRole, assertTenantDoc } from './authHelpers'
 
-export const record = mutation({
+export const record = internalMutation({
   args: {
     clerkOrgId: v.string(),
-    actorId: v.string(),
-    actorRole: v.string(),
     action: v.string(),
     shiftId: v.optional(v.id('shifts')),
     previousStatus: v.optional(v.string()),
@@ -14,16 +12,22 @@ export const record = mutation({
     metadata: v.optional(v.record(v.string(), v.any())),
   },
   handler: async (ctx, args) => {
-    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
-      'org:admin',
-      'org:coordinator',
-      'org:caregiver',
-    ])
+    const { tenantId, identity, role } = await requireTenantRole(
+      ctx,
+      args.clerkOrgId,
+      ['org:admin', 'org:coordinator', 'org:caregiver'],
+    )
+
+    if (args.shiftId) {
+      const shift = await ctx.db.get(args.shiftId)
+      if (!shift) throw new Error('Shift not found.')
+      assertTenantDoc(shift, tenantId)
+    }
 
     return ctx.db.insert('auditEvents', {
       tenantId,
-      actorId: args.actorId,
-      actorRole: args.actorRole,
+      actorId: identity.subject,
+      actorRole: role,
       action: args.action,
       shiftId: args.shiftId,
       previousStatus: args.previousStatus,

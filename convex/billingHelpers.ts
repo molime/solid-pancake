@@ -1,4 +1,4 @@
-import { api } from './_generated/api'
+import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { assertTenantDoc, requireTenantRole } from './authHelpers'
@@ -88,7 +88,7 @@ export async function createInvoiceRecord(
     caregiverId?: string
   },
 ) {
-  const { tenantId, identity, role } = await requireTenantRole(
+  const { tenantId, identity } = await requireTenantRole(
     ctx,
     args.clerkOrgId,
     ['org:admin', 'org:coordinator'],
@@ -161,10 +161,8 @@ export async function createInvoiceRecord(
     await ctx.db.patch(line._id, { exportBatchId: invoiceId })
   }
 
-  await ctx.runMutation(api.audit.record, {
+  await ctx.runMutation(internal.audit.record, {
     clerkOrgId: args.clerkOrgId,
-    actorId: identity.subject,
-    actorRole: role,
     action: 'invoice_created',
     metadata: {
       invoiceId: invoiceId as string,

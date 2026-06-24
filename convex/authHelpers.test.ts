@@ -1,9 +1,26 @@
 import { describe, it, expect } from 'vitest'
+import type { Id } from './_generated/dataModel'
 import {
+  assertTenantDoc,
   getActiveClerkOrganizationId,
   getClerkOrganizationRole,
   requireActiveClerkOrganization,
 } from './authHelpers'
+
+describe('assertTenantDoc', () => {
+  it('does not throw when doc belongs to the tenant', () => {
+    const tenantId = 'tenant_123' as Id<'tenants'>
+    expect(() => assertTenantDoc({ tenantId }, tenantId)).not.toThrow()
+  })
+
+  it('throws when doc belongs to a different tenant', () => {
+    const tenantId = 'tenant_123' as Id<'tenants'>
+    const otherTenantId = 'tenant_456' as Id<'tenants'>
+    expect(() => assertTenantDoc({ tenantId: otherTenantId }, tenantId)).toThrow(
+      'cross-tenant access denied',
+    )
+  })
+})
 
 describe('getActiveClerkOrganizationId', () => {
   it('reads top-level org_id', () => {

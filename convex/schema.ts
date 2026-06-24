@@ -1,6 +1,29 @@
 import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
+const adpPunchSyncStatus = v.union(
+  v.literal('pending_credentials'),
+  v.literal('queued'),
+  v.literal('synced'),
+  v.literal('error'),
+)
+
+const adpEmployeeSyncStatus = v.union(
+  v.literal('pending_credentials'),
+  v.literal('queued'),
+  v.literal('synced'),
+  v.literal('error'),
+  v.literal('matched'),
+)
+
+const integrationConnectionStatus = v.union(
+  v.literal('pending_credentials'),
+  v.literal('configured'),
+  v.literal('error'),
+)
+
+const adpProviderLiteral = v.literal('adp')
+
 export default defineSchema({
   tenants: defineTable({
     clerkOrgId: v.string(),
@@ -32,12 +55,35 @@ export default defineSchema({
     .index('by_tenant_role', ['tenantId', 'role'])
     .index('by_clerk_user_id', ['clerkUserId']),
 
+  tenantSettings: defineTable({
+    tenantId: v.id('tenants'),
+    shiftGeofence: v.object({
+      enabled: v.boolean(),
+      enforceClockIn: v.boolean(),
+      enforceClockOut: v.boolean(),
+      defaultRadiusMeters: v.number(),
+      maxAccuracyMeters: v.number(),
+    }),
+  }).index('by_tenant', ['tenantId']),
+
   clients: defineTable({
     tenantId: v.id('tenants'),
     displayName: v.string(),
     serviceType: v.union(v.literal('SLS'), v.literal('ILS')),
     authorizationHours: v.number(),
     riskFlags: v.array(v.string()),
+    serviceAddress: v.optional(
+      v.object({
+        line1: v.string(),
+        line2: v.optional(v.string()),
+        city: v.string(),
+        state: v.string(),
+        postalCode: v.string(),
+        country: v.optional(v.string()),
+        latitude: v.optional(v.number()),
+        longitude: v.optional(v.number()),
+      }),
+    ),
   }).index('by_tenant', ['tenantId']),
 
   shifts: defineTable({
@@ -47,6 +93,8 @@ export default defineSchema({
     coordinatorId: v.optional(v.string()),
     scheduledStart: v.string(),
     scheduledEnd: v.string(),
+    clockInAt: v.optional(v.string()),
+    clockOutAt: v.optional(v.string()),
     status: v.union(
       v.literal('scheduled'),
       v.literal('in_progress'),
@@ -57,6 +105,15 @@ export default defineSchema({
     ),
     serviceType: v.union(v.literal('SLS'), v.literal('ILS')),
     rate: v.number(),
+    serviceLocationOverride: v.optional(
+      v.object({
+        label: v.string(),
+        addressLine: v.optional(v.string()),
+        latitude: v.number(),
+        longitude: v.number(),
+        radiusMeters: v.optional(v.number()),
+      }),
+    ),
   })
     .index('by_tenant_caregiver_status', ['tenantId', 'caregiverId', 'status'])
     .index('by_tenant_coordinator_status', [
@@ -65,6 +122,72 @@ export default defineSchema({
       'status',
     ])
     .index('by_tenant_status_start', ['tenantId', 'status', 'scheduledStart']),
+
+  timePunches: defineTable({
+    tenantId: v.id('tenants'),
+    shiftId: v.id('shifts'),
+    caregiverId: v.string(),
+    punchType: v.union(v.literal('clock_in'), v.literal('clock_out')),
+    at: v.string(),
+    source: v.literal('atriax'),
+    location: v.optional(
+      v.object({
+        latitude: v.number(),
+        longitude: v.number(),
+        accuracyMeters: v.number(),
+        distanceMeters: v.optional(v.number()),
+        targetLabel: v.optional(v.string()),
+        targetLatitude: v.optional(v.number()),
+        targetLongitude: v.optional(v.number()),
+        withinGeofence: v.optional(v.boolean()),
+      }),
+    ),
+    adpSyncStatus: adpPunchSyncStatus,
+    adpPunchId: v.optional(v.string()),
+    adpError: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index('by_tenant_shift', ['tenantId', 'shiftId'])
+    .index('by_tenant_shift_type', ['tenantId', 'shiftId', 'punchType'])
+    .index('by_tenant_sync_status', ['tenantId', 'adpSyncStatus']),
+
+  employeeProfiles: defineTable({
+    tenantId: v.id('tenants'),
+    clerkUserId: v.optional(v.string()),
+    tenantMemberId: v.optional(v.id('tenantMembers')),
+    displayName: v.string(),
+    email: v.string(),
+    adpAssociateOid: v.optional(v.string()),
+    adpWorkerId: v.optional(v.string()),
+    adpSyncStatus: adpEmployeeSyncStatus,
+    adpError: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_clerk_user', ['tenantId', 'clerkUserId'])
+    .index('by_tenant_adp_aoid', ['tenantId', 'adpAssociateOid']),
+
+  integrationConnections: defineTable({
+    tenantId: v.id('tenants'),
+    provider: adpProviderLiteral,
+    status: integrationConnectionStatus,
+    lastCheckedAt: v.optional(v.string()),
+    note: v.optional(v.string()),
+  }).index('by_tenant_provider', ['tenantId', 'provider']),
+
+  integrationEvents: defineTable({
+    tenantId: v.id('tenants'),
+    provider: adpProviderLiteral,
+    kind: v.string(),
+    refId: v.optional(v.string()),
+    idempotencyKey: v.string(),
+    status: v.string(),
+    request: v.optional(v.any()),
+    response: v.optional(v.any()),
+    createdAt: v.string(),
+  })
+    .index('by_tenant_idemp', ['tenantId', 'idempotencyKey'])
+    .index('by_tenant_created', ['tenantId', 'createdAt']),
 
   progressNotes: defineTable({
     tenantId: v.id('tenants'),
