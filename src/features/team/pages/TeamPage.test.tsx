@@ -5,6 +5,8 @@ import { TeamPage } from './TeamPage'
 
 const mocks = {
   createInvitation: vi.fn(),
+  createCaregiver: vi.fn(),
+  runAdpInitialWorkerLoad: vi.fn(),
   updateMember: vi.fn(),
   updateRole: vi.fn(),
   getInvitations: vi.fn(),
@@ -27,16 +29,14 @@ vi.mock('convex/react', async () => {
   return {
     ...actual,
     useQuery: vi.fn(),
-    useMutation: vi.fn((api) => {
-      if (api?.members?.updateRole) return mocks.updateRole
-      return vi.fn()
-    }),
-    useAction: vi.fn(() => mocks.createInvitation),
+    useMutation: vi.fn(),
+    useAction: vi.fn(),
   }
 })
 
 import { useOrganization, useUser } from '@clerk/react'
-import { useQuery } from 'convex/react'
+import { useQuery, useMutation, useAction } from 'convex/react'
+import { getFunctionName } from 'convex/server'
 
 function mockTeamState(options: {
   members?: Array<{
@@ -45,6 +45,13 @@ function mockTeamState(options: {
     displayName: string
     email: string
     role: string
+  }>
+  employeeProfiles?: Array<{
+    _id: string
+    displayName: string
+    email: string
+    role: string
+    adpSyncStatus: string
   }>
   currentUserId?: string
   invitations?: Array<{
@@ -58,6 +65,7 @@ function mockTeamState(options: {
   }>
 }) {
   const members = options.members ?? []
+  const employeeProfiles = options.employeeProfiles
   const currentUserId = options.currentUserId ?? 'user_admin'
   const invitations = options.invitations ?? []
 
@@ -76,7 +84,32 @@ function mockTeamState(options: {
     user: { id: currentUserId },
   } as unknown as ReturnType<typeof useUser>)
 
-  vi.mocked(useQuery).mockReturnValue(members)
+  vi.mocked(useQuery).mockImplementation(
+    ((queryRef: unknown) => {
+      const name = getFunctionName(queryRef as Parameters<typeof getFunctionName>[0])
+      if (name === 'members:list') return members
+      if (name === 'employeeProfiles:listEmployeeProfiles') return employeeProfiles
+      return undefined
+    }) as unknown as typeof useQuery,
+  )
+
+  vi.mocked(useMutation).mockImplementation(
+    ((mutationRef: unknown) => {
+      const name = getFunctionName(mutationRef as Parameters<typeof getFunctionName>[0])
+      if (name === 'members:updateRole') return mocks.updateRole
+      return vi.fn()
+    }) as unknown as typeof useMutation,
+  )
+
+  vi.mocked(useAction).mockImplementation(
+    ((actionRef: unknown) => {
+      const name = getFunctionName(actionRef as Parameters<typeof getFunctionName>[0])
+      if (name === 'employeeProfiles:createCaregiver') return mocks.createCaregiver
+      if (name === 'employeeProfiles:runAdpInitialWorkerLoad')
+        return mocks.runAdpInitialWorkerLoad
+      return mocks.createInvitation
+    }) as unknown as typeof useAction,
+  )
 }
 
 describe('TeamPage', () => {
@@ -410,6 +443,131 @@ describe('TeamPage', () => {
       expect(
         screen.getByText(/existing@agency.com joined the organization/i),
       ).toBeInTheDocument()
+    })
+  })
+
+  it('adds a caregiver through the caregiver form', async () => {
+    mocks.createCaregiver.mockResolvedValueOnce({
+      profileId: 'profile_1',
+      invitationId: 'inv_cg',
+      emailAddress: 'newcaregiver@agency.com',
+      role: 'org:member',
+      status: 'pending',
+    })
+
+    mockTeamState({
+      members: [
+        {
+          _id: 'm1',
+          clerkUserId: 'user_admin',
+          displayName: 'Admin User',
+          email: 'admin@test.com',
+          role: 'org:admin',
+        },
+      ],
+      employeeProfiles: [],
+      currentUserId: 'user_admin',
+    })
+
+    render(<TeamPage />)
+
+    const nameInput = screen.getByPlaceholderText('Caregiver name')
+    const emailInput = screen.getByPlaceholderText('caregiver@agency.com')
+    const addButton = screen.getByRole('button', { name: /Add caregiver/i })
+
+    await userEvent.type(nameInput, 'New Caregiver')
+    await userEvent.type(emailInput, 'newcaregiver@agency.com')
+    await userEvent.click(addButton)
+
+    await waitFor(() => {
+      expect(mocks.createCaregiver).toHaveBeenCalledTimes(1)
+    })
+    expect(mocks.createCaregiver).toHaveBeenCalledWith({
+      clerkOrgId: 'org_123',
+      displayName: 'New Caregiver',
+      email: 'newcaregiver@agency.com',
+      appBaseUrl: window.location.origin,
+    })
+  })
+
+  it('loads ADP workers and shows a summary toast', async () => {
+    mocks.runAdpInitialWorkerLoad.mockResolvedValueOnce({
+      status: 'success',
+      processed: 3,
+      matched: 1,
+      created: 2,
+      errors: 0,
+    })
+
+    mockTeamState({
+      members: [
+        {
+          _id: 'm1',
+          clerkUserId: 'user_admin',
+          displayName: 'Admin User',
+          email: 'admin@test.com',
+          role: 'org:admin',
+        },
+      ],
+      employeeProfiles: [],
+      currentUserId: 'user_admin',
+    })
+
+    render(<TeamPage />)
+
+    const loadButton = screen.getByRole('button', { name: /Load from ADP/i })
+    await userEvent.click(loadButton)
+
+    await waitFor(() => {
+      expect(mocks.runAdpInitialWorkerLoad).toHaveBeenCalledTimes(1)
+    })
+    expect(mocks.runAdpInitialWorkerLoad).toHaveBeenCalledWith({
+      clerkOrgId: 'org_123',
+    })
+    await waitFor(() => {
+      expect(
+        screen.getByText(/3 processed, 1 matched, 2 created, 0 errors/i),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('renders employee profiles with ADP sync status pills', async () => {
+    mockTeamState({
+      members: [
+        {
+          _id: 'm1',
+          clerkUserId: 'user_admin',
+          displayName: 'Admin User',
+          email: 'admin@test.com',
+          role: 'org:admin',
+        },
+      ],
+      employeeProfiles: [
+        {
+          _id: 'p1',
+          displayName: 'Synced Caregiver',
+          email: 'synced@agency.com',
+          role: 'org:caregiver',
+          adpSyncStatus: 'synced',
+        },
+        {
+          _id: 'p2',
+          displayName: 'Queued Caregiver',
+          email: 'queued@agency.com',
+          role: 'org:caregiver',
+          adpSyncStatus: 'queued',
+        },
+      ],
+      currentUserId: 'user_admin',
+    })
+
+    render(<TeamPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Synced Caregiver')).toBeInTheDocument()
+      expect(screen.getByText('Queued Caregiver')).toBeInTheDocument()
+      expect(screen.getByText('Synced')).toBeInTheDocument()
+      expect(screen.getByText('Queued')).toBeInTheDocument()
     })
   })
 })

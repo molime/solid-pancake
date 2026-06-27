@@ -14,6 +14,7 @@ const adpEmployeeSyncStatus = v.union(
   v.literal('synced'),
   v.literal('error'),
   v.literal('matched'),
+  v.literal('created'),
 )
 
 const integrationConnectionStatus = v.union(
@@ -173,7 +174,9 @@ export default defineSchema({
     status: integrationConnectionStatus,
     lastCheckedAt: v.optional(v.string()),
     note: v.optional(v.string()),
-  }).index('by_tenant_provider', ['tenantId', 'provider']),
+  })
+    .index('by_tenant_provider', ['tenantId', 'provider'])
+    .index('by_provider_status', ['provider', 'status']),
 
   integrationEvents: defineTable({
     tenantId: v.id('tenants'),
@@ -182,8 +185,11 @@ export default defineSchema({
     refId: v.optional(v.string()),
     idempotencyKey: v.string(),
     status: v.string(),
+    attempt: v.optional(v.number()),
     request: v.optional(v.any()),
     response: v.optional(v.any()),
+    completedAt: v.optional(v.string()),
+    nextRetryAt: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index('by_tenant_idemp', ['tenantId', 'idempotencyKey'])

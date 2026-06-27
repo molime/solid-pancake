@@ -95,9 +95,17 @@ describe('Convex source exports', () => {
     expect(mod).toHaveProperty('validatePunchLocation')
   })
 
-  it('adpSync.ts exports adpSyncPunch', async () => {
+  it('adpSync.ts exports adp sync helpers and triggerInitialWorkerLoad', async () => {
     const mod = await import('../../../convex/adpSync')
+    expect(mod).toHaveProperty('claimIntegrationEvent')
+    expect(mod).toHaveProperty('triggerInitialWorkerLoad')
+  })
+
+  it('adpOutbound.ts exports adp sync actions', async () => {
+    const mod = await import('../../../convex/adpOutbound')
     expect(mod).toHaveProperty('adpSyncPunch')
+    expect(mod).toHaveProperty('adpSyncWorker')
+    expect(mod).toHaveProperty('adpInitialWorkerLoad')
   })
 
   it('files.ts exports attachProof, removeProof, getDownloadUrl', async () => {

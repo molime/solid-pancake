@@ -47,6 +47,48 @@ function normalizeCreatedAt(value: unknown) {
   return new Date().toISOString()
 }
 
+export async function sendClerkInvitation(args: {
+  secretKey: string
+  inviterUserId: string
+  clerkOrgId: string
+  emailAddress: string
+  role: InviteRole
+  appBaseUrl: string
+}) {
+  const response = await fetch(
+    `https://api.clerk.com/v1/organizations/${args.clerkOrgId}/invitations`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${args.secretKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        inviter_user_id: args.inviterUserId,
+        email_address: args.emailAddress.trim(),
+        role: toClerkRole(args.role),
+        redirect_url: invitationRedirectUrl(args.appBaseUrl),
+        public_metadata: { atriaRole: args.role },
+      }),
+    },
+  )
+
+  const payload = await response.json()
+  if (!response.ok) {
+    throw new ConvexError(clerkErrorMessage(payload))
+  }
+
+  const record = payload as Record<string, unknown>
+  return {
+    id: String(record.id ?? ''),
+    emailAddress: String(record.email_address ?? args.emailAddress),
+    role: String(record.role ?? toClerkRole(args.role)),
+    roleName: String(record.role_name ?? toClerkRole(args.role)),
+    status: String(record.status ?? 'pending'),
+    createdAt: normalizeCreatedAt(record.created_at),
+  }
+}
+
 export const create = action({
   args: {
     clerkOrgId: v.string(),
@@ -74,37 +116,13 @@ export const create = action({
       )
     }
 
-    const response = await fetch(
-      `https://api.clerk.com/v1/organizations/${args.clerkOrgId}/invitations`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${secretKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          inviter_user_id: identity.subject,
-          email_address: args.emailAddress.trim(),
-          role: toClerkRole(args.role),
-          redirect_url: invitationRedirectUrl(args.appBaseUrl),
-          public_metadata: { atriaRole: args.role },
-        }),
-      },
-    )
-
-    const payload = await response.json()
-    if (!response.ok) {
-      throw new ConvexError(clerkErrorMessage(payload))
-    }
-
-    const record = payload as Record<string, unknown>
-    return {
-      id: String(record.id ?? ''),
-      emailAddress: String(record.email_address ?? args.emailAddress),
-      role: String(record.role ?? toClerkRole(args.role)),
-      roleName: String(record.role_name ?? toClerkRole(args.role)),
-      status: String(record.status ?? 'pending'),
-      createdAt: normalizeCreatedAt(record.created_at),
-    }
+    return sendClerkInvitation({
+      secretKey,
+      inviterUserId: identity.subject,
+      clerkOrgId: args.clerkOrgId,
+      emailAddress: args.emailAddress,
+      role: args.role,
+      appBaseUrl: args.appBaseUrl,
+    })
   },
 })

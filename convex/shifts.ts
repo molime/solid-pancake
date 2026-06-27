@@ -315,8 +315,8 @@ async function recordClockPunch(
     },
   })
 
-  await ctx.scheduler.runAfter(0, internal.adpSync.adpSyncPunch, {
-    punchId,
+  await ctx.scheduler.runAfter(0, internal.adpOutbound.adpSyncPunch, {
+    timePunchId: punchId,
   })
 
   return punchId
@@ -766,8 +766,8 @@ export const clockOut = mutation({
         },
       })
 
-      await ctx.scheduler.runAfter(0, internal.adpSync.adpSyncPunch, {
-        punchId,
+      await ctx.scheduler.runAfter(0, internal.adpOutbound.adpSyncPunch, {
+        timePunchId: punchId,
       })
 
       await ctx.db.patch(args.shiftId, { clockOutAt: now })

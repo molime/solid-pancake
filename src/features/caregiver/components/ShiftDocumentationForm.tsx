@@ -1,275 +1,424 @@
 import { useMutation, useQuery } from 'convex/react'
 import type { FunctionReturnType } from 'convex/server'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import {
   createTaskDrafts,
   noteDraftFromNote,
-  validateDocumentationDraft,
+  buildServicesProvided,
+  buildClientResponse,
+  parseSelectedServices,
+  parseSelectedGoals,
+  parseIssueChoice,
   type NoteDraft,
   type TaskDraft,
+  type ServiceLabel,
+  type GoalLabel,
+  type IssueChoice,
 } from '../model/documentationDraft'
-import { Badge } from '@/shared/ui/Badge'
+import {
+  WIZARD_STEPS,
+  validateDocumentationDraft,
+  validateStep,
+  buildAutosavePatch,
+} from '../model/documentationWizard'
+import { useCaregiverLocation } from '../hooks/useCaregiverLocation'
 import { Button } from '@/shared/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
-import { Input } from '@/shared/ui/Input'
-import { Separator } from '@/shared/ui/Separator'
-import { Textarea } from '@/shared/ui/Textarea'
-import { ShiftTaskList } from './ShiftTaskList'
+import { ShiftClockInScreen } from './ShiftClockInScreen'
+import { ShiftClockOutScreen } from './ShiftClockOutScreen'
+import { ShiftNoteStep } from './ShiftNoteStep'
+import { ShiftSuccessScreen } from './ShiftSuccessScreen'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { cn } from '@/shared/lib/cn'
+import { formatStreetAddress } from '@/shared/format'
 
 type ShiftDetails = FunctionReturnType<typeof api.shiftQueries.getWithDetails>
+type TenantSettings = FunctionReturnType<typeof api.tenantSettings.get>
 type TaskId = ShiftDetails['tasks'][number]['_id']
 type TaskDraftList = TaskDraft<TaskId>[]
 
-type BrowserLocation = {
-  latitude: number
-  longitude: number
-  accuracyMeters: number
-}
+const TERMINAL_STATUSES = new Set([
+  'submitted',
+  'approved',
+  'billing_ready',
+])
 
-async function getCurrentLocation(): Promise<BrowserLocation | undefined> {
-  if (!navigator.geolocation) return undefined
-  return new Promise((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracyMeters: position.coords.accuracy,
-        })
-      },
-      () => resolve(undefined),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
-    )
-  })
+function defaultGeofence(settings: TenantSettings | undefined) {
+  return {
+    enabled: settings?.shiftGeofence.enabled ?? false,
+    enforceClockIn: settings?.shiftGeofence.enforceClockIn ?? false,
+    enforceClockOut: settings?.shiftGeofence.enforceClockOut ?? false,
+  }
 }
 
 export function ShiftDocumentationForm({
   clerkOrgId,
   shiftId,
+  firstName,
+  onDone,
 }: {
   clerkOrgId: string
   shiftId: Id<'shifts'>
+  firstName?: string
+  onDone?: () => void
 }) {
   const details = useQuery(api.shiftQueries.getWithDetails, {
     clerkOrgId,
     shiftId,
   })
+  const settings = useQuery(api.tenantSettings.get, { clerkOrgId })
 
-  if (!details) {
+  if (!details || !settings) {
     return (
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-sm text-atria-muted">Loading shift details…</div>
-        </CardContent>
-      </Card>
+      <div className="rounded-[var(--radius-atria-lg)] border border-atria-border bg-atria-surface p-6">
+        <div className="text-sm text-atria-muted">Loading shift details…</div>
+      </div>
     )
   }
 
   return (
-    <ShiftDocumentationEditor
+    <ShiftDocumentationWizard
       clerkOrgId={clerkOrgId}
       details={details}
+      settings={settings}
       shiftId={shiftId}
+      firstName={firstName}
+      onDone={onDone}
     />
   )
 }
 
-function ShiftDocumentationEditor({
+function ShiftDocumentationWizard({
   clerkOrgId,
   details,
+  settings,
   shiftId,
+  firstName,
+  onDone,
 }: {
   clerkOrgId: string
   details: ShiftDetails
+  settings: TenantSettings
   shiftId: Id<'shifts'>
+  firstName?: string
+  onDone?: () => void
 }) {
   const [note, setNote] = useState<NoteDraft>(() => noteDraftFromNote(details.note))
-  const [taskUpdates, setTaskUpdates] = useState<TaskDraftList>(() =>
+  const [taskDrafts, setTaskDrafts] = useState<TaskDraftList>(() =>
     createTaskDrafts(details.tasks),
   )
-  const [nowMs] = useState(() => Date.now())
+  const [selectedServices, setSelectedServices] = useState<ServiceLabel[]>(() =>
+    parseSelectedServices(details.note?.servicesProvided),
+  )
+  const [selectedGoals, setSelectedGoals] = useState<GoalLabel[]>(() =>
+    parseSelectedGoals(details.note?.servicesProvided),
+  )
+  const [issueChoice, setIssueChoice] = useState<IssueChoice | null>(() =>
+    parseIssueChoice(details.note?.clientResponse),
+  )
+  const [confirmed, setConfirmed] = useState(false)
+  const [currentStepIndex, setCurrentStepIndex] = useState(0)
+  const [view, setView] = useState<'clockIn' | 'wizard' | 'clockOut' | 'success'>(() => {
+    if (TERMINAL_STATUSES.has(details.shift.status)) return 'success'
+    if (details.shift.clockInAt) return 'wizard'
+    return 'clockIn'
+  })
+  const [isSaving, setIsSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [isPunchLoading, setIsPunchLoading] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const geofence = useMemo(
+    () => defaultGeofence(settings),
+    [settings],
+  )
+  const { state: locationState, requestLocation, setOutsideError, clearLocationError } = useCaregiverLocation()
+
   const clockIn = useMutation(api.shifts.clockIn)
   const clockOut = useMutation(api.shifts.clockOut)
+  const updateProgressNote = useMutation(api.shifts.updateProgressNote)
 
   const blockers = useMemo(
-    () => validateDocumentationDraft(note, taskUpdates, details.tasks),
-    [note, taskUpdates, details.tasks],
+    () => validateDocumentationDraft(note, taskDrafts, details.tasks),
+    [note, taskDrafts, details.tasks],
   )
 
-  const scheduledStartMs = Date.parse(details.shift.scheduledStart)
-  const isScheduledDue =
-    Number.isFinite(scheduledStartMs) && scheduledStartMs <= nowMs
-  const hasClockIn = Boolean(details.shift.clockInAt)
-  const hasClockOut = Boolean(details.shift.clockOutAt)
+  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const editable =
-    (details.shift.status === 'in_progress' ||
-      details.shift.status === 'needs_correction') &&
-    hasClockIn &&
-    (details.shift.status === 'needs_correction' || !hasClockOut)
-  const canClockIn =
-    !hasClockIn &&
-    !hasClockOut &&
-    isScheduledDue &&
-    (details.shift.status === 'scheduled' ||
-      details.shift.status === 'in_progress')
-  const canClockOut = editable && blockers.length === 0
+  const autosave = (patch: Partial<NoteDraft>) => {
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current)
+    }
+    setSaved(false)
+    autosaveTimeoutRef.current = setTimeout(async () => {
+      if (Object.keys(patch).length === 0) return
+      setIsSaving(true)
+      setSaveError(null)
+      try {
+        await updateProgressNote({
+          clerkOrgId,
+          shiftId,
+          ...patch,
+        })
+        setSaved(true)
+      } catch (err) {
+        setSaveError(err instanceof Error ? err.message : 'Autosave failed')
+      } finally {
+        setIsSaving(false)
+      }
+    }, 800)
+  }
+
+  const handleNoteChange = (next: NoteDraft) => {
+    setNote(next)
+    const stepId = WIZARD_STEPS[currentStepIndex].id
+    const patch = buildAutosavePatch(stepId, next)
+    autosave(patch)
+  }
+
+  const updateServicesAndGoals = (
+    services: ServiceLabel[],
+    goals: GoalLabel[],
+  ) => {
+    const servicesProvided = buildServicesProvided(services, goals)
+    setSelectedServices(services)
+    setSelectedGoals(goals)
+    const next = { ...note, servicesProvided }
+    setNote(next)
+    autosave({ servicesProvided })
+  }
+
+  const updateIssueChoice = (choice: IssueChoice) => {
+    setIssueChoice(choice)
+    const clientResponse = buildClientResponse(choice)
+    const next = { ...note, clientResponse }
+    setNote(next)
+    autosave({ clientResponse })
+  }
 
   const handleClockIn = async () => {
+    setSaveError(null)
+    setIsPunchLoading(true)
     try {
-      const location = await getCurrentLocation()
+      const location = await requestLocation({
+        geofence,
+        punchType: 'clock_in',
+      })
+      const locationRequired = geofence.enabled && geofence.enforceClockIn
+      if (locationRequired && !location) {
+        return
+      }
       await clockIn({ clerkOrgId, shiftId, location })
+      setView('wizard')
     } catch (err) {
-      console.error('Clock in error:', err)
-      alert(err instanceof Error ? err.message : 'Clock in failed')
+      const message = err instanceof Error ? err.message : 'Clock in failed'
+      if (message.toLowerCase().includes('outside')) {
+        setOutsideError(message)
+      } else {
+        setSaveError(message)
+      }
+    } finally {
+      setIsPunchLoading(false)
     }
   }
 
   const handleClockOut = async () => {
+    setSaveError(null)
+    setIsPunchLoading(true)
     try {
-      const location = await getCurrentLocation()
+      const location = await requestLocation({
+        geofence,
+        punchType: 'clock_out',
+      })
       await clockOut({
         clerkOrgId,
         shiftId,
         location,
         note,
-        tasks: taskUpdates,
+        tasks: taskDrafts,
       })
+      setView('success')
     } catch (err) {
-      console.error('Clock out error:', err)
-      alert(err instanceof Error ? err.message : 'Clock out failed')
+      const message = err instanceof Error ? err.message : 'Clock out failed'
+      if (message.toLowerCase().includes('outside')) {
+        setOutsideError(message)
+      } else {
+        setSaveError(message)
+      }
+    } finally {
+      setIsPunchLoading(false)
     }
   }
 
+  const currentStepId = WIZARD_STEPS[currentStepIndex].id
+  const stepBlockers = validateStep(currentStepId, note, taskDrafts, details.tasks)
+
+  const isDoneStep = currentStepIndex === WIZARD_STEPS.length - 1
+  const canAdvance =
+    stepBlockers.length === 0 &&
+    (currentStepId !== 'what' || selectedServices.length > 0) &&
+    (currentStepId !== 'goal' || selectedGoals.length > 0) &&
+    (currentStepId !== 'issues' || issueChoice !== null)
+  const canSubmitDone = canAdvance && confirmed
+
+  const goNext = () => {
+    if (currentStepIndex < WIZARD_STEPS.length - 1) {
+      setCurrentStepIndex((i) => i + 1)
+    } else {
+      setView('clockOut')
+    }
+  }
+
+  const goBack = () => {
+    if (currentStepIndex > 0) {
+      setCurrentStepIndex((i) => i - 1)
+    } else {
+      setView('clockIn')
+      clearLocationError()
+    }
+  }
+
+  const editStep = (stepIndex: number) => {
+    setCurrentStepIndex(stepIndex)
+  }
+
+  const clientName = details.client?.displayName ?? 'Client'
+  const address = details.client?.serviceAddress
+    ? formatStreetAddress(details.client.serviceAddress)
+    : 'No address'
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (view === 'clockOut') {
+      requestLocation({ geofence, punchType: 'clock_out' }).catch(() => {
+        // Location errors are captured in locationState; surface them via the checklist.
+      })
+    }
+  }, [view, geofence, requestLocation])
+
+  if (view === 'success') {
+    return (
+      <ShiftSuccessScreen
+        firstName={firstName ?? ''}
+        clientName={clientName}
+        onHome={() => {
+          onDone?.()
+          setView('clockIn')
+          setCurrentStepIndex(0)
+          setConfirmed(false)
+          clearLocationError()
+        }}
+      />
+    )
+  }
+
+  if (view === 'clockIn') {
+    return (
+      <ShiftClockInScreen
+        scheduledStart={details.shift.scheduledStart}
+        scheduledEnd={details.shift.scheduledEnd}
+        clientName={clientName}
+        address={address}
+        geofence={geofence}
+        locationState={locationState}
+        isLoading={isPunchLoading}
+        onClockIn={handleClockIn}
+      />
+    )
+  }
+
+  if (view === 'clockOut') {
+    return (
+      <ShiftClockOutScreen
+        scheduledStart={details.shift.scheduledStart}
+        clientName={clientName}
+        actualClockInAt={details.shift.clockInAt}
+        blockers={blockers}
+        geofence={geofence}
+        locationState={locationState}
+        isLoading={isPunchLoading}
+        onClockOut={handleClockOut}
+      />
+    )
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Shift Documentation</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
-              Start Time
-            </label>
-            <Input
-              type="time"
-              value={note.startTime}
-              onChange={(e) => setNote((n) => ({ ...n, startTime: e.target.value }))}
-              disabled={!editable}
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
-              End Time
-            </label>
-            <Input
-              type="time"
-              value={note.endTime}
-              onChange={(e) => setNote((n) => ({ ...n, endTime: e.target.value }))}
-              disabled={!editable}
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
-            Services Provided
-          </label>
-          <Input
-            value={note.servicesProvided}
-            onChange={(e) => setNote((n) => ({ ...n, servicesProvided: e.target.value }))}
-            placeholder="Describe services provided..."
-            disabled={!editable}
-          />
-        </div>
-
-        <div>
-          <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
-            Client Response
-          </label>
-          <Input
-            value={note.clientResponse}
-            onChange={(e) => setNote((n) => ({ ...n, clientResponse: e.target.value }))}
-            placeholder="How did the client respond?"
-            disabled={!editable}
-          />
-        </div>
-
-        <div>
-          <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
-            Narrative
-          </label>
-          <Textarea
-            value={note.narrative}
-            onChange={(e) => setNote((n) => ({ ...n, narrative: e.target.value }))}
-            placeholder="Detailed narrative of the shift..."
-            disabled={!editable}
-          />
-        </div>
-
-        <Separator />
-
-        <ShiftTaskList
-          clerkOrgId={clerkOrgId}
-          editable={editable}
-          taskUpdates={taskUpdates}
+    <div className="flex h-full flex-col">
+      <div className="flex-1 overflow-y-auto">
+        <ShiftNoteStep
+          stepId={currentStepId}
+          stepIndex={currentStepIndex}
+          note={note}
+          onNoteChange={handleNoteChange}
+          taskDrafts={taskDrafts}
+          onTaskDraftsChange={setTaskDrafts}
           tasks={details.tasks}
-          onChange={setTaskUpdates}
+          editable
+          clerkOrgId={clerkOrgId}
+          clientName={clientName}
+          selectedServices={selectedServices}
+          selectedGoals={selectedGoals}
+          issueChoice={issueChoice}
+          confirmed={confirmed}
+          onSelectedServicesChange={(services) =>
+            updateServicesAndGoals(services, selectedGoals)
+          }
+          onSelectedGoalsChange={(goals) =>
+            updateServicesAndGoals(selectedServices, goals)
+          }
+          onIssueChoiceChange={updateIssueChoice}
+          onConfirmedChange={setConfirmed}
+          onEditStep={editStep}
+          isSaving={isSaving}
+          saved={saved}
         />
+      </div>
 
-        {blockers.length > 0 && (
-          <div className="rounded-md bg-atria-danger-bg p-3">
-            <p className="text-xs font-medium text-atria-danger mb-1">
-              Blockers
-            </p>
-            <ul className="space-y-0.5">
-              {blockers.map((blocker) => (
-                <li key={blocker} className="text-xs text-atria-danger">
-                  {blocker}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+      {saveError && (
+        <div className="mb-4 rounded-[var(--radius-atria-md)] border border-atria-danger/30 bg-atria-danger-bg p-3 text-sm text-atria-danger" data-testid="save-error">
+          {saveError}
+        </div>
+      )}
 
-        {canClockIn && (
-          <Button
-            variant="primary"
-            className="w-full"
-            onClick={handleClockIn}
-          >
-            Clock In
-          </Button>
-        )}
+      <div className="flex items-center justify-between gap-3">
+        <Button
+          variant="secondary"
+          size="lg"
+          className="h-[52px] min-w-[44px]"
+          onClick={goBack}
+          data-testid="wizard-back-button"
+        >
+          <ChevronLeft className="h-5 w-5" />
+          Back
+        </Button>
 
-        {editable && (
-          <Button
-            variant="primary"
-            className="w-full"
-            disabled={!canClockOut}
-            onClick={handleClockOut}
-          >
-            Clock Out & Submit
-          </Button>
-        )}
-
-        {details.shift.status === 'scheduled' && !isScheduledDue && (
-          <div className="rounded-md bg-atria-bg p-3 text-xs text-atria-muted">
-            This shift is scheduled for the future. Documentation opens at the
-            scheduled start time.
-          </div>
-        )}
-
-        {details.shift.status === 'submitted' && (
-          <Badge variant="info">Submitted for coordinator review</Badge>
-        )}
-        {details.shift.status === 'needs_correction' && (
-          <Badge variant="danger">Returned for corrections</Badge>
-        )}
-      </CardContent>
-    </Card>
+        <Button
+          variant="primary"
+          size="lg"
+          className={cn(
+            'h-[52px] min-w-[44px] rounded-full',
+            currentStepId !== 'issues' && WIZARD_STEPS[currentStepIndex].bgAccent,
+          )}
+          onClick={goNext}
+          disabled={isDoneStep ? !canSubmitDone : !canAdvance}
+          data-testid="wizard-next-button"
+        >
+          {isDoneStep ? 'Submit my notes' : 'Next Step'}
+          {isDoneStep ? (
+            <span className="ml-2">✓</span>
+          ) : (
+            <ChevronRight className="h-5 w-5" />
+          )}
+        </Button>
+      </div>
+    </div>
   )
 }

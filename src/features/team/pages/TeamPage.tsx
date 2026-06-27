@@ -1,6 +1,7 @@
 import { useOrganization, useUser } from '@clerk/react'
 import { useAction, useQuery, useMutation } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
+import type { Doc } from '../../../../convex/_generated/dataModel'
 import {
   Table,
   TableBody,
@@ -49,6 +50,23 @@ type CachedInvitation = {
   role: string
   status: string
   createdAt: string
+}
+
+function adpStatusPill(status: string) {
+  switch (status) {
+    case 'synced':
+    case 'matched':
+    case 'created':
+      return { label: 'Synced', variant: 'success' as const }
+    case 'queued':
+      return { label: 'Queued', variant: 'warning' as const }
+    case 'pending_credentials':
+      return { label: 'Pending credentials', variant: 'default' as const }
+    case 'error':
+      return { label: 'Error', variant: 'danger' as const }
+    default:
+      return { label: status, variant: 'default' as const }
+  }
 }
 
 function getCacheKey(orgId: string) {
@@ -122,8 +140,16 @@ export function TeamPage() {
     api.members.list,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
+  const employeeProfiles = useQuery(
+    api.employeeProfiles.listEmployeeProfiles,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
   const updateRole = useMutation(api.members.updateRole)
   const createInvitation = useAction(api.invitations.create)
+  const createCaregiver = useAction(api.employeeProfiles.createCaregiver)
+  const runAdpInitialWorkerLoad = useAction(
+    api.employeeProfiles.runAdpInitialWorkerLoad,
+  )
 
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<RoleValue>('org:caregiver')
@@ -133,6 +159,16 @@ export function TeamPage() {
   const [roleUpdates, setRoleUpdates] = useState<Record<string, RoleValue>>({})
   const [isUpdatingRole, setIsUpdatingRole] = useState<string | null>(null)
   const [roleSyncError, setRoleSyncError] = useState<string | null>(null)
+
+  const [caregiverName, setCaregiverName] = useState('')
+  const [caregiverEmail, setCaregiverEmail] = useState('')
+  const [isCreatingCaregiver, setIsCreatingCaregiver] = useState(false)
+  const [caregiverMessage, setCaregiverMessage] = useState<string | null>(null)
+  const [caregiverError, setCaregiverError] = useState<string | null>(null)
+
+  const [isLoadingAdp, setIsLoadingAdp] = useState(false)
+  const [adpMessage, setAdpMessage] = useState<string | null>(null)
+  const [adpError, setAdpError] = useState<string | null>(null)
 
   const [invitations, setInvitations] = useState<ClerkInvitation[]>(() => {
     if (!clerkOrgId) return []
@@ -291,6 +327,53 @@ export function TeamPage() {
     [loadInvitations, clerkOrgId],
   )
 
+  const handleCreateCaregiver = useCallback(async () => {
+    if (!clerkOrgId || !caregiverName.trim() || !caregiverEmail.trim()) return
+    setIsCreatingCaregiver(true)
+    setCaregiverError(null)
+    setCaregiverMessage(null)
+
+    try {
+      await createCaregiver({
+        clerkOrgId,
+        displayName: caregiverName.trim(),
+        email: caregiverEmail.trim(),
+        appBaseUrl: window.location.origin,
+      })
+      setCaregiverMessage(`Invitation sent to ${caregiverEmail.trim()}`)
+      setCaregiverName('')
+      setCaregiverEmail('')
+    } catch (err) {
+      setCaregiverError(err instanceof Error ? err.message : 'Failed to add caregiver')
+    } finally {
+      setIsCreatingCaregiver(false)
+    }
+  }, [clerkOrgId, caregiverName, caregiverEmail, createCaregiver])
+
+  const handleLoadAdp = useCallback(async () => {
+    if (!clerkOrgId) return
+    setIsLoadingAdp(true)
+    setAdpError(null)
+    setAdpMessage(null)
+
+    try {
+      const result = await runAdpInitialWorkerLoad({ clerkOrgId })
+      if (result.status === 'success') {
+        setAdpMessage(
+          `ADP load complete: ${result.processed} processed, ${result.matched} matched, ${result.created} created, ${result.errors} errors`,
+        )
+      } else {
+        setAdpMessage(
+          `ADP load ${result.status}${result.error ? `: ${result.error}` : ''}`,
+        )
+      }
+    } catch (err) {
+      setAdpError(err instanceof Error ? err.message : 'ADP load failed')
+    } finally {
+      setIsLoadingAdp(false)
+    }
+  }, [clerkOrgId, runAdpInitialWorkerLoad])
+
   async function syncConvexRole(
     clerkUserId: string,
     newRole: RoleValue,
@@ -348,10 +431,13 @@ export function TeamPage() {
   }
 
   const isAdmin =
-    members.find((m) => m.clerkUserId === user?.id)?.role === 'org:admin'
+    members.find((m: Doc<'tenantMembers'>) => m.clerkUserId === user?.id)?.role ===
+    'org:admin'
 
   const memberEmails = new Set(
-    members.map((member) => member.email.trim().toLowerCase()).filter(Boolean),
+    members
+      .map((member: Doc<'tenantMembers'>) => member.email.trim().toLowerCase())
+      .filter(Boolean),
   )
   const pendingInvitations = invitations.filter(
     (i) =>
@@ -506,6 +592,118 @@ export function TeamPage() {
         </Card>
       )}
 
+      {isAdmin && employeeProfiles !== undefined && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <UserPlus className="h-4 w-4 text-atria-accent" />
+                Caregivers & ADP sync
+              </CardTitle>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleLoadAdp}
+                disabled={isLoadingAdp}
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${isLoadingAdp ? 'animate-spin' : ''}`}
+                />
+                Load from ADP
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                  Name
+                </label>
+                <Input
+                  value={caregiverName}
+                  onChange={(e) => setCaregiverName(e.target.value)}
+                  placeholder="Caregiver name"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                  Email
+                </label>
+                <Input
+                  type="email"
+                  value={caregiverEmail}
+                  onChange={(e) => setCaregiverEmail(e.target.value)}
+                  placeholder="caregiver@agency.com"
+                  className="mt-1"
+                />
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              onClick={handleCreateCaregiver}
+              disabled={
+                isCreatingCaregiver ||
+                !caregiverName.trim() ||
+                !caregiverEmail.trim()
+              }
+            >
+              {isCreatingCaregiver ? 'Adding…' : 'Add caregiver'}
+            </Button>
+            {caregiverError && (
+              <p className="text-sm text-atria-danger">{caregiverError}</p>
+            )}
+            {caregiverMessage && (
+              <p className="text-sm text-atria-success">{caregiverMessage}</p>
+            )}
+            {adpError && (
+              <p className="text-sm text-atria-danger">{adpError}</p>
+            )}
+            {adpMessage && (
+              <p className="text-sm text-atria-success">{adpMessage}</p>
+            )}
+
+            {employeeProfiles.length === 0 ? (
+              <div className="text-sm text-atria-muted">
+                No caregiver employee profiles yet.
+              </div>
+            ) : (
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Name</TableHeader>
+                    <TableHeader>Email</TableHeader>
+                    <TableHeader>Role</TableHeader>
+                    <TableHeader>ADP Status</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {employeeProfiles.map((profile) => {
+                    const pill = adpStatusPill(profile.adpSyncStatus)
+                    return (
+                      <TableRow key={profile._id}>
+                        <TableCell className="font-medium">
+                          {profile.displayName}
+                        </TableCell>
+                        <TableCell>{profile.email}</TableCell>
+                        <TableCell>
+                          <Badge variant="success">
+                            {profile.role.replace('org:', '')}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={pill.variant}>{pill.label}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {roleSyncError && (
         <div className="rounded-md bg-atria-danger-bg border border-atria-danger/20 px-4 py-3">
           <p className="text-sm text-atria-danger font-medium">
@@ -545,7 +743,7 @@ export function TeamPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {members.map((member) => {
+                {members.map((member: Doc<'tenantMembers'>) => {
                   const isSelf = member.clerkUserId === user?.id
                   const currentRole =
                     roleUpdates[member.clerkUserId] ?? member.role

@@ -12,7 +12,7 @@ export function Table({ children, className, ...props }: PropsWithChildren<Table
 }
 
 export function TableHead({ children, className, ...props }: PropsWithChildren<TableHTMLAttributes<HTMLTableSectionElement>>) {
-  return <thead className={cn('bg-atria-sidebar text-white', className)} {...props}>{children}</thead>
+  return <thead className={cn('bg-atria-surface-2 text-atria-ink', className)} {...props}>{children}</thead>
 }
 
 export function TableBody({ children, className, ...props }: PropsWithChildren<TableHTMLAttributes<HTMLTableSectionElement>>) {
@@ -20,14 +20,14 @@ export function TableBody({ children, className, ...props }: PropsWithChildren<T
 }
 
 export function TableRow({ children, className, ...props }: PropsWithChildren<TableHTMLAttributes<HTMLTableRowElement>>) {
-  return <tr className={cn('border-b border-atria-border hover:bg-atria-bg/50 transition-colors', className)} {...props}>{children}</tr>
+  return <tr className={cn('border-b border-atria-border hover:bg-atria-surface-2/50 transition-colors', className)} {...props}>{children}</tr>
 }
 
 export function TableHeader({ children, className, ...props }: PropsWithChildren<ThHTMLAttributes<HTMLTableHeaderCellElement>>) {
   return (
     <th
       className={cn(
-        'px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider',
+        'px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-atria-text-secondary',
         className,
       )}
       {...props}

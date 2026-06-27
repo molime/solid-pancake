@@ -10,6 +10,7 @@ import {
   Building2,
   X,
   Globe,
+  MapPin,
 } from 'lucide-react'
 import { cn } from '@/shared/lib/cn'
 import { useQuery } from 'convex/react'
@@ -64,6 +65,12 @@ const navItems: NavItem[] = [
     path: '/team',
     icon: <Building2 className="h-4 w-4" />,
     roles: ['org:admin'],
+  },
+  {
+    label: 'Settings',
+    path: '/settings/geofence',
+    icon: <MapPin className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator'],
   },
 ]
 

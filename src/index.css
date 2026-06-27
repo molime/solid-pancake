@@ -1,31 +1,75 @@
 @import "tailwindcss";
 
-@theme inline {
+@theme {
   --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
-  --color-atria-bg: #f4f7f8;
-  --color-atria-surface: #ffffff;
-  --color-atria-sidebar: #17232b;
-  --color-atria-ink: #17212b;
-  --color-atria-muted: #667085;
-  --color-atria-border: #d9e3e7;
-  --color-atria-accent: #0f766e;
-  --color-atria-accent-hover: #115e59;
-  --color-atria-success: #16834f;
-  --color-atria-success-bg: rgba(22, 131, 79, 0.1);
-  --color-atria-warning: #b7791f;
-  --color-atria-warning-bg: rgba(183, 121, 31, 0.12);
-  --color-atria-danger: #b42318;
-  --color-atria-danger-bg: rgba(180, 35, 24, 0.1);
-  --color-atria-info: #2563eb;
-  --color-atria-info-bg: rgba(37, 99, 235, 0.1);
-  --color-atria-sidebar-text: #b9c5cb;
-  --color-atria-sidebar-active: #ffffff;
+
+  /* Default mode: Dark. Source: design-system-tokens.md (v1). */
+  --color-atria-bg: #0a0e0f;
+  --color-atria-bg-sunken: #070a0b;
+  --color-atria-surface: #11171a;
+  --color-atria-surface-2: #161d21;
+  --color-atria-surface-3: #1c262b;
+  --color-atria-sidebar: #0c1113;
+  --color-atria-ink: #f2f6f7;
+  --color-atria-text-primary: #f2f6f7;
+  --color-atria-text-secondary: #aebcc2;
+  --color-atria-muted: #6e808a;      /* legacy alias; prefer --color-atria-text-muted */
+  --color-atria-text-muted: #6e808a;
+  --color-atria-text-disabled: #49575e;
+  --color-atria-on-accent: #04140e;
+  --color-atria-border: #2a373d;
+  --color-atria-border-subtle: #1f2a2f;
+  --color-atria-border-strong: #3a4a52;
+  --color-atria-accent: #16a34a;
+  --color-atria-accent-hover: #15833d;
+  --color-atria-accent-quiet: rgba(22, 163, 74, 0.14);
+  --color-atria-success: #2fbf71;
+  --color-atria-success-bg: rgba(47, 191, 113, 0.14);
+  --color-atria-warning: #f0b429;
+  --color-atria-warning-bg: rgba(240, 180, 41, 0.14);
+  --color-atria-danger: #f0564a;
+  --color-atria-danger-bg: rgba(240, 86, 74, 0.14);
+  --color-atria-info: #4d8df6;
+  --color-atria-info-bg: rgba(77, 141, 246, 0.14);
+  --color-atria-neutral: #8a99a0;
+  --color-atria-neutral-bg: rgba(138, 153, 160, 0.12);
+  --color-atria-sidebar-text: #aebcc2;
+  --color-atria-sidebar-active: #f2f6f7;
+
+  /* Step accents used by the Progress Note wizard. */
+  --color-atria-step-when: #3b82f6;
+  --color-atria-step-what: #a855f7;
+  --color-atria-step-how: #f59e0b;
+  --color-atria-step-goal: #14b8a6;
+  --color-atria-step-issues: #ef4444;
+  --color-atria-step-done: #16a34a;
+
+  /* Radius scale. */
   --radius-atria: 8px;
+  --radius-atria-sm: 8px;
+  --radius-atria-md: 12px;
+  --radius-atria-lg: 16px;
+  --radius-atria-xl: 20px;
+  --radius-atria-pill: 999px;
+
+  /* Sizing / touch targets. */
+  --size-control-md: 40px;
+  --size-control-lg: 52px;
+  --size-tile: 88px;
+  --size-sidebar: 248px;
+  --size-topbar: 64px;
+  --size-kpi-card: 140px;
+  --size-avatar: 36px;
+
+  /* Elevation. */
+  --shadow-atria-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-atria-pop: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
 :root {
   color: var(--color-atria-ink);
   background: var(--color-atria-bg);
+  font-size: 16px;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -56,7 +100,7 @@ a {
   text-decoration: none;
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling (dark mode default). */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -65,9 +109,58 @@ a {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #b9c5cb;
+  background: var(--color-atria-border-strong);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
+  background: #4a5a62;
+}
+
+/**
+ * Light mode palette (preserved for a future theme toggle).
+ * Apply `.light` or `data-theme="light"` on <html> or a parent to restore the
+ * legacy light values that lived in @theme inline before this dark port.
+ */
+.light,
+[data-theme="light"] {
+  --color-atria-bg: #f4f7f8;
+  --color-atria-bg-sunken: #e8edf0;
+  --color-atria-surface: #ffffff;
+  --color-atria-surface-2: #f8f9fa;
+  --color-atria-surface-3: #f1f3f5;
+  --color-atria-sidebar: #17232b;
+  --color-atria-ink: #17212b;
+  --color-atria-text-primary: #17212b;
+  --color-atria-text-secondary: #344054;
+  --color-atria-muted: #667085;      /* legacy alias; prefer --color-atria-text-muted */
+  --color-atria-text-muted: #667085;
+  --color-atria-text-disabled: #98a2b3;
+  --color-atria-on-accent: #ffffff;
+  --color-atria-border: #d9e3e7;
+  --color-atria-border-subtle: #e4e7ec;
+  --color-atria-border-strong: #98a2b3;
+  --color-atria-accent: #0f766e;
+  --color-atria-accent-hover: #115e59;
+  --color-atria-accent-quiet: rgba(15, 118, 110, 0.1);
+  --color-atria-success: #16834f;
+  --color-atria-success-bg: rgba(22, 131, 79, 0.1);
+  --color-atria-warning: #b7791f;
+  --color-atria-warning-bg: rgba(183, 121, 31, 0.12);
+  --color-atria-danger: #b42318;
+  --color-atria-danger-bg: rgba(180, 35, 24, 0.1);
+  --color-atria-info: #2563eb;
+  --color-atria-info-bg: rgba(37, 99, 235, 0.1);
+  --color-atria-neutral: #667085;
+  --color-atria-neutral-bg: rgba(102, 112, 133, 0.1);
+  --color-atria-sidebar-text: #b9c5cb;
+  --color-atria-sidebar-active: #ffffff;
+}
+
+.light ::-webkit-scrollbar-thumb,
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #b9c5cb;
+}
+.light ::-webkit-scrollbar-thumb:hover,
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
   background: #8fa0a8;
 }

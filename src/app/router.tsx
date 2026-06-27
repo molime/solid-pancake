@@ -49,6 +49,11 @@ const SearchPage = lazy(() =>
     default: module.SearchPage,
   })),
 )
+const GeofenceSettingsPage = lazy(() =>
+  import('@/features/settings/pages/GeofenceSettingsPage').then((module) => ({
+    default: module.GeofenceSettingsPage,
+  })),
+)
 
 function RouteSuspense({ children }: { children: ReactNode }) {
   return (
@@ -207,6 +212,18 @@ export function AppRouter() {
             <RouteSuspense>
               <SearchPage />
             </RouteSuspense>
+          }
+        />
+        <Route
+          path="settings/geofence"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator']}
+            >
+              <RouteSuspense>
+                <GeofenceSettingsPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
           }
         />
         <Route path="*" element={<Navigate replace to="/" />} />

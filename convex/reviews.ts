@@ -111,6 +111,10 @@ export const requestCorrection = mutation({
     if (!shift) throw new Error('Shift not found.')
     assertTenantDoc(shift, tenantId)
 
+    if (!args.comment || args.comment.trim().length === 0) {
+      throw new Error('A comment is required to request a correction.')
+    }
+
     if (shift.status !== 'submitted' && shift.status !== 'billing_ready') {
       throw new Error(
         'Can only return submitted or approved shifts for correction.',

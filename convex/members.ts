@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
 import { query, mutation } from './_generated/server'
+import { internal } from './_generated/api'
 import {
   getActiveClerkOrganizationId,
   getClerkOrganizationRole,
@@ -8,6 +9,7 @@ import {
   requireTenant,
   requireTenantRole,
 } from './authHelpers'
+import { ensureCaregiverEmployeeProfile } from './employeeProfiles'
 
 export const checkMembership = query({
   args: { clerkOrgId: v.string() },
@@ -129,16 +131,46 @@ export const sync = mutation({
         displayName: args.displayName,
         email: args.email,
       })
+      if (role === 'org:caregiver') {
+        const employeeProfileId = await ensureCaregiverEmployeeProfile(
+          ctx,
+          tenantId,
+          { ...existing, role, displayName: args.displayName, email: args.email },
+        )
+        if (employeeProfileId) {
+          await ctx.scheduler.runAfter(0, internal.adpOutbound.adpSyncWorker, {
+            employeeProfileId,
+          })
+        }
+      }
       return existing._id
     }
 
-    return ctx.db.insert('tenantMembers', {
+    const memberId = await ctx.db.insert('tenantMembers', {
       tenantId,
       clerkUserId: args.clerkUserId,
       role,
       displayName: args.displayName,
       email: args.email,
     })
+
+    if (role === 'org:caregiver') {
+      const newMember = await ctx.db.get(memberId)
+      if (newMember) {
+        const employeeProfileId = await ensureCaregiverEmployeeProfile(
+          ctx,
+          tenantId,
+          newMember,
+        )
+        if (employeeProfileId) {
+          await ctx.scheduler.runAfter(0, internal.adpOutbound.adpSyncWorker, {
+            employeeProfileId,
+          })
+        }
+      }
+    }
+
+    return memberId
   },
 })
 
@@ -173,6 +205,21 @@ export const updateRole = mutation({
     }
 
     await ctx.db.patch(existing._id, { role: args.role })
+
+    if (args.role === 'org:caregiver') {
+      const updatedMember = { ...existing, role: args.role }
+      const employeeProfileId = await ensureCaregiverEmployeeProfile(
+        ctx,
+        tenantId,
+        updatedMember,
+      )
+      if (employeeProfileId) {
+        await ctx.scheduler.runAfter(0, internal.adpOutbound.adpSyncWorker, {
+          employeeProfileId,
+        })
+      }
+    }
+
     return existing._id
   },
 })

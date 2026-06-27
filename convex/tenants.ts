@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
 import { query, mutation } from './_generated/server'
+import { internal } from './_generated/api'
 import {
   getClerkOrganizationRole,
   requireIdentity,
@@ -8,6 +9,7 @@ import {
   type TenantRole,
 } from './authHelpers'
 import type { Id } from './_generated/dataModel'
+import { ensureCaregiverEmployeeProfile } from './employeeProfiles'
 
 export const list = query({
   args: {},
@@ -140,6 +142,22 @@ export const ensureSelectedAgency = mutation({
       displayName,
       email,
     })
+
+    if (role === 'org:caregiver') {
+      const newMember = await ctx.db.get(memberId)
+      if (newMember) {
+        const employeeProfileId = await ensureCaregiverEmployeeProfile(
+          ctx,
+          tenantId,
+          newMember,
+        )
+        if (employeeProfileId) {
+          await ctx.scheduler.runAfter(0, internal.adpOutbound.adpSyncWorker, {
+            employeeProfileId,
+          })
+        }
+      }
+    }
 
     return { tenantId, memberId, isNewTenant }
   },
