@@ -7,6 +7,7 @@ const mocks = {
   createInvitation: vi.fn(),
   createCaregiver: vi.fn(),
   runAdpInitialWorkerLoad: vi.fn(),
+  drainAdpPendingRows: vi.fn(),
   updateMember: vi.fn(),
   updateRole: vi.fn(),
   getInvitations: vi.fn(),
@@ -97,6 +98,8 @@ function mockTeamState(options: {
     ((mutationRef: unknown) => {
       const name = getFunctionName(mutationRef as Parameters<typeof getFunctionName>[0])
       if (name === 'members:updateRole') return mocks.updateRole
+      if (name === 'employeeProfiles:drainAdpPendingRows')
+        return mocks.drainAdpPendingRows
       return vi.fn()
     }) as unknown as typeof useMutation,
   )
@@ -527,6 +530,41 @@ describe('TeamPage', () => {
     await waitFor(() => {
       expect(
         screen.getByText(/3 processed, 1 matched, 2 created, 0 errors/i),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('queues an ADP drain for pending rows', async () => {
+    mocks.drainAdpPendingRows.mockResolvedValueOnce({ status: 'queued' })
+
+    mockTeamState({
+      members: [
+        {
+          _id: 'm1',
+          clerkUserId: 'user_admin',
+          displayName: 'Admin User',
+          email: 'admin@test.com',
+          role: 'org:admin',
+        },
+      ],
+      employeeProfiles: [],
+      currentUserId: 'user_admin',
+    })
+
+    render(<TeamPage />)
+
+    const drainButton = screen.getByRole('button', { name: /Drain ADP queue/i })
+    await userEvent.click(drainButton)
+
+    await waitFor(() => {
+      expect(mocks.drainAdpPendingRows).toHaveBeenCalledTimes(1)
+    })
+    expect(mocks.drainAdpPendingRows).toHaveBeenCalledWith({
+      clerkOrgId: 'org_123',
+    })
+    await waitFor(() => {
+      expect(
+        screen.getByText(/ADP drain queued/i),
       ).toBeInTheDocument()
     })
   })

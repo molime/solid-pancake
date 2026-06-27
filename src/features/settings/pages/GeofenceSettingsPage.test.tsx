@@ -33,8 +33,8 @@ const defaultGeofence = {
   enabled: false,
   enforceClockIn: false,
   enforceClockOut: false,
-  defaultRadiusMeters: 100,
-  maxAccuracyMeters: 50,
+  defaultRadiusMeters: 150,
+  maxAccuracyMeters: 100,
 }
 
 function mockSettingsState(settings: { shiftGeofence: typeof defaultGeofence }) {
@@ -68,8 +68,8 @@ describe('GeofenceSettingsPage', () => {
     expect(screen.getByRole('checkbox', { name: /Enable geofence/i })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: /Enforce on clock-in/i })).toBeDisabled()
     expect(screen.getByRole('checkbox', { name: /Enforce on clock-out/i })).toBeDisabled()
+    expect(screen.getByDisplayValue('150')).toBeInTheDocument()
     expect(screen.getByDisplayValue('100')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('50')).toBeInTheDocument()
   })
 
   it('toggles enforcement options when geofence is enabled', async () => {

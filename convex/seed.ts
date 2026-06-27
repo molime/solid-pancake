@@ -2,6 +2,7 @@ import { v } from 'convex/values'
 import { mutation } from './_generated/server'
 import { requireTenantRole } from './authHelpers'
 import type { Id } from './_generated/dataModel'
+import { DEFAULT_SHIFT_GEOFENCE } from './tenantSettings'
 
 // Fixed reference dates for deterministic, idempotent seeds across days
 const REF_TODAY = '2024-01-15'
@@ -612,19 +613,12 @@ export const seedE2E = mutation({
       .query('tenantSettings')
       .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
       .unique()
-    const defaultGeofence = {
-      enabled: false,
-      enforceClockIn: false,
-      enforceClockOut: false,
-      defaultRadiusMeters: 100,
-      maxAccuracyMeters: 50,
-    }
     if (existingSettings) {
-      await ctx.db.patch(existingSettings._id, { shiftGeofence: defaultGeofence })
+      await ctx.db.patch(existingSettings._id, { shiftGeofence: DEFAULT_SHIFT_GEOFENCE })
     } else {
       await ctx.db.insert('tenantSettings', {
         tenantId,
-        shiftGeofence: defaultGeofence,
+        shiftGeofence: DEFAULT_SHIFT_GEOFENCE,
       })
     }
 
@@ -789,15 +783,8 @@ export const resetE2EShifts = mutation({
       .query('tenantSettings')
       .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
       .unique()
-    const defaultGeofence = {
-      enabled: false,
-      enforceClockIn: false,
-      enforceClockOut: false,
-      defaultRadiusMeters: 100,
-      maxAccuracyMeters: 50,
-    }
     if (existingSettings) {
-      await ctx.db.patch(existingSettings._id, { shiftGeofence: defaultGeofence })
+      await ctx.db.patch(existingSettings._id, { shiftGeofence: DEFAULT_SHIFT_GEOFENCE })
     }
 
     const findShift = async (scheduledStart: string) => {

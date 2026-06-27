@@ -1099,3 +1099,231 @@ describe('adpSyncWorker scheduled drain', () => {
     expect(profiles[0]?.adpSyncStatus).toBe('synced')
   })
 })
+describe('adpDrainPendingRows', () => {
+  it('drains pending time punches after ADP is configured', async () => {
+    stubAdpEnv()
+    resetSharedMockAdp()
+    const t = createTestConvex()
+    const clerkOrgId = 'org_adp_drain_punch'
+    const caregiverId = 'user_cg_drain_punch'
+    const caregiverEmail = 'drain-punch@example.com'
+    const { tenantId, shiftId } = await seedAgency(t, {
+      clerkOrgId,
+      caregiverId,
+      caregiverEmail,
+      configureAdp: false,
+    })
+
+    const punchResult = await asCaregiver(t, caregiverId, clerkOrgId).mutation(
+      api.shifts.clockIn,
+      { clerkOrgId, shiftId },
+    )
+    expect(punchResult.punchId).toBeDefined()
+
+    const punchBefore = await t.run(async (ctx) => {
+      return ctx.db.get(punchResult.punchId as Id<'timePunches'>)
+    })
+    expect(punchBefore?.adpSyncStatus).toBe('pending_credentials')
+
+    // Configure ADP and add an employee profile with an AOID so the drain can
+    // successfully post the pending punch.
+    await t.run(async (ctx) => {
+      await ctx.db.insert('integrationConnections', {
+        tenantId,
+        provider: 'adp',
+        status: 'configured',
+        lastCheckedAt: new Date().toISOString(),
+      })
+
+      await ctx.db.insert('employeeProfiles', {
+        tenantId,
+        clerkUserId: caregiverId,
+        displayName: 'Caregiver',
+        email: caregiverEmail,
+        adpAssociateOid: 'mock-aoid-drain-punch@example.com',
+        adpSyncStatus: 'synced',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    vi.useFakeTimers()
+
+    const drainResult = await t.action(internal.adpOutbound.adpDrainPendingRows, {
+      tenantId,
+    })
+    expect(drainResult.status).toBe('draining')
+    expect(drainResult.punchCount).toBe(1)
+    expect(drainResult.profileCount).toBe(0)
+
+    await t.finishAllScheduledFunctions(vi.runAllTimers)
+
+    const punchAfter = await t.run(async (ctx) => {
+      return ctx.db.get(punchResult.punchId as Id<'timePunches'>)
+    })
+    expect(punchAfter?.adpSyncStatus).toBe('synced')
+    expect(punchAfter?.adpPunchId).toBeDefined()
+  })
+
+  it('drains pending employee profiles after ADP is configured', async () => {
+    stubAdpEnv()
+    resetSharedMockAdp()
+    const t = createTestConvex()
+    const clerkOrgId = 'org_adp_drain_profile'
+    const adminId = 'user_admin_drain_profile'
+    const caregiverEmail = 'drain-profile@example.com'
+
+    const tenantId = await t.run(async (ctx) => {
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId,
+        name: 'Test Agency',
+        slug: 'test-agency',
+        createdAt: new Date().toISOString(),
+      })
+
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: adminId,
+        role: 'org:admin',
+        displayName: 'Admin',
+        email: 'admin@example.com',
+      })
+
+      return tenantId
+    })
+
+    // Create a caregiver profile while ADP is not configured.
+    const profileId = await t.run(async (ctx) => {
+      return ctx.db.insert('employeeProfiles', {
+        tenantId,
+        displayName: 'Drain Profile',
+        email: caregiverEmail,
+        adpSyncStatus: 'pending_credentials',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    const profileBefore = await t.run(async (ctx) => {
+      return ctx.db.get(profileId)
+    })
+    expect(profileBefore?.adpSyncStatus).toBe('pending_credentials')
+
+    // Configure ADP.
+    await t.run(async (ctx) => {
+      await ctx.db.insert('integrationConnections', {
+        tenantId,
+        provider: 'adp',
+        status: 'configured',
+        lastCheckedAt: new Date().toISOString(),
+      })
+    })
+
+    vi.useFakeTimers()
+
+    const drainResult = await t.action(internal.adpOutbound.adpDrainPendingRows, {
+      tenantId,
+    })
+    expect(drainResult.status).toBe('draining')
+    expect(drainResult.punchCount).toBe(0)
+    expect(drainResult.profileCount).toBe(1)
+
+    await t.finishAllScheduledFunctions(vi.runAllTimers)
+
+    const profileAfter = await t.run(async (ctx) => {
+      return ctx.db.get(profileId)
+    })
+    expect(profileAfter?.adpSyncStatus).toBe('synced')
+    expect(profileAfter?.adpAssociateOid).toBeDefined()
+  })
+
+  it('returns pending_credentials when ADP is not configured', async () => {
+    stubAdpEnv()
+    resetSharedMockAdp()
+    const t = createTestConvex()
+    const clerkOrgId = 'org_adp_drain_unconfigured'
+    const caregiverId = 'user_cg_drain_unconfigured'
+    const caregiverEmail = 'drain-unconfigured@example.com'
+    const { tenantId, shiftId } = await seedAgency(t, {
+      clerkOrgId,
+      caregiverId,
+      caregiverEmail,
+      configureAdp: false,
+    })
+
+    await asCaregiver(t, caregiverId, clerkOrgId).mutation(api.shifts.clockIn, {
+      clerkOrgId,
+      shiftId,
+    })
+
+    const drainResult = await t.action(internal.adpOutbound.adpDrainPendingRows, {
+      tenantId,
+    })
+    expect(drainResult.status).toBe('pending_credentials')
+    expect(drainResult.punchCount).toBe(0)
+    expect(drainResult.profileCount).toBe(0)
+  })
+
+  it('exposes an admin mutation that queues the drain', async () => {
+    stubAdpEnv()
+    resetSharedMockAdp()
+    const t = createTestConvex()
+    const clerkOrgId = 'org_adp_drain_admin'
+    const adminId = 'user_admin_drain_admin'
+    const caregiverId = 'user_cg_drain_admin'
+    const caregiverEmail = 'drain-admin@example.com'
+
+    const { tenantId, shiftId } = await seedAgency(t, {
+      clerkOrgId,
+      caregiverId,
+      caregiverEmail,
+      configureAdp: true,
+    })
+
+    const punchId = await t.run(async (ctx) => {
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: adminId,
+        role: 'org:admin',
+        displayName: 'Admin',
+        email: 'admin@example.com',
+      })
+
+      await ctx.db.insert('employeeProfiles', {
+        tenantId,
+        clerkUserId: caregiverId,
+        displayName: 'Caregiver',
+        email: caregiverEmail,
+        adpAssociateOid: 'mock-aoid-drain-admin@example.com',
+        adpSyncStatus: 'synced',
+        createdAt: new Date().toISOString(),
+      })
+
+      return ctx.db.insert('timePunches', {
+        tenantId,
+        shiftId,
+        caregiverId,
+        punchType: 'clock_in',
+        at: new Date().toISOString(),
+        source: 'atriax',
+        adpSyncStatus: 'pending_credentials',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    vi.useFakeTimers()
+
+    const queued = await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.employeeProfiles.drainAdpPendingRows,
+      { clerkOrgId },
+    )
+    expect(queued.status).toBe('queued')
+
+    await t.finishAllScheduledFunctions(vi.runAllTimers)
+
+    const punch = await t.run(async (ctx) => {
+      return ctx.db.get(punchId)
+    })
+    expect(punch).toBeDefined()
+    expect(punch?.adpSyncStatus).toBe('synced')
+    expect(punch?.adpPunchId).toBeDefined()
+  })
+})

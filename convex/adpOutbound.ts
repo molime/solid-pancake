@@ -318,6 +318,50 @@ export const adpSyncWorker = internalAction({
   },
 })
 
+export const adpDrainPendingRows = internalAction({
+  args: { tenantId: v.id('tenants') },
+  handler: async (ctx: ActionCtx, { tenantId }) => {
+    const configured = await ctx.runQuery(
+      internal.adpSync.isAdpConfiguredForTenant,
+      { tenantId },
+    )
+    if (!configured) {
+      return {
+        status: 'pending_credentials' as const,
+        punchCount: 0,
+        profileCount: 0,
+      }
+    }
+
+    const [pendingPunches, pendingProfiles] = await Promise.all([
+      ctx.runQuery(internal.adpSync.findPendingAdpPunches, { tenantId }),
+      ctx.runQuery(internal.adpSync.findPendingAdpProfiles, { tenantId }),
+    ])
+
+    let punchCount = 0
+    for (const punch of pendingPunches) {
+      await ctx.scheduler.runAfter(0, internal.adpOutbound.adpSyncPunch, {
+        timePunchId: punch._id,
+      })
+      punchCount++
+    }
+
+    let profileCount = 0
+    for (const profile of pendingProfiles) {
+      await ctx.scheduler.runAfter(0, internal.adpOutbound.adpSyncWorker, {
+        employeeProfileId: profile._id,
+      })
+      profileCount++
+    }
+
+    return {
+      status: 'draining' as const,
+      punchCount,
+      profileCount,
+    }
+  },
+})
+
 export const adpInitialWorkerLoad = internalAction({
   args: { tenantId: v.id('tenants') },
   handler: async (ctx: ActionCtx, { tenantId }) => {

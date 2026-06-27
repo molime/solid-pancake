@@ -150,6 +150,9 @@ export function TeamPage() {
   const runAdpInitialWorkerLoad = useAction(
     api.employeeProfiles.runAdpInitialWorkerLoad,
   )
+  const drainAdpPendingRows = useMutation(
+    api.employeeProfiles.drainAdpPendingRows,
+  )
 
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<RoleValue>('org:caregiver')
@@ -373,6 +376,22 @@ export function TeamPage() {
       setIsLoadingAdp(false)
     }
   }, [clerkOrgId, runAdpInitialWorkerLoad])
+
+  const handleDrainAdp = useCallback(async () => {
+    if (!clerkOrgId) return
+    setIsLoadingAdp(true)
+    setAdpError(null)
+    setAdpMessage(null)
+
+    try {
+      await drainAdpPendingRows({ clerkOrgId })
+      setAdpMessage('ADP drain queued. Pending punches and profiles will sync shortly.')
+    } catch (err) {
+      setAdpError(err instanceof Error ? err.message : 'ADP drain failed')
+    } finally {
+      setIsLoadingAdp(false)
+    }
+  }, [clerkOrgId, drainAdpPendingRows])
 
   async function syncConvexRole(
     clerkUserId: string,
@@ -600,17 +619,30 @@ export function TeamPage() {
                 <UserPlus className="h-4 w-4 text-atria-accent" />
                 Caregivers & ADP sync
               </CardTitle>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleLoadAdp}
-                disabled={isLoadingAdp}
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${isLoadingAdp ? 'animate-spin' : ''}`}
-                />
-                Load from ADP
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleDrainAdp}
+                  disabled={isLoadingAdp}
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${isLoadingAdp ? 'animate-spin' : ''}`}
+                  />
+                  Drain ADP queue
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleLoadAdp}
+                  disabled={isLoadingAdp}
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${isLoadingAdp ? 'animate-spin' : ''}`}
+                  />
+                  Load from ADP
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">

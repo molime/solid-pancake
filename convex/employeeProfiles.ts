@@ -2,6 +2,7 @@ import { v } from 'convex/values'
 import {
   action,
   internalMutation,
+  mutation,
   query,
   type MutationCtx,
 } from './_generated/server'
@@ -250,6 +251,17 @@ export const listEmployeeProfiles = query({
         adpSyncStatus: profile.adpSyncStatus,
       }
     })
+  },
+})
+
+export const drainAdpPendingRows = mutation({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, { clerkOrgId }) => {
+    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, ['org:admin'])
+    await ctx.scheduler.runAfter(0, internal.adpOutbound.adpDrainPendingRows, {
+      tenantId,
+    })
+    return { status: 'queued' }
   },
 })
 

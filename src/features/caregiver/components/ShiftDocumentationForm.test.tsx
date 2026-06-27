@@ -111,8 +111,8 @@ function mockState(options?: {
     enabled: options?.geofenceEnabled ?? false,
     enforceClockIn: options?.geofenceEnforceClockIn ?? false,
     enforceClockOut: options?.geofenceEnforceClockOut ?? false,
-    defaultRadiusMeters: 100,
-    maxAccuracyMeters: 50,
+    defaultRadiusMeters: 150,
+    maxAccuracyMeters: 100,
   }
 
   vi.mocked(useQuery).mockImplementation(

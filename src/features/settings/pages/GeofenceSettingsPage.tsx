@@ -35,8 +35,8 @@ export function GeofenceSettingsPage() {
         enabled: false,
         enforceClockIn: false,
         enforceClockOut: false,
-        defaultRadiusMeters: 100,
-        maxAccuracyMeters: 50,
+        defaultRadiusMeters: 150,
+        maxAccuracyMeters: 100,
       }
 
   if (!settings) {

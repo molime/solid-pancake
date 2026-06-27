@@ -130,6 +130,41 @@ export const isAdpConfiguredForTenant = internalQuery({
   },
 })
 
+export const findPendingAdpPunches = internalQuery({
+  args: { tenantId: v.id('tenants') },
+  handler: async (ctx: QueryCtx, { tenantId }) => {
+    const pending = await ctx.db
+      .query('timePunches')
+      .withIndex('by_tenant_sync_status', (q) =>
+        q.eq('tenantId', tenantId).eq('adpSyncStatus', 'pending_credentials'),
+      )
+      .collect()
+
+    const queued = await ctx.db
+      .query('timePunches')
+      .withIndex('by_tenant_sync_status', (q) =>
+        q.eq('tenantId', tenantId).eq('adpSyncStatus', 'queued'),
+      )
+      .collect()
+
+    return [...pending, ...queued]
+  },
+})
+
+export const findPendingAdpProfiles = internalQuery({
+  args: { tenantId: v.id('tenants') },
+  handler: async (ctx: QueryCtx, { tenantId }) => {
+    const profiles = await ctx.db
+      .query('employeeProfiles')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+      .collect()
+
+    return profiles.filter(
+      (p) => p.adpSyncStatus === 'pending_credentials' || p.adpSyncStatus === 'queued',
+    )
+  },
+})
+
 export const patchPunchAdpStatus = internalMutation({
   args: {
     timePunchId: v.id('timePunches'),
