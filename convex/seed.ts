@@ -1,5 +1,5 @@
 import { v } from 'convex/values'
-import { mutation } from './_generated/server'
+import { mutation, type MutationCtx } from './_generated/server'
 import { requireTenantRole } from './authHelpers'
 import type { Id } from './_generated/dataModel'
 import { DEFAULT_SHIFT_GEOFENCE } from './tenantSettings'
@@ -502,10 +502,274 @@ function hashToken(token: string): number {
   return hash
 }
 
-// Deterministic E2E fixtures. Idempotent by clerkOrgId, member user id, and
-// scheduled start time. Geofence is disabled by default so the lifecycle
-// flow can run without location. A second client with coordinates is provided
-// for geofence scenarios.
+type E2EFixtureUserIds = {
+  adminUserId: string
+  coordinatorUserId: string
+  caregiverUserId: string
+}
+
+async function deleteShiftChildren(
+  ctx: MutationCtx,
+  tenantId: Id<'tenants'>,
+  shiftId: Id<'shifts'>,
+) {
+  const notes = await ctx.db
+    .query('progressNotes')
+    .withIndex('by_tenant_shift', (q) =>
+      q.eq('tenantId', tenantId).eq('shiftId', shiftId),
+    )
+    .collect()
+  for (const note of notes) {
+    await ctx.db.delete(note._id)
+  }
+
+  const tasks = await ctx.db
+    .query('shiftTasks')
+    .withIndex('by_tenant_shift', (q) =>
+      q.eq('tenantId', tenantId).eq('shiftId', shiftId),
+    )
+    .collect()
+  for (const task of tasks) {
+    await ctx.db.delete(task._id)
+  }
+
+  const reviews = await ctx.db
+    .query('reviewEvents')
+    .withIndex('by_tenant_shift', (q) =>
+      q.eq('tenantId', tenantId).eq('shiftId', shiftId),
+    )
+    .collect()
+  for (const review of reviews) {
+    await ctx.db.delete(review._id)
+  }
+
+  const billingLines = await ctx.db
+    .query('billingLines')
+    .withIndex('by_tenant_shift', (q) =>
+      q.eq('tenantId', tenantId).eq('shiftId', shiftId),
+    )
+    .collect()
+  for (const line of billingLines) {
+    await ctx.db.delete(line._id)
+  }
+
+  const punches = await ctx.db
+    .query('timePunches')
+    .withIndex('by_tenant_shift', (q) =>
+      q.eq('tenantId', tenantId).eq('shiftId', shiftId),
+    )
+    .collect()
+  for (const punch of punches) {
+    await ctx.db.delete(punch._id)
+  }
+}
+
+async function seedE2EFixtures(
+  ctx: MutationCtx,
+  clerkOrgId: string,
+  userIds: E2EFixtureUserIds,
+) {
+  const { tenantId } = await requireTenantRole(ctx, clerkOrgId, ['org:admin'])
+
+  // Fixed fixture date so seeded shifts are always in the past and clock-in is
+  // allowed regardless of the actual UTC time the tests run.
+  const fixtureDate = REF_TODAY
+
+  const members = [
+    {
+      clerkUserId: userIds.adminUserId,
+      role: 'org:admin' as const,
+      displayName: 'E2E Admin',
+      email: 'e2e-admin@atriax.test',
+    },
+    {
+      clerkUserId: userIds.coordinatorUserId,
+      role: 'org:coordinator' as const,
+      displayName: 'E2E Coordinator',
+      email: 'e2e-coordinator@atriax.test',
+    },
+    {
+      clerkUserId: userIds.caregiverUserId,
+      role: 'org:caregiver' as const,
+      displayName: 'E2E Caregiver',
+      email: 'e2e-caregiver@atriax.test',
+    },
+  ]
+
+  const memberIds: Record<string, Id<'tenantMembers'>> = {}
+  for (const member of members) {
+    const existing = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', tenantId).eq('clerkUserId', member.clerkUserId),
+      )
+      .unique()
+    if (existing) {
+      memberIds[member.clerkUserId] = existing._id
+    } else {
+      memberIds[member.clerkUserId] = await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: member.clerkUserId,
+        role: member.role,
+        displayName: member.displayName,
+        email: member.email,
+      })
+    }
+  }
+
+  const findClient = async (displayName: string) => {
+    const all = await ctx.db
+      .query('clients')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    return all.find((c) => c.displayName === displayName) ?? null
+  }
+
+  let lifecycleClientId: Id<'clients'>
+  const lifecycleClient = await findClient('Sam Lee')
+  if (!lifecycleClient) {
+    lifecycleClientId = await ctx.db.insert('clients', {
+      tenantId,
+      displayName: 'Sam Lee',
+      serviceType: 'ILS',
+      authorizationHours: 30,
+      riskFlags: [],
+    })
+  } else {
+    lifecycleClientId = lifecycleClient._id
+  }
+
+  let geofenceClientId: Id<'clients'>
+  const geofenceClient = await findClient('Maya Torres')
+  if (!geofenceClient) {
+    geofenceClientId = await ctx.db.insert('clients', {
+      tenantId,
+      displayName: 'Maya Torres',
+      serviceType: 'SLS',
+      authorizationHours: 40,
+      riskFlags: ['mobility'],
+      serviceAddress: {
+        line1: '123 Hennepin Ave',
+        city: 'Minneapolis',
+        state: 'MN',
+        postalCode: '55401',
+        latitude: 44.9778,
+        longitude: -93.265,
+      },
+    })
+  } else {
+    geofenceClientId = geofenceClient._id
+  }
+
+  // Reset geofence to disabled so lifecycle tests never prompt for location.
+  const existingSettings = await ctx.db
+    .query('tenantSettings')
+    .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+    .unique()
+  if (existingSettings) {
+    await ctx.db.patch(existingSettings._id, {
+      shiftGeofence: DEFAULT_SHIFT_GEOFENCE,
+    })
+  } else {
+    await ctx.db.insert('tenantSettings', {
+      tenantId,
+      shiftGeofence: DEFAULT_SHIFT_GEOFENCE,
+    })
+  }
+
+  const findShiftsByStart = async (scheduledStart: string) => {
+    const all = await ctx.db
+      .query('shifts')
+      .withIndex('by_tenant_status_start', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    return all.filter((s) => s.scheduledStart === scheduledStart)
+  }
+
+  const createCleanShift = async (
+    clientId: Id<'clients'>,
+    scheduledStart: string,
+    scheduledEnd: string,
+    serviceType: 'ILS' | 'SLS',
+    rate: number,
+  ): Promise<Id<'shifts'>> => {
+    const shiftId = await ctx.db.insert('shifts', {
+      tenantId,
+      clientId,
+      caregiverId: userIds.caregiverUserId,
+      scheduledStart,
+      scheduledEnd,
+      status: 'scheduled',
+      serviceType,
+      rate,
+    })
+
+    await ctx.db.insert('progressNotes', {
+      tenantId,
+      shiftId,
+      startTime: '',
+      endTime: '',
+      servicesProvided: '',
+      clientResponse: '',
+      narrative: '',
+    })
+
+    await ctx.db.insert('shiftTasks', {
+      tenantId,
+      shiftId,
+      title: 'Upload shift documentation proof',
+      requiredProof: true,
+      status: 'pending',
+    })
+
+    return shiftId
+  }
+
+  // Destroy any existing fixture shifts for the known start times so that each
+  // E2E reset creates fresh documents with new IDs. This prevents the
+  // React/Convex client from reusing stale query/component state keyed by the
+  // same shift ID across serial scenarios.
+  const lifecycleStart = `${fixtureDate}T09:00:00Z`
+  const existingLifecycleShifts = await findShiftsByStart(lifecycleStart)
+  for (const shift of existingLifecycleShifts) {
+    await deleteShiftChildren(ctx, tenantId, shift._id)
+    await ctx.db.delete(shift._id)
+  }
+
+  const geofenceStart = `${fixtureDate}T14:00:00Z`
+  const existingGeofenceShifts = await findShiftsByStart(geofenceStart)
+  for (const shift of existingGeofenceShifts) {
+    await deleteShiftChildren(ctx, tenantId, shift._id)
+    await ctx.db.delete(shift._id)
+  }
+
+  const lifecycleShiftId = await createCleanShift(
+    lifecycleClientId,
+    lifecycleStart,
+    `${fixtureDate}T13:00:00Z`,
+    'ILS',
+    30,
+  )
+
+  const geofenceShiftId = await createCleanShift(
+    geofenceClientId,
+    geofenceStart,
+    `${fixtureDate}T18:00:00Z`,
+    'SLS',
+    28.5,
+  )
+
+  return {
+    tenantId,
+    memberIds,
+    lifecycleShiftId,
+    geofenceShiftId,
+  }
+}
+
+// Deterministic E2E fixtures. Each call deletes the existing fixture shifts
+// and inserts fresh ones, so serial E2E scenarios never reuse stale shift IDs.
+// Geofence is disabled by default so the lifecycle flow can run without
+// location. A second client with coordinates is provided for geofence scenarios.
 export const seedE2E = mutation({
   args: {
     clerkOrgId: v.string(),
@@ -514,375 +778,39 @@ export const seedE2E = mutation({
     caregiverUserId: v.string(),
   },
   handler: async (ctx, args) => {
-    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
-      'org:admin',
-    ])
-
-    // Fixed fixture date so seeded shifts are always in the past and clock-in is
-    // allowed regardless of the actual UTC time the tests run.
-    const fixtureDate = REF_TODAY
-
-    const members = [
-      {
-        clerkUserId: args.adminUserId,
-        role: 'org:admin' as const,
-        displayName: 'E2E Admin',
-        email: 'e2e-admin@atriax.test',
-      },
-      {
-        clerkUserId: args.coordinatorUserId,
-        role: 'org:coordinator' as const,
-        displayName: 'E2E Coordinator',
-        email: 'e2e-coordinator@atriax.test',
-      },
-      {
-        clerkUserId: args.caregiverUserId,
-        role: 'org:caregiver' as const,
-        displayName: 'E2E Caregiver',
-        email: 'e2e-caregiver@atriax.test',
-      },
-    ]
-
-    const memberIds: Record<string, Id<'tenantMembers'>> = {}
-    for (const member of members) {
-      const existing = await ctx.db
-        .query('tenantMembers')
-        .withIndex('by_tenant_user', (q) =>
-          q.eq('tenantId', tenantId).eq('clerkUserId', member.clerkUserId),
-        )
-        .unique()
-      if (existing) {
-        memberIds[member.clerkUserId] = existing._id
-      } else {
-        memberIds[member.clerkUserId] = await ctx.db.insert('tenantMembers', {
-          tenantId,
-          clerkUserId: member.clerkUserId,
-          role: member.role,
-          displayName: member.displayName,
-          email: member.email,
-        })
-      }
-    }
-
-    const findClient = async (displayName: string) => {
-      const all = await ctx.db
-        .query('clients')
-        .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
-        .collect()
-      return all.find((c) => c.displayName === displayName) ?? null
-    }
-
-    let lifecycleClientId: Id<'clients'>
-    const lifecycleClient = await findClient('Sam Lee')
-    if (!lifecycleClient) {
-      lifecycleClientId = await ctx.db.insert('clients', {
-        tenantId,
-        displayName: 'Sam Lee',
-        serviceType: 'ILS',
-        authorizationHours: 30,
-        riskFlags: [],
-      })
-    } else {
-      lifecycleClientId = lifecycleClient._id
-    }
-
-    let geofenceClientId: Id<'clients'>
-    const geofenceClient = await findClient('Maya Torres')
-    if (!geofenceClient) {
-      geofenceClientId = await ctx.db.insert('clients', {
-        tenantId,
-        displayName: 'Maya Torres',
-        serviceType: 'SLS',
-        authorizationHours: 40,
-        riskFlags: ['mobility'],
-        serviceAddress: {
-          line1: '123 Hennepin Ave',
-          city: 'Minneapolis',
-          state: 'MN',
-          postalCode: '55401',
-          latitude: 44.9778,
-          longitude: -93.265,
-        },
-      })
-    } else {
-      geofenceClientId = geofenceClient._id
-    }
-
-    // Reset geofence to disabled so lifecycle tests never prompt for location.
-    const existingSettings = await ctx.db
-      .query('tenantSettings')
-      .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
-      .unique()
-    if (existingSettings) {
-      await ctx.db.patch(existingSettings._id, { shiftGeofence: DEFAULT_SHIFT_GEOFENCE })
-    } else {
-      await ctx.db.insert('tenantSettings', {
-        tenantId,
-        shiftGeofence: DEFAULT_SHIFT_GEOFENCE,
-      })
-    }
-
-    const findShift = async (scheduledStart: string) => {
-      const all = await ctx.db
-        .query('shifts')
-        .withIndex('by_tenant_status_start', (q) => q.eq('tenantId', tenantId))
-        .collect()
-      return all.find((s) => s.scheduledStart === scheduledStart) ?? null
-    }
-
-    const resetShift = async (shiftId: Id<'shifts'>) => {
-      await ctx.db.patch(shiftId, {
-        status: 'scheduled',
-        clockInAt: undefined,
-        clockOutAt: undefined,
-        serviceLocationOverride: undefined,
-      })
-
-      const existingNote = await ctx.db
-        .query('progressNotes')
-        .withIndex('by_tenant_shift', (q) =>
-          q.eq('tenantId', tenantId).eq('shiftId', shiftId),
-        )
-        .unique()
-      if (existingNote) {
-        await ctx.db.patch(existingNote._id, {
-          startTime: '',
-          endTime: '',
-          servicesProvided: '',
-          clientResponse: '',
-          narrative: '',
-          submittedBy: undefined,
-          submittedAt: undefined,
-        })
-      } else {
-        await ctx.db.insert('progressNotes', {
-          tenantId,
-          shiftId,
-          startTime: '',
-          endTime: '',
-          servicesProvided: '',
-          clientResponse: '',
-          narrative: '',
-        })
-      }
-
-      const existingTasks = await ctx.db
-        .query('shiftTasks')
-        .withIndex('by_tenant_shift', (q) =>
-          q.eq('tenantId', tenantId).eq('shiftId', shiftId),
-        )
-        .collect()
-      for (const task of existingTasks) {
-        await ctx.db.delete(task._id)
-      }
-      await ctx.db.insert('shiftTasks', {
-        tenantId,
-        shiftId,
-        title: 'Upload shift documentation proof',
-        requiredProof: true,
-        status: 'pending',
-      })
-
-      const reviews = await ctx.db
-        .query('reviewEvents')
-        .withIndex('by_tenant_shift', (q) =>
-          q.eq('tenantId', tenantId).eq('shiftId', shiftId),
-        )
-        .collect()
-      for (const review of reviews) {
-        await ctx.db.delete(review._id)
-      }
-
-      const billingLines = await ctx.db
-        .query('billingLines')
-        .withIndex('by_tenant_shift', (q) =>
-          q.eq('tenantId', tenantId).eq('shiftId', shiftId),
-        )
-        .collect()
-      for (const line of billingLines) {
-        await ctx.db.delete(line._id)
-      }
-
-      const punches = await ctx.db
-        .query('timePunches')
-        .withIndex('by_tenant_shift', (q) =>
-          q.eq('tenantId', tenantId).eq('shiftId', shiftId),
-        )
-        .collect()
-      for (const punch of punches) {
-        await ctx.db.delete(punch._id)
-      }
-    }
-
-    let lifecycleShiftId: Id<'shifts'>
-    const lifecycleStart = `${fixtureDate}T09:00:00Z`
-    const lifecycleShift = await findShift(lifecycleStart)
-    if (!lifecycleShift) {
-      lifecycleShiftId = await ctx.db.insert('shifts', {
-        tenantId,
-        clientId: lifecycleClientId,
-        caregiverId: args.caregiverUserId,
-        scheduledStart: lifecycleStart,
-        scheduledEnd: `${fixtureDate}T13:00:00Z`,
-        status: 'scheduled',
-        serviceType: 'ILS',
-        rate: 30,
-      })
-    } else {
-      lifecycleShiftId = lifecycleShift._id
-      await ctx.db.patch(lifecycleShiftId, { caregiverId: args.caregiverUserId })
-    }
-    await resetShift(lifecycleShiftId)
-
-    let geofenceShiftId: Id<'shifts'>
-    const geofenceStart = `${fixtureDate}T14:00:00Z`
-    const geofenceShift = await findShift(geofenceStart)
-    if (!geofenceShift) {
-      geofenceShiftId = await ctx.db.insert('shifts', {
-        tenantId,
-        clientId: geofenceClientId,
-        caregiverId: args.caregiverUserId,
-        scheduledStart: geofenceStart,
-        scheduledEnd: `${fixtureDate}T18:00:00Z`,
-        status: 'scheduled',
-        serviceType: 'SLS',
-        rate: 28.5,
-      })
-    } else {
-      geofenceShiftId = geofenceShift._id
-      await ctx.db.patch(geofenceShiftId, { caregiverId: args.caregiverUserId })
-    }
-    await resetShift(geofenceShiftId)
+    const result = await seedE2EFixtures(ctx, args.clerkOrgId, {
+      adminUserId: args.adminUserId,
+      coordinatorUserId: args.coordinatorUserId,
+      caregiverUserId: args.caregiverUserId,
+    })
 
     return {
       status: 'seeded' as const,
-      tenantId,
-      memberIds,
-      lifecycleShiftId,
-      geofenceShiftId,
+      ...result,
     }
   },
 })
 
-// Resets the two deterministic E2E fixture shifts back to a clean scheduled
-// state and disables geofence. Used between serial e2e scenarios so each test
-// starts from the same fixture baseline.
+// Resets the E2E fixture shifts back to a clean scheduled state by recreating
+// them with fresh IDs and disabling geofence. Used between serial e2e scenarios
+// so each test starts from an isolated fixture baseline.
 export const resetE2EShifts = mutation({
   args: {
     clerkOrgId: v.string(),
+    adminUserId: v.string(),
+    coordinatorUserId: v.string(),
+    caregiverUserId: v.string(),
   },
   handler: async (ctx, args) => {
-    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
-      'org:admin',
-    ])
-
-    // Use the same fixed fixture date as seedE2E so reset finds the rows.
-    const fixtureDate = REF_TODAY
-
-    const existingSettings = await ctx.db
-      .query('tenantSettings')
-      .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
-      .unique()
-    if (existingSettings) {
-      await ctx.db.patch(existingSettings._id, { shiftGeofence: DEFAULT_SHIFT_GEOFENCE })
-    }
-
-    const findShift = async (scheduledStart: string) => {
-      const all = await ctx.db
-        .query('shifts')
-        .withIndex('by_tenant_status_start', (q) => q.eq('tenantId', tenantId))
-        .collect()
-      return all.find((s) => s.scheduledStart === scheduledStart) ?? null
-    }
-
-    const resetShift = async (shiftId: Id<'shifts'>) => {
-      await ctx.db.patch(shiftId, {
-        status: 'scheduled',
-        clockInAt: undefined,
-        clockOutAt: undefined,
-        serviceLocationOverride: undefined,
-      })
-
-      const existingNote = await ctx.db
-        .query('progressNotes')
-        .withIndex('by_tenant_shift', (q) =>
-          q.eq('tenantId', tenantId).eq('shiftId', shiftId),
-        )
-        .unique()
-      if (existingNote) {
-        await ctx.db.patch(existingNote._id, {
-          startTime: '',
-          endTime: '',
-          servicesProvided: '',
-          clientResponse: '',
-          narrative: '',
-          submittedBy: undefined,
-          submittedAt: undefined,
-        })
-      }
-
-      const existingTasks = await ctx.db
-        .query('shiftTasks')
-        .withIndex('by_tenant_shift', (q) =>
-          q.eq('tenantId', tenantId).eq('shiftId', shiftId),
-        )
-        .collect()
-      for (const task of existingTasks) {
-        await ctx.db.delete(task._id)
-      }
-      await ctx.db.insert('shiftTasks', {
-        tenantId,
-        shiftId,
-        title: 'Upload shift documentation proof',
-        requiredProof: true,
-        status: 'pending',
-      })
-
-      const reviews = await ctx.db
-        .query('reviewEvents')
-        .withIndex('by_tenant_shift', (q) =>
-          q.eq('tenantId', tenantId).eq('shiftId', shiftId),
-        )
-        .collect()
-      for (const review of reviews) {
-        await ctx.db.delete(review._id)
-      }
-
-      const billingLines = await ctx.db
-        .query('billingLines')
-        .withIndex('by_tenant_shift', (q) =>
-          q.eq('tenantId', tenantId).eq('shiftId', shiftId),
-        )
-        .collect()
-      for (const line of billingLines) {
-        await ctx.db.delete(line._id)
-      }
-
-      const punches = await ctx.db
-        .query('timePunches')
-        .withIndex('by_tenant_shift', (q) =>
-          q.eq('tenantId', tenantId).eq('shiftId', shiftId),
-        )
-        .collect()
-      for (const punch of punches) {
-        await ctx.db.delete(punch._id)
-      }
-    }
-
-    const lifecycleShift = await findShift(`${fixtureDate}T09:00:00Z`)
-    if (lifecycleShift) {
-      await resetShift(lifecycleShift._id)
-    }
-
-    const geofenceShift = await findShift(`${fixtureDate}T14:00:00Z`)
-    if (geofenceShift) {
-      await resetShift(geofenceShift._id)
-    }
+    const result = await seedE2EFixtures(ctx, args.clerkOrgId, {
+      adminUserId: args.adminUserId,
+      coordinatorUserId: args.coordinatorUserId,
+      caregiverUserId: args.caregiverUserId,
+    })
 
     return {
       status: 'reset' as const,
-      lifecycleShiftId: lifecycleShift?._id ?? null,
-      geofenceShiftId: geofenceShift?._id ?? null,
+      ...result,
     }
   },
 })

@@ -26,8 +26,8 @@ type BadgeProps = PropsWithChildren<
   React.HTMLAttributes<HTMLSpanElement> & VariantProps<typeof badgeStyles>
 >
 
-export function Badge({ children, className, variant }: BadgeProps) {
+export function Badge({ children, className, variant, ...props }: BadgeProps) {
   return (
-    <span className={cn(badgeStyles({ variant }), className)}>{children}</span>
+    <span className={cn(badgeStyles({ variant }), className)} {...props}>{children}</span>
   )
 }

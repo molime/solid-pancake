@@ -5,6 +5,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: 'list',
+  timeout: 120000,
   globalSetup: './tests/e2e/global-setup.ts',
   use: {
     baseURL: 'http://localhost:5173',

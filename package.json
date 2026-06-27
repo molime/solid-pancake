@@ -10,7 +10,7 @@
     "typecheck": "tsc -b",
     "test": "vitest run --configLoader native",
     "test:watch": "vitest --configLoader native",
-    "e2e": "playwright test",
+    "e2e": "node --env-file=.env.local ./node_modules/@playwright/test/cli.js test",
     "preview": "vite preview --configLoader native"
   },
   "dependencies": {

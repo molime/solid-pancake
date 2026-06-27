@@ -102,63 +102,63 @@ export function ShiftNoteStep<TaskId extends string>({
         <p className="text-base text-atria-text-secondary">{helperText}</p>
       </div>
 
-      {stepId === 'when' && (
-        <WhenStep
-          note={note}
-          onChange={update}
-          editable={editable}
-          stepBlockers={stepBlockers}
-        />
-      )}
+      <div data-testid={`step-content-${stepId}`} className="space-y-4">
+        {stepId === 'when' && (
+          <WhenStep
+            note={note}
+            onChange={update}
+            editable={editable}
+            stepBlockers={stepBlockers}
+          />
+        )}
 
-      {stepId === 'what' && (
-        <WhatStep
-          selectedServices={selectedServices}
-          onChange={onSelectedServicesChange}
-        />
-      )}
+        {stepId === 'what' && (
+          <WhatStep
+            selectedServices={selectedServices}
+            onChange={onSelectedServicesChange}
+          />
+        )}
 
-      {stepId === 'how' && (
-        <HowStep
-          note={note}
-          onChange={update}
-          editable={editable}
-          clientName={clientName}
-        />
-      )}
+        {stepId === 'how' && (
+          <HowStep
+            note={note}
+            onChange={update}
+            editable={editable}
+            clientName={clientName}
+          />
+        )}
 
-      {stepId === 'goal' && (
-        <GoalStep
-          selectedGoals={selectedGoals}
-          onChange={onSelectedGoalsChange}
-        />
-      )}
+        {stepId === 'goal' && (
+          <GoalStep
+            selectedGoals={selectedGoals}
+            onChange={onSelectedGoalsChange}
+          />
+        )}
 
-      {stepId === 'issues' && (
-        <IssuesStep
-          issueChoice={issueChoice}
-          onChange={onIssueChoiceChange}
-          clerkOrgId={clerkOrgId}
-          editable={editable}
-          taskDrafts={taskDrafts}
-          tasks={tasks}
-          onTaskDraftsChange={onTaskDraftsChange}
-        />
-      )}
+        {stepId === 'issues' && (
+          <IssuesStep
+            issueChoice={issueChoice}
+            onChange={onIssueChoiceChange}
+            clerkOrgId={clerkOrgId}
+            editable={editable}
+            taskDrafts={taskDrafts}
+            tasks={tasks}
+            onTaskDraftsChange={onTaskDraftsChange}
+          />
+        )}
 
-      {stepId === 'done' && (
-        <DoneStep
-          note={note}
-          selectedServices={selectedServices}
-          selectedGoals={selectedGoals}
-          issueChoice={issueChoice}
-          confirmed={confirmed}
-          onConfirmedChange={onConfirmedChange}
-          onEditStep={onEditStep}
-        />
-      )}
-
-      <div data-testid={`step-content-${stepId}`} className="hidden" />
+        {stepId === 'done' && (
+          <DoneStep
+            note={note}
+            selectedServices={selectedServices}
+            selectedGoals={selectedGoals}
+            issueChoice={issueChoice}
+            confirmed={confirmed}
+            onConfirmedChange={onConfirmedChange}
+            onEditStep={onEditStep}
+          />
+        )}
+      </div>
     </div>
   )
 }
