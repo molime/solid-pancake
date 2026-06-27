@@ -52,6 +52,10 @@ describe('Convex source exports', () => {
     expect(mod).toHaveProperty('createMany')
     expect(mod).toHaveProperty('startDocumentation')
     expect(mod).toHaveProperty('submitDocumentation')
+    expect(mod).toHaveProperty('clockIn')
+    expect(mod).toHaveProperty('clockOut')
+    expect(mod).toHaveProperty('updateProgressNote')
+    expect(mod).toHaveProperty('updateServiceLocationOverride')
   })
 
   it('reviews.ts exports approve and requestCorrection', async () => {
@@ -71,6 +75,37 @@ describe('Convex source exports', () => {
   it('audit.ts exports record', async () => {
     const mod = await import('../../../convex/audit')
     expect(mod).toHaveProperty('record')
+  })
+
+  it('tenantSettings.ts exports get and updateShiftGeofence', async () => {
+    const mod = await import('../../../convex/tenantSettings')
+    expect(mod).toHaveProperty('get')
+    expect(mod).toHaveProperty('updateShiftGeofence')
+  })
+
+  it('clients.ts exports updateServiceAddress', async () => {
+    const mod = await import('../../../convex/clients')
+    expect(mod).toHaveProperty('updateServiceAddress')
+  })
+
+  it('locationValidation.ts exports helpers', async () => {
+    const mod = await import('../../../convex/locationValidation')
+    expect(mod).toHaveProperty('haversineDistanceMeters')
+    expect(mod).toHaveProperty('resolveShiftServiceTarget')
+    expect(mod).toHaveProperty('validatePunchLocation')
+  })
+
+  it('adpSync.ts exports adp sync helpers and triggerInitialWorkerLoad', async () => {
+    const mod = await import('../../../convex/adpSync')
+    expect(mod).toHaveProperty('claimIntegrationEvent')
+    expect(mod).toHaveProperty('triggerInitialWorkerLoad')
+  })
+
+  it('adpOutbound.ts exports adp sync actions', async () => {
+    const mod = await import('../../../convex/adpOutbound')
+    expect(mod).toHaveProperty('adpSyncPunch')
+    expect(mod).toHaveProperty('adpSyncWorker')
+    expect(mod).toHaveProperty('adpInitialWorkerLoad')
   })
 
   it('files.ts exports attachProof, removeProof, getDownloadUrl', async () => {

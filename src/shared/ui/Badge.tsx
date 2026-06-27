@@ -7,12 +7,13 @@ const badgeStyles = cva(
   {
     variants: {
       variant: {
-        default: 'bg-atria-bg text-atria-muted',
+        default: 'bg-atria-surface-2 text-atria-text-secondary',
         success: 'bg-atria-success-bg text-atria-success',
         warning: 'bg-atria-warning-bg text-atria-warning',
         danger: 'bg-atria-danger-bg text-atria-danger',
         info: 'bg-atria-info-bg text-atria-info',
-        accent: 'bg-atria-accent/10 text-atria-accent',
+        neutral: 'bg-atria-neutral-bg text-atria-neutral',
+        accent: 'bg-atria-accent-quiet text-atria-accent',
       },
     },
     defaultVariants: {

@@ -1,7 +1,7 @@
 import { v } from 'convex/values'
 import { mutation } from './_generated/server'
 import { requireTenantRole, assertTenantDoc } from './authHelpers'
-import { api } from './_generated/api'
+import { internal } from './_generated/api'
 import {
   calculateDocumentedHours,
   roundCurrency,
@@ -15,7 +15,7 @@ export const approve = mutation({
     comment: v.string(),
   },
   handler: async (ctx, args) => {
-    const { tenantId, identity, role } = await requireTenantRole(
+    const { tenantId, identity } = await requireTenantRole(
       ctx,
       args.clerkOrgId,
       ['org:coordinator', 'org:admin'],
@@ -82,10 +82,8 @@ export const approve = mutation({
       createdAt: new Date().toISOString(),
     })
 
-    await ctx.runMutation(api.audit.record, {
+    await ctx.runMutation(internal.audit.record, {
       clerkOrgId: args.clerkOrgId,
-      actorId: identity.subject,
-      actorRole: role,
       action: 'shift_approved',
       shiftId: args.shiftId,
       previousStatus: shift.status,
@@ -103,7 +101,7 @@ export const requestCorrection = mutation({
     comment: v.string(),
   },
   handler: async (ctx, args) => {
-    const { tenantId, identity, role } = await requireTenantRole(
+    const { tenantId, identity } = await requireTenantRole(
       ctx,
       args.clerkOrgId,
       ['org:coordinator', 'org:admin'],
@@ -112,6 +110,10 @@ export const requestCorrection = mutation({
     const shift = await ctx.db.get(args.shiftId)
     if (!shift) throw new Error('Shift not found.')
     assertTenantDoc(shift, tenantId)
+
+    if (!args.comment || args.comment.trim().length === 0) {
+      throw new Error('A comment is required to request a correction.')
+    }
 
     if (shift.status !== 'submitted' && shift.status !== 'billing_ready') {
       throw new Error(
@@ -149,10 +151,8 @@ export const requestCorrection = mutation({
       createdAt: new Date().toISOString(),
     })
 
-    await ctx.runMutation(api.audit.record, {
+    await ctx.runMutation(internal.audit.record, {
       clerkOrgId: args.clerkOrgId,
-      actorId: identity.subject,
-      actorRole: role,
       action: 'shift_correction_requested',
       shiftId: args.shiftId,
       previousStatus: shift.status,

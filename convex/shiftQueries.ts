@@ -23,13 +23,26 @@ export const listMyShifts = query({
   handler: async (ctx, { clerkOrgId }) => {
     const { tenantId, identity } = await requireTenant(ctx, clerkOrgId)
 
-    return ctx.db
+    const shifts = await ctx.db
       .query('shifts')
       .withIndex('by_tenant_caregiver_status', (q) =>
         q.eq('tenantId', tenantId).eq('caregiverId', identity.subject),
       )
       .order('desc')
       .take(100)
+
+    const clients = await Promise.all(
+      shifts.map((shift) => ctx.db.get(shift.clientId)),
+    )
+
+    clients.forEach((client) => {
+      if (client) assertTenantDoc(client, tenantId)
+    })
+
+    return shifts.map((shift, index) => ({
+      shift,
+      client: clients[index],
+    }))
   },
 })
 
@@ -116,7 +129,7 @@ export const getWithDetails = query({
     assertTenantDoc(shift, tenantId)
     assertShiftReadableByRole(shift, role, identity.subject)
 
-    const [client, note, tasks, reviews] = await Promise.all([
+    const [client, note, tasks, reviews, punches] = await Promise.all([
       ctx.db.get(shift.clientId),
       ctx.db
         .query('progressNotes')
@@ -137,14 +150,37 @@ export const getWithDetails = query({
         )
         .order('desc')
         .collect(),
+      ctx.db
+        .query('timePunches')
+        .withIndex('by_tenant_shift', (q) =>
+          q.eq('tenantId', tenantId).eq('shiftId', shiftId),
+        )
+        .collect(),
     ])
 
     if (client) assertTenantDoc(client, tenantId)
     if (note) assertTenantDoc(note, tenantId)
     for (const task of tasks) assertTenantDoc(task, tenantId)
     for (const review of reviews) assertTenantDoc(review, tenantId)
+    for (const punch of punches) assertTenantDoc(punch, tenantId)
 
-    return { shift, client, note, tasks, reviews }
+    const clockIn = punches.find((p) => p.punchType === 'clock_in')
+    const clockOut = punches.find((p) => p.punchType === 'clock_out')
+    const locationMatched = Boolean(
+      clockIn?.location && clockIn.location.withinGeofence === true,
+    )
+    const submittedOnSite = Boolean(
+      clockOut?.location && clockOut.location.withinGeofence === true,
+    )
+
+    return {
+      shift,
+      client,
+      note,
+      tasks,
+      reviews,
+      verification: { locationMatched, submittedOnSite },
+    }
   },
 })
 

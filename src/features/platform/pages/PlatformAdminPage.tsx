@@ -11,6 +11,17 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Globe, ShieldAlert } from 'lucide-react'
 
+type TenantSummary = {
+  _id: string
+  name: string
+  slug: string
+  clerkOrgId: string
+  createdAt: string
+  memberCount: number
+  clientCount: number
+  shiftCount: number
+}
+
 export function PlatformAdminPage() {
   const isAdmin = useQuery(api.platform.isAdmin)
   const tenants = useQuery(
@@ -87,7 +98,7 @@ export function PlatformAdminPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {tenants.map((tenant) => (
+                {tenants.map((tenant: TenantSummary) => (
                   <TableRow key={tenant._id}>
                     <TableCell className="font-medium">{tenant.name}</TableCell>
                     <TableCell className="text-atria-muted">{tenant.slug}</TableCell>

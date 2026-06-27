@@ -22,6 +22,29 @@ export interface TaskDraft<TaskId extends string = string> {
   proofName?: string
 }
 
+export const SERVICE_OPTIONS = [
+  { label: 'Bathing', icon: '🛁' },
+  { label: 'Meals', icon: '🍽️' },
+  { label: 'Walking', icon: '🚶' },
+  { label: 'Medication', icon: '💊' },
+  { label: 'Housekeeping', icon: '🧹' },
+  { label: 'Company', icon: '💬' },
+] as const
+
+export const GOAL_OPTIONS = [
+  { label: 'Walk a little each day', goal: 'stay mobile and steady' },
+  { label: 'Eat full meals', goal: 'keep her strength up' },
+  { label: 'Spend time talking', goal: 'feel less lonely' },
+] as const
+
+export type ServiceLabel = (typeof SERVICE_OPTIONS)[number]['label']
+export type GoalLabel = (typeof GOAL_OPTIONS)[number]['label']
+
+export const ISSUE_CHOICE_NO = 'no'
+export const ISSUE_CHOICE_YES = 'yes'
+
+export type IssueChoice = typeof ISSUE_CHOICE_NO | typeof ISSUE_CHOICE_YES
+
 const EMPTY_NOTE_DRAFT: NoteDraft = {
   startTime: '',
   endTime: '',
@@ -64,6 +87,51 @@ export function updateTaskDraft<TaskId extends string = string>(
   return drafts.map((draft) =>
     draft.taskId === taskId ? { ...draft, ...patch } : draft,
   )
+}
+
+export function parseSelectedServices(servicesProvided?: string): ServiceLabel[] {
+  if (!servicesProvided) return []
+  const labels = new Set(SERVICE_OPTIONS.map((s) => s.label))
+  return servicesProvided
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part): part is ServiceLabel => labels.has(part as ServiceLabel))
+}
+
+export function parseSelectedGoals(servicesProvided?: string): GoalLabel[] {
+  if (!servicesProvided) return []
+  const goalLabels = new Set(GOAL_OPTIONS.map((g) => g.label))
+  return servicesProvided
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part.endsWith(' goal'))
+    .map((part) => part.replace(/ goal$/, ''))
+    .filter((part): part is GoalLabel => goalLabels.has(part as GoalLabel))
+}
+
+export function buildServicesProvided(
+  services: ServiceLabel[],
+  goals: GoalLabel[],
+): string {
+  const parts: string[] = [...services]
+  for (const goal of goals) {
+    parts.push(`${goal} goal`)
+  }
+  return parts.join(', ')
+}
+
+export function parseIssueChoice(clientResponse?: string): IssueChoice | null {
+  if (!clientResponse) return null
+  if (clientResponse.startsWith('Reported:')) return ISSUE_CHOICE_YES
+  if (clientResponse.includes('all good')) return ISSUE_CHOICE_NO
+  return null
+}
+
+export function buildClientResponse(choice: IssueChoice): string {
+  if (choice === ISSUE_CHOICE_NO) {
+    return 'No problems — all good today'
+  }
+  return 'Reported: A fall, pain, mood change, or other concern'
 }
 
 export function validateDocumentationDraft<TaskId extends string = string>(

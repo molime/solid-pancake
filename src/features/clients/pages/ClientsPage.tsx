@@ -1,7 +1,7 @@
 import { useOrganization } from '@clerk/react'
 import { useQuery, useMutation } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
-import type { Id } from '../../../../convex/_generated/dataModel'
+import type { Doc, Id } from '../../../../convex/_generated/dataModel'
 import { useState } from 'react'
 import {
   Table,
@@ -23,7 +23,7 @@ import {
   DialogContent,
   DialogFooter,
 } from '@/shared/ui/Dialog'
-import { Users, CalendarPlus } from 'lucide-react'
+import { Users, CalendarPlus, MapPin } from 'lucide-react'
 
 type CaregiverOption = {
   clerkUserId: string
@@ -59,9 +59,14 @@ export function ClientsPage() {
     api.members.listCaregivers,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
+  const tenantSettings = useQuery(
+    api.tenantSettings.get,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
   const createClient = useMutation(api.clients.create)
   const createShift = useMutation(api.shifts.create)
   const createManyShifts = useMutation(api.shifts.createMany)
+  const updateServiceAddress = useMutation(api.clients.updateServiceAddress)
 
   const [form, setForm] = useState({
     displayName: '',
@@ -93,6 +98,20 @@ export function ClientsPage() {
   }))
   const [bulkError, setBulkError] = useState<string | null>(null)
   const [bulkMessage, setBulkMessage] = useState<string | null>(null)
+
+  const [addressOpen, setAddressOpen] = useState(false)
+  const [addressClientId, setAddressClientId] = useState<string | null>(null)
+  const [addressForm, setAddressForm] = useState({
+    line1: '',
+    line2: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: '',
+    latitude: '',
+    longitude: '',
+  })
+  const [addressError, setAddressError] = useState<string | null>(null)
 
   if (!clients) {
     return (
@@ -158,6 +177,56 @@ export function ClientsPage() {
     setBulkOpen(true)
   }
 
+  const openAddress = (client: Doc<'clients'>) => {
+    setAddressClientId(client._id)
+    const address = client.serviceAddress
+    setAddressForm({
+      line1: address?.line1 ?? '',
+      line2: address?.line2 ?? '',
+      city: address?.city ?? '',
+      state: address?.state ?? '',
+      postalCode: address?.postalCode ?? '',
+      country: address?.country ?? '',
+      latitude: address?.latitude?.toString() ?? '',
+      longitude: address?.longitude?.toString() ?? '',
+    })
+    setAddressError(null)
+    setAddressOpen(true)
+  }
+
+  const handleSaveAddress = async () => {
+    if (!clerkOrgId || !addressClientId) return
+    setAddressError(null)
+
+    const latitude = addressForm.latitude.trim()
+      ? Number(addressForm.latitude)
+      : undefined
+    const longitude = addressForm.longitude.trim()
+      ? Number(addressForm.longitude)
+      : undefined
+
+    try {
+      await updateServiceAddress({
+        clerkOrgId,
+        clientId: addressClientId as Id<'clients'>,
+        serviceAddress: {
+          line1: addressForm.line1.trim(),
+          line2: addressForm.line2.trim() || undefined,
+          city: addressForm.city.trim(),
+          state: addressForm.state.trim(),
+          postalCode: addressForm.postalCode.trim(),
+          country: addressForm.country.trim() || undefined,
+          latitude,
+          longitude,
+        },
+      })
+      setAddressOpen(false)
+      setAddressClientId(null)
+    } catch (err) {
+      setAddressError(err instanceof Error ? err.message : 'Failed to save address.')
+    }
+  }
+
   const handleSchedule = async () => {
     if (!clerkOrgId || !scheduleClientId) return
     setScheduleError(null)
@@ -167,7 +236,7 @@ export function ClientsPage() {
       return
     }
 
-    const client = clients.find((c) => c._id === scheduleClientId)
+    const client = clients.find((c: Doc<'clients'>) => c._id === scheduleClientId)
     if (!client) return
 
     const scheduledStart = `${scheduleForm.date}T${scheduleForm.startTime}:00Z`
@@ -259,6 +328,19 @@ export function ClientsPage() {
           {bulkMessage}
         </div>
       )}
+
+      {tenantSettings?.shiftGeofence.enabled &&
+        clients.some(
+          (client: Doc<'clients'>) =>
+            client.serviceAddress?.latitude === undefined ||
+            client.serviceAddress?.longitude === undefined,
+        ) && (
+          <div className="rounded-md border border-atria-warning/30 bg-atria-warning-bg px-4 py-3 text-sm text-atria-warning">
+            Geofence is enabled, but some clients are missing latitude/longitude
+            coordinates. Clock-in/out will be blocked for those clients until a
+            service address is completed.
+          </div>
+        )}
 
       {showForm && (
         <Card>
@@ -356,7 +438,7 @@ export function ClientsPage() {
                       onChange={(event) =>
                         setSelectedClientIds(
                           event.target.checked
-                            ? clients.map((client) => client._id)
+                            ? clients.map((client: Doc<'clients'>) => client._id)
                             : [],
                         )
                       }
@@ -371,7 +453,7 @@ export function ClientsPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {clients.map((client) => (
+                {clients.map((client: Doc<'clients'>) => (
                   <TableRow key={client._id}>
                     <TableCell>
                       <input
@@ -390,7 +472,7 @@ export function ClientsPage() {
                     <TableCell>{client.authorizationHours}</TableCell>
                     <TableCell>
                       <div className="flex gap-1 flex-wrap">
-                        {client.riskFlags.map((flag) => (
+                        {client.riskFlags.map((flag: string) => (
                           <Badge key={flag} variant="warning">
                             {flag}
                           </Badge>
@@ -398,14 +480,24 @@ export function ClientsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openSchedule(client._id)}
-                      >
-                        <CalendarPlus className="h-4 w-4 mr-1" />
-                        Schedule
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openAddress(client)}
+                        >
+                          <MapPin className="h-4 w-4 mr-1" />
+                          Address
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openSchedule(client._id)}
+                        >
+                          <CalendarPlus className="h-4 w-4 mr-1" />
+                          Schedule
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -437,7 +529,7 @@ export function ClientsPage() {
               <option value="" disabled>
                 Select caregiver
               </option>
-              {caregivers?.map((cg) => (
+              {caregivers?.map((cg: CaregiverOption) => (
                 <option key={cg.clerkUserId} value={cg.clerkUserId}>
                   {caregiverLabel(cg)}
                 </option>
@@ -540,7 +632,7 @@ export function ClientsPage() {
               <option value="" disabled>
                 Select caregiver
               </option>
-              {caregivers?.map((cg) => (
+              {caregivers?.map((cg: CaregiverOption) => (
                 <option key={cg.clerkUserId} value={cg.clerkUserId}>
                   {caregiverLabel(cg)}
                 </option>
@@ -628,6 +720,138 @@ export function ClientsPage() {
           </Button>
           <Button variant="primary" size="sm" onClick={handleBulkSchedule}>
             Create Shifts
+          </Button>
+        </DialogFooter>
+      </Dialog>
+
+      <Dialog open={addressOpen} onClose={() => setAddressOpen(false)}>
+        <DialogHeader>
+          <DialogTitle>Service Address</DialogTitle>
+        </DialogHeader>
+        <DialogContent className="space-y-3">
+          {addressError && (
+            <p className="text-sm text-atria-danger">{addressError}</p>
+          )}
+          <div>
+            <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+              Address line 1
+            </label>
+            <Input
+              value={addressForm.line1}
+              onChange={(e) =>
+                setAddressForm((f) => ({ ...f, line1: e.target.value }))
+              }
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+              Address line 2
+            </label>
+            <Input
+              value={addressForm.line2}
+              onChange={(e) =>
+                setAddressForm((f) => ({ ...f, line2: e.target.value }))
+              }
+              className="mt-1"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                City
+              </label>
+              <Input
+                value={addressForm.city}
+                onChange={(e) =>
+                  setAddressForm((f) => ({ ...f, city: e.target.value }))
+                }
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                State
+              </label>
+              <Input
+                value={addressForm.state}
+                onChange={(e) =>
+                  setAddressForm((f) => ({ ...f, state: e.target.value }))
+                }
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                Postal code
+              </label>
+              <Input
+                value={addressForm.postalCode}
+                onChange={(e) =>
+                  setAddressForm((f) => ({ ...f, postalCode: e.target.value }))
+                }
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+              Country
+            </label>
+            <Input
+              value={addressForm.country}
+              onChange={(e) =>
+                setAddressForm((f) => ({ ...f, country: e.target.value }))
+              }
+              className="mt-1"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                Latitude
+              </label>
+              <Input
+                type="number"
+                step="any"
+                value={addressForm.latitude}
+                onChange={(e) =>
+                  setAddressForm((f) => ({ ...f, latitude: e.target.value }))
+                }
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                Longitude
+              </label>
+              <Input
+                type="number"
+                step="any"
+                value={addressForm.longitude}
+                onChange={(e) =>
+                  setAddressForm((f) => ({ ...f, longitude: e.target.value }))
+                }
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-atria-muted">
+            Latitude and longitude are required for geofence enforcement. They
+            can be entered manually or geocoded from the address outside the
+            app.
+          </p>
+        </DialogContent>
+        <DialogFooter>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setAddressOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button variant="primary" size="sm" onClick={handleSaveAddress}>
+            Save Address
           </Button>
         </DialogFooter>
       </Dialog>

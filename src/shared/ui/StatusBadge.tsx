@@ -1,25 +1,66 @@
+import type { PropsWithChildren } from 'react'
 import type { ShiftStatus } from '@/shared/domain/types'
 import { formatStatusLabel } from '@/shared/format'
 import { cn } from '@/shared/utils/cn'
 
-const statusStyles: Record<ShiftStatus, string> = {
-  scheduled: 'border-slate-300 bg-slate-50 text-slate-700',
-  in_progress: 'border-blue-200 bg-blue-50 text-blue-800',
-  submitted: 'border-amber-200 bg-amber-50 text-amber-800',
-  needs_correction: 'border-red-200 bg-red-50 text-red-800',
-  approved: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-  billing_ready: 'border-teal-200 bg-teal-50 text-teal-800',
+export type StatusBadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
+
+const statusVariantMap: Record<ShiftStatus, StatusBadgeVariant> = {
+  scheduled: 'neutral',
+  in_progress: 'info',
+  submitted: 'warning',
+  needs_correction: 'danger',
+  approved: 'success',
+  billing_ready: 'info',
 }
 
-export function StatusBadge({ status }: { status: ShiftStatus }) {
+const variantClasses: Record<StatusBadgeVariant, string> = {
+  neutral:
+    'border-atria-border-strong bg-atria-neutral-bg text-atria-neutral',
+  info:
+    'border-atria-info/30 bg-atria-info-bg text-atria-info',
+  warning:
+    'border-atria-warning/30 bg-atria-warning-bg text-atria-warning',
+  danger:
+    'border-atria-danger/30 bg-atria-danger-bg text-atria-danger',
+  success:
+    'border-atria-success/30 bg-atria-success-bg text-atria-success',
+}
+
+const variantLabels: Record<StatusBadgeVariant, string> = {
+  neutral: 'Neutral',
+  info: 'Info',
+  warning: 'Warning',
+  danger: 'Danger',
+  success: 'Success',
+}
+
+type StatusBadgeProps = {
+  status?: ShiftStatus
+  variant?: StatusBadgeVariant
+  className?: string
+}
+
+export function StatusBadge({
+  status,
+  variant,
+  className,
+  children,
+}: PropsWithChildren<StatusBadgeProps>) {
+  const resolvedVariant = variant ?? (status ? statusVariantMap[status] : 'neutral')
+  const label =
+    children ?? (status ? formatStatusLabel(status) : variantLabels[resolvedVariant])
+
   return (
     <span
       className={cn(
-        'inline-flex rounded-md border px-2 py-1 text-xs font-semibold',
-        statusStyles[status],
+        'inline-flex items-center gap-1.5 rounded-[var(--radius-atria-sm)] border px-2 py-1 text-xs font-semibold',
+        variantClasses[resolvedVariant],
+        className,
       )}
     >
-      {formatStatusLabel(status)}
+      <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-current" />
+      {label}
     </span>
   )
 }
