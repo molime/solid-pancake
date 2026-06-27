@@ -223,14 +223,18 @@ function ShiftDocumentationWizard({
     }
   }
 
+  const hasExistingClockOut = Boolean(details.shift.clockOutAt)
+
   const handleClockOut = async () => {
     setSaveError(null)
     setIsPunchLoading(true)
     try {
-      const location = await requestLocation({
-        geofence,
-        punchType: 'clock_out',
-      })
+      const location = hasExistingClockOut
+        ? undefined
+        : await requestLocation({
+            geofence,
+            punchType: 'clock_out',
+          })
       await clockOut({
         clerkOrgId,
         shiftId,
@@ -297,12 +301,12 @@ function ShiftDocumentationWizard({
   }, [])
 
   useEffect(() => {
-    if (view === 'clockOut') {
+    if (view === 'clockOut' && !hasExistingClockOut) {
       requestLocation({ geofence, punchType: 'clock_out' }).catch(() => {
         // Location errors are captured in locationState; surface them via the checklist.
       })
     }
-  }, [view, geofence, requestLocation])
+  }, [view, geofence, requestLocation, hasExistingClockOut])
 
   if (view === 'success') {
     return (
@@ -341,6 +345,7 @@ function ShiftDocumentationWizard({
         scheduledStart={details.shift.scheduledStart}
         clientName={clientName}
         actualClockInAt={details.shift.clockInAt}
+        actualClockOutAt={details.shift.clockOutAt}
         blockers={blockers}
         geofence={geofence}
         locationState={locationState}

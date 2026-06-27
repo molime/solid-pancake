@@ -67,7 +67,13 @@ async function seedE2EFixtures(
 }
 
 async function extractClerkToken(page: import('@playwright/test').Page): Promise<string | null> {
-  return page.evaluate(() => {
+  return page.evaluate(async () => {
+    const clerk = (window as unknown as Record<string, unknown>).Clerk as
+      | { session?: { getToken: () => Promise<string | null> } }
+      | undefined
+    const sessionToken = await clerk?.session?.getToken()
+    if (sessionToken) return sessionToken
+
     const keys = ['__clerk_client_jwt', '__session', '__clerk_session_jwt']
     for (const key of keys) {
       const value = localStorage.getItem(key)

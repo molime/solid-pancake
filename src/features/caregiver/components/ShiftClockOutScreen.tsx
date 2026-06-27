@@ -40,7 +40,8 @@ export function ShiftClockOutScreen({
     return () => clearInterval(interval)
   }, [])
 
-  const locationRequired = geofence.enabled && geofence.enforceClockOut
+  const hasExistingClockOut = Boolean(actualClockOutAt)
+  const locationRequired = geofence.enabled && geofence.enforceClockOut && !hasExistingClockOut
   const locationReady = !locationRequired || locationState.status === 'granted'
   const canSubmit = blockers.length === 0 && locationReady && !isLoading
 
@@ -91,6 +92,7 @@ export function ShiftClockOutScreen({
         <MissingChecklist
           blockers={blockers}
           geofence={geofence}
+          hasExistingClockOut={hasExistingClockOut}
           locationState={locationState}
           data-testid="missing-checklist"
         />

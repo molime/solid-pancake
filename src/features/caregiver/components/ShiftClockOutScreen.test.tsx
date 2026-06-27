@@ -52,4 +52,22 @@ describe('ShiftClockOutScreen', () => {
     expect(screen.getByRole('button', { name: /Clock out now/i })).toBeDisabled()
     expect(screen.getByText(/Location needed for clock-out/i)).toBeInTheDocument()
   })
+
+  it('does not require location when an existing clock-out punch is reused', () => {
+    render(
+      <ShiftClockOutScreen
+        scheduledStart="2026-06-25T08:00:00Z"
+        clientName="Client A"
+        actualClockOutAt="2026-06-25T16:00:00Z"
+        blockers={[]}
+        geofence={{ enabled: true, enforceClockIn: false, enforceClockOut: true }}
+        locationState={{ status: 'idle' }}
+        isLoading={false}
+        onClockOut={() => {}}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /Clock out now/i })).toBeEnabled()
+    expect(screen.queryByText(/Location needed for clock-out/i)).not.toBeInTheDocument()
+  })
 })

@@ -28,6 +28,60 @@ export function assertE2ECredentialsConfigured(): void {
   }
 }
 
+type ClerkUser = {
+  id: string
+}
+
+type ClerkSignInToken = {
+  token: string
+}
+
+async function createSignInTicket(email: string): Promise<string | null> {
+  const secretKey = process.env.CLERK_SECRET_KEY
+  if (!secretKey) return null
+
+  const headers = {
+    Authorization: `Bearer ${secretKey}`,
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  }
+
+  const usersResponse = await fetch(
+    `https://api.clerk.com/v1/users?query=${encodeURIComponent(email)}`,
+    { headers },
+  )
+
+  if (!usersResponse.ok) {
+    throw new Error(
+      `Could not look up Clerk E2E user ${email}: ${usersResponse.status}`,
+    )
+  }
+
+  const users = (await usersResponse.json()) as ClerkUser[]
+  const user = users.find((candidate) => candidate.id)
+  if (!user) {
+    throw new Error(`Clerk E2E user ${email} was not found.`)
+  }
+
+  const tokenResponse = await fetch('https://api.clerk.com/v1/sign_in_tokens', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      user_id: user.id,
+      expires_in_seconds: 600,
+    }),
+  })
+
+  if (!tokenResponse.ok) {
+    throw new Error(
+      `Could not create Clerk E2E sign-in ticket for ${email}: ${tokenResponse.status}`,
+    )
+  }
+
+  const signInToken = (await tokenResponse.json()) as ClerkSignInToken
+  return signInToken.token
+}
+
 async function selectOrgIfAsked(page: Page, orgId: string) {
   // Clerk's organization switcher may appear after sign-in. Try to select the
   // expected org by its id or name, or just wait for the app to settle.
@@ -46,22 +100,35 @@ export async function signInWithClerk(
   password: string,
   orgId: string,
 ) {
+  const ticket = await createSignInTicket(email)
+  if (ticket) {
+    await page.goto(`/sign-in?__clerk_ticket=${encodeURIComponent(ticket)}`)
+    await expect(page).not.toHaveURL(/sign-in/, { timeout: 20000 })
+    await page.waitForLoadState('networkidle')
+    await selectOrgIfAsked(page, orgId)
+    return
+  }
+
   await page.goto('/sign-in')
   await expect(page).toHaveURL(/sign-in/)
 
-  // Clerk sign-in flow: email -> continue -> password -> continue
+  // Clerk sign-in flow fallback: email -> continue -> password -> continue.
   const emailInput = page.locator('input[name="identifier"], input[type="email"], input[inputmode="email"]').first()
   await expect(emailInput).toBeVisible({ timeout: 10000 })
   await emailInput.fill(email)
 
-  const continueButton = page.locator('button:has-text("Continue"), button[type="submit"]').first()
+  const continueButton = page
+    .locator('button:has-text("Continue"):visible, button[type="submit"]:visible')
+    .first()
   await continueButton.click()
 
   const passwordInput = page.locator('input[name="password"], input[type="password"]').first()
   await expect(passwordInput).toBeVisible({ timeout: 10000 })
   await passwordInput.fill(password)
 
-  const submitButton = page.locator('button:has-text("Continue"), button[type="submit"]').first()
+  const submitButton = page
+    .locator('button:has-text("Continue"):visible, button[type="submit"]:visible')
+    .first()
   await submitButton.click()
 
   // Wait for navigation away from sign-in
@@ -83,7 +150,13 @@ export async function signOut(page: Page) {
 }
 
 async function extractClerkToken(page: Page): Promise<string | null> {
-  return page.evaluate(() => {
+  return page.evaluate(async () => {
+    const clerk = (window as unknown as Record<string, unknown>).Clerk as
+      | { session?: { getToken: () => Promise<string | null> } }
+      | undefined
+    const sessionToken = await clerk?.session?.getToken()
+    if (sessionToken) return sessionToken
+
     const keys = ['__clerk_client_jwt', '__session', '__clerk_session_jwt']
     for (const key of keys) {
       const value = localStorage.getItem(key)

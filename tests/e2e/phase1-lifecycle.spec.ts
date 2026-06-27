@@ -138,11 +138,11 @@ test('full caregiver-to-billing lifecycle with geofence disabled', async ({ page
   const correctionCard = page.locator('[data-testid^="shift-card-"][data-shift-status="needs_correction"]', { hasText: CLIENT_NAME })
   await expect(correctionCard.locator('[data-testid="shift-status-badge"]')).toHaveText('CORRECTION')
   await expect(correctionCard.locator('[data-testid="shift-status-badge"]')).toHaveClass(/bg-atria-danger/)
-  await page.locator('[data-testid="clock-in-start-button"]:visible').click()
-  await expect(page.locator('[data-testid="shift-clock-in-screen"]')).toBeVisible()
-  await page.locator('[data-testid="clock-in-button"]').click()
 
-  await expect(page.locator('[data-testid="step-content-when"]')).toBeVisible()
+  // The original clock-in/out punches are preserved; the caregiver resumes directly to the note.
+  await page.locator('[data-testid="clock-in-start-button"]:visible').click()
+  await expect(page.locator('[data-testid="step-content-when"]')).toBeVisible({ timeout: 15000 })
+
   const correctionWhen = page.locator('[data-testid="step-content-when"]:visible')
   await correctionWhen.locator('button:has-text("Change")').first().click()
   await page.locator('[data-testid="start-time-input"]').fill('09:15')
@@ -161,8 +161,11 @@ test('full caregiver-to-billing lifecycle with geofence disabled', async ({ page
   await page.locator('[data-testid="confirm-checkbox"]').check()
   await page.locator('[data-testid="wizard-next-button"]:visible').click()
 
+  // The existing clock-out punch is reused, so no new geolocation is required.
   await expect(page.locator('[data-testid="shift-clock-out-screen"]')).toBeVisible({ timeout: 15000 })
-  await page.locator('[data-testid="clock-out-button"]').click()
+  const resubmitClockOutButton = page.locator('[data-testid="clock-out-button"]')
+  await expect(resubmitClockOutButton).toBeEnabled()
+  await resubmitClockOutButton.click()
   await expect(page.locator('[data-testid="shift-success-screen"]')).toBeVisible({ timeout: 15000 })
 
   // ---- Coordinator: approve -> billing ready ----

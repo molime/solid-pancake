@@ -6,15 +6,17 @@ type LocationState = ReturnType<typeof useCaregiverLocation>['state']
 export function MissingChecklist({
   blockers,
   geofence,
+  hasExistingClockOut,
   locationState,
   'data-testid': testId,
 }: {
   blockers: string[]
   geofence: ShiftGeofence
+  hasExistingClockOut?: boolean
   locationState: LocationState
   'data-testid'?: string
 }) {
-  const locationRequired = geofence.enabled && geofence.enforceClockOut
+  const locationRequired = geofence.enabled && geofence.enforceClockOut && !hasExistingClockOut
   const locationReady = !locationRequired || locationState.status === 'granted'
   const locationBlocked =
     locationRequired &&

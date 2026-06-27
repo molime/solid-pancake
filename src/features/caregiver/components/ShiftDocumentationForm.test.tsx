@@ -406,6 +406,61 @@ describe('ShiftDocumentationForm', () => {
     expect(mocks.clockOut).toHaveBeenCalledTimes(1)
   })
 
+  it('resumes the wizard after a correction and reuses the existing clock-out without requesting location', async () => {
+    mockState({
+      geofenceEnabled: true,
+      geofenceEnforceClockOut: true,
+      details: makeDetails({
+        status: 'needs_correction',
+        clockInAt: '2026-06-25T08:01:00Z',
+        clockOutAt: '2026-06-25T16:01:00Z',
+        note: {
+          startTime: '08:00',
+          endTime: '16:00',
+          servicesProvided: 'Bathing, Meals, Walk a little each day goal',
+          clientResponse: 'No problems — all good today',
+          narrative: 'Done',
+        },
+        tasks: [
+          { _id: 'task_1', title: 'Observation note', requiredProof: false, status: 'complete' },
+        ],
+      }),
+    })
+    mocks.clockOut.mockResolvedValueOnce({ punchId: 'punch_2', clockOutAt: '2026-06-25T16:01:00Z' })
+    const user = userEvent.setup()
+    render(<ShiftDocumentationForm clerkOrgId="org_123" shiftId={shiftId} />)
+
+    // Already clocked in, so the wizard is shown directly.
+    expect(screen.getByText(/When were you there/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Clock in now/i })).not.toBeInTheDocument()
+
+    for (let i = 0; i < 5; i++) {
+      await user.click(screen.getByRole('button', { name: /Next Step/i }))
+    }
+
+    const confirmCheckbox = screen.getByRole('checkbox', { name: /I confirm this is accurate/i })
+    await user.click(confirmCheckbox)
+
+    const submitButton = screen.getByRole('button', { name: /Submit my notes/i })
+    await waitFor(() => expect(submitButton).toBeEnabled())
+    await user.click(submitButton)
+
+    const clockOutButton = await screen.findByRole('button', { name: /Clock out now/i })
+    await waitFor(() => expect(clockOutButton).toBeEnabled())
+    await user.click(clockOutButton)
+
+    await waitFor(() => {
+      expect(mocks.clockOut).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clerkOrgId: 'org_123',
+          shiftId,
+          location: undefined,
+        }),
+      )
+    })
+    expect(mockGetCurrentPosition).not.toHaveBeenCalled()
+  })
+
   it('calls onDone when returning home from the success screen', async () => {
     const onDone = vi.fn()
     mockState({
