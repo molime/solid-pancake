@@ -124,7 +124,13 @@ export default defineSchema({
       'coordinatorId',
       'status',
     ])
-    .index('by_tenant_status_start', ['tenantId', 'status', 'scheduledStart']),
+    .index('by_tenant_status_start', ['tenantId', 'status', 'scheduledStart'])
+    .index('by_tenant_caregiver_status_start', [
+      'tenantId',
+      'caregiverId',
+      'status',
+      'scheduledStart',
+    ]),
 
   timePunches: defineTable({
     tenantId: v.id('tenants'),
@@ -285,6 +291,7 @@ export default defineSchema({
     previousStatus: v.optional(v.string()),
     nextStatus: v.optional(v.string()),
     action: v.string(),
+    kind: v.optional(v.string()),
     metadata: v.optional(v.record(v.string(), v.any())),
     createdAt: v.string(),
   }).index('by_tenant_created_at', ['tenantId', 'createdAt']),
@@ -359,23 +366,29 @@ export default defineSchema({
 
   availabilityWindows: defineTable({
     tenantId: v.id('tenants'),
-    employeeProfileId: v.id('employeeProfiles'),
-    weekday: v.string(),
+    caregiverId: v.string(),
+    kind: v.union(v.literal('recurring'), v.literal('one-off')),
+    dayOfWeek: v.optional(v.number()),
+    date: v.optional(v.string()),
     startTime: v.string(),
     endTime: v.string(),
-    effectiveStart: v.optional(v.string()),
-    effectiveEnd: v.optional(v.string()),
-    status: v.string(),
-  }).index('by_tenant_employee', ['tenantId', 'employeeProfileId']),
+    available: v.boolean(),
+    note: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index('by_tenant_caregiver', ['tenantId', 'caregiverId'])
+    .index('by_tenant_caregiver_date', ['tenantId', 'caregiverId', 'date']),
 
   coverageRequests: defineTable({
     tenantId: v.id('tenants'),
     shiftId: v.id('shifts'),
     requesterId: v.string(),
-    reason: v.optional(v.string()),
-    status: v.string(),
-    createdAt: v.string(),
+    reason: v.string(),
+    status: v.union(v.literal('open'), v.literal('filled'), v.literal('cancelled')),
+    reassignedTo: v.optional(v.string()),
+    resolvedBy: v.optional(v.string()),
     resolvedAt: v.optional(v.string()),
+    createdAt: v.string(),
   })
     .index('by_tenant_shift', ['tenantId', 'shiftId'])
     .index('by_tenant_status', ['tenantId', 'status']),

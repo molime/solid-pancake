@@ -30,6 +30,7 @@ import type * as members from "../members.js";
 import type * as platform from "../platform.js";
 import type * as platformTrainingCompletions from "../platformTrainingCompletions.js";
 import type * as reviews from "../reviews.js";
+import type * as scheduling from "../scheduling.js";
 import type * as search from "../search.js";
 import type * as seed from "../seed.js";
 import type * as shiftLifecycle from "../shiftLifecycle.js";
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   platform: typeof platform;
   platformTrainingCompletions: typeof platformTrainingCompletions;
   reviews: typeof reviews;
+  scheduling: typeof scheduling;
   search: typeof search;
   seed: typeof seed;
   shiftLifecycle: typeof shiftLifecycle;

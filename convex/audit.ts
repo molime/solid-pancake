@@ -6,6 +6,7 @@ export const record = internalMutation({
   args: {
     clerkOrgId: v.string(),
     action: v.string(),
+    kind: v.optional(v.string()),
     shiftId: v.optional(v.id('shifts')),
     previousStatus: v.optional(v.string()),
     nextStatus: v.optional(v.string()),
@@ -29,6 +30,7 @@ export const record = internalMutation({
       actorId: identity.subject,
       actorRole: role,
       action: args.action,
+      kind: args.kind,
       shiftId: args.shiftId,
       previousStatus: args.previousStatus,
       nextStatus: args.nextStatus,
