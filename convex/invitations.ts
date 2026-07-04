@@ -8,9 +8,16 @@ const roleValidator = v.union(
   v.literal('org:admin'),
   v.literal('org:coordinator'),
   v.literal('org:caregiver'),
+  v.literal('org:hr'),
+  v.literal('org:candidate'),
 )
 
-type InviteRole = 'org:admin' | 'org:coordinator' | 'org:caregiver'
+type InviteRole =
+  | 'org:admin'
+  | 'org:coordinator'
+  | 'org:caregiver'
+  | 'org:hr'
+  | 'org:candidate'
 
 function toClerkRole(role: InviteRole) {
   return role === 'org:admin' ? 'org:admin' : 'org:member'

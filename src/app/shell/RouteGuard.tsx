@@ -5,7 +5,12 @@ import { Navigate } from 'react-router-dom'
 import type { PropsWithChildren } from 'react'
 import { AppLoader } from '@/shared/ui/AppLoader'
 
-type TenantRole = 'org:admin' | 'org:coordinator' | 'org:caregiver'
+type TenantRole =
+  | 'org:admin'
+  | 'org:coordinator'
+  | 'org:caregiver'
+  | 'org:hr'
+  | 'org:candidate'
 
 export function TenantRouteGuard({ children }: PropsWithChildren) {
   const { isLoaded: authLoaded, isSignedIn } = useAuth()

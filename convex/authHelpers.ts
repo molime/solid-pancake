@@ -3,7 +3,12 @@ import { ConvexError } from 'convex/values'
 import type { Id } from './_generated/dataModel'
 
 export type AuthContext = QueryCtx | MutationCtx
-export type TenantRole = 'org:admin' | 'org:coordinator' | 'org:caregiver'
+export type TenantRole =
+  | 'org:admin'
+  | 'org:coordinator'
+  | 'org:caregiver'
+  | 'org:hr'
+  | 'org:candidate'
 
 export async function requireIdentity(ctx: AuthContext) {
   const identity = await ctx.auth.getUserIdentity()
@@ -89,7 +94,9 @@ function normalizeTenantRole(role: unknown): TenantRole | null {
   if (
     role === 'org:admin' ||
     role === 'org:coordinator' ||
-    role === 'org:caregiver'
+    role === 'org:caregiver' ||
+    role === 'org:hr' ||
+    role === 'org:candidate'
   ) {
     return role
   }
@@ -97,6 +104,8 @@ function normalizeTenantRole(role: unknown): TenantRole | null {
   if (role === 'admin') return 'org:admin'
   if (role === 'coordinator') return 'org:coordinator'
   if (role === 'caregiver') return 'org:caregiver'
+  if (role === 'hr') return 'org:hr'
+  if (role === 'candidate') return 'org:candidate'
 
   return null
 }

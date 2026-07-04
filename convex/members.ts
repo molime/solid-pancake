@@ -94,6 +94,8 @@ export const sync = mutation({
       v.literal('org:admin'),
       v.literal('org:coordinator'),
       v.literal('org:caregiver'),
+      v.literal('org:hr'),
+      v.literal('org:candidate'),
     ),
     displayName: v.string(),
     email: v.string(),
@@ -182,6 +184,8 @@ export const updateRole = mutation({
       v.literal('org:admin'),
       v.literal('org:coordinator'),
       v.literal('org:caregiver'),
+      v.literal('org:hr'),
+      v.literal('org:candidate'),
     ),
   },
   handler: async (ctx, args) => {

@@ -7,10 +7,10 @@ import {
   E2E_COORDINATOR_EMAIL,
   E2E_COORDINATOR_PASSWORD,
   E2E_ORG_ID,
-  e2eCredentialsAvailable,
   signInWithClerk,
   signOut,
 } from './helpers/auth'
+import { e2eCredentialsAvailable, isLocalConvexUrl } from './helpers/env'
 
 type RoleCredentials = {
   email: string
@@ -84,8 +84,8 @@ async function extractClerkToken(page: import('@playwright/test').Page): Promise
 }
 
 export default async function globalSetup(config: FullConfig) {
-  if (!e2eCredentialsAvailable()) {
-    console.log('E2E credentials not configured; skipping global seed.')
+  if (!e2eCredentialsAvailable() || isLocalConvexUrl()) {
+    console.log('Skipping global E2E seed: local Convex backend or missing credentials.')
     return
   }
 

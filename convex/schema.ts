@@ -48,6 +48,8 @@ export default defineSchema({
       v.literal('org:admin'),
       v.literal('org:coordinator'),
       v.literal('org:caregiver'),
+      v.literal('org:hr'),
+      v.literal('org:candidate'),
     ),
     displayName: v.string(),
     email: v.string(),
@@ -310,4 +312,117 @@ export default defineSchema({
     clerkUserId: v.string(),
     createdAt: v.string(),
   }).index('by_clerk_user_id', ['clerkUserId']),
+
+  candidates: defineTable({
+    tenantId: v.id('tenants'),
+    clerkUserId: v.optional(v.string()),
+    email: v.string(),
+    phone: v.optional(v.string()),
+    displayName: v.string(),
+    status: v.string(),
+    source: v.optional(v.string()),
+    createdAt: v.string(),
+  }).index('by_tenant_email', ['tenantId', 'email']),
+
+  applications: defineTable({
+    tenantId: v.id('tenants'),
+    candidateId: v.id('candidates'),
+    status: v.string(),
+    submittedAt: v.optional(v.string()),
+    reviewedBy: v.optional(v.string()),
+    decisionAt: v.optional(v.string()),
+    hiredEmployeeProfileId: v.optional(v.id('employeeProfiles')),
+  }).index('by_tenant_status', ['tenantId', 'status']),
+
+  candidateTasks: defineTable({
+    tenantId: v.id('tenants'),
+    candidateId: v.id('candidates'),
+    applicationId: v.optional(v.id('applications')),
+    type: v.string(),
+    status: v.string(),
+    dueAt: v.optional(v.string()),
+    completedAt: v.optional(v.string()),
+  }).index('by_tenant_candidate_status', ['tenantId', 'candidateId', 'status']),
+
+  hrCases: defineTable({
+    tenantId: v.id('tenants'),
+    subjectType: v.string(),
+    subjectId: v.string(),
+    category: v.string(),
+    status: v.string(),
+    ownerMemberId: v.optional(v.id('tenantMembers')),
+    description: v.optional(v.string()),
+    resolvedAt: v.optional(v.string()),
+  })
+    .index('by_tenant_status', ['tenantId', 'status'])
+    .index('by_tenant_owner_status', ['tenantId', 'ownerMemberId', 'status']),
+
+  availabilityWindows: defineTable({
+    tenantId: v.id('tenants'),
+    employeeProfileId: v.id('employeeProfiles'),
+    weekday: v.string(),
+    startTime: v.string(),
+    endTime: v.string(),
+    effectiveStart: v.optional(v.string()),
+    effectiveEnd: v.optional(v.string()),
+    status: v.string(),
+  }).index('by_tenant_employee', ['tenantId', 'employeeProfileId']),
+
+  coverageRequests: defineTable({
+    tenantId: v.id('tenants'),
+    shiftId: v.id('shifts'),
+    requesterId: v.string(),
+    reason: v.optional(v.string()),
+    status: v.string(),
+    createdAt: v.string(),
+    resolvedAt: v.optional(v.string()),
+  })
+    .index('by_tenant_shift', ['tenantId', 'shiftId'])
+    .index('by_tenant_status', ['tenantId', 'status']),
+
+  formDefinitions: defineTable({
+    tenantId: v.id('tenants'),
+    key: v.string(),
+    name: v.string(),
+    version: v.number(),
+    status: v.string(),
+    fields: v.array(v.any()),
+    createdBy: v.string(),
+    createdAt: v.string(),
+  }).index('by_tenant_key_version', ['tenantId', 'key', 'version']),
+
+  formSubmissions: defineTable({
+    tenantId: v.id('tenants'),
+    formDefinitionId: v.id('formDefinitions'),
+    subjectType: v.string(),
+    subjectId: v.string(),
+    submittedBy: v.string(),
+    status: v.string(),
+    answers: v.record(v.string(), v.any()),
+    submittedAt: v.string(),
+  }).index('by_tenant_subject', ['tenantId', 'subjectType', 'subjectId']),
+
+  documentArchiveItems: defineTable({
+    tenantId: v.id('tenants'),
+    fileId: v.id('files'),
+    subjectType: v.string(),
+    subjectId: v.string(),
+    category: v.string(),
+    status: v.string(),
+    expiresAt: v.optional(v.string()),
+    retentionUntil: v.optional(v.string()),
+    source: v.optional(v.string()),
+  })
+    .index('by_tenant_subject', ['tenantId', 'subjectType', 'subjectId'])
+    .index('by_tenant_category_status', ['tenantId', 'category', 'status'])
+    .index('by_tenant_expires_at', ['tenantId', 'expiresAt']),
+
+  platformTrainingCompletions: defineTable({
+    tenantId: v.id('tenants'),
+    clerkUserId: v.string(),
+    trainingId: v.string(),
+    completedAt: v.string(),
+    status: v.string(),
+    expiresAt: v.optional(v.string()),
+  }).index('by_tenant_user', ['tenantId', 'clerkUserId']),
 })

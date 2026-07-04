@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test'
+import { e2eCredentialsAvailable } from './env'
 
 export const E2E_ORG_ID = process.env.E2E_CLERK_ORG_ID ?? ''
 export const E2E_ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? ''
@@ -7,18 +8,6 @@ export const E2E_CAREGIVER_EMAIL = process.env.E2E_CAREGIVER_EMAIL ?? ''
 export const E2E_CAREGIVER_PASSWORD = process.env.E2E_CAREGIVER_PASSWORD ?? ''
 export const E2E_COORDINATOR_EMAIL = process.env.E2E_COORDINATOR_EMAIL ?? ''
 export const E2E_COORDINATOR_PASSWORD = process.env.E2E_COORDINATOR_PASSWORD ?? ''
-
-export function e2eCredentialsAvailable(): boolean {
-  return Boolean(
-    E2E_ORG_ID &&
-      E2E_ADMIN_EMAIL &&
-      E2E_ADMIN_PASSWORD &&
-      E2E_CAREGIVER_EMAIL &&
-      E2E_CAREGIVER_PASSWORD &&
-      E2E_COORDINATOR_EMAIL &&
-      E2E_COORDINATOR_PASSWORD,
-  )
-}
 
 export function assertE2ECredentialsConfigured(): void {
   if (!e2eCredentialsAvailable()) {
