@@ -1,0 +1,93 @@
+{
+  "project": "atriax",
+  "task": "ATRIA-X SESSION 4 \u2014 Minimal caregiver identity + ADP sync + geofence settings UI\n\nRun this through the ATRIA-X multi-model pipeline using codex + kimi only: plan/review via Codex CLI, implementation/fix via Kimi CLI. Opus/Claude must not be used.\n\nRepo: C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\n\nFollow atriax-orchestrator and atriax-rules:\n- All tenant data through convex/authHelpers.ts\n- requireTenantRole for server-side authorization\n- Clerk organization roles: org:admin, org:coordinator, org:caregiver\n- npx convex codegen after Convex edits\n- Style: single quotes, no semicolons, 2-space indent\n- Do not build candidate application or HR onboarding\n- Keep this Phase 1 backend + thin admin/coordinator UI minimal\n\nTask:\n\nATRIA-X Phase 1 backend + thin admin/coordinator UI for minimal caregiver identity and geofence settings, reusing convex/members.ts, convex/invitations.ts, employeeProfiles, tenant shiftGeofence settings, and the ADP sync engine.\n\nRequired implementation:\n\n1. Backend mutation createCaregiver({ displayName, email })\n   - requireTenantRole org:admin\n   - Creates or updates an employeeProfiles row\n   - Sends the existing Clerk invitation so the caregiver can log in, reusing convex/invitations.ts\n   - Enqueues adpSyncWorker so the new caregiver is reflected in ADP when configured\n   - If ADP credentials/config are missing, queue/mark as pending_credentials until then\n   - On invite acceptance, link employeeProfiles.clerkUserId + tenantMemberId\n\n2. Backend admin mutation runAdpInitialWorkerLoad()\n   - requireTenantRole org:admin\n   - Schedules/runs adpInitialWorkerLoad from the prior session\n   - Returns a summary with matched/created/errors counts\n\n3. Backend query listEmployeeProfiles\n   - Tenant-guarded\n   - Admin-facing\n   - Return displayName, email, role, adpSyncStatus\n\n4. Thin admin UI under src/features/team\n   - Reuse existing Team page patterns and src/shared/ui primitives\n   - Role-gated through RouteGuard/TenantRoleRouteGuard as appropriate\n   - Add a \"Caregivers & ADP sync\" panel\n   - List employees with adpSyncStatus pill, with color + WORD:\n     - Synced = green\n     - Queued = amber\n     - Pending credentials = gray\n     - Error = red\n   - Add caregiver form with name + email fields\n   - \"Load from ADP\" button calls runAdpInitialWorkerLoad and shows a result toast\n\n5. Compact \"Clock-in location rules\" settings panel\n   - Visible to admins/coordinators\n   - Enable/disable geofence\n   - Enforce on clock-in\n   - Enforce on clock-out\n   - Default radius meters\n   - Max accuracy meters\n   - Plain-language help text\n   - Editable by admin/coordinator\n   - Rejected for caregiver on backend\n\n6. Client/shift location editing where it naturally fits\n   - Client record or shift detail, whichever matches existing patterns best\n   - Service address + latitude/longitude fields, or saved geocoded target\n   - If no coordinates are configured and geofence is enabled, warn that clock-in/out will be blocked until an address is completed\n\nTests required:\n- createCaregiver enqueues a worker sync + creates a profile\n- initial-load summary counts are correct with mocked ADP\n- geofence settings are editable by admin/coordinator and rejected for caregiver\n\nRequired gates:\n- npx convex codegen\n- npm run lint\n- npm run typecheck\n- npm run test\n\nQuality/scope constraints:\n- Minimal Phase 1 only\n- Do not build candidate/HR onboarding\n- Preserve existing flows unless tests prove the intended change\n- Do not claim success unless codegen/lint/typecheck/tests required by this session are actually green\n\nOptimization guidance:\n- Avoid wasting loops on formatting-only churn; run the required focused tests and gates promptly after implementation\n- Keep scope tight to the listed files/features\n- Do not add broad refactors or unrelated UI redesigns",
+  "plan_mode": "codex",
+  "dry_run": false,
+  "stages": [
+    {
+      "stage": "plan_codex",
+      "backend": "codex",
+      "model": "gpt-5.5 (default)",
+      "rc": 0
+    },
+    {
+      "stage": "implement",
+      "backend": "kimi",
+      "model": "Kimi-k2.6 (default)",
+      "rc": 0
+    },
+    {
+      "stage": "gate_postimpl",
+      "passed": true
+    },
+    {
+      "stage": "review_codex_iter1",
+      "backend": "codex",
+      "model": "gpt-5.5 (default)",
+      "verdict": "CHANGES_REQUESTED"
+    },
+    {
+      "stage": "fix_iter1",
+      "backend": "kimi",
+      "model": "Kimi-k2.6 (default)",
+      "rc": 0
+    },
+    {
+      "stage": "gate_postfix1",
+      "passed": true
+    },
+    {
+      "stage": "review_codex_iter2",
+      "backend": "codex",
+      "model": "gpt-5.5 (default)",
+      "verdict": "CHANGES_REQUESTED"
+    },
+    {
+      "stage": "fix_iter2",
+      "backend": "kimi",
+      "model": "Kimi-k2.6 (default)",
+      "rc": 0
+    },
+    {
+      "stage": "gate_postfix2",
+      "passed": true
+    },
+    {
+      "stage": "review_codex_iter3",
+      "backend": "codex",
+      "model": "gpt-5.5 (default)",
+      "verdict": "UNKNOWN"
+    },
+    {
+      "stage": "fix_iter3",
+      "backend": "kimi",
+      "model": "Kimi-k2.6 (default)",
+      "rc": 0
+    },
+    {
+      "stage": "gate_postfix3",
+      "passed": true
+    },
+    {
+      "stage": "review_codex_iter4",
+      "backend": "codex",
+      "model": "gpt-5.5 (default)",
+      "verdict": "UNKNOWN"
+    },
+    {
+      "stage": "fix_iter4",
+      "backend": "kimi",
+      "model": "Kimi-k2.6 (default)",
+      "rc": 0
+    },
+    {
+      "stage": "gate_postfix4",
+      "passed": true
+    },
+    {
+      "stage": "gate_final",
+      "passed": true
+    }
+  ],
+  "result": "NOT_CONVERGED (review cap hit)"
+}

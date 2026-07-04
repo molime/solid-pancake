@@ -283,6 +283,80 @@ describe('E2E fixture isolation', () => {
     expect(reset.geofenceShiftId).not.toBe(first.geofenceShiftId)
   })
 
+  it('does not destroy unrelated shifts or billing lines that share the fixture start times', async () => {
+    const t = createRuntimeConvex()
+    const clerkOrgId = 'org_e2e_narrow_delete'
+    const adminUserId = 'user_admin_narrow_delete'
+    const coordinatorUserId = 'user_coordinator_narrow_delete'
+    const caregiverUserId = 'user_caregiver_narrow_delete'
+    const otherCaregiverUserId = 'user_other_caregiver_narrow_delete'
+
+    const { tenantId } = await seedTenant(
+      t,
+      clerkOrgId,
+      adminUserId,
+      coordinatorUserId,
+      caregiverUserId,
+    )
+
+    const first = await seedE2E(t, clerkOrgId, adminUserId, coordinatorUserId, caregiverUserId)
+
+    const unrelatedClientId = await t.run(async (ctx) => {
+      return ctx.db.insert('clients', {
+        tenantId,
+        displayName: 'Unrelated Client',
+        serviceType: 'ILS',
+        authorizationHours: 10,
+        riskFlags: [],
+      })
+    })
+
+    const lifecycleStart = '2024-01-15T09:00:00Z'
+    const unrelatedShiftId = await t.run(async (ctx) => {
+      const shiftId = await ctx.db.insert('shifts', {
+        tenantId,
+        clientId: unrelatedClientId,
+        caregiverId: otherCaregiverUserId,
+        scheduledStart: lifecycleStart,
+        scheduledEnd: '2024-01-15T13:00:00Z',
+        status: 'scheduled',
+        serviceType: 'ILS',
+        rate: 25,
+      })
+      await ctx.db.insert('billingLines', {
+        tenantId,
+        shiftId,
+        hours: 4,
+        rate: 25,
+        amount: 100,
+        createdAt: new Date().toISOString(),
+      })
+      return shiftId
+    })
+
+    const second = await seedE2E(t, clerkOrgId, adminUserId, coordinatorUserId, caregiverUserId)
+
+    const unrelatedShiftAfter = await t.run(async (ctx) => {
+      return ctx.db.get(unrelatedShiftId)
+    })
+    expect(unrelatedShiftAfter).not.toBeNull()
+    expect(unrelatedShiftAfter?.status).toBe('scheduled')
+
+    const unrelatedBillingLines = await t.run(async (ctx) => {
+      return ctx.db
+        .query('billingLines')
+        .withIndex('by_tenant_shift', (q) =>
+          q.eq('tenantId', tenantId).eq('shiftId', unrelatedShiftId),
+        )
+        .collect()
+    })
+    expect(unrelatedBillingLines).toHaveLength(1)
+    expect(unrelatedBillingLines[0]?.amount).toBe(100)
+
+    expect(second.lifecycleShiftId).not.toBe(first.lifecycleShiftId)
+    expect(second.geofenceShiftId).not.toBe(first.geofenceShiftId)
+  })
+
   it('seedE2E resets geofence settings to disabled', async () => {
     const t = createRuntimeConvex()
     const clerkOrgId = 'org_e2e_geofence_reset'

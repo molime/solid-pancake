@@ -677,12 +677,20 @@ async function seedE2EFixtures(
     })
   }
 
-  const findShiftsByStart = async (scheduledStart: string) => {
+  const findFixtureShifts = async (
+    clientId: Id<'clients'>,
+    caregiverId: string,
+    scheduledStart: string,
+  ) => {
     const all = await ctx.db
       .query('shifts')
-      .withIndex('by_tenant_status_start', (q) => q.eq('tenantId', tenantId))
+      .withIndex('by_tenant_caregiver_status', (q) =>
+        q.eq('tenantId', tenantId).eq('caregiverId', caregiverId),
+      )
       .collect()
-    return all.filter((s) => s.scheduledStart === scheduledStart)
+    return all.filter(
+      (s) => s.clientId === clientId && s.scheduledStart === scheduledStart,
+    )
   }
 
   const createCleanShift = async (
@@ -724,19 +732,28 @@ async function seedE2EFixtures(
     return shiftId
   }
 
-  // Destroy any existing fixture shifts for the known start times so that each
-  // E2E reset creates fresh documents with new IDs. This prevents the
-  // React/Convex client from reusing stale query/component state keyed by the
-  // same shift ID across serial scenarios.
+  // Destroy only the intended fixture shifts (matched by client, caregiver, and
+  // scheduled start) so that each E2E reset creates fresh documents with new IDs
+  // without touching unrelated tenant shifts that happen to share the same start
+  // time. This prevents the React/Convex client from reusing stale
+  // query/component state keyed by the same shift ID across serial scenarios.
   const lifecycleStart = `${fixtureDate}T09:00:00Z`
-  const existingLifecycleShifts = await findShiftsByStart(lifecycleStart)
+  const existingLifecycleShifts = await findFixtureShifts(
+    lifecycleClientId,
+    userIds.caregiverUserId,
+    lifecycleStart,
+  )
   for (const shift of existingLifecycleShifts) {
     await deleteShiftChildren(ctx, tenantId, shift._id)
     await ctx.db.delete(shift._id)
   }
 
   const geofenceStart = `${fixtureDate}T14:00:00Z`
-  const existingGeofenceShifts = await findShiftsByStart(geofenceStart)
+  const existingGeofenceShifts = await findFixtureShifts(
+    geofenceClientId,
+    userIds.caregiverUserId,
+    geofenceStart,
+  )
   for (const shift of existingGeofenceShifts) {
     await deleteShiftChildren(ctx, tenantId, shift._id)
     await ctx.db.delete(shift._id)

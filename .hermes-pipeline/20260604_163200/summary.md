@@ -1,0 +1,39 @@
+# Pipeline summary — atriax
+**Task:** Stage 0 foundation: add reference-INDEPENDENT, additive UI primitives and accessibility/size improvements to the shared design system, WITHOUT changing the existing brand color palette or token values in src/index.css. Specifically: (1) Add a 'lg' size variant to src/shared/ui/Button.tsx (larger padding, min-height 44px touch target, text-base) while keeping existing variants/sizes and tests passing. (2) Create new primitives in src/shared/ui/: EmptyState.tsx (icon + title + description + optional action button, used for no-data states), ProgressSteps.tsx (horizontal/vertical numbered step indicator with current/complete/upcoming states, for guided flows), FieldGroup.tsx (label + helper text + error text wrapper around form inputs for larger readable labels), and Toast.tsx (simple inline/transient feedback message with success/error/info variants). (3) Export all new primitives from src/shared/ui/index.ts. Follow repo conventions strictly: TypeScript, React function components, single quotes, NO semicolons, 2-space indent, use class-variance-authority where variants exist (match the pattern in existing Button.tsx), use the cn helper from @/shared/lib/cn, lucide-react for icons, and the existing --color-atria-* CSS variables for colors. Each new component must be presentational only (no Convex, no data fetching). Add Vitest component tests for each new primitive under src/shared/ui matching the existing test style. Do not modify any feature pages or backend. Do not introduce Radix or shadcn dependencies. All of lint, typecheck, and unit gates must pass.
+**Plan mode:** both
+**Result:** SUCCESS
+**Converged:** True  **Final gate:** True
+**Run dir:** C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260604_163200
+
+## Stages
+- {'stage': 'plan_opus', 'backend': 'hermes', 'model': 'claude-opus-4-8', 'rc': 0}
+- {'stage': 'plan_codex', 'backend': 'codex', 'model': 'gpt-5.5 (default)', 'rc': 0}
+- {'stage': 'implement', 'backend': 'kimi', 'model': 'Kimi-k2.6 (default)', 'rc': 0}
+- {'stage': 'gate_postimpl', 'passed': True}
+- {'stage': 'review_opus_iter1', 'backend': 'hermes', 'model': 'claude-opus-4-8', 'verdict': 'APPROVED'}
+- {'stage': 'review_codex_iter1', 'backend': 'codex', 'model': 'gpt-5.5 (default)', 'verdict': 'CHANGES_REQUESTED'}
+- {'stage': 'fix_iter1', 'backend': 'kimi', 'model': 'Kimi-k2.6 (default)', 'rc': 0}
+- {'stage': 'gate_postfix1', 'passed': True}
+- {'stage': 'review_opus_iter2', 'backend': 'hermes', 'model': 'claude-opus-4-8', 'verdict': 'APPROVED'}
+- {'stage': 'review_codex_iter2', 'backend': 'codex', 'model': 'gpt-5.5 (default)', 'verdict': 'CHANGES_REQUESTED'}
+- {'stage': 'fix_iter2', 'backend': 'kimi', 'model': 'Kimi-k2.6 (default)', 'rc': 0}
+- {'stage': 'gate_postfix2', 'passed': True}
+- {'stage': 'review_opus_iter3', 'backend': 'hermes', 'model': 'claude-opus-4-8', 'verdict': 'APPROVED'}
+- {'stage': 'review_codex_iter3', 'backend': 'codex', 'model': 'gpt-5.5 (default)', 'verdict': 'CHANGES_REQUESTED'}
+- {'stage': 'fix_iter3', 'backend': 'kimi', 'model': 'Kimi-k2.6 (default)', 'rc': 0}
+- {'stage': 'gate_postfix3', 'passed': True}
+- {'stage': 'review_opus_iter4', 'backend': 'hermes', 'model': 'claude-opus-4-8', 'verdict': 'APPROVED'}
+- {'stage': 'review_codex_iter4', 'backend': 'codex', 'model': 'gpt-5.5 (default)', 'verdict': 'APPROVED'}
+- {'stage': 'gate_final', 'passed': True}
+
+## Hermes authenticated providers (probe)
+```
+anthropic (1 credentials):
+  #1  ANTHROPIC_API_KEY    api_key env:ANTHROPIC_API_KEY ←
+```
+
+## Next step
+Review the uncommitted diff, then commit/merge if satisfied:
+```
+git -C "C:\Users\pinol\Documents\Work\atriax\solid-pancake" diff
+```
