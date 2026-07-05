@@ -5,7 +5,9 @@ import {
   requireTenantRole,
   assertTenantDoc,
   type TenantRole,
+  type AuthContext,
 } from './authHelpers'
+import type { Id } from './_generated/dataModel'
 
 export function assertCanEditProof(opts: {
   role: TenantRole
@@ -27,6 +29,10 @@ export function assertCanEditProof(opts: {
       )
     }
   }
+}
+
+export async function getFileMetadata(ctx: AuthContext, fileId: Id<'files'>) {
+  return ctx.db.get(fileId)
 }
 
 export const generateUploadUrl = mutation({

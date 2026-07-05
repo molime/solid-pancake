@@ -1,6 +1,7 @@
-import type { QueryCtx, MutationCtx } from './_generated/server'
+import type { QueryCtx, MutationCtx, ActionCtx } from './_generated/server'
 import { ConvexError } from 'convex/values'
 import type { Id } from './_generated/dataModel'
+import { api } from './_generated/api'
 
 export type AuthContext = QueryCtx | MutationCtx
 export type TenantRole =
@@ -185,4 +186,30 @@ export async function ensureTenantMember(
       q.eq('tenantId', tenantId).eq('clerkUserId', clerkUserId),
     )
     .unique()
+}
+
+export async function requireTenantRoleAction(
+  ctx: ActionCtx,
+  clerkOrgId: string,
+  allowedRoles: TenantRole[],
+) {
+  const identity = await ctx.auth.getUserIdentity()
+  if (!identity) {
+    throw new ConvexError('Unauthorized: authentication required.')
+  }
+  requireMatchingClerkOrganization(identity, clerkOrgId)
+
+  const member = await ctx.runQuery(api.members.me, { clerkOrgId })
+  if (!member) {
+    throw new ConvexError('Forbidden: not a member of this tenant.')
+  }
+
+  const role = normalizeTenantRole(member.role)
+  if (!role || !allowedRoles.includes(role)) {
+    throw new ConvexError(
+      `Forbidden: required one of [${allowedRoles.join(', ')}].`,
+    )
+  }
+
+  return { identity, member, role, clerkOrgId }
 }

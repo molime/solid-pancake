@@ -328,18 +328,27 @@ export default defineSchema({
     displayName: v.string(),
     status: v.string(),
     source: v.optional(v.string()),
+    invitationId: v.optional(v.string()),
     createdAt: v.string(),
-  }).index('by_tenant_email', ['tenantId', 'email']),
+  })
+    .index('by_tenant_email', ['tenantId', 'email'])
+    .index('by_tenant_clerk_user', ['tenantId', 'clerkUserId']),
 
   applications: defineTable({
     tenantId: v.id('tenants'),
     candidateId: v.id('candidates'),
     status: v.string(),
+    fields: v.optional(v.any()),
+    decision: v.optional(v.union(v.literal('approved'), v.literal('rejected'))),
+    hrNotes: v.optional(v.string()),
     submittedAt: v.optional(v.string()),
     reviewedBy: v.optional(v.string()),
     decisionAt: v.optional(v.string()),
     hiredEmployeeProfileId: v.optional(v.id('employeeProfiles')),
-  }).index('by_tenant_status', ['tenantId', 'status']),
+  })
+    .index('by_tenant_status', ['tenantId', 'status'])
+    .index('by_candidate', ['candidateId'])
+    .index('by_candidate_submittedAt', ['candidateId', 'submittedAt']),
 
   candidateTasks: defineTable({
     tenantId: v.id('tenants'),
@@ -347,9 +356,12 @@ export default defineSchema({
     applicationId: v.optional(v.id('applications')),
     type: v.string(),
     status: v.string(),
+    order: v.number(),
     dueAt: v.optional(v.string()),
     completedAt: v.optional(v.string()),
-  }).index('by_tenant_candidate_status', ['tenantId', 'candidateId', 'status']),
+  })
+    .index('by_tenant_candidate_status', ['tenantId', 'candidateId', 'status'])
+    .index('by_tenant_candidate_order', ['tenantId', 'candidateId', 'order']),
 
   hrCases: defineTable({
     tenantId: v.id('tenants'),
@@ -395,14 +407,17 @@ export default defineSchema({
 
   formDefinitions: defineTable({
     tenantId: v.id('tenants'),
-    key: v.string(),
+    key: v.optional(v.string()),
     name: v.string(),
-    version: v.number(),
-    status: v.string(),
+    version: v.optional(v.number()),
+    description: v.optional(v.string()),
+    active: v.boolean(),
     fields: v.array(v.any()),
     createdBy: v.string(),
     createdAt: v.string(),
-  }).index('by_tenant_key_version', ['tenantId', 'key', 'version']),
+  })
+    .index('by_tenant_key_version', ['tenantId', 'key', 'version'])
+    .index('by_tenant_created', ['tenantId', 'createdAt']),
 
   formSubmissions: defineTable({
     tenantId: v.id('tenants'),
@@ -413,7 +428,10 @@ export default defineSchema({
     status: v.string(),
     answers: v.record(v.string(), v.any()),
     submittedAt: v.string(),
-  }).index('by_tenant_subject', ['tenantId', 'subjectType', 'subjectId']),
+  })
+    .index('by_tenant_subject', ['tenantId', 'subjectType', 'subjectId'])
+    .index('by_formDefinition', ['formDefinitionId'])
+    .index('by_submittedBy', ['submittedBy']),
 
   documentArchiveItems: defineTable({
     tenantId: v.id('tenants'),
@@ -425,10 +443,15 @@ export default defineSchema({
     expiresAt: v.optional(v.string()),
     retentionUntil: v.optional(v.string()),
     source: v.optional(v.string()),
+    verifiedBy: v.optional(v.string()),
+    verifiedAt: v.optional(v.string()),
+    rejectionReason: v.optional(v.string()),
+    createdAt: v.string(),
   })
     .index('by_tenant_subject', ['tenantId', 'subjectType', 'subjectId'])
     .index('by_tenant_category_status', ['tenantId', 'category', 'status'])
-    .index('by_tenant_expires_at', ['tenantId', 'expiresAt']),
+    .index('by_tenant_expires_at', ['tenantId', 'expiresAt'])
+    .index('by_tenant_created', ['tenantId', 'createdAt']),
 
   platformTrainingCompletions: defineTable({
     tenantId: v.id('tenants'),

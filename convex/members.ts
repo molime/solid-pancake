@@ -1,6 +1,7 @@
 import { v } from 'convex/values'
-import { query, mutation } from './_generated/server'
+import { query, mutation, type MutationCtx } from './_generated/server'
 import { internal } from './_generated/api'
+import type { Id } from './_generated/dataModel'
 import {
   getActiveClerkOrganizationId,
   getClerkOrganizationRole,
@@ -10,6 +11,26 @@ import {
   requireTenantRole,
 } from './authHelpers'
 import { ensureCaregiverEmployeeProfile } from './employeeProfiles'
+import { normalizeEmail } from './adpSync'
+
+async function linkCandidateClerkUserId(
+  ctx: MutationCtx,
+  tenantId: Id<'tenants'>,
+  clerkUserId: string,
+  email: string,
+  role: string,
+) {
+  if (role !== 'org:candidate') return
+  const candidate = await ctx.db
+    .query('candidates')
+    .withIndex('by_tenant_email', (q) =>
+      q.eq('tenantId', tenantId).eq('email', normalizeEmail(email)),
+    )
+    .unique()
+  if (candidate && !candidate.clerkUserId) {
+    await ctx.db.patch(candidate._id, { clerkUserId })
+  }
+}
 
 export const checkMembership = query({
   args: { clerkOrgId: v.string() },
@@ -145,6 +166,13 @@ export const sync = mutation({
           })
         }
       }
+      await linkCandidateClerkUserId(
+        ctx,
+        tenantId,
+        args.clerkUserId,
+        args.email,
+        role,
+      )
       return existing._id
     }
 
@@ -171,6 +199,14 @@ export const sync = mutation({
         }
       }
     }
+
+    await linkCandidateClerkUserId(
+      ctx,
+      tenantId,
+      args.clerkUserId,
+      args.email,
+      role,
+    )
 
     return memberId
   },

@@ -16,7 +16,7 @@ export const record = internalMutation({
     const { tenantId, identity, role } = await requireTenantRole(
       ctx,
       args.clerkOrgId,
-      ['org:admin', 'org:coordinator', 'org:caregiver'],
+      ['org:admin', 'org:coordinator', 'org:caregiver', 'org:hr', 'org:candidate'],
     )
 
     if (args.shiftId) {
