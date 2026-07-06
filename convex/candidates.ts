@@ -579,7 +579,11 @@ export const reviewApplication = mutation({
   args: {
     clerkOrgId: v.string(),
     candidateId: v.id('candidates'),
-    decision: v.union(v.literal('approved'), v.literal('rejected')),
+    decision: v.union(
+      v.literal('approved'),
+      v.literal('rejected'),
+      v.literal('needs_correction'),
+    ),
     hrNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -594,8 +598,18 @@ export const reviewApplication = mutation({
     }
     assertTenantDoc(candidate, tenantId)
 
-    if (candidate.status !== 'applied' && candidate.status !== 'hr_review') {
-      throw new ConvexError('Candidate must be in applied or hr_review status.')
+    const allowedStatuses = ['applied', 'hr_review', 'application_draft']
+    if (!allowedStatuses.includes(candidate.status)) {
+      throw new ConvexError(
+        'Candidate must be in applied, hr_review, or application_draft status.',
+      )
+    }
+
+    if (args.decision === 'needs_correction') {
+      const notes = args.hrNotes?.trim() ?? ''
+      if (!notes) {
+        throw new ConvexError('HR notes are required when requesting a correction.')
+      }
     }
 
     const latest = await getLatestApplication(ctx, candidate._id)
@@ -604,7 +618,12 @@ export const reviewApplication = mutation({
     }
 
     const now = new Date().toISOString()
-    const nextStatus = args.decision === 'approved' ? 'hr_review' : 'rejected'
+    const nextStatus =
+      args.decision === 'approved'
+        ? 'hr_review'
+        : args.decision === 'rejected'
+          ? 'rejected'
+          : 'application_draft'
 
     await ctx.db.patch(latest._id, {
       decision: args.decision,
@@ -731,7 +750,13 @@ export const rejectOffer = mutation({
 })
 
 export const hireCandidate = mutation({
-  args: { clerkOrgId: v.string(), candidateId: v.id('candidates') },
+  args: {
+    clerkOrgId: v.string(),
+    candidateId: v.id('candidates'),
+    startDate: v.optional(v.string()),
+    payRate: v.optional(v.string()),
+    supervisor: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
       'org:admin',
@@ -837,7 +862,20 @@ export const hireCandidate = mutation({
 
     const latest = await getLatestApplication(ctx, candidate._id)
     if (latest) {
-      await ctx.db.patch(latest._id, { hiredEmployeeProfileId: employeeProfileId })
+      const hiringDetails: Record<string, unknown> = {}
+      if (args.startDate) hiringDetails.startDate = args.startDate
+      if (args.payRate) hiringDetails.payRate = args.payRate
+      if (args.supervisor) hiringDetails.supervisor = args.supervisor
+
+      await ctx.db.patch(latest._id, {
+        hiredEmployeeProfileId: employeeProfileId,
+        ...(Object.keys(hiringDetails).length > 0 && {
+          fields: {
+            ...(latest.fields ?? {}),
+            ...hiringDetails,
+          },
+        }),
+      })
     }
 
     await recordCandidateAudit(ctx, {
@@ -1019,3 +1057,115 @@ export const update = mutation({
     return args.candidateId
   },
 })
+
+const CANDIDATE_DOCUMENT_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+]
+const MAX_CANDIDATE_DOCUMENT_BYTES = 10 * 1024 * 1024
+
+export const attachCandidateDocument = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    storageId: v.string(),
+    fileName: v.string(),
+    contentType: v.optional(v.string()),
+    size: v.optional(v.number()),
+    documentType: v.string(),
+    label: v.string(),
+    expiresAt: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:candidate',
+    ])
+
+    const own = await getOwnCandidate(ctx, tenantId, {
+      subject: identity.subject,
+      email: typeof identity.email === 'string' ? identity.email : undefined,
+    })
+    if (!own) {
+      throw new ConvexError('Candidate profile not found.')
+    }
+    const candidateId = own._id
+
+    if (
+      args.contentType &&
+      !CANDIDATE_DOCUMENT_TYPES.includes(args.contentType)
+    ) {
+      throw new ConvexError(
+        'Invalid file type. Only JPG, PNG, WebP, and PDF are allowed.',
+      )
+    }
+    if (args.size && args.size > MAX_CANDIDATE_DOCUMENT_BYTES) {
+      throw new ConvexError('File exceeds 10 MB limit.')
+    }
+
+    const fileId = await ctx.db.insert('files', {
+      tenantId,
+      storageId: args.storageId,
+      uploadedBy: identity.subject,
+      fileName: args.fileName,
+      contentType: args.contentType,
+      size: args.size,
+      linkedType: 'complianceDoc',
+      linkedId: candidateId as string,
+      visibility: 'admins_coordinators',
+      createdAt: new Date().toISOString(),
+    })
+
+    const existingArchiveItem = await ctx.db
+      .query('documentArchiveItems')
+      .withIndex('by_tenant_subject', (q) =>
+        q
+          .eq('tenantId', tenantId)
+          .eq('subjectType', 'candidate')
+          .eq('subjectId', candidateId as string),
+      )
+      .filter((q) =>
+        q.and(
+          q.eq(q.field('category'), args.documentType),
+          q.eq(q.field('status'), 'active'),
+        ),
+      )
+      .first()
+
+    if (existingArchiveItem) {
+      await ctx.db.patch(existingArchiveItem._id, {
+        fileId,
+        source: args.label,
+        expiresAt: args.expiresAt,
+        createdAt: new Date().toISOString(),
+      })
+    } else {
+      await ctx.db.insert('documentArchiveItems', {
+        tenantId,
+        fileId,
+        subjectType: 'candidate',
+        subjectId: candidateId as string,
+        category: args.documentType,
+        status: 'active',
+        expiresAt: args.expiresAt,
+        source: args.label,
+        createdAt: new Date().toISOString(),
+      })
+    }
+
+    await completeCandidateTask(ctx, tenantId, candidateId, 'document_upload')
+
+    await recordCandidateAudit(ctx, {
+      clerkOrgId: args.clerkOrgId,
+      action: 'candidate.document.attached',
+      metadata: {
+        candidateId: candidateId as string,
+        documentType: args.documentType,
+        fileId: fileId as string,
+      },
+    })
+
+    return fileId
+  },
+})
+

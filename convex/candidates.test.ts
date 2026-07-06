@@ -588,6 +588,60 @@ describe('reviewApplication and offer lifecycle', () => {
     expect(membershipCall).toBeDefined()
   })
 
+  it('requests correction and returns candidate to application_draft', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_correction'
+    const adminId = 'user_admin_correction'
+    const candidateUserId = 'user_candidate_correction'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    let candidateId: Id<'candidates'>
+
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      candidateId = await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        email: 'correction@example.com',
+        displayName: 'Correction Candidate',
+        status: 'applied',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('applications', {
+        tenantId: tenant._id,
+        candidateId,
+        status: 'submitted',
+        submittedAt: new Date().toISOString(),
+      })
+    })
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.candidates.reviewApplication,
+      {
+        clerkOrgId,
+        candidateId: candidateId!,
+        decision: 'needs_correction',
+        hrNotes: 'Please upload a valid license.',
+      },
+    )
+
+    const candidate = await t.run(async (ctx) => ctx.db.get(candidateId))
+    expect(candidate?.status).toBe('application_draft')
+
+    const application = await t.run(async (ctx) => {
+      return ctx.db
+        .query('applications')
+        .withIndex('by_candidate', (q) => q.eq('candidateId', candidateId))
+        .first()
+    })
+    expect(application?.decision).toBe('needs_correction')
+    expect(application?.hrNotes).toBe('Please upload a valid license.')
+  })
+
   it('rejects application and blocks offer from non-hr_review status', async () => {
     const t = createTestConvex()
     const clerkOrgId = 'org_reject'

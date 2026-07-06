@@ -174,7 +174,8 @@ export default defineSchema({
   })
     .index('by_tenant', ['tenantId'])
     .index('by_tenant_clerk_user', ['tenantId', 'clerkUserId'])
-    .index('by_tenant_adp_aoid', ['tenantId', 'adpAssociateOid']),
+    .index('by_tenant_adp_aoid', ['tenantId', 'adpAssociateOid'])
+    .index('by_tenant_member', ['tenantId', 'tenantMemberId']),
 
   integrationConnections: defineTable({
     tenantId: v.id('tenants'),
@@ -339,7 +340,13 @@ export default defineSchema({
     candidateId: v.id('candidates'),
     status: v.string(),
     fields: v.optional(v.any()),
-    decision: v.optional(v.union(v.literal('approved'), v.literal('rejected'))),
+    decision: v.optional(
+      v.union(
+        v.literal('approved'),
+        v.literal('rejected'),
+        v.literal('needs_correction'),
+      ),
+    ),
     hrNotes: v.optional(v.string()),
     submittedAt: v.optional(v.string()),
     reviewedBy: v.optional(v.string()),
@@ -368,10 +375,12 @@ export default defineSchema({
     subjectType: v.string(),
     subjectId: v.string(),
     category: v.string(),
+    title: v.string(),
     status: v.string(),
     ownerMemberId: v.optional(v.id('tenantMembers')),
     description: v.optional(v.string()),
     resolvedAt: v.optional(v.string()),
+    createdAt: v.string(),
   })
     .index('by_tenant_status', ['tenantId', 'status'])
     .index('by_tenant_owner_status', ['tenantId', 'ownerMemberId', 'status']),

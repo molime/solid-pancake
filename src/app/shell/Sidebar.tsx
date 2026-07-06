@@ -11,6 +11,7 @@ import {
   X,
   Globe,
   MapPin,
+  Clock,
 } from 'lucide-react'
 import { cn } from '@/shared/lib/cn'
 import { useQuery } from 'convex/react'
@@ -34,6 +35,24 @@ const navItems: NavItem[] = [
     label: 'Today',
     path: '/caregiver/today',
     icon: <CalendarDays className="h-4 w-4" />,
+    roles: ['org:caregiver'],
+  },
+  {
+    label: 'Schedule',
+    path: '/scheduling',
+    icon: <CalendarDays className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator'],
+  },
+  {
+    label: 'Schedule',
+    path: '/caregiver/schedule',
+    icon: <CalendarDays className="h-4 w-4" />,
+    roles: ['org:caregiver'],
+  },
+  {
+    label: 'Availability',
+    path: '/caregiver/availability',
+    icon: <Clock className="h-4 w-4" />,
     roles: ['org:caregiver'],
   },
   {
@@ -67,10 +86,46 @@ const navItems: NavItem[] = [
     roles: ['org:admin'],
   },
   {
+    label: 'Candidates',
+    path: '/hr/candidates',
+    icon: <Users className="h-4 w-4" />,
+    roles: ['org:admin', 'org:hr'],
+  },
+  {
+    label: 'Employees',
+    path: '/hr/employees',
+    icon: <Building2 className="h-4 w-4" />,
+    roles: ['org:admin', 'org:hr'],
+  },
+  {
+    label: 'Cases',
+    path: '/hr/cases',
+    icon: <ClipboardCheck className="h-4 w-4" />,
+    roles: ['org:admin', 'org:hr'],
+  },
+  {
     label: 'Settings',
     path: '/settings/geofence',
     icon: <MapPin className="h-4 w-4" />,
     roles: ['org:admin', 'org:coordinator'],
+  },
+  {
+    label: 'Onboarding',
+    path: '/onboarding',
+    icon: <ClipboardCheck className="h-4 w-4" />,
+    roles: ['org:candidate'],
+  },
+  {
+    label: 'Training',
+    path: '/onboarding/training',
+    icon: <Globe className="h-4 w-4" />,
+    roles: ['org:candidate', 'org:caregiver'],
+  },
+  {
+    label: 'Profile',
+    path: '/onboarding/profile',
+    icon: <Users className="h-4 w-4" />,
+    roles: ['org:candidate'],
   },
 ]
 
@@ -173,7 +228,9 @@ function SidebarContent({
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {visibleItems.map((item) => {
-          const isActive = locationPath === item.path
+          const isActive =
+            locationPath === item.path ||
+            (item.path !== '/' && locationPath.startsWith(`${item.path}/`))
           return (
             <NavLink
               key={item.path}

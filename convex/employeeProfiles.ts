@@ -8,6 +8,7 @@ import {
 } from './_generated/server'
 import { internal, api } from './_generated/api'
 import { requireTenantRole, assertTenantDoc } from './authHelpers'
+import { ConvexError } from 'convex/values'
 import type { Doc, Id } from './_generated/dataModel'
 import { normalizeEmail } from './adpSync'
 import { sendClerkInvitation } from './invitations'
@@ -225,7 +226,10 @@ export const createCaregiver = action({
 export const listEmployeeProfiles = query({
   args: { clerkOrgId: v.string() },
   handler: async (ctx, { clerkOrgId }) => {
-    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, ['org:admin'])
+    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
+      'org:admin',
+      'org:hr',
+    ])
 
     const profiles = await ctx.db
       .query('employeeProfiles')
@@ -238,19 +242,50 @@ export const listEmployeeProfiles = query({
       .collect()
 
     const memberById = new Map(members.map((m) => [m._id, m]))
+    const memberByClerkUserId = new Map(members.map((m) => [m.clerkUserId, m]))
 
     return profiles.map((profile) => {
       const member = profile.tenantMemberId
         ? memberById.get(profile.tenantMemberId)
-        : undefined
+        : profile.clerkUserId
+          ? memberByClerkUserId.get(profile.clerkUserId)
+          : undefined
       return {
         _id: profile._id,
         displayName: profile.displayName,
         email: profile.email,
         role: member?.role ?? 'org:caregiver',
         adpSyncStatus: profile.adpSyncStatus,
+        tenantMemberId: member?._id,
+        clerkUserId: profile.clerkUserId,
+        createdAt: profile.createdAt,
       }
     })
+  },
+})
+
+export const getEmployeeProfileDetail = query({
+  args: { clerkOrgId: v.string(), memberId: v.id('tenantMembers') },
+  handler: async (ctx, { clerkOrgId, memberId }) => {
+    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
+      'org:admin',
+      'org:hr',
+    ])
+
+    const member = await ctx.db.get(memberId)
+    if (!member) {
+      throw new ConvexError('Member not found.')
+    }
+    assertTenantDoc(member, tenantId)
+
+    const profile = await ctx.db
+      .query('employeeProfiles')
+      .withIndex('by_tenant_member', (q) =>
+        q.eq('tenantId', tenantId).eq('tenantMemberId', memberId),
+      )
+      .unique()
+
+    return { member, profile }
   },
 })
 

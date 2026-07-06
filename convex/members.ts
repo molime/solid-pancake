@@ -94,6 +94,7 @@ export const listCaregivers = query({
     const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
       'org:admin',
       'org:coordinator',
+      'org:hr',
     ])
 
     const members = await ctx.db

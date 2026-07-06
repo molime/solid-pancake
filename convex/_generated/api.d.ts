@@ -21,6 +21,7 @@ import type * as embedding from "../embedding.js";
 import type * as employeeProfiles from "../employeeProfiles.js";
 import type * as files from "../files.js";
 import type * as forms from "../forms.js";
+import type * as hrCases from "../hrCases.js";
 import type * as integrations_adp_adpClient from "../integrations/adp/adpClient.js";
 import type * as integrations_adp_adpPort from "../integrations/adp/adpPort.js";
 import type * as integrations_adp_config from "../integrations/adp/config.js";
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   employeeProfiles: typeof employeeProfiles;
   files: typeof files;
   forms: typeof forms;
+  hrCases: typeof hrCases;
   "integrations/adp/adpClient": typeof integrations_adp_adpClient;
   "integrations/adp/adpPort": typeof integrations_adp_adpPort;
   "integrations/adp/config": typeof integrations_adp_config;
