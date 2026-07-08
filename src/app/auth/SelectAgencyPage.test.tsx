@@ -19,6 +19,7 @@ vi.mock('@clerk/react', async () => {
     useOrganization: vi.fn(),
     useOrganizationList: vi.fn(),
     useUser: vi.fn(),
+    useClerk: vi.fn(() => ({ signOut: vi.fn() })),
   }
 })
 
@@ -214,7 +215,7 @@ describe('SelectAgencyPage', () => {
 
     mockClerkState({
       orgs: [{ id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' }],
-      activeOrgId: null,
+      activeOrgId: 'org_123',
       user: { fullName: 'Alice', primaryEmailAddress: { emailAddress: 'a@x.com' } },
     })
     mockConvexAuth({ isLoading: false, isAuthenticated: true })
@@ -304,5 +305,36 @@ describe('SelectAgencyPage', () => {
       ).toBeInTheDocument()
     })
     expect(mocks.navigate).not.toHaveBeenCalled()
+  })
+
+  it('auto-selects the only membership when no org is active', async () => {
+    mocks.setActive.mockResolvedValueOnce(undefined)
+
+    mockClerkState({
+      orgs: [{ id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' }],
+      activeOrgId: null,
+      user: { fullName: 'Alice', primaryEmailAddress: { emailAddress: 'a@x.com' } },
+    })
+    mockConvexAuth({ isLoading: false, isAuthenticated: true })
+
+    render(<SelectAgencyPage />)
+
+    await waitFor(() => {
+      expect(mocks.setActive).toHaveBeenCalledWith({ organization: 'org_123' })
+    })
+  })
+
+  it('shows a helpful empty state when the user has no agency memberships', async () => {
+    mockClerkState({
+      orgs: [],
+      activeOrgId: null,
+      user: { fullName: 'Alice', primaryEmailAddress: { emailAddress: 'a@x.com' } },
+    })
+    mockConvexAuth({ isLoading: false, isAuthenticated: true })
+
+    render(<SelectAgencyPage />)
+    expect(screen.getByText(/You don't belong to any agency yet/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Sign out/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Create New Agency/i })).toBeInTheDocument()
   })
 })
