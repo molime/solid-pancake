@@ -139,6 +139,27 @@ export function ApplicationReviewPage() {
 
   const pill = candidateStatusPill(candidate.status)
 
+  const handleApprove = async () => {
+    if (!clerkOrgId || !candidateId) return
+    setSubmitting(true)
+    try {
+      await reviewApplication({
+        clerkOrgId,
+        candidateId: candidateId as Id<'candidates'>,
+        decision: 'approved',
+      })
+      show('success', 'Application approved', 'You can now send an offer.')
+    } catch (err) {
+      show(
+        'danger',
+        'Approval failed',
+        err instanceof Error ? err.message : 'Unknown error.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handleAdvance = async () => {
     if (!clerkOrgId || !candidateId) return
     setSubmitting(true)
@@ -383,17 +404,48 @@ export function ApplicationReviewPage() {
               </FieldGroup>
             </div>
             <hr className="border-atria-border" />
-            <Button
-              variant="primary"
-              size="lg"
-              className="w-full"
-              data-testid="advance-button"
-              disabled={submitting || !allTasksComplete}
-              onClick={handleAdvance}
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              Advance to next stage
-            </Button>
+
+            {(candidate.status === 'applied' || candidate.status === 'application_draft') && (
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full"
+                data-testid="approve-button"
+                disabled={submitting || !allTasksComplete}
+                onClick={handleApprove}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Approve application
+              </Button>
+            )}
+
+            {candidate.status === 'hr_review' && (
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full"
+                data-testid="advance-button"
+                disabled={submitting || !allTasksComplete}
+                onClick={handleAdvance}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Send offer
+              </Button>
+            )}
+
+            {(candidate.status === 'offer_sent' || candidate.status === 'accepted' || candidate.status === 'hired') && (
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full"
+                data-testid="advance-button"
+                disabled
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Offer already sent
+              </Button>
+            )}
+
             {!allTasksComplete && (
               <p className="text-xs text-atria-text-secondary">
                 Complete or waive all candidate tasks before advancing.
