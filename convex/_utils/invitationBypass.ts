@@ -109,7 +109,7 @@ async function createClerkUser(args: {
   password: string
   displayName: string
   role: string
-}) {
+}): Promise<{ userId: string; existed: boolean }> {
   const firstName = args.displayName.split(' ')[0] ?? args.displayName
   const lastName = args.displayName.split(' ').slice(1).join(' ') || undefined
 
@@ -127,7 +127,7 @@ async function createClerkUser(args: {
   })
 
   if (ok && payload && typeof payload === 'object' && typeof payload.id === 'string') {
-    return payload.id as string
+    return { userId: payload.id as string, existed: false }
   }
 
   // The user may already exist; try to look them up before giving up.
@@ -136,7 +136,7 @@ async function createClerkUser(args: {
       secretKey: args.secretKey,
       emailAddress: args.emailAddress,
     })
-    if (existingId) return existingId
+    if (existingId) return { userId: existingId, existed: true }
   }
 
   throw new ConvexError(clerkErrorMessage(payload))
@@ -363,7 +363,7 @@ export async function createClerkUserAndJoinOrg(args: {
   const password = generatePassword()
   const invitationId = generateBypassInvitationId()
 
-  const clerkUserId = await createClerkUser({
+  const { userId: clerkUserId } = await createClerkUser({
     secretKey: args.secretKey,
     emailAddress: args.emailAddress,
     password,
@@ -371,6 +371,8 @@ export async function createClerkUserAndJoinOrg(args: {
     role: args.role,
   })
 
+  // Always ensure the user is a member of the target org, even if the
+  // Clerk account already existed from a previous invitation attempt.
   await addClerkOrgMembershipWithQuotaCleanup({
     secretKey: args.secretKey,
     clerkOrgId: args.clerkOrgId,
