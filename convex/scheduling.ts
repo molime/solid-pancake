@@ -384,14 +384,14 @@ export const deleteShift = mutation({
       await ctx.db.delete(request._id)
     }
 
-    await ctx.db.delete(shift._id)
-
     await ctx.runMutation(internal.audit.record, {
       clerkOrgId: args.clerkOrgId,
       action: 'shift.deleted',
       kind: 'shift.deleted',
       shiftId: shift._id,
     })
+
+    await ctx.db.delete(shift._id)
 
     return { shiftId: shift._id }
   },

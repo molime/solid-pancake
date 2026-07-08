@@ -193,11 +193,20 @@ export const createCaregiver = action({
       },
     )
 
+    const admin = await ctx.runQuery(api.members.firstOrgAdmin, {
+      clerkOrgId: args.clerkOrgId,
+    })
+    if (!admin) {
+      throw new ConvexError(
+        'No organization admin available to send Clerk invitation.',
+      )
+    }
+
     let invitation
     try {
       invitation = await sendClerkInvitation({
         secretKey,
-        inviterUserId: identity.subject,
+        inviterUserId: admin.clerkUserId,
         clerkOrgId: args.clerkOrgId,
         emailAddress: args.email,
         role: 'org:caregiver',

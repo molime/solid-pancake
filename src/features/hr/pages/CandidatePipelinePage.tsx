@@ -1,5 +1,5 @@
 import { useOrganization } from '@clerk/react'
-import { useQuery } from 'convex/react'
+import { useQuery, useAction } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
 import {
@@ -17,6 +17,7 @@ import { ArrowRight, Users, UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { InviteCandidateModal } from '../components/InviteCandidateModal'
+import type { Id } from '../../../../convex/_generated/dataModel'
 import { HrToast } from '../components/HrToast'
 import { useHrToast } from '../hooks/useHrToast'
 import { candidateStatusPill } from '../lib/candidateStatus'
@@ -59,12 +60,35 @@ export function CandidatePipelinePage() {
     api.candidates.listCandidates,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
+  const regenerateTicket = useAction(api.candidates.regenerateBypassSignInTicket)
 
   const [activeTab, setActiveTab] = useState<TabValue>('all')
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [regenerating, setRegenerating] = useState<Record<string, boolean>>({})
   const { toast, show, hide } = useHrToast()
 
   const filtered = (candidates ?? []).filter((c) => matchesTab(c, activeTab))
+
+  const handleRegenerateLink = async (candidateId: string) => {
+    if (!clerkOrgId) return
+    setRegenerating((prev) => ({ ...prev, [candidateId]: true }))
+    try {
+      const { magicLink } = await regenerateTicket({
+        clerkOrgId,
+        candidateId: candidateId as Id<'candidates'>,
+      })
+      await navigator.clipboard.writeText(magicLink)
+      show('success', 'Sign-in link copied', 'The bypass sign-in link is on the clipboard.')
+    } catch (err) {
+      show(
+        'danger',
+        'Could not regenerate link',
+        err instanceof Error ? err.message : 'Unknown error',
+      )
+    } finally {
+      setRegenerating((prev) => ({ ...prev, [candidateId]: false }))
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -75,7 +99,11 @@ export function CandidatePipelinePage() {
             Track applicants by stage — screening, interviews, offers, and onboarding.
           </p>
         </div>
-        <Button variant="primary" onClick={() => setInviteOpen(true)}>
+        <Button
+          variant="primary"
+          data-testid="invite-candidate-button"
+          onClick={() => setInviteOpen(true)}
+        >
           <UserPlus className="h-4 w-4" />
           Invite candidate
         </Button>
@@ -126,7 +154,10 @@ export function CandidatePipelinePage() {
                   const completedTasks = 0
                   const totalTasks = 5
                   return (
-                    <TableRow key={candidate._id}>
+                    <TableRow
+                      key={candidate._id}
+                      data-testid={`candidate-row-${candidate._id}`}
+                    >
                       <TableCell className="font-medium">
                         {candidate.displayName}
                       </TableCell>
@@ -137,7 +168,35 @@ export function CandidatePipelinePage() {
                         {formatWeekdayDate(candidate.createdAt)}
                       </TableCell>
                       <TableCell>
-                        <StatusBadge variant={pill.variant}>{pill.label}</StatusBadge>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <StatusBadge variant={pill.variant}>{pill.label}</StatusBadge>
+                          {candidate.invitationFailed && (
+                            <span
+                              title={candidate.invitationError ?? 'Invitation failed'}
+                              className="inline-flex items-center rounded-[var(--radius-atria-sm)] border border-atria-danger/30 bg-atria-danger-bg px-2 py-1 text-xs font-semibold text-atria-danger"
+                            >
+                              Failed
+                            </span>
+                          )}
+                          {candidate.invitationId?.startsWith('bypass:') && (
+                            <span className="inline-flex items-center rounded-[var(--radius-atria-sm)] border border-atria-info/30 bg-atria-info-bg px-2 py-1 text-xs font-semibold text-atria-info">
+                              Dev bypass
+                            </span>
+                          )}
+                          {candidate.invitationId?.startsWith('bypass:') && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              data-testid={`regenerate-link-${candidate._id}`}
+                              disabled={regenerating[candidate._id]}
+                              onClick={() => handleRegenerateLink(candidate._id)}
+                            >
+                              {regenerating[candidate._id]
+                                ? 'Copying…'
+                                : 'Copy sign-in link'}
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <span className="text-sm text-atria-text-secondary">

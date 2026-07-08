@@ -42,6 +42,7 @@ export const generateUploadUrl = mutation({
       'org:admin',
       'org:coordinator',
       'org:caregiver',
+      'org:candidate',
     ])
 
     const url = await ctx.storage.generateUploadUrl()

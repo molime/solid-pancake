@@ -31,9 +31,11 @@ export const createHrCase = mutation({
       subjectType: args.subjectType,
       subjectId: args.subjectId,
       category: args.category,
+      title: args.title,
       status: 'open',
       ownerMemberId: member._id,
       description: args.description,
+      createdAt: new Date().toISOString(),
     })
   },
 })

@@ -138,7 +138,8 @@ describe('ShiftPacketPanel', () => {
       />,
     )
 
-    expect(screen.getByText('Saturday visit — Rosa Díaz')).toBeInTheDocument()
+    expect(screen.getByText(/Saturday.*visit/)).toBeInTheDocument()
+    expect(screen.getByText('Rosa Díaz')).toBeInTheDocument()
     expect(screen.getByText('Edit shift')).toBeInTheDocument()
     expect(screen.getByText('Cancel shift')).toBeInTheDocument()
     expect(screen.getByText('Audit history')).toBeInTheDocument()

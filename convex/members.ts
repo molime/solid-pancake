@@ -1,5 +1,5 @@
-import { v } from 'convex/values'
-import { query, mutation, type MutationCtx } from './_generated/server'
+import { ConvexError, v } from 'convex/values'
+import { query, mutation, internalMutation, type MutationCtx } from './_generated/server'
 import { internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import {
@@ -77,6 +77,7 @@ export const list = query({
   handler: async (ctx, { clerkOrgId }) => {
     const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
       'org:admin',
+      'org:hr',
     ])
 
     const members = await ctx.db
@@ -85,6 +86,32 @@ export const list = query({
       .collect()
 
     return members
+  },
+})
+
+export const firstOrgAdmin = query({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, { clerkOrgId }) => {
+    await requireTenantRole(ctx, clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+
+    const tenant = await ctx.db
+      .query('tenants')
+      .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+      .unique()
+    if (!tenant) return null
+
+    const admin = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_tenant_role', (q) =>
+        q.eq('tenantId', tenant._id).eq('role', 'org:admin'),
+      )
+      .first()
+
+    return admin ? { clerkUserId: admin.clerkUserId } : null
   },
 })
 
@@ -262,6 +289,55 @@ export const updateRole = mutation({
     }
 
     return existing._id
+  },
+})
+
+export const createBypassMember = internalMutation({
+  args: {
+    clerkOrgId: v.string(),
+    clerkUserId: v.string(),
+    role: v.union(
+      v.literal('org:admin'),
+      v.literal('org:coordinator'),
+      v.literal('org:caregiver'),
+      v.literal('org:hr'),
+      v.literal('org:candidate'),
+    ),
+    displayName: v.string(),
+    email: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const tenant = await ctx.db
+      .query('tenants')
+      .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', args.clerkOrgId))
+      .unique()
+    if (!tenant) {
+      throw new ConvexError('Tenant not found for bypass member creation.')
+    }
+
+    const existing = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', tenant._id).eq('clerkUserId', args.clerkUserId),
+      )
+      .unique()
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        role: args.role,
+        displayName: args.displayName,
+        email: args.email,
+      })
+      return existing._id
+    }
+
+    return await ctx.db.insert('tenantMembers', {
+      tenantId: tenant._id,
+      clerkUserId: args.clerkUserId,
+      role: args.role,
+      displayName: args.displayName,
+      email: args.email,
+    })
   },
 })
 

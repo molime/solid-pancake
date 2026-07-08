@@ -592,6 +592,245 @@ describe('listShifts', () => {
   })
 })
 
+describe('createShift', () => {
+  it('writes a shift.created audit event', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_create_audit'
+    const { clientId, caregiverId } = await seedTenant(t, clerkOrgId)
+
+    const { shiftId } = await asAdmin(
+      t,
+      `admin_${clerkOrgId}`,
+      clerkOrgId,
+    ).mutation(api.scheduling.createShift, {
+      clerkOrgId,
+      clientId,
+      caregiverId,
+      scheduledStart: '2024-06-01T09:00:00Z',
+      scheduledEnd: '2024-06-01T10:00:00Z',
+      serviceType: 'SLS',
+      rate: 25,
+    })
+
+    const events = await asAdmin(
+      t,
+      `admin_${clerkOrgId}`,
+      clerkOrgId,
+    ).query(api.audit.list, {
+      clerkOrgId,
+    })
+
+    const createdEvent = events.find(
+      (e) => e.action === 'shift.created' && e.shiftId === shiftId,
+    )
+    expect(createdEvent).toBeDefined()
+  })
+})
+
+describe('caregiver role scheduling restrictions', () => {
+  it('blocks caregiver from admin-only scheduling operations', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_caregiver_blocked'
+    const { clientId, caregiverId, otherCaregiverId } = await seedTenant(
+      t,
+      clerkOrgId,
+    )
+
+    const { shiftId } = await asAdmin(
+      t,
+      `admin_${clerkOrgId}`,
+      clerkOrgId,
+    ).mutation(api.scheduling.createShift, {
+      clerkOrgId,
+      clientId,
+      caregiverId,
+      scheduledStart: '2024-06-01T09:00:00Z',
+      scheduledEnd: '2024-06-01T10:00:00Z',
+      serviceType: 'SLS',
+      rate: 25,
+    })
+
+    const asCare = asCaregiver(t, caregiverId, clerkOrgId)
+
+    await expect(
+      asCare.mutation(api.scheduling.createShift, {
+        clerkOrgId,
+        clientId,
+        caregiverId,
+        scheduledStart: '2024-06-02T09:00:00Z',
+        scheduledEnd: '2024-06-02T10:00:00Z',
+        serviceType: 'SLS',
+        rate: 25,
+      }),
+    ).rejects.toThrow('org:admin, org:coordinator')
+
+    await expect(
+      asCare.mutation(api.scheduling.updateShift, {
+        clerkOrgId,
+        shiftId,
+        rate: 30,
+      }),
+    ).rejects.toThrow('org:admin, org:coordinator')
+
+    await expect(
+      asCare.mutation(api.scheduling.deleteShift, {
+        clerkOrgId,
+        shiftId,
+      }),
+    ).rejects.toThrow('org:admin')
+
+    await expect(
+      asCare.mutation(api.scheduling.assignShift, {
+        clerkOrgId,
+        shiftId,
+        caregiverId: otherCaregiverId,
+      }),
+    ).rejects.toThrow('org:admin, org:coordinator')
+
+    const { coverageRequestId } = await asCare.mutation(
+      api.scheduling.requestCoverage,
+      {
+        clerkOrgId,
+        shiftId,
+        reason: 'Unavailable',
+      },
+    )
+
+    await expect(
+      asCaregiver(t, otherCaregiverId, clerkOrgId).mutation(
+        api.scheduling.resolveCoverage,
+        {
+          clerkOrgId,
+          coverageRequestId,
+          reassignedTo: otherCaregiverId,
+        },
+      ),
+    ).rejects.toThrow('org:admin, org:coordinator')
+  })
+})
+
+describe('updateShift', () => {
+  it('is blocked when the shift is approved', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_update_approved'
+    const { tenantId, clientId, caregiverId } = await seedTenant(t, clerkOrgId)
+
+    const shiftId = await t.run(async (ctx) => {
+      return await ctx.db.insert('shifts', {
+        tenantId,
+        clientId,
+        caregiverId,
+        scheduledStart: '2024-06-01T09:00:00Z',
+        scheduledEnd: '2024-06-01T10:00:00Z',
+        status: 'approved',
+        serviceType: 'SLS',
+        rate: 25,
+      })
+    })
+
+    await expect(
+      asAdmin(t, `admin_${clerkOrgId}`, clerkOrgId).mutation(
+        api.scheduling.updateShift,
+        {
+          clerkOrgId,
+          shiftId,
+          rate: 30,
+        },
+      ),
+    ).rejects.toThrow('Cannot edit a shift that is submitted or approved')
+  })
+})
+
+describe('deleteShift', () => {
+  it('is blocked when the shift is submitted', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_delete_submitted'
+    const { tenantId, clientId, caregiverId } = await seedTenant(t, clerkOrgId)
+
+    const shiftId = await t.run(async (ctx) => {
+      return await ctx.db.insert('shifts', {
+        tenantId,
+        clientId,
+        caregiverId,
+        scheduledStart: '2024-06-01T09:00:00Z',
+        scheduledEnd: '2024-06-01T10:00:00Z',
+        status: 'submitted',
+        serviceType: 'SLS',
+        rate: 25,
+      })
+    })
+
+    await expect(
+      asAdmin(t, `admin_${clerkOrgId}`, clerkOrgId).mutation(
+        api.scheduling.deleteShift,
+        {
+          clerkOrgId,
+          shiftId,
+        },
+      ),
+    ).rejects.toThrow('Only scheduled shifts can be deleted')
+  })
+})
+
+describe('resolveCoverage', () => {
+  it('detects a cross-caregiver conflict when resolving coverage', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_coverage_conflict'
+    const { clientId, caregiverId, otherCaregiverId } = await seedTenant(
+      t,
+      clerkOrgId,
+    )
+
+    const { shiftId: shiftA } = await asAdmin(
+      t,
+      `admin_${clerkOrgId}`,
+      clerkOrgId,
+    ).mutation(api.scheduling.createShift, {
+      clerkOrgId,
+      clientId,
+      caregiverId,
+      scheduledStart: '2024-06-01T09:00:00Z',
+      scheduledEnd: '2024-06-01T10:00:00Z',
+      serviceType: 'SLS',
+      rate: 25,
+    })
+
+    await asAdmin(t, `admin_${clerkOrgId}`, clerkOrgId).mutation(
+      api.scheduling.createShift,
+      {
+        clerkOrgId,
+        clientId,
+        caregiverId: otherCaregiverId,
+        scheduledStart: '2024-06-01T09:00:00Z',
+        scheduledEnd: '2024-06-01T10:00:00Z',
+        serviceType: 'SLS',
+        rate: 25,
+      },
+    )
+
+    const { coverageRequestId } = await asCaregiver(
+      t,
+      caregiverId,
+      clerkOrgId,
+    ).mutation(api.scheduling.requestCoverage, {
+      clerkOrgId,
+      shiftId: shiftA,
+      reason: 'Conflict expected',
+    })
+
+    await expect(
+      asAdmin(t, `admin_${clerkOrgId}`, clerkOrgId).mutation(
+        api.scheduling.resolveCoverage,
+        {
+          clerkOrgId,
+          coverageRequestId,
+          reassignedTo: otherCaregiverId,
+        },
+      ),
+    ).rejects.toThrow('Shift conflicts with')
+  })
+})
+
 describe('coverage lifecycle', () => {
   it('allows a caregiver to request coverage and an admin to resolve it', async () => {
     const t = createTestConvex()

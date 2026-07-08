@@ -2,15 +2,19 @@ import { chromium, type FullConfig } from '@playwright/test'
 import {
   E2E_ADMIN_EMAIL,
   E2E_ADMIN_PASSWORD,
+  E2E_CANDIDATE_EMAIL,
+  E2E_CANDIDATE_PASSWORD,
   E2E_CAREGIVER_EMAIL,
   E2E_CAREGIVER_PASSWORD,
   E2E_COORDINATOR_EMAIL,
   E2E_COORDINATOR_PASSWORD,
+  E2E_HR_EMAIL,
+  E2E_HR_PASSWORD,
   E2E_ORG_ID,
   signInWithClerk,
   signOut,
 } from './helpers/auth'
-import { e2eCredentialsAvailable, isLocalConvexUrl } from './helpers/env'
+import { e2eCredentialsAvailable, isLocalConvexUrl, mockE2EEnabled } from './helpers/env'
 
 type RoleCredentials = {
   email: string
@@ -66,6 +70,50 @@ async function seedE2EFixtures(
   console.log('seedE2E result:', result)
 }
 
+async function seedE2ECandidateFixtures(
+  authToken: string,
+  userIds: {
+    adminUserId: string
+    coordinatorUserId: string
+    caregiverUserId: string
+    hrUserId: string
+    candidateUserId: string
+  },
+) {
+  const convexUrl = process.env.VITE_CONVEX_URL
+  if (!convexUrl) {
+    throw new Error('VITE_CONVEX_URL is not set; cannot seed e2e candidate fixtures.')
+  }
+
+  const response = await fetch(`${convexUrl}/api/mutation`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify({
+      path: 'seed:resetE2ECandidate',
+      args: {
+        clerkOrgId: E2E_ORG_ID,
+        adminUserId: userIds.adminUserId,
+        coordinatorUserId: userIds.coordinatorUserId,
+        caregiverUserId: userIds.caregiverUserId,
+        hrUserId: userIds.hrUserId,
+        candidateUserId: userIds.candidateUserId,
+      },
+      format: 'json',
+    }),
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`seed:resetE2ECandidate failed: ${response.status} ${text}`)
+  }
+
+  const result = await response.json()
+  console.log('seed:resetE2ECandidate result:', result)
+}
+
 async function extractClerkToken(page: import('@playwright/test').Page): Promise<string | null> {
   return page.evaluate(async () => {
     const clerk = (window as unknown as Record<string, unknown>).Clerk as
@@ -84,8 +132,10 @@ async function extractClerkToken(page: import('@playwright/test').Page): Promise
 }
 
 export default async function globalSetup(config: FullConfig) {
-  if (!e2eCredentialsAvailable() || isLocalConvexUrl()) {
-    console.log('Skipping global E2E seed: local Convex backend or missing credentials.')
+  if (mockE2EEnabled() || !e2eCredentialsAvailable() || isLocalConvexUrl()) {
+    console.log(
+      'Skipping global E2E seed: local Convex backend, missing credentials, or mock mode. Phase 2 fixtures will be seeded per-spec.',
+    )
     return
   }
 
@@ -99,6 +149,8 @@ export default async function globalSetup(config: FullConfig) {
       admin: { email: E2E_ADMIN_EMAIL, password: E2E_ADMIN_PASSWORD },
       coordinator: { email: E2E_COORDINATOR_EMAIL, password: E2E_COORDINATOR_PASSWORD },
       caregiver: { email: E2E_CAREGIVER_EMAIL, password: E2E_CAREGIVER_PASSWORD },
+      hr: { email: E2E_HR_EMAIL, password: E2E_HR_PASSWORD },
+      candidate: { email: E2E_CANDIDATE_EMAIL, password: E2E_CANDIDATE_PASSWORD },
     }
 
     const userIds: Record<string, string> = {}
@@ -112,7 +164,7 @@ export default async function globalSetup(config: FullConfig) {
       await signOut(page)
     }
 
-    // Sign back in as admin so we can call the seed mutation with an admin token.
+    // Sign back in as admin so we can call the seed mutations with an admin token.
     await signInWithClerk(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD, E2E_ORG_ID)
 
     // Bootstrap the tenant if this is the first run against this org.
@@ -128,6 +180,14 @@ export default async function globalSetup(config: FullConfig) {
       adminUserId: userIds.admin,
       coordinatorUserId: userIds.coordinator,
       caregiverUserId: userIds.caregiver,
+    })
+
+    await seedE2ECandidateFixtures(token, {
+      adminUserId: userIds.admin,
+      coordinatorUserId: userIds.coordinator,
+      caregiverUserId: userIds.caregiver,
+      hrUserId: userIds.hr,
+      candidateUserId: userIds.candidate,
     })
   } finally {
     await browser.close()

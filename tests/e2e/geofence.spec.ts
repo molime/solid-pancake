@@ -24,7 +24,7 @@ test.describe('geofence scenarios', { tag: '@auth' }, () => {
     page: import('@playwright/test').Page,
     enabled: boolean,
   ) {
-    await signInWithClerk(page, E2E_COORDINATOR_EMAIL, E2E_COORDINATOR_PASSWORD, E2E_ORG_ID)
+    await signInWithClerk(page, E2E_COORDINATOR_EMAIL, E2E_COORDINATOR_PASSWORD, E2E_ORG_ID, 'org:coordinator')
     const token = await page.evaluate(async () => {
       const clerk = (window as unknown as { Clerk?: { session?: { getToken: () => Promise<string | null> } } }).Clerk
       return clerk?.session?.getToken() ?? null
@@ -67,7 +67,7 @@ test.describe('geofence scenarios', { tag: '@auth' }, () => {
     await page.goto('about:blank')
     await page.goto('/caregiver/today')
     if (page.url().includes('/sign-in')) {
-      await signInWithClerk(page, E2E_CAREGIVER_EMAIL, E2E_CAREGIVER_PASSWORD, E2E_ORG_ID)
+      await signInWithClerk(page, E2E_CAREGIVER_EMAIL, E2E_CAREGIVER_PASSWORD, E2E_ORG_ID, 'org:caregiver')
       await page.goto('/caregiver/today')
     }
     await expect(page).toHaveURL(/caregiver\/today/)
@@ -90,7 +90,7 @@ test.describe('geofence scenarios', { tag: '@auth' }, () => {
 
     await context.grantPermissions(['geolocation'])
     await context.setGeolocation(INSIDE_COORDS)
-    await signInWithClerk(page, E2E_CAREGIVER_EMAIL, E2E_CAREGIVER_PASSWORD, E2E_ORG_ID)
+    await signInWithClerk(page, E2E_CAREGIVER_EMAIL, E2E_CAREGIVER_PASSWORD, E2E_ORG_ID, 'org:caregiver')
     await openGeofenceShift(page)
 
     const locationPanel = page.locator('[data-testid="clock-in-location-panel"]')
@@ -140,7 +140,7 @@ test.describe('geofence scenarios', { tag: '@auth' }, () => {
 
     await context.grantPermissions(['geolocation'])
     await context.setGeolocation(OUTSIDE_COORDS)
-    await signInWithClerk(page, E2E_CAREGIVER_EMAIL, E2E_CAREGIVER_PASSWORD, E2E_ORG_ID)
+    await signInWithClerk(page, E2E_CAREGIVER_EMAIL, E2E_CAREGIVER_PASSWORD, E2E_ORG_ID, 'org:caregiver')
     await openGeofenceShift(page)
 
     const locationPanel = page.locator('[data-testid="clock-in-location-panel"]')
@@ -156,7 +156,7 @@ test.describe('geofence scenarios', { tag: '@auth' }, () => {
     await enableGeofence(page)
 
     await context.clearPermissions()
-    await signInWithClerk(page, E2E_CAREGIVER_EMAIL, E2E_CAREGIVER_PASSWORD, E2E_ORG_ID)
+    await signInWithClerk(page, E2E_CAREGIVER_EMAIL, E2E_CAREGIVER_PASSWORD, E2E_ORG_ID, 'org:caregiver')
     await openGeofenceShift(page)
 
     const locationPanel = page.locator('[data-testid="clock-in-location-panel"]')
@@ -171,7 +171,7 @@ test.describe('geofence scenarios', { tag: '@auth' }, () => {
   test('disabling geofence stops requesting browser location', async ({ page, context }) => {
     await setGeofenceViaConvex(page, false)
     await context.clearPermissions()
-    await signInWithClerk(page, E2E_CAREGIVER_EMAIL, E2E_CAREGIVER_PASSWORD, E2E_ORG_ID)
+    await signInWithClerk(page, E2E_CAREGIVER_EMAIL, E2E_CAREGIVER_PASSWORD, E2E_ORG_ID, 'org:caregiver')
     await openGeofenceShift(page)
 
     await expect(page.locator('[data-testid="clock-in-location-panel"]')).toHaveCount(0)

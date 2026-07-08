@@ -197,7 +197,11 @@ export function SelectAgencyPage() {
                         {mem.organization.name}
                       </p>
                       <p className="text-xs text-atria-muted mt-0.5">
-                        Role: {mem.role?.replace('org:', '') ?? 'member'}
+                        Role:{' '}
+                        {(mem.publicMetadata as { atriaRole?: string } | undefined)
+                          ?.atriaRole?.replace('org:', '') ??
+                          mem.role?.replace('org:', '') ??
+                          'member'}
                       </p>
                     </div>
                     {isLoading ? (

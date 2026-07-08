@@ -319,4 +319,21 @@ describe('TenantRoleRouteGuard', () => {
     expect(screen.getByText('Navigate to /')).toBeInTheDocument()
     expect(mockNavigate).toHaveBeenCalledWith('/')
   })
+  it('redirects candidate to /onboarding from a role-protected route', () => {
+    mockClerkState({
+      authLoaded: true,
+      isSignedIn: true,
+      orgLoaded: true,
+      organization: { id: 'org_123', name: 'Agency' },
+    })
+    mockMember({ role: 'org:candidate' })
+
+    render(
+      <TenantRoleRouteGuard allowedRoles={['org:hr']}>
+        <div data-testid="protected">Protected</div>
+      </TenantRoleRouteGuard>,
+    )
+
+    expect(mockNavigate).toHaveBeenCalledWith('/onboarding')
+  })
 })

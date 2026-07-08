@@ -86,12 +86,13 @@ export function TenantRoleRouteGuard({
   }
 
   if (!allowedRoles.includes(member.role)) {
-    return (
-      <Navigate
-        to={member.role === 'org:caregiver' ? '/caregiver/today' : '/'}
-        replace
-      />
-    )
+    const fallback =
+      member.role === 'org:caregiver'
+        ? '/caregiver/today'
+        : member.role === 'org:candidate'
+          ? '/onboarding'
+          : '/'
+    return <Navigate to={fallback} replace />
   }
 
   return <>{children}</>

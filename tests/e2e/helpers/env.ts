@@ -1,12 +1,22 @@
 export function e2eCredentialsAvailable(): boolean {
-  return Boolean(
+  const base =
     process.env.E2E_CLERK_ORG_ID &&
-      process.env.E2E_ADMIN_EMAIL &&
-      process.env.E2E_ADMIN_PASSWORD &&
-      process.env.E2E_COORDINATOR_EMAIL &&
-      process.env.E2E_COORDINATOR_PASSWORD &&
-      process.env.E2E_CAREGIVER_EMAIL &&
-      process.env.E2E_CAREGIVER_PASSWORD,
+    process.env.E2E_ADMIN_EMAIL &&
+    process.env.E2E_ADMIN_PASSWORD &&
+    process.env.E2E_COORDINATOR_EMAIL &&
+    process.env.E2E_COORDINATOR_PASSWORD &&
+    process.env.E2E_CAREGIVER_EMAIL &&
+    process.env.E2E_CAREGIVER_PASSWORD
+
+  const isFullRun = process.env.E2E_FULL === '1' || process.env.E2E_FULL === 'true'
+  if (!isFullRun) return Boolean(base)
+
+  return Boolean(
+    base &&
+      process.env.E2E_HR_EMAIL &&
+      process.env.E2E_HR_PASSWORD &&
+      process.env.E2E_CANDIDATE_EMAIL &&
+      process.env.E2E_CANDIDATE_PASSWORD,
   )
 }
 
@@ -19,4 +29,10 @@ export function isLocalConvexUrl(): boolean {
   } catch {
     return true
   }
+}
+
+export function mockE2EEnabled(): boolean {
+  return (
+    process.env.E2E_USE_MOCK === '1' || process.env.E2E_USE_MOCK === 'true'
+  )
 }

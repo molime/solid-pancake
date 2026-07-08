@@ -330,6 +330,8 @@ export default defineSchema({
     status: v.string(),
     source: v.optional(v.string()),
     invitationId: v.optional(v.string()),
+    invitationFailed: v.optional(v.boolean()),
+    invitationError: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index('by_tenant_email', ['tenantId', 'email'])

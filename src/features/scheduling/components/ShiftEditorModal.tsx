@@ -185,6 +185,7 @@ export function ShiftEditorModal({
             <FieldGroup label="CLIENT" htmlFor="shift-client" required>
               <Select
                 id="shift-client"
+                data-testid="shift-client-select"
                 value={form.clientId}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, clientId: e.target.value }))
@@ -205,6 +206,7 @@ export function ShiftEditorModal({
             <FieldGroup label="CAREGIVER" htmlFor="shift-caregiver" required>
               <Select
                 id="shift-caregiver"
+                data-testid="shift-caregiver-select"
                 value={form.caregiverId}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, caregiverId: e.target.value }))
@@ -230,6 +232,7 @@ export function ShiftEditorModal({
               <FieldGroup label="DATE" htmlFor="shift-date" required>
                 <Input
                   id="shift-date"
+                  data-testid="shift-date-input"
                   type="date"
                   value={form.date}
                   onChange={(e) =>
@@ -242,6 +245,7 @@ export function ShiftEditorModal({
                 <div className="grid grid-cols-2 gap-3">
                   <Input
                     id="shift-start"
+                    data-testid="shift-start-input"
                     type="time"
                     value={form.startTime}
                     onChange={(e) =>
@@ -251,6 +255,7 @@ export function ShiftEditorModal({
                   />
                   <Input
                     id="shift-end"
+                    data-testid="shift-end-input"
                     type="time"
                     value={form.endTime}
                     onChange={(e) =>
@@ -311,6 +316,7 @@ export function ShiftEditorModal({
               <Button
                 variant="primary"
                 size="lg"
+                data-testid="save-shift-button"
                 disabled={submitting}
                 onClick={handleSubmit}
               >
@@ -346,6 +352,7 @@ export function ShiftEditorModal({
 
             {availabilityStatus && (
               <div
+                data-testid="availability-banner"
                 className={cn(
                   'mt-5 rounded-[var(--radius-atria-md)] border px-3 py-2 text-center text-base font-semibold',
                   availabilityStatus === 'available'

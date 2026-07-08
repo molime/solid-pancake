@@ -4,6 +4,17 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
+import { StatusBadge } from '@/shared/ui/StatusBadge'
+import { candidateStatusPill } from '@/features/hr/lib/candidateStatus'
+
+function initials(name: string) {
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+}
 
 export function CandidateProfilePage() {
   const navigate = useNavigate()
@@ -15,16 +26,15 @@ export function CandidateProfilePage() {
   if (!isLoaded || !clerkOrgId) return null
 
   const appFields = application?.application?.fields ?? {}
+  const status = candidate?.status ?? 'invited'
+  const pill = candidateStatusPill(status)
+  const displayName = candidate?.displayName ?? ''
 
   const rows = [
-    { label: 'Full name', value: candidate?.displayName ?? '' },
+    { label: 'Full name', value: displayName },
     { label: 'Email', value: candidate?.email ?? '' },
     { label: 'Phone', value: candidate?.phone ?? '' },
-    { label: 'Date of birth', value: appFields.dob as string },
-    { label: 'Home address', value: appFields.address as string },
     { label: 'Position', value: (appFields.position as string) ?? 'Caregiver' },
-    { label: 'Experience', value: appFields.yearsExperience as string },
-    { label: 'Work history', value: appFields.workHistory as string },
   ]
 
   return (
@@ -48,13 +58,31 @@ export function CandidateProfilePage() {
             </div>
           </div>
 
-          <div className='mb-6 flex items-center justify-between'>
-            <h1 className='text-2xl font-semibold text-atria-ink'>Your profile</h1>
+          <h1 className='mb-6 text-2xl font-semibold text-atria-ink'>My Profile</h1>
+
+          <div className='mb-8 flex flex-col items-center text-center'>
+            <div className='mb-3 flex h-20 w-20 items-center justify-center rounded-full bg-atria-accent text-2xl font-semibold text-atria-on-accent'>
+              {initials(displayName)}
+            </div>
+            <p className='text-lg font-semibold text-atria-ink'>{displayName || 'Candidate'}</p>
+            <p className='text-sm text-atria-text-secondary'>
+              Applying for {(appFields.position as string) ?? 'Caregiver'}
+            </p>
+            <div className='mt-3'>
+              <StatusBadge variant={pill.variant}>{pill.label}</StatusBadge>
+            </div>
           </div>
 
-          <div className='flex flex-col gap-4'>
-            {rows.map((row) => (
-              <div key={row.label}>
+          <div className='flex flex-col gap-0'>
+            {rows.map((row, idx) => (
+              <div
+                key={row.label}
+                className={
+                  idx !== rows.length - 1
+                    ? 'border-b border-atria-border py-4 first:pt-0'
+                    : 'py-4 first:pt-0'
+                }
+              >
                 <p className='text-xs font-semibold uppercase tracking-wide text-atria-text-muted'>{row.label}</p>
                 <p className='mt-1 text-base text-atria-ink'>{row.value || '—'}</p>
               </div>

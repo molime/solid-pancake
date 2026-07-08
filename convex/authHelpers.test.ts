@@ -145,3 +145,32 @@ describe('requireActiveClerkOrganization', () => {
     ).not.toThrow()
   })
 })
+
+
+describe('getClerkOrganizationRole with public metadata', () => {
+  it('prefers atriaRole from org_public_metadata when Clerk role is org:member', () => {
+    const role = getClerkOrganizationRole({
+      org_id: 'org_123',
+      org_role: 'org:member',
+      org_public_metadata: { atriaRole: 'org:hr' },
+    } as unknown as Parameters<typeof getClerkOrganizationRole>[0])
+    expect(role).toBe('org:hr')
+  })
+
+  it('does not consult public_metadata when org_public_metadata is absent', () => {
+    const role = getClerkOrganizationRole({
+      org_id: 'org_123',
+      org_role: 'org:member',
+      public_metadata: { atriaRole: 'org:admin' },
+    } as unknown as Parameters<typeof getClerkOrganizationRole>[0])
+    expect(role).toBeNull()
+  })
+
+  it('still returns top-level org_role when it is already an ATRIA role', () => {
+    const role = getClerkOrganizationRole({
+      org_id: 'org_123',
+      org_role: 'org:admin',
+    } as unknown as Parameters<typeof getClerkOrganizationRole>[0])
+    expect(role).toBe('org:admin')
+  })
+})

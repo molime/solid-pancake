@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as _utils_env from "../_utils/env.js";
+import type * as _utils_invitationBypass from "../_utils/invitationBypass.js";
 import type * as adpOutbound from "../adpOutbound.js";
 import type * as adpSync from "../adpSync.js";
 import type * as audit from "../audit.js";
@@ -52,6 +54,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "_utils/env": typeof _utils_env;
+  "_utils/invitationBypass": typeof _utils_invitationBypass;
   adpOutbound: typeof adpOutbound;
   adpSync: typeof adpSync;
   audit: typeof audit;

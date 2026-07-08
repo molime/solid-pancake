@@ -508,16 +508,6 @@ export function AppRouter() {
           }
         />
         <Route
-          path="onboarding/documents"
-          element={
-            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
-              <RouteSuspense>
-                <DocumentUploadPage />
-              </RouteSuspense>
-            </TenantRoleRouteGuard>
-          }
-        />
-        <Route
           path="onboarding/acknowledgment"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:candidate']}>

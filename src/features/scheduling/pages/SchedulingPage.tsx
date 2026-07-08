@@ -160,6 +160,7 @@ export function SchedulingPage() {
             variant="primary"
             size="lg"
             className="min-h-[52px] px-6"
+            data-testid="add-shift-button"
             onClick={openNewShift}
           >
             <CalendarPlus className="h-5 w-5" />
@@ -186,7 +187,12 @@ export function SchedulingPage() {
           title="No shifts this week"
           description="Add a shift to start scheduling caregivers."
           action={
-            <Button variant="primary" size="lg" onClick={openNewShift}>
+            <Button
+              variant="primary"
+              size="lg"
+              data-testid="add-shift-button"
+              onClick={openNewShift}
+            >
               Add shift
             </Button>
           }
@@ -244,6 +250,7 @@ export function SchedulingPage() {
                           <button
                             key={shift._id}
                             type="button"
+                            data-testid={`shift-card-${shift._id}`}
                             onClick={() => setPacketShift(shift)}
                             className={cn(
                               'min-h-[70px] w-full rounded-[10px] p-3 text-left transition-opacity hover:opacity-90',
@@ -284,7 +291,7 @@ export function SchedulingPage() {
       <CoverageRequestsPanel clerkOrgId={clerkOrgId} />
 
       <ShiftEditorModal
-        key={editShift?._id ?? 'new'}
+        key={editorOpen ? 'editor-open' : 'editor-closed'}
         open={editorOpen}
         onClose={() => setEditorOpen(false)}
         clerkOrgId={clerkOrgId}

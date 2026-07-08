@@ -21,7 +21,7 @@ export function Dialog({
     >
       <div
         className={cn(
-          'w-full max-w-lg rounded-[var(--radius-atria-lg)] border border-atria-border bg-atria-surface shadow-[var(--shadow-atria-pop)]',
+          'flex max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-[var(--radius-atria-lg)] border border-atria-border bg-atria-surface shadow-[var(--shadow-atria-pop)]',
           className,
         )}
         onClick={(e) => e.stopPropagation()}
@@ -41,7 +41,7 @@ export function DialogTitle({ children, className }: PropsWithChildren<{ classNa
 }
 
 export function DialogContent({ children, className }: PropsWithChildren<{ className?: string }>) {
-  return <div className={cn('p-6', className)}>{children}</div>
+  return <div className={cn('flex-1 overflow-y-auto p-6', className)}>{children}</div>
 }
 
 export function DialogFooter({ children, className }: PropsWithChildren<{ className?: string }>) {

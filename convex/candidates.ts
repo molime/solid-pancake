@@ -346,6 +346,7 @@ export const inviteCandidate = action({
     displayName: v.string(),
     email: v.string(),
     phone: v.optional(v.string()),
+    devBypassEnabled: v.optional(v.boolean()),
   },
   handler: async (
     ctx,
@@ -398,7 +399,7 @@ export const inviteCandidate = action({
         appBaseUrl,
       })
     } catch (err) {
-      if (isDevInvitationBypassEnabled() && isAllowListError(err)) {
+      if (isDevInvitationBypassEnabled({ appBaseUrl, devBypassEnabled: args.devBypassEnabled }) && isAllowListError(err)) {
         try {
           const bypass = await createClerkUserAndJoinOrg({
             secretKey,
@@ -471,6 +472,7 @@ export const insertInvitedCandidate = internalMutation({
     displayName: v.string(),
     email: v.string(),
     phone: v.optional(v.string()),
+    devBypassEnabled: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [

@@ -253,6 +253,7 @@ export function ShiftPacketPanel({
                 variant="primary"
                 size="lg"
                 className="min-w-[150px]"
+                data-testid="edit-shift-button"
                 onClick={() => onEdit(shift)}
               >
                 Edit shift
@@ -262,6 +263,7 @@ export function ShiftPacketPanel({
                   variant="secondary"
                   size="lg"
                   className="min-w-[150px] border-atria-danger text-atria-danger hover:bg-atria-danger/10"
+                  data-testid="delete-shift-button"
                   onClick={handleDelete}
                   disabled={deleting}
                 >
@@ -283,6 +285,7 @@ export function ShiftPacketPanel({
               <Button
                 variant="primary"
                 size="lg"
+                data-testid="request-coverage-button"
                 onClick={() => setRequestOpen(true)}
               >
                 Request Coverage

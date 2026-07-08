@@ -106,6 +106,7 @@ export function CoverageRequestsPanel({
             return (
               <div
                 key={request._id}
+                data-testid="coverage-request-row"
                 className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between"
               >
                 <div className="min-w-0 space-y-1">
@@ -133,6 +134,7 @@ export function CoverageRequestsPanel({
                       }))
                     }
                     className="min-w-[180px]"
+                    data-testid="coverage-assign-select"
                   >
                     <option value="" disabled>
                       Assign caregiver
@@ -148,6 +150,7 @@ export function CoverageRequestsPanel({
                   <Button
                     variant="primary"
                     size="sm"
+                    data-testid="coverage-assign-button"
                     disabled={!selections[request._id] || resolving[request._id]}
                     onClick={() => handleAssign(request)}
                   >

@@ -1545,6 +1545,103 @@ describe('addCandidateDocument', () => {
   })
 })
 
+describe('attachCandidateDocument', () => {
+  it('marks the matching photo_id and cpr_certificate tasks complete', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_attach_doc'
+    const adminId = 'user_admin_attach_doc'
+    const candidateUserId = 'user_candidate_attach_doc'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    let candidateId: Id<'candidates'>
+    let tenantId: Id<'tenants'>
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      tenantId = tenant._id
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: candidateUserId,
+        role: 'org:candidate',
+        displayName: 'Doc Candidate',
+        email: 'attach@example.com',
+      })
+      candidateId = await ctx.db.insert('candidates', {
+        tenantId,
+        clerkUserId: candidateUserId,
+        email: 'attach@example.com',
+        displayName: 'Doc Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
+        type: 'photo_id',
+        status: 'pending',
+        order: 1,
+      })
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
+        type: 'cpr_certificate',
+        status: 'pending',
+        order: 2,
+      })
+    })
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.attachCandidateDocument,
+      {
+        clerkOrgId,
+        storageId: 'storage-photo-id',
+        fileName: 'license.png',
+        contentType: 'image/png',
+        size: 1024,
+        documentType: 'photo_id',
+        label: 'Photo ID',
+      },
+    )
+
+    let tasks = await t.run(async (ctx) =>
+      ctx.db
+        .query('candidateTasks')
+        .withIndex('by_tenant_candidate_order', (q) =>
+          q.eq('tenantId', tenantId).eq('candidateId', candidateId),
+        )
+        .collect(),
+    )
+    expect(tasks.find((task) => task.type === 'photo_id')?.status).toBe('complete')
+    expect(tasks.find((task) => task.type === 'cpr_certificate')?.status).toBe('pending')
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.attachCandidateDocument,
+      {
+        clerkOrgId,
+        storageId: 'storage-cpr',
+        fileName: 'cpr.pdf',
+        contentType: 'application/pdf',
+        size: 2048,
+        documentType: 'cpr_certificate',
+        label: 'CPR certificate',
+      },
+    )
+
+    tasks = await t.run(async (ctx) =>
+      ctx.db
+        .query('candidateTasks')
+        .withIndex('by_tenant_candidate_order', (q) =>
+          q.eq('tenantId', tenantId).eq('candidateId', candidateId),
+        )
+        .collect(),
+    )
+    expect(tasks.find((task) => task.type === 'cpr_certificate')?.status).toBe('complete')
+  })
+})
+
 describe('listCandidateTasks', () => {
   it('returns ordered tasks for candidate', async () => {
     const t = createTestConvex()

@@ -196,6 +196,7 @@ export function HireConvertPage() {
               variant="primary"
               size="lg"
               className="w-full"
+              data-testid="confirm-hire-button"
               disabled={submitting}
               onClick={handleHire}
             >

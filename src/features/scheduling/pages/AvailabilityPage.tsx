@@ -201,6 +201,7 @@ export function AvailabilityPage() {
                     variant="ghost"
                     size="sm"
                     className="mt-2 w-full text-atria-accent"
+                    data-testid={`add-window-button-${index}`}
                     onClick={() => openAdd(index)}
                   >
                     <Plus className="mr-1 h-4 w-4" />
@@ -241,6 +242,7 @@ export function AvailabilityPage() {
                       <FieldGroup label="Start" htmlFor="window-start">
                         <Input
                           id="window-start"
+                          data-testid="window-start-input"
                           type="time"
                           value={form.startTime}
                           onChange={(e) =>
@@ -254,6 +256,7 @@ export function AvailabilityPage() {
                       <FieldGroup label="End" htmlFor="window-end">
                         <Input
                           id="window-end"
+                          data-testid="window-end-input"
                           type="time"
                           value={form.endTime}
                           onChange={(e) =>
@@ -290,6 +293,7 @@ export function AvailabilityPage() {
                       <Button
                         variant="primary"
                         size="sm"
+                        data-testid="save-window-button"
                         onClick={() => handleAdd(index)}
                       >
                         Save

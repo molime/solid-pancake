@@ -152,6 +152,52 @@ async function seedCaregiver(
   })
 }
 
+async function seedArchiveItem(
+  t: ReturnType<typeof createTestConvex>,
+  clerkOrgId: string,
+  overrides: {
+    subjectType?: string
+    subjectId?: string
+    category?: string
+    status?: string
+    expiresAt?: string
+    fileName?: string
+    createdAt?: string
+  } = {},
+) {
+  return t.run(async (ctx) => {
+    const tenant = await ctx.db
+      .query('tenants')
+      .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+      .unique()
+    if (!tenant) throw new Error('Tenant not found.')
+    const fileId = await ctx.db.insert('files', {
+      tenantId: tenant._id,
+      storageId: 'storage-test',
+      uploadedBy: 'user_test',
+      fileName: overrides.fileName ?? 'doc.pdf',
+      contentType: 'application/pdf',
+      size: 2048,
+      linkedType: 'shiftTask',
+      linkedId: 'task-test',
+      visibility: 'all_staff',
+      createdAt: overrides.createdAt ?? new Date().toISOString(),
+    })
+    const itemId = await ctx.db.insert('documentArchiveItems', {
+      tenantId: tenant._id,
+      fileId,
+      subjectType: overrides.subjectType ?? 'candidate',
+      subjectId: overrides.subjectId ?? 'candidate-test',
+      category: overrides.category ?? 'license',
+      status: overrides.status ?? 'active',
+      expiresAt: overrides.expiresAt,
+      source: 'test',
+      createdAt: overrides.createdAt ?? new Date().toISOString(),
+    })
+    return { tenantId: tenant._id, fileId, itemId }
+  })
+}
+
 beforeEach(() => {
   // noop
 })
@@ -491,6 +537,32 @@ describe('submitForm', () => {
     ).rejects.toThrow('Missing required field: name')
   })
 
+  it('rejects empty-string required field', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_submit_empty'
+    const adminId = 'user_admin_submit_empty'
+    const candidateUserId = 'user_candidate_submit_empty'
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedCandidate(t, clerkOrgId, candidateUserId)
+
+    const formId = await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.forms.createFormDefinition,
+      {
+        clerkOrgId,
+        name: 'Required Form',
+        fields: sampleFields,
+      },
+    )
+
+    await expect(
+      asCandidate(t, candidateUserId, clerkOrgId).mutation(api.forms.submitForm, {
+        clerkOrgId,
+        formDefinitionId: formId as Id<'formDefinitions'>,
+        data: { name: '', experience: '5 years' },
+      }),
+    ).rejects.toThrow('Missing required field: name')
+  })
+
   it('throws for cross-tenant formDefinitionId', async () => {
     const t = createTestConvex()
     const orgA = 'org_a'
@@ -803,5 +875,89 @@ describe('getFormSubmission', () => {
         submissionId: submissionId as Id<'formSubmissions'>,
       }),
     ).rejects.toThrow('Forbidden: you can only view your own submissions.')
+  })
+})
+
+describe('updateDocumentArchiveItem', () => {
+  it('sets verifiedBy and verifiedAt', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_forms_archive_verify'
+    const adminId = 'user_admin_forms_archive_verify'
+    await seedTenant(t, clerkOrgId, adminId)
+    const { itemId } = await seedArchiveItem(t, clerkOrgId)
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.documentArchive.updateDocumentArchiveItem,
+      {
+        clerkOrgId,
+        itemId,
+        status: 'verified',
+      },
+    )
+
+    const item = await t.run(async (ctx) =>
+      ctx.db.get(itemId as Id<'documentArchiveItems'>),
+    )
+    expect(item?.status).toBe('verified')
+    expect(item?.verifiedBy).toBe(adminId)
+    expect(item?.verifiedAt).toBeDefined()
+  })
+
+  it('rejection requires reason and clears verified fields', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_forms_archive_reject'
+    const adminId = 'user_admin_forms_archive_reject'
+    await seedTenant(t, clerkOrgId, adminId)
+    const { itemId } = await seedArchiveItem(t, clerkOrgId)
+
+    await expect(
+      asAdmin(t, adminId, clerkOrgId).mutation(
+        api.documentArchive.updateDocumentArchiveItem,
+        {
+          clerkOrgId,
+          itemId,
+          status: 'rejected',
+        },
+      ),
+    ).rejects.toThrow('Rejection reason is required when rejecting a document.')
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.documentArchive.updateDocumentArchiveItem,
+      {
+        clerkOrgId,
+        itemId,
+        status: 'rejected',
+        rejectionReason: 'Blurry scan',
+      },
+    )
+
+    const item = await t.run(async (ctx) =>
+      ctx.db.get(itemId as Id<'documentArchiveItems'>),
+    )
+    expect(item?.status).toBe('rejected')
+    expect(item?.rejectionReason).toBe('Blurry scan')
+    expect(item?.verifiedBy).toBeUndefined()
+    expect(item?.verifiedAt).toBeUndefined()
+  })
+
+  it('is blocked for org:caregiver', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_forms_archive_update_block'
+    const adminId = 'user_admin_forms_archive_update_block'
+    const caregiverId = 'user_cg_forms_archive_update_block'
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedCaregiver(t, clerkOrgId, caregiverId)
+    const { itemId } = await seedArchiveItem(t, clerkOrgId)
+
+    await expect(
+      asCaregiver(t, caregiverId, clerkOrgId).mutation(
+        api.documentArchive.updateDocumentArchiveItem,
+        {
+          clerkOrgId,
+          itemId,
+          status: 'verified',
+        },
+      ),
+    ).rejects.toThrow()
   })
 })

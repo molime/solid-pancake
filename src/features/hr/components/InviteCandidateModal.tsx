@@ -31,12 +31,17 @@ export function InviteCandidateModal({
   const [phone, setPhone] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [bypass, setBypass] = useState<{
+    manualPassword: string
+    magicLink: string
+  } | null>(null)
 
   const reset = () => {
     setDisplayName('')
     setEmail('')
     setPhone('')
     setError(null)
+    setBypass(null)
   }
 
   const handleClose = () => {
@@ -52,14 +57,26 @@ export function InviteCandidateModal({
 
     setSubmitting(true)
     setError(null)
+    setBypass(null)
 
     try {
-      await inviteCandidate({
+      const result = await inviteCandidate({
         clerkOrgId,
         displayName: trimmedName,
         email: trimmedEmail,
         phone: phone.trim() || undefined,
+        devBypassEnabled: import.meta.env.DEV,
       })
+
+      if (result.manualPassword && result.magicLink) {
+        setBypass({
+          manualPassword: result.manualPassword,
+          magicLink: result.magicLink,
+        })
+        onInvited?.()
+        return
+      }
+
       reset()
       onInvited?.()
       onClose()
@@ -77,9 +94,36 @@ export function InviteCandidateModal({
       </DialogHeader>
       <DialogContent className="space-y-4">
         {error && <p className="text-sm text-atria-danger">{error}</p>}
+        {bypass && (
+          <div
+            data-testid="dev-bypass-card"
+            className="rounded-md border border-atria-border bg-atria-surface p-3 text-sm"
+          >
+            <p className="mb-2 font-medium text-atria-ink">
+              Dev bypass: candidate account created
+            </p>
+            <p className="mb-1 text-atria-text-secondary">
+              <span className="font-medium">Password:</span>{' '}
+              <code className="rounded bg-atria-surface-2 px-1 py-0.5">{bypass.manualPassword}</code>
+            </p>
+            <a
+              href={bypass.magicLink}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 font-medium text-atria-accent hover:text-atria-accent-hover"
+            >
+              Open magic link
+            </a>
+            <p className="mt-2 text-xs text-atria-text-secondary">
+              The magic link expires in 10 minutes. Do not share these credentials outside of local
+              development.
+            </p>
+          </div>
+        )}
         <FieldGroup label="Full name" required htmlFor="candidate-name">
           <Input
             id="candidate-name"
+            data-testid="candidate-name-input"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder="Sofia Herrera"
@@ -88,6 +132,7 @@ export function InviteCandidateModal({
         <FieldGroup label="Email" required htmlFor="candidate-email">
           <Input
             id="candidate-email"
+            data-testid="candidate-email-input"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -97,6 +142,7 @@ export function InviteCandidateModal({
         <FieldGroup label="Phone" htmlFor="candidate-phone">
           <Input
             id="candidate-phone"
+            data-testid="candidate-phone-input"
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
@@ -111,8 +157,9 @@ export function InviteCandidateModal({
         <Button
           variant="primary"
           size="sm"
+          data-testid="send-invitation-button"
           disabled={
-            submitting || !displayName.trim() || !email.trim()
+            submitting || !displayName.trim() || !email.trim() || bypass !== null
           }
           onClick={handleSubmit}
         >

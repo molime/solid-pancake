@@ -24,7 +24,7 @@ test.describe('phase1 lifecycle', { tag: '@auth' }, () => {
     await resetE2EShifts(page)
 
     // ---- Caregiver: clock in ----
-    await signInWithClerk(page, E2E_CAREGIVER_EMAIL, E2E_CAREGIVER_PASSWORD, E2E_ORG_ID)
+    await signInWithClerk(page, E2E_CAREGIVER_EMAIL, E2E_CAREGIVER_PASSWORD, E2E_ORG_ID, 'org:caregiver')
     await page.goto('/caregiver/today')
     await expect(page).toHaveURL(/caregiver\/today/)
 
@@ -109,7 +109,7 @@ test.describe('phase1 lifecycle', { tag: '@auth' }, () => {
 
     // ---- Coordinator: request correction ----
     await signOut(page)
-    await signInWithClerk(page, E2E_COORDINATOR_EMAIL, E2E_COORDINATOR_PASSWORD, E2E_ORG_ID)
+    await signInWithClerk(page, E2E_COORDINATOR_EMAIL, E2E_COORDINATOR_PASSWORD, E2E_ORG_ID, 'org:coordinator')
     await page.goto('/coordinator/review')
     await expect(page).toHaveURL(/coordinator\/review/)
     await page.reload()
@@ -140,7 +140,7 @@ test.describe('phase1 lifecycle', { tag: '@auth' }, () => {
 
     // ---- Caregiver: fix and resubmit ----
     await signOut(page)
-    await signInWithClerk(page, E2E_CAREGIVER_EMAIL, E2E_CAREGIVER_PASSWORD, E2E_ORG_ID)
+    await signInWithClerk(page, E2E_CAREGIVER_EMAIL, E2E_CAREGIVER_PASSWORD, E2E_ORG_ID, 'org:caregiver')
     await page.goto('/caregiver/today')
     await expect(page).toHaveURL(/caregiver\/today/)
 
@@ -180,7 +180,7 @@ test.describe('phase1 lifecycle', { tag: '@auth' }, () => {
 
     // ---- Coordinator: approve -> billing ready ----
     await signOut(page)
-    await signInWithClerk(page, E2E_COORDINATOR_EMAIL, E2E_COORDINATOR_PASSWORD, E2E_ORG_ID)
+    await signInWithClerk(page, E2E_COORDINATOR_EMAIL, E2E_COORDINATOR_PASSWORD, E2E_ORG_ID, 'org:coordinator')
     await page.goto('/coordinator/review')
     await expect(page).toHaveURL(/coordinator\/review/)
 

@@ -47,7 +47,13 @@ import { useAuth, useOrganization, useOrganizationList, useUser } from '@clerk/r
 import { useConvexAuth } from 'convex/react'
 
 function mockClerkState(options: {
-  orgs?: Array<{ id: string; name: string; slug: string; role: string }>
+  orgs?: Array<{
+    id: string
+    name: string
+    slug: string
+    role: string
+    atriaRole?: string
+  }>
   activeOrgId?: string | null
   user?: { fullName: string; primaryEmailAddress: { emailAddress: string } } | null
   isLoaded?: boolean
@@ -62,6 +68,7 @@ function mockClerkState(options: {
       data: orgs.map((o) => ({
         organization: { id: o.id, name: o.name, slug: o.slug },
         role: o.role,
+        publicMetadata: o.atriaRole ? { atriaRole: o.atriaRole } : undefined,
       })),
     },
   } as unknown as ReturnType<typeof useOrganizationList>)
@@ -92,6 +99,26 @@ function mockConvexAuth(auth: { isLoading: boolean; isAuthenticated: boolean }) 
 describe('SelectAgencyPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('shows ATRIA role from publicMetadata when Clerk role is generic org:member', async () => {
+    mockClerkState({
+      orgs: [
+        {
+          id: 'org_123',
+          name: 'Test Agency',
+          slug: 'test',
+          role: 'org:member',
+          atriaRole: 'org:hr',
+        },
+      ],
+      activeOrgId: 'org_123',
+      user: { fullName: 'Alice', primaryEmailAddress: { emailAddress: 'a@x.com' } },
+    })
+    mockConvexAuth({ isLoading: false, isAuthenticated: true })
+
+    render(<SelectAgencyPage />)
+    expect(screen.getByText(/Role:\s*hr/i)).toBeInTheDocument()
   })
 
   it('does not call Convex while Convex auth is loading', async () => {
