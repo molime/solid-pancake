@@ -186,6 +186,7 @@ export function AppRouter() {
               path="/sign-in"
               signUpUrl="/sign-up"
               fallbackRedirectUrl="/select-agency"
+              forceRedirectUrl="/select-agency"
             />
           </div>
         }
@@ -199,6 +200,7 @@ export function AppRouter() {
               path="/sign-up"
               signInUrl="/sign-in"
               fallbackRedirectUrl="/select-agency"
+              forceRedirectUrl="/select-agency"
             />
           </div>
         }
@@ -212,6 +214,7 @@ export function AppRouter() {
               path="/accept-invitation"
               signInUrl="/sign-in"
               fallbackRedirectUrl="/select-agency"
+              forceRedirectUrl="/select-agency"
             />
           </div>
         }

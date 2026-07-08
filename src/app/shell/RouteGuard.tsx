@@ -1,7 +1,11 @@
-import { useOrganization, useAuth } from '@clerk/react'
+import {
+  useOrganization,
+  useAuth,
+  useOrganizationList,
+} from '@clerk/react'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import type { PropsWithChildren } from 'react'
 import { AppLoader } from '@/shared/ui/AppLoader'
 
@@ -55,13 +59,26 @@ function TenantMembershipGuard({ children }: PropsWithChildren) {
 
 export function SignedInRouteGuard({ children }: PropsWithChildren) {
   const { isLoaded, isSignedIn } = useAuth()
+  const location = useLocation()
+  const { isLoaded: orgsLoaded, userMemberships } = useOrganizationList({
+    userMemberships: { infinite: true },
+  })
 
-  if (!isLoaded) {
+  if (!isLoaded || !orgsLoaded) {
     return <AppLoader fullScreen />
   }
 
   if (!isSignedIn) {
     return <Navigate to="/sign-in" replace />
+  }
+
+  // If Clerk drops the user on /create-agency but they already have
+  // memberships, send them to the agency picker instead.
+  if (
+    location.pathname === '/create-agency' &&
+    (userMemberships.data?.length ?? 0) > 0
+  ) {
+    return <Navigate to="/select-agency" replace />
   }
 
   return <>{children}</>
