@@ -187,15 +187,16 @@ describe('inviteCandidate', () => {
         .collect()
     })
 
-    expect(tasks).toHaveLength(5)
+    expect(tasks).toHaveLength(6)
     expect(tasks.map((t) => t.type)).toEqual([
       'form_submission',
-      'document_upload',
+      'photo_id',
+      'cpr_certificate',
       'background_check',
-      'reference_check',
+      'employment_agreement',
       'platform_training',
     ])
-    expect(tasks.map((t) => t.order)).toEqual([0, 1, 2, 3, 4])
+    expect(tasks.map((t) => t.order)).toEqual([0, 1, 2, 3, 4, 5])
     expect(tasks.every((t) => t.status === 'pending')).toBe(true)
   })
 
@@ -219,6 +220,60 @@ describe('inviteCandidate', () => {
     )
 
     expect(result.candidateId).toBeDefined()
+  })
+
+  it('uses an org:admin as the Clerk inviter even when called by org:hr', async () => {
+    stubClerkInvitation()
+    const t = createTestConvex()
+    const clerkOrgId = 'org_invite_hr_uses_admin'
+    const adminId = 'user_admin_invite_hr_uses_admin'
+    const hrId = 'user_hr_invite_hr_uses_admin'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedHR(t, clerkOrgId, hrId)
+
+    await asHR(t, hrId, clerkOrgId).action(api.candidates.inviteCandidate, {
+      clerkOrgId,
+      displayName: 'Candidate HR Admin Inviter',
+      email: 'candidate.hr.admin@example.com',
+    })
+
+    const calls = vi.mocked(fetch).mock.calls
+    expect(calls.length).toBeGreaterThan(0)
+    const lastCall = calls[calls.length - 1]
+    const requestBody = JSON.parse(lastCall[1]?.body as string)
+    expect(requestBody.inviter_user_id).toBe(adminId)
+  })
+
+  it('throws a clear error when no org:admin is available', async () => {
+    stubClerkInvitation()
+    const t = createTestConvex()
+    const clerkOrgId = 'org_invite_no_admin'
+    const hrId = 'user_hr_invite_no_admin'
+
+    await t.run(async (ctx) => {
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId,
+        name: 'No Admin Agency',
+        slug: 'no-admin-agency',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: hrId,
+        role: 'org:hr',
+        displayName: 'HR Person',
+        email: 'hr@example.com',
+      })
+    })
+
+    await expect(
+      asHR(t, hrId, clerkOrgId).action(api.candidates.inviteCandidate, {
+        clerkOrgId,
+        displayName: 'Candidate No Admin',
+        email: 'candidate.no.admin@example.com',
+      }),
+    ).rejects.toThrow('No organization admin available to send Clerk invitation')
   })
 
   it('blocks org:caregiver callers', async () => {
@@ -254,6 +309,577 @@ describe('inviteCandidate', () => {
         displayName: 'Candidate One',
         email: 'candidate@example.com',
       }),
+    ).rejects.toThrow()
+  })
+
+
+  it('throws a clear error when CLERK_SECRET_KEY is missing', async () => {
+    vi.stubEnv('CLERK_SECRET_KEY', '')
+    vi.stubEnv('APP_URL', 'http://localhost')
+    const t = createTestConvex()
+    const clerkOrgId = 'org_invite_missing_clerk_key'
+    const adminId = 'user_admin_invite_missing_clerk_key'
+
+    await seedTenant(t, clerkOrgId, adminId)
+
+    await expect(
+      asAdmin(t, adminId, clerkOrgId).action(api.candidates.inviteCandidate, {
+        clerkOrgId,
+        displayName: 'Candidate One',
+        email: 'candidate@example.com',
+      }),
+    ).rejects.toThrow('CLERK_SECRET_KEY')
+  })
+
+  it('throws a clear error when APP_URL is missing', async () => {
+    vi.stubEnv('CLERK_SECRET_KEY', '***')
+    vi.stubEnv('APP_URL', '')
+    const t = createTestConvex()
+    const clerkOrgId = 'org_invite_missing_app_url'
+    const adminId = 'user_admin_invite_missing_app_url'
+
+    await seedTenant(t, clerkOrgId, adminId)
+
+    await expect(
+      asAdmin(t, adminId, clerkOrgId).action(api.candidates.inviteCandidate, {
+        clerkOrgId,
+        displayName: 'Candidate One',
+        email: 'candidate@example.com',
+      }),
+    ).rejects.toThrow('APP_URL')
+  })
+
+  it('bypasses Clerk allow-list errors in local dev and links the candidate', async () => {
+    vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
+    vi.stubEnv('APP_URL', 'http://localhost:5173')
+    vi.stubEnv('ATRIA_X_DEV_INVITE_BYPASS', '')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init: RequestInit | undefined) => {
+        if (url.includes('/organizations/org_invite_bypass/invitations')) {
+          return Promise.resolve({
+            ok: false,
+            status: 422,
+            json: () =>
+              Promise.resolve({
+                errors: [
+                  {
+                    message: 'not allowed to access this application',
+                    long_message:
+                      'candidate@gmail.com is not allowed to access this application',
+                    code: 'form_param_format_invalid',
+                  },
+                ],
+              }),
+          })
+        }
+
+        if (url.includes('/users') && init?.method === 'POST') {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                id: 'user_bypass_candidate',
+                email_addresses: [{ email_address: 'candidate@gmail.com' }],
+              }),
+          })
+        }
+
+        if (url.includes('/memberships') && init?.method === 'POST') {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ id: 'mem_bypass_candidate' }),
+          })
+        }
+
+        if (url.includes('/sign_in_tokens')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                id: 'sit_bypass_candidate',
+                token: 'sint_bypass_candidate',
+                user_id: 'user_bypass_candidate',
+              }),
+          })
+        }
+
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: () => Promise.resolve({ errors: [{ message: 'Not found' }] }),
+        })
+      }) as unknown as typeof fetch,
+    )
+
+    const t = createTestConvex()
+    const clerkOrgId = 'org_invite_bypass'
+    const adminId = 'user_admin_invite_bypass'
+
+    await seedTenant(t, clerkOrgId, adminId)
+
+    const result = await asAdmin(t, adminId, clerkOrgId).action(
+      api.candidates.inviteCandidate,
+      {
+        clerkOrgId,
+        displayName: 'Bypass Candidate',
+        email: 'candidate@gmail.com',
+      },
+    )
+
+    expect(result.invitationId).toMatch(/^bypass:/)
+    expect(result.manualPassword).toMatch(/^dev-/)
+    expect(result.magicLink).toMatch(/__clerk_ticket=sint_bypass_candidate$/)
+
+    const candidate = await t.run(async (ctx) => {
+      return ctx.db.get(result.candidateId as Id<'candidates'>)
+    })
+
+    expect(candidate?.clerkUserId).toBe('user_bypass_candidate')
+    expect(candidate?.invitationId).toMatch(/^bypass:/)
+    expect(candidate?.invitationFailed).toBeUndefined()
+    expect(candidate?.invitationError).toBeUndefined()
+  })
+
+  it('preserves the candidate record when bypass fails', async () => {
+    vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
+    vi.stubEnv('APP_URL', 'http://localhost:5173')
+    vi.stubEnv('ATRIA_X_DEV_INVITE_BYPASS', '')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 422,
+          json: () =>
+            Promise.resolve({
+              errors: [
+                {
+                  message: 'not allowed to access this application',
+                  long_message:
+                    'candidate@gmail.com is not allowed to access this application',
+                  code: 'form_param_format_invalid',
+                },
+              ],
+            }),
+        }),
+      ) as unknown as typeof fetch,
+    )
+
+    const t = createTestConvex()
+    const clerkOrgId = 'org_invite_no_bypass'
+    const adminId = 'user_admin_invite_no_bypass'
+
+    await seedTenant(t, clerkOrgId, adminId)
+
+    await expect(
+      asAdmin(t, adminId, clerkOrgId).action(api.candidates.inviteCandidate, {
+        clerkOrgId,
+        displayName: 'No Bypass Candidate',
+        email: 'candidate@gmail.com',
+      }),
+    ).rejects.toThrow('not allowed to access this application')
+
+    const candidate = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      return ctx.db
+        .query('candidates')
+        .withIndex('by_tenant_email', (q) =>
+          q.eq('tenantId', tenant!._id).eq('email', 'candidate@gmail.com'),
+        )
+        .unique()
+    })
+
+    expect(candidate).toBeDefined()
+    expect(candidate?.status).toBe('invited')
+    expect(candidate?.invitationFailed).toBe(true)
+    expect(candidate?.invitationError).toContain('not allowed to access this application')
+  })
+
+  it('does not bypass on a production URL without the explicit flag', async () => {
+    vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
+    vi.stubEnv('APP_URL', 'https://app.example.com')
+    vi.stubEnv('ATRIA_X_DEV_INVITE_BYPASS', '')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 422,
+          json: () =>
+            Promise.resolve({
+              errors: [
+                {
+                  message: 'not allowed to access this application',
+                  long_message:
+                    'candidate@gmail.com is not allowed to access this application',
+                  code: 'form_param_format_invalid',
+                },
+              ],
+            }),
+        }),
+      ) as unknown as typeof fetch,
+    )
+
+    const t = createTestConvex()
+    const clerkOrgId = 'org_invite_production_guard'
+    const adminId = 'user_admin_invite_production_guard'
+
+    await seedTenant(t, clerkOrgId, adminId)
+
+    await expect(
+      asAdmin(t, adminId, clerkOrgId).action(api.candidates.inviteCandidate, {
+        clerkOrgId,
+        displayName: 'Production Guard Candidate',
+        email: 'candidate@gmail.com',
+      }),
+    ).rejects.toThrow('not allowed to access this application')
+
+    const calls = vi.mocked(fetch).mock.calls
+    const bypassCalls = calls.filter(
+      (call) =>
+        typeof call[0] === 'string' &&
+        (call[0].includes('/users') || call[0].includes('/sign_in_tokens')),
+    )
+    expect(bypassCalls).toHaveLength(0)
+
+    const candidate = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      return ctx.db
+        .query('candidates')
+        .withIndex('by_tenant_email', (q) =>
+          q.eq('tenantId', tenant!._id).eq('email', 'candidate@gmail.com'),
+        )
+        .unique()
+    })
+
+    expect(candidate?.invitationFailed).toBe(true)
+  })
+
+  it('bypasses via explicit flag on a production URL', async () => {
+    vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
+    vi.stubEnv('APP_URL', 'https://app.example.com')
+    vi.stubEnv('ATRIA_X_DEV_INVITE_BYPASS', 'true')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init: RequestInit | undefined) => {
+        if (url.includes('/organizations/org_invite_flag_bypass/invitations')) {
+          return Promise.resolve({
+            ok: false,
+            status: 422,
+            json: () =>
+              Promise.resolve({
+                errors: [
+                  {
+                    message: 'not allowed to access this application',
+                    long_message:
+                      'candidate@gmail.com is not allowed to access this application',
+                    code: 'form_param_format_invalid',
+                  },
+                ],
+              }),
+          })
+        }
+
+        if (url.includes('/users') && init?.method === 'POST') {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                id: 'user_flag_bypass_candidate',
+                email_addresses: [{ email_address: 'candidate@gmail.com' }],
+              }),
+          })
+        }
+
+        if (url.includes('/memberships') && init?.method === 'POST') {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ id: 'mem_flag_bypass_candidate' }),
+          })
+        }
+
+        if (url.includes('/sign_in_tokens')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                id: 'sit_flag_bypass_candidate',
+                token: 'sint_flag_bypass_candidate',
+                user_id: 'user_flag_bypass_candidate',
+              }),
+          })
+        }
+
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: () => Promise.resolve({ errors: [{ message: 'Not found' }] }),
+        })
+      }) as unknown as typeof fetch,
+    )
+
+    const t = createTestConvex()
+    const clerkOrgId = 'org_invite_flag_bypass'
+    const adminId = 'user_admin_invite_flag_bypass'
+
+    await seedTenant(t, clerkOrgId, adminId)
+
+    const result = await asAdmin(t, adminId, clerkOrgId).action(
+      api.candidates.inviteCandidate,
+      {
+        clerkOrgId,
+        displayName: 'Flag Bypass Candidate',
+        email: 'candidate@gmail.com',
+      },
+    )
+
+    expect(result.invitationId).toMatch(/^bypass:/)
+    expect(result.manualPassword).toMatch(/^dev-/)
+    expect(result.magicLink).toMatch(/__clerk_ticket=sint_flag_bypass_candidate$/)
+
+    const candidate = await t.run(async (ctx) => {
+      return ctx.db.get(result.candidateId as Id<'candidates'>)
+    })
+
+    expect(candidate?.clerkUserId).toBe('user_flag_bypass_candidate')
+    expect(candidate?.invitationFailed).toBeUndefined()
+  })
+
+  it('preserves the candidate record on unexpected Clerk errors', async () => {
+    vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
+    vi.stubEnv('APP_URL', 'http://localhost:5173')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 500,
+          json: () => Promise.resolve({ errors: [{ message: 'Internal server error' }] }),
+        }),
+      ) as unknown as typeof fetch,
+    )
+
+    const t = createTestConvex()
+    const clerkOrgId = 'org_invite_500'
+    const adminId = 'user_admin_invite_500'
+
+    await seedTenant(t, clerkOrgId, adminId)
+
+    await expect(
+      asAdmin(t, adminId, clerkOrgId).action(api.candidates.inviteCandidate, {
+        clerkOrgId,
+        displayName: 'Server Error Candidate',
+        email: 'candidate.500@example.com',
+      }),
+    ).rejects.toThrow('Internal server error')
+
+    const candidate = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      return ctx.db
+        .query('candidates')
+        .withIndex('by_tenant_email', (q) =>
+          q.eq('tenantId', tenant!._id).eq('email', 'candidate.500@example.com'),
+        )
+        .unique()
+    })
+
+    expect(candidate).toBeDefined()
+    expect(candidate?.invitationFailed).toBe(true)
+  })
+})
+
+describe('regenerateBypassSignInTicket', () => {
+  function stubSignInTicket() {
+    vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
+    vi.stubEnv('APP_URL', 'http://localhost:5173')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/sign_in_tokens')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                id: 'sit_regenerate',
+                token: 'sint_regenerate',
+                user_id: 'user_bypass_regenerate',
+              }),
+          })
+        }
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: () => Promise.resolve({ errors: [{ message: 'Not found' }] }),
+        })
+      }) as unknown as typeof fetch,
+    )
+  }
+
+  it('returns a fresh magic link for a bypass candidate', async () => {
+    stubSignInTicket()
+    const t = createTestConvex()
+    const clerkOrgId = 'org_regenerate_bypass'
+    const adminId = 'user_admin_regenerate_bypass'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    const candidateId = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      return ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId: 'user_bypass_regenerate',
+        email: 'regenerate@gmail.com',
+        displayName: 'Regenerate Candidate',
+        status: 'invited',
+        invitationId: 'bypass:test',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    const result = await asAdmin(t, adminId, clerkOrgId).action(
+      api.candidates.regenerateBypassSignInTicket,
+      {
+        clerkOrgId,
+        candidateId,
+      },
+    )
+
+    expect(result.magicLink).toBe('http://localhost:5173/sign-in?__clerk_ticket=sint_regenerate')
+  })
+
+  it('throws when dev bypass is disabled', async () => {
+    vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
+    vi.stubEnv('APP_URL', 'https://app.example.com')
+    vi.stubEnv('ATRIA_X_DEV_INVITE_BYPASS', '')
+    const t = createTestConvex()
+    const clerkOrgId = 'org_regenerate_disabled'
+    const adminId = 'user_admin_regenerate_disabled'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    const candidateId = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      return ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId: 'user_bypass_disabled',
+        email: 'disabled@gmail.com',
+        displayName: 'Disabled Candidate',
+        status: 'invited',
+        invitationId: 'bypass:test',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    await expect(
+      asAdmin(t, adminId, clerkOrgId).action(api.candidates.regenerateBypassSignInTicket, {
+        clerkOrgId,
+        candidateId,
+      }),
+    ).rejects.toThrow('Dev invitation bypass is not enabled')
+  })
+
+  it('throws for a candidate not created via bypass', async () => {
+    stubSignInTicket()
+    const t = createTestConvex()
+    const clerkOrgId = 'org_regenerate_normal'
+    const adminId = 'user_admin_regenerate_normal'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    const candidateId = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      return ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId: 'user_normal',
+        email: 'normal@example.com',
+        displayName: 'Normal Candidate',
+        status: 'invited',
+        invitationId: 'inv_normal',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    await expect(
+      asAdmin(t, adminId, clerkOrgId).action(api.candidates.regenerateBypassSignInTicket, {
+        clerkOrgId,
+        candidateId,
+      }),
+    ).rejects.toThrow('Candidate was not created via dev bypass')
+  })
+
+  it('blocks org:candidate callers', async () => {
+    stubSignInTicket()
+    const t = createTestConvex()
+    const clerkOrgId = 'org_regenerate_candidate'
+    const adminId = 'user_admin_regenerate_candidate'
+    const candidateUserId = 'user_candidate_regenerate'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        role: 'org:candidate',
+        displayName: 'Candidate',
+        email: 'candidate@example.com',
+      })
+    })
+    const candidateId = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      return ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        email: 'candidate@example.com',
+        displayName: 'Candidate',
+        status: 'invited',
+        invitationId: 'bypass:test',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    await expect(
+      asCandidate(t, candidateUserId, clerkOrgId).action(
+        api.candidates.regenerateBypassSignInTicket,
+        {
+          clerkOrgId,
+          candidateId,
+        },
+      ),
     ).rejects.toThrow()
   })
 })
@@ -876,12 +1502,22 @@ describe('addCandidateDocument', () => {
       })
     })
 
+    await t.run(async (ctx) => {
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
+        type: 'photo_id',
+        status: 'pending',
+        order: 1,
+      })
+    })
+
     await asCandidate(t, candidateUserId, clerkOrgId).mutation(
       api.candidates.addCandidateDocument,
       {
         clerkOrgId,
         fileId,
-        documentType: 'license',
+        documentType: 'photo_id',
         label: 'Driver License',
       },
     )
@@ -903,8 +1539,8 @@ describe('addCandidateDocument', () => {
     })
 
     expect(documents).toHaveLength(1)
-    expect(documents[0]?.category).toBe('license')
-    const docTask = tasks.find((t) => t.type === 'document_upload')
+    expect(documents[0]?.category).toBe('photo_id')
+    const docTask = tasks.find((t) => t.type === 'photo_id')
     expect(docTask?.status).toBe('complete')
   })
 })

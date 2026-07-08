@@ -1,0 +1,137 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useOrganization } from '@clerk/react'
+import { useMutation, useQuery } from 'convex/react'
+import { api } from '../../../../convex/_generated/api'
+import { Button } from '@/shared/ui/Button'
+import { Card, CardContent } from '@/shared/ui/Card'
+
+export function OfferAcceptancePage() {
+  const navigate = useNavigate()
+  const { organization, isLoaded } = useOrganization()
+  const clerkOrgId = organization?.id
+  const data = useQuery(api.candidates.getMyApplication, clerkOrgId ? { clerkOrgId } : 'skip')
+  const accept = useMutation(api.candidates.acceptOffer)
+  const reject = useMutation(api.candidates.rejectOffer)
+
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  if (!isLoaded || !clerkOrgId) return null
+
+  const candidate = data?.candidate
+  const application = data?.application
+  const status = candidate?.status
+
+  const firstName = candidate?.displayName?.split(' ')[0] ?? 'there'
+  const fields = application?.fields ?? {}
+  const position = (fields.position as string) ?? 'Caregiver'
+  const payRate = (fields.payRate as string) ?? '$22.00 / hr'
+  const startDate = (fields.startDate as string) ?? 'As soon as paperwork is complete'
+  const schedule = (fields.schedule as string) ?? 'Flexible, based on availability'
+  const supervisor = (fields.supervisor as string) ?? 'Your assigned coordinator'
+  const agencyName = organization?.name ?? 'ATRIA-X'
+  const offerExpiresAt = (fields.offerExpiresAt as string) ?? undefined
+
+  const handleAccept = async () => {
+    setIsSubmitting(true)
+    await accept({ clerkOrgId })
+    navigate('/onboarding/checklist', { replace: true })
+  }
+
+  const handleReject = async () => {
+    if (!window.confirm('Are you sure you want to decline this offer?')) return
+    setIsSubmitting(true)
+    await reject({ clerkOrgId })
+    navigate('/onboarding/status', { replace: true })
+  }
+
+  if (status !== 'offer_sent') {
+    return (
+      <div className='flex min-h-screen flex-col items-center justify-center bg-atria-bg px-4 py-8'>
+        <Card className='w-full max-w-[480px]'>
+          <CardContent className='p-8 text-center'>
+            <h1 className='mb-2 text-2xl font-semibold text-atria-ink'>No pending offer</h1>
+            <p className='mb-6 text-atria-text-secondary'>There is no offer available right now.</p>
+            <Button variant='secondary' onClick={() => navigate('/onboarding/status')}>
+              Check status {String.fromCharCode(8594)}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className='flex min-h-screen flex-col items-center justify-center bg-atria-bg px-4 py-8'>
+      <Card className='w-full max-w-[520px]'>
+        <CardContent className='p-8'>
+          <div className='mb-6 flex items-center gap-3'>
+            <div className='flex h-10 w-10 items-center justify-center rounded-[var(--radius-atria-md)] bg-atria-accent text-atria-on-accent'>
+              <span className='text-lg font-bold'>A</span>
+            </div>
+            <div>
+              <p className='text-lg font-semibold leading-none text-atria-ink'>ATRIA-X</p>
+              <p className='text-sm text-atria-text-secondary'>Caregiver Portal</p>
+            </div>
+          </div>
+
+          <div className='mb-6 rounded-[var(--radius-atria-md)] border border-atria-success/30 bg-atria-success-bg p-5'>
+            <p className='mb-1 text-xs font-semibold uppercase tracking-wide text-atria-success'>You have an offer!</p>
+            <h1 className='mb-1 text-2xl font-semibold text-atria-ink'>{position}</h1>
+            <p className='text-sm text-atria-text-secondary'>
+              {agencyName} {String.fromCharCode(183)} Los Angeles, CA
+              {offerExpiresAt ? ` ${String.fromCharCode(183)} Expires ${new Date(offerExpiresAt).toLocaleDateString()}` : ''}
+            </p>
+          </div>
+
+          <p className='mb-5 text-base text-atria-ink'>
+            Hi {firstName}, we are excited to offer you a caregiver position. Review the details below and let us know your decision.
+          </p>
+
+          <div className='mb-6 grid grid-cols-2 gap-3'>
+            <div className='rounded-[var(--radius-atria-sm)] border border-atria-border bg-atria-surface-2 p-4'>
+              <p className='mb-1 text-xs font-semibold uppercase tracking-wide text-atria-text-muted'>Pay rate</p>
+              <p className='text-base font-semibold text-atria-ink'>{payRate}</p>
+            </div>
+            <div className='rounded-[var(--radius-atria-sm)] border border-atria-border bg-atria-surface-2 p-4'>
+              <p className='mb-1 text-xs font-semibold uppercase tracking-wide text-atria-text-muted'>Start date</p>
+              <p className='text-base font-semibold text-atria-ink'>{startDate}</p>
+            </div>
+            <div className='rounded-[var(--radius-atria-sm)] border border-atria-border bg-atria-surface-2 p-4'>
+              <p className='mb-1 text-xs font-semibold uppercase tracking-wide text-atria-text-muted'>Schedule</p>
+              <p className='text-base font-semibold text-atria-ink'>{schedule}</p>
+            </div>
+            <div className='rounded-[var(--radius-atria-sm)] border border-atria-border bg-atria-surface-2 p-4'>
+              <p className='mb-1 text-xs font-semibold uppercase tracking-wide text-atria-text-muted'>Supervisor</p>
+              <p className='text-base font-semibold text-atria-ink'>{supervisor}</p>
+            </div>
+          </div>
+
+          <Button
+            variant='primary'
+            size='lg'
+            className='mb-3 w-full'
+            disabled={isSubmitting}
+            onClick={handleAccept}
+          >
+            {isSubmitting ? 'Accepting...' : 'Accept this offer'}
+          </Button>
+
+          <Button
+            variant='secondary'
+            size='lg'
+            className='w-full'
+            disabled={isSubmitting}
+            onClick={handleReject}
+          >
+            No thanks, decline this offer
+          </Button>
+
+          <p className='mt-4 text-center text-xs text-atria-text-muted'>
+            By accepting, you agree to the caregiver terms and conditions.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

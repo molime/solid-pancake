@@ -1,0 +1,228 @@
+import { useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useOrganization } from '@clerk/react'
+import { useQuery } from 'convex/react'
+import { api } from '../../../../convex/_generated/api'
+import { Card, CardContent } from '@/shared/ui/Card'
+import { Button } from '@/shared/ui/Button'
+import { StatusBadge } from '@/shared/ui/StatusBadge'
+import { cn } from '@/shared/lib/cn'
+
+const STATUS_CONFIG: Record<string, { title: string; description: string; variant: 'success' | 'warning' | 'info' | 'neutral' | 'danger'; cardClass: string; labelClass: string }> = {
+  invited: {
+    title: 'Application not started',
+    description: 'Please fill out and submit your application.',
+    variant: 'neutral',
+    cardClass: 'border-atria-border bg-atria-surface-2',
+    labelClass: 'text-atria-text-secondary',
+  },
+  applied: {
+    title: 'Under review',
+    description: 'We received your application. An HR team member will review it soon.',
+    variant: 'warning',
+    cardClass: 'border-atria-warning/30 bg-atria-warning/10',
+    labelClass: 'text-atria-warning',
+  },
+  hr_review: {
+    title: 'Under review',
+    description: 'Your application is being reviewed by the hiring team.',
+    variant: 'warning',
+    cardClass: 'border-atria-warning/30 bg-atria-warning/10',
+    labelClass: 'text-atria-warning',
+  },
+  application_draft: {
+    title: 'Needs correction',
+    description: 'HR requested updates to your application. Please resubmit.',
+    variant: 'danger',
+    cardClass: 'border-atria-danger/30 bg-atria-danger/10',
+    labelClass: 'text-atria-danger',
+  },
+  offer_sent: {
+    title: 'Offer sent',
+    description: 'You have an offer waiting! Please review and accept.',
+    variant: 'success',
+    cardClass: 'border-atria-success/30 bg-atria-success/10',
+    labelClass: 'text-atria-success',
+  },
+  accepted: {
+    title: 'Offer accepted',
+    description: 'Welcome to the team! Complete your onboarding tasks.',
+    variant: 'success',
+    cardClass: 'border-atria-success/30 bg-atria-success/10',
+    labelClass: 'text-atria-success',
+  },
+  hired: {
+    title: 'Hired',
+    description: 'You are hired. Head to your caregiver dashboard.',
+    variant: 'success',
+    cardClass: 'border-atria-success/30 bg-atria-success/10',
+    labelClass: 'text-atria-success',
+  },
+  rejected: {
+    title: 'Not moving forward',
+    description: 'Thank you for your interest. We decided not to move forward.',
+    variant: 'danger',
+    cardClass: 'border-atria-danger/30 bg-atria-danger/10',
+    labelClass: 'text-atria-danger',
+  },
+  withdrawn: {
+    title: 'Withdrawn',
+    description: 'This application has been withdrawn.',
+    variant: 'neutral',
+    cardClass: 'border-atria-border bg-atria-surface-2',
+    labelClass: 'text-atria-text-secondary',
+  },
+}
+
+const STEPS = [
+  { key: 'submitted', label: 'Application submitted' },
+  { key: 'documents', label: 'Documents received' },
+  { key: 'review', label: 'Under review' },
+  { key: 'decision', label: 'Decision' },
+]
+
+function formatDate(value?: string) {
+  if (!value) return ''
+  return new Date(value).toLocaleDateString()
+}
+
+export function ApplicationStatusPage() {
+  const navigate = useNavigate()
+  const { organization, isLoaded } = useOrganization()
+  const clerkOrgId = organization?.id
+  const data = useQuery(api.candidates.getMyApplication, clerkOrgId ? { clerkOrgId } : 'skip')
+
+  const candidate = data?.candidate
+  const application = data?.application
+  const tasks = data?.tasks
+
+  const status = candidate?.status ?? 'invited'
+  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.invited
+
+  const currentStepIndex = useMemo(() => {
+    if (['hired', 'accepted', 'offer_sent'].includes(status)) return 3
+    if (['applied', 'hr_review', 'application_draft'].includes(status)) return 2
+    if (tasks?.some((t) => t.status === 'complete')) return 1
+    return 0
+  }, [status, tasks])
+
+  const submittedDate = formatDate(application?.submittedAt)
+  const documentsComplete = tasks?.filter((t) => ['photo_id', 'cpr_certificate'].includes(t.type)).every((t) => t.status === 'complete') ?? false
+  const documentsDate = tasks?.find((t) => ['photo_id', 'cpr_certificate'].includes(t.type) && t.completedAt)?.completedAt
+
+  if (!isLoaded || !clerkOrgId) return null
+
+  const firstName = candidate?.displayName?.split(' ')[0] ?? 'there'
+
+  return (
+    <div className='flex min-h-screen flex-col items-center justify-center bg-atria-bg px-4 py-8'>
+      <Card className='w-full max-w-[540px]'>
+        <CardContent className='p-8'>
+          <div className='mb-6 flex items-center gap-3'>
+            <div className='flex h-10 w-10 items-center justify-center rounded-[var(--radius-atria-md)] bg-atria-accent text-atria-on-accent'>
+              <span className='text-lg font-bold'>A</span>
+            </div>
+            <div>
+              <p className='text-lg font-semibold leading-none text-atria-ink'>ATRIA-X</p>
+              <p className='text-sm text-atria-text-secondary'>Caregiver Portal</p>
+            </div>
+          </div>
+
+          <h1 className='mb-1 text-2xl font-semibold text-atria-ink'>Hi {firstName} 👋</h1>
+          <p className='mb-6 text-base text-atria-text-secondary'>Here is where your application stands.</p>
+
+          <div className={cn('mb-8 rounded-[var(--radius-atria-md)] border p-5', config.cardClass)}>
+            <p className={cn('mb-2 text-xs font-semibold uppercase tracking-wide', config.labelClass)}>Current status</p>
+            <div className='mb-2 flex items-center gap-3'>
+              <h2 className='text-xl font-semibold text-atria-ink'>{config.title}</h2>
+              <StatusBadge variant={config.variant} />
+            </div>
+            <p className='text-sm text-atria-text-secondary'>{config.description}</p>
+          </div>
+
+          <h3 className='mb-4 text-base font-semibold text-atria-ink'>Your progress</h3>
+
+          <div className='relative mb-8 pl-2'>
+            {STEPS.map((step, idx) => {
+              const completed = idx <= currentStepIndex
+              const isCurrent = idx === currentStepIndex
+              const subtext =
+                step.key === 'submitted' && submittedDate
+                  ? `Submitted on ${submittedDate}`
+                  : step.key === 'documents' && documentsComplete && documentsDate
+                    ? `Completed on ${formatDate(documentsDate)}`
+                    : isCurrent
+                      ? 'In progress'
+                      : ''
+              return (
+                <div key={step.key} className='relative flex gap-4 pb-6 last:pb-0'>
+                  {idx !== STEPS.length - 1 && (
+                    <div
+                      className={cn(
+                        'absolute left-[11px] top-6 w-px',
+                        completed ? 'bg-atria-accent' : 'bg-atria-border',
+                      )}
+                      style={{ height: 'calc(100% - 24px)' }}
+                    />
+                  )}
+                  <div
+                    className={cn(
+                      'relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border',
+                      completed
+                        ? 'border-atria-accent bg-atria-accent text-atria-on-accent'
+                        : 'border-atria-border bg-atria-surface-3 text-atria-text-muted',
+                    )}
+                  >
+                    {completed ? (
+                      <svg className='h-4 w-4' viewBox='0 0 24 24' fill='currentColor' aria-hidden>
+                        <path d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z' />
+                      </svg>
+                    ) : (
+                      <span className='text-xs'>{idx + 1}</span>
+                    )}
+                  </div>
+                  <div>
+                    <p
+                      className={cn(
+                        'text-base font-medium',
+                        completed ? 'text-atria-ink' : 'text-atria-text-secondary',
+                      )}
+                    >
+                      {step.label}
+                    </p>
+                    {subtext && (
+                      <p className='text-sm text-atria-text-secondary'>{subtext}</p>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className='flex flex-col gap-3'>
+            {status === 'application_draft' && (
+              <Button variant='primary' size='lg' className='w-full' onClick={() => navigate('/onboarding/application')}>
+                Update application {String.fromCharCode(8594)}
+              </Button>
+            )}
+            {status === 'offer_sent' && (
+              <Button variant='primary' size='lg' className='w-full' onClick={() => navigate('/onboarding/offer')}>
+                View your offer {String.fromCharCode(8594)}
+              </Button>
+            )}
+            {['applied', 'hr_review'].includes(status) && (
+              <Button variant='primary' size='lg' className='w-full' onClick={() => navigate('/onboarding/checklist')}>
+                View my documents {String.fromCharCode(8594)}
+              </Button>
+            )}
+            {['accepted', 'hired', 'rejected', 'withdrawn'].includes(status) && (
+              <Button variant='secondary' size='lg' className='w-full' onClick={() => navigate('/onboarding/checklist')}>
+                Back to onboarding checklist {String.fromCharCode(8594)}
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

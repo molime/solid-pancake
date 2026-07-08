@@ -141,6 +141,11 @@ const CandidateProfilePage = lazy(() =>
     default: module.CandidateProfilePage,
   })),
 )
+const CandidateOnboardingIndex = lazy(() =>
+  import('@/features/onboarding/pages/CandidateOnboardingIndex').then((module) => ({
+    default: module.CandidateOnboardingIndex,
+  })),
+)
 const TrainingPage = lazy(() =>
   import('@/features/onboarding/pages/TrainingPage').then((module) => ({
     default: module.TrainingPage,
@@ -447,7 +452,27 @@ export function AppRouter() {
           element={
             <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
               <RouteSuspense>
+                <CandidateOnboardingIndex />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="onboarding/checklist"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
+              <RouteSuspense>
                 <CandidateOnboardingPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="apply"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
+              <RouteSuspense>
+                <ApplicationFormPage />
               </RouteSuspense>
             </TenantRoleRouteGuard>
           }
@@ -474,6 +499,16 @@ export function AppRouter() {
         />
         <Route
           path="onboarding/upload/:taskId"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
+              <RouteSuspense>
+                <DocumentUploadPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="onboarding/documents"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
               <RouteSuspense>

@@ -6,6 +6,7 @@ import { Button } from '@/shared/ui/Button'
 import { Textarea } from '@/shared/ui/Textarea'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
+import { Input } from '@/shared/ui/Input'
 import { HrToast } from '../components/HrToast'
 import { useHrToast } from '../hooks/useHrToast'
 import { candidateStatusPill, candidateStatusAccentClass } from '../lib/candidateStatus'
@@ -100,13 +101,19 @@ export function ApplicationReviewPage() {
   const reviewApplication = useMutation(api.candidates.reviewApplication)
   const sendOffer = useMutation(api.candidates.sendOffer)
 
+  const candidate = detail?.candidate
+  const application = detail?.applications?.[0]
+  const fields = (application?.fields ?? {}) as Record<string, string>
+
   const [hrNotes, setHrNotes] = useState('')
+  const [payRate, setPayRate] = useState(fields.payRate || '$22.00 / hr')
+  const [startDate, setStartDate] = useState(fields.startDate || '')
+  const [schedule, setSchedule] = useState(fields.schedule || 'Flexible, based on availability')
+  const [supervisor, setSupervisor] = useState(fields.supervisor || 'Your assigned coordinator')
+  const [expiresAt, setExpiresAt] = useState(fields.offerExpiresAt || '')
   const [submitting, setSubmitting] = useState(false)
   const [confirmReject, setConfirmReject] = useState(false)
   const { toast, show, hide } = useHrToast()
-
-  const candidate = detail?.candidate
-  const application = detail?.applications?.[0]
 
   const allTasksComplete = useMemo(() => {
     const list = tasks ?? []
@@ -130,7 +137,6 @@ export function ApplicationReviewPage() {
     )
   }
 
-  const fields = (application?.fields ?? {}) as Record<string, string>
   const pill = candidateStatusPill(candidate.status)
 
   const handleAdvance = async () => {
@@ -140,6 +146,11 @@ export function ApplicationReviewPage() {
       await sendOffer({
         clerkOrgId,
         candidateId: candidateId as Id<'candidates'>,
+        payRate,
+        startDate,
+        schedule,
+        supervisor,
+        expiresAt,
       })
       show('success', 'Offer sent', 'The candidate can now accept the offer.')
     } catch (err) {
@@ -311,6 +322,7 @@ export function ApplicationReviewPage() {
             >
               <Textarea
                 id="hr-notes"
+                data-testid="hr-notes-input"
                 value={hrNotes}
                 onChange={(e) => setHrNotes(e.target.value)}
                 placeholder="Add notes about the application…"
@@ -324,10 +336,58 @@ export function ApplicationReviewPage() {
             <CardTitle>Your decision</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 p-6">
+            <div className="space-y-4">
+              <FieldGroup label="PAY RATE" htmlFor="offer-pay-rate">
+                <Input
+                  id="offer-pay-rate"
+                  value={payRate}
+                  onChange={(e) => setPayRate(e.target.value)}
+                  placeholder="$22.00 / hr"
+                />
+              </FieldGroup>
+              <FieldGroup label="START DATE" htmlFor="offer-start-date">
+                <Input
+                  id="offer-start-date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </FieldGroup>
+              <FieldGroup label="SCHEDULE" htmlFor="offer-schedule">
+                <Input
+                  id="offer-schedule"
+                  value={schedule}
+                  onChange={(e) => setSchedule(e.target.value)}
+                  placeholder="Flexible, based on availability"
+                />
+              </FieldGroup>
+              <FieldGroup label="SUPERVISOR" htmlFor="offer-supervisor">
+                <Input
+                  id="offer-supervisor"
+                  value={supervisor}
+                  onChange={(e) => setSupervisor(e.target.value)}
+                  placeholder="Your assigned coordinator"
+                />
+              </FieldGroup>
+              <FieldGroup
+                label="OFFER EXPIRES AT"
+                htmlFor="offer-expires-at"
+                helperText="Candidate must accept before this date."
+              >
+                <Input
+                  id="offer-expires-at"
+                  type="date"
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                />
+              </FieldGroup>
+            </div>
+            <hr className="border-atria-border" />
             <Button
               variant="primary"
               size="lg"
               className="w-full"
+              data-testid="advance-button"
               disabled={submitting || !allTasksComplete}
               onClick={handleAdvance}
             >
@@ -344,6 +404,7 @@ export function ApplicationReviewPage() {
               variant="secondary"
               size="lg"
               className="w-full border-atria-warning text-atria-warning hover:bg-atria-warning-bg"
+              data-testid="request-correction-button"
               disabled={submitting || !hrNotes.trim()}
               onClick={handleCorrection}
             >
@@ -355,6 +416,7 @@ export function ApplicationReviewPage() {
               variant="secondary"
               size="lg"
               className="w-full border-atria-danger text-atria-danger hover:bg-atria-danger-bg"
+              data-testid="reject-button"
               disabled={submitting}
               onClick={() => setConfirmReject(true)}
             >

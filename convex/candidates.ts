@@ -8,7 +8,7 @@ import {
   type MutationCtx,
   type ActionCtx,
 } from './_generated/server'
-import { internal } from './_generated/api'
+import { api, internal } from './_generated/api'
 import { ConvexError } from 'convex/values'
 import {
   requireTenantRole,
@@ -16,8 +16,14 @@ import {
   assertTenantDoc,
   type AuthContext,
 } from './authHelpers'
-import { sendClerkInvitation } from './invitations'
+import { sendClerkInvitation, isAllowListError } from './invitations'
+import {
+  isDevInvitationBypassEnabled,
+  createClerkUserAndJoinOrg,
+  generateClerkSignInTicket,
+} from './_utils/invitationBypass'
 import { normalizeEmail } from './adpSync'
+import { requireEnv } from './_utils/env'
 import type { Id } from './_generated/dataModel'
 
 declare const process: { env: Record<string, string | undefined> }
@@ -34,9 +40,10 @@ type CandidateStatus =
 
 const CANDIDATE_TASK_TYPES = [
   'form_submission',
-  'document_upload',
+  'photo_id',
+  'cpr_certificate',
   'background_check',
-  'reference_check',
+  'employment_agreement',
   'platform_training',
 ] as const
 
@@ -195,6 +202,31 @@ export const getCandidateProfile = query({
   },
 })
 
+export const getMyApplication = query({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, { clerkOrgId }) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, clerkOrgId, [
+      'org:candidate',
+    ])
+    const candidate = await getOwnCandidate(ctx, tenantId, {
+      subject: identity.subject,
+      email: typeof identity.email === 'string' ? identity.email : undefined,
+    })
+    if (!candidate) {
+      throw new ConvexError('Candidate profile not found.')
+    }
+    const application = await getLatestApplication(ctx, candidate._id)
+    const tasks = await ctx.db
+      .query('candidateTasks')
+      .withIndex('by_tenant_candidate_order', (q) =>
+        q.eq('tenantId', tenantId).eq('candidateId', candidate._id),
+      )
+      .order('asc')
+      .collect()
+    return { candidate, application, tasks }
+  },
+})
+
 export const listCandidates = query({
   args: { clerkOrgId: v.string(), status: v.optional(v.string()) },
   handler: async (ctx, { clerkOrgId, status }) => {
@@ -318,23 +350,19 @@ export const inviteCandidate = action({
   handler: async (
     ctx,
     args,
-  ): Promise<{ candidateId: Id<'candidates'>; invitationId: string }> => {
-    const { identity } = await requireTenantRoleAction(ctx, args.clerkOrgId, [
+  ): Promise<{
+    candidateId: Id<'candidates'>
+    invitationId: string
+    manualPassword?: string
+    magicLink?: string
+  }> => {
+    await requireTenantRoleAction(ctx, args.clerkOrgId, [
       'org:admin',
       'org:hr',
     ])
 
-    const secretKey = process.env.CLERK_SECRET_KEY
-    if (!secretKey) {
-      throw new ConvexError(
-        'Server invitation configuration is missing CLERK_SECRET_KEY.',
-      )
-    }
-
-    const appBaseUrl = process.env.APP_URL
-    if (!appBaseUrl) {
-      throw new ConvexError('Server invitation configuration is missing APP_URL.')
-    }
+    const secretKey = requireEnv('CLERK_SECRET_KEY')
+    const appBaseUrl = requireEnv('APP_URL')
 
     const result = await ctx.runMutation(internal.candidates.insertInvitedCandidate, {
       clerkOrgId: args.clerkOrgId,
@@ -350,29 +378,78 @@ export const inviteCandidate = action({
       }
     }
 
+    const admin = await ctx.runQuery(api.members.firstOrgAdmin, {
+      clerkOrgId: args.clerkOrgId,
+    })
+    if (!admin) {
+      throw new ConvexError(
+        'No organization admin available to send Clerk invitation.',
+      )
+    }
+
     let invitation
     try {
       invitation = await sendClerkInvitation({
         secretKey,
-        inviterUserId: identity.subject,
+        inviterUserId: admin.clerkUserId,
         clerkOrgId: args.clerkOrgId,
         emailAddress: args.email,
         role: 'org:candidate',
         appBaseUrl,
       })
     } catch (err) {
-      if (result.isNew) {
+      if (isDevInvitationBypassEnabled() && isAllowListError(err)) {
         try {
-          await ctx.runMutation(internal.candidates.deleteInvitedCandidate, {
-            candidateId: result.candidateId,
+          const bypass = await createClerkUserAndJoinOrg({
+            secretKey,
+            clerkOrgId: args.clerkOrgId,
+            emailAddress: args.email,
+            displayName: args.displayName,
+            role: 'org:candidate',
+            appBaseUrl,
           })
-        } catch (cleanupErr) {
-          console.error(
-            'Failed to clean up candidate after invitation failure:',
-            cleanupErr,
+
+          await ctx.runMutation(internal.candidates.patchCandidateClerkUser, {
+            clerkOrgId: args.clerkOrgId,
+            candidateId: result.candidateId,
+            clerkUserId: bypass.clerkUserId,
+            invitationId: bypass.invitationId,
+          })
+
+          await ctx.runMutation(internal.members.createBypassMember, {
+            clerkOrgId: args.clerkOrgId,
+            clerkUserId: bypass.clerkUserId,
+            role: 'org:candidate',
+            displayName: args.displayName,
+            email: args.email,
+          })
+
+          return {
+            candidateId: result.candidateId,
+            invitationId: bypass.invitationId,
+            manualPassword: bypass.manualPassword,
+            magicLink: bypass.magicLink,
+          }
+        } catch (bypassErr) {
+          const bypassMessage =
+            bypassErr instanceof Error ? bypassErr.message : 'Dev bypass failed.'
+          await ctx.runMutation(internal.candidates.patchCandidateInvitationError, {
+            clerkOrgId: args.clerkOrgId,
+            candidateId: result.candidateId,
+            invitationError: bypassMessage,
+          })
+          throw new ConvexError(
+            `Dev invitation bypass failed for ${args.email}: ${bypassMessage}`,
           )
         }
       }
+
+      await ctx.runMutation(internal.candidates.patchCandidateInvitationError, {
+        clerkOrgId: args.clerkOrgId,
+        candidateId: result.candidateId,
+        invitationError:
+          err instanceof Error ? err.message : 'Invitation request failed.',
+      })
       throw err
     }
 
@@ -502,23 +579,96 @@ export const patchCandidateInvitationId = internalMutation({
   },
 })
 
-export const deleteInvitedCandidate = internalMutation({
+export const patchCandidateInvitationError = internalMutation({
   args: {
+    clerkOrgId: v.string(),
     candidateId: v.id('candidates'),
+    invitationError: v.string(),
   },
   handler: async (ctx, args) => {
     const candidate = await ctx.db.get(args.candidateId)
-    if (!candidate) return
+    if (!candidate) {
+      throw new ConvexError('Candidate not found.')
+    }
 
-    const tasks = await ctx.db
-      .query('candidateTasks')
-      .withIndex('by_tenant_candidate_order', (q) =>
-        q.eq('tenantId', candidate.tenantId).eq('candidateId', args.candidateId),
-      )
-      .collect()
+    const tenant = await ctx.db.get(candidate.tenantId)
+    if (!tenant || tenant.clerkOrgId !== args.clerkOrgId) {
+      throw new ConvexError('Forbidden: cross-tenant access denied.')
+    }
 
-    await Promise.all(tasks.map((task) => ctx.db.delete(task._id)))
-    await ctx.db.delete(args.candidateId)
+    await ctx.db.patch(args.candidateId, {
+      invitationFailed: true,
+      invitationError: args.invitationError,
+    })
+    return args.candidateId
+  },
+})
+
+export const patchCandidateClerkUser = internalMutation({
+  args: {
+    clerkOrgId: v.string(),
+    candidateId: v.id('candidates'),
+    clerkUserId: v.string(),
+    invitationId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const candidate = await ctx.db.get(args.candidateId)
+    if (!candidate) {
+      throw new ConvexError('Candidate not found.')
+    }
+
+    const tenant = await ctx.db.get(candidate.tenantId)
+    if (!tenant || tenant.clerkOrgId !== args.clerkOrgId) {
+      throw new ConvexError('Forbidden: cross-tenant access denied.')
+    }
+
+    await ctx.db.patch(args.candidateId, {
+      clerkUserId: args.clerkUserId,
+      invitationId: args.invitationId,
+      invitationFailed: undefined,
+      invitationError: undefined,
+    })
+    return args.candidateId
+  },
+})
+
+export const regenerateBypassSignInTicket = action({
+  args: {
+    clerkOrgId: v.string(),
+    candidateId: v.id('candidates'),
+  },
+  handler: async (ctx, args): Promise<{ magicLink: string }> => {
+    await requireTenantRoleAction(ctx, args.clerkOrgId, ['org:admin', 'org:hr'])
+
+    if (!isDevInvitationBypassEnabled()) {
+      throw new ConvexError('Dev invitation bypass is not enabled.')
+    }
+
+    const detail = await ctx.runQuery(api.candidates.getCandidateDetail, {
+      clerkOrgId: args.clerkOrgId,
+      candidateId: args.candidateId,
+    })
+    if (!detail?.candidate) {
+      throw new ConvexError('Candidate not found.')
+    }
+
+    const candidate = detail.candidate
+    if (!candidate.clerkUserId || !candidate.invitationId?.startsWith('bypass:')) {
+      throw new ConvexError('Candidate was not created via dev bypass.')
+    }
+
+    const secretKey = requireEnv('CLERK_SECRET_KEY')
+    const appBaseUrl = requireEnv('APP_URL')
+
+    const ticket = await generateClerkSignInTicket({
+      secretKey,
+      clerkUserId: candidate.clerkUserId,
+    })
+
+    const url = new URL(appBaseUrl)
+    return {
+      magicLink: `${url.origin}/sign-in?__clerk_ticket=${ticket}`,
+    }
   },
 })
 
@@ -648,7 +798,15 @@ export const reviewApplication = mutation({
 })
 
 export const sendOffer = mutation({
-  args: { clerkOrgId: v.string(), candidateId: v.id('candidates') },
+  args: {
+    clerkOrgId: v.string(),
+    candidateId: v.id('candidates'),
+    payRate: v.optional(v.string()),
+    startDate: v.optional(v.string()),
+    schedule: v.optional(v.string()),
+    supervisor: v.optional(v.string()),
+    expiresAt: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
       'org:admin',
@@ -663,6 +821,17 @@ export const sendOffer = mutation({
 
     if (candidate.status !== 'hr_review') {
       throw new ConvexError('Candidate must be in hr_review status to send offer.')
+    }
+
+    const latest = await getLatestApplication(ctx, candidate._id)
+    if (latest && latest.fields) {
+      const offerFields: Record<string, unknown> = { ...(latest.fields as Record<string, unknown> | undefined) }
+      if (args.payRate !== undefined) offerFields.payRate = args.payRate
+      if (args.startDate !== undefined) offerFields.startDate = args.startDate
+      if (args.schedule !== undefined) offerFields.schedule = args.schedule
+      if (args.supervisor !== undefined) offerFields.supervisor = args.supervisor
+      if (args.expiresAt !== undefined) offerFields.offerExpiresAt = args.expiresAt
+      await ctx.db.patch(latest._id, { fields: offerFields })
     }
 
     await ctx.db.patch(candidate._id, { status: 'offer_sent' })
@@ -953,7 +1122,7 @@ export const addCandidateDocument = mutation({
       createdAt: new Date().toISOString(),
     })
 
-    await completeCandidateTask(ctx, tenantId, candidateId, 'document_upload')
+    await completeCandidateTask(ctx, tenantId, candidateId, args.documentType)
 
     await recordCandidateAudit(ctx, {
       clerkOrgId: args.clerkOrgId,
@@ -965,6 +1134,34 @@ export const addCandidateDocument = mutation({
     })
 
     return candidateId
+  },
+})
+
+
+export const acknowledgeBackgroundCheck = mutation({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, { clerkOrgId }) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, clerkOrgId, [
+      'org:candidate',
+    ])
+    const candidate = await getOwnCandidate(ctx, tenantId, {
+      subject: identity.subject,
+      email: typeof identity.email === 'string' ? identity.email : undefined,
+    })
+    if (!candidate) {
+      throw new ConvexError('Candidate profile not found.')
+    }
+
+    await recordCandidateAudit(ctx, {
+      clerkOrgId,
+      action: 'candidate.acknowledgment.signed',
+      metadata: { candidateId: candidate._id as string },
+    })
+
+    await completeCandidateTask(ctx, tenantId, candidate._id, 'background_check')
+    await completeCandidateTask(ctx, tenantId, candidate._id, 'employment_agreement')
+
+    return candidate._id
   },
 })
 
@@ -1035,12 +1232,15 @@ export const update = mutation({
     candidateId: v.id('candidates'),
     status: v.optional(v.string()),
     displayName: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
       'org:admin',
       'org:coordinator',
       'org:hr',
+      'org:candidate',
     ])
 
     const candidate = await ctx.db.get(args.candidateId)
@@ -1049,9 +1249,21 @@ export const update = mutation({
     }
     assertTenantDoc(candidate, tenantId)
 
+    if (identity.role === 'org:candidate') {
+      const candidate = await ctx.db.get(args.candidateId)
+      if (!candidate || candidate.clerkUserId !== identity.subject) {
+        throw new ConvexError('You can only edit your own profile.')
+      }
+      if (args.status !== undefined) {
+        throw new ConvexError('Candidates cannot change their status.')
+      }
+    }
+
     await ctx.db.patch(args.candidateId, {
       ...(args.status !== undefined && { status: args.status }),
       ...(args.displayName !== undefined && { displayName: args.displayName }),
+      ...(args.email !== undefined && { email: args.email }),
+      ...(args.phone !== undefined && { phone: args.phone }),
     })
 
     return args.candidateId
@@ -1153,7 +1365,7 @@ export const attachCandidateDocument = mutation({
       })
     }
 
-    await completeCandidateTask(ctx, tenantId, candidateId, 'document_upload')
+    await completeCandidateTask(ctx, tenantId, candidateId, args.documentType)
 
     await recordCandidateAudit(ctx, {
       clerkOrgId: args.clerkOrgId,

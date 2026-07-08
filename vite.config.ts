@@ -1,11 +1,14 @@
 import path from 'node:path'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
+import { loadEnv } from 'vite'
 import type { PluginOption } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig(async ({ mode }) => {
   const plugins: PluginOption[] = [react()]
+  const env = loadEnv(mode, process.cwd(), '')
+  const convexUrl = env.VITE_CONVEX_URL || 'http://127.0.0.1:3210'
 
   // Tailwind's Vite plugin loads a native Oxide binding. Vite's default
   // config bundler tries to resolve that native dependency while bundling
@@ -24,6 +27,14 @@ export default defineConfig(async ({ mode }) => {
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, './src'),
+      },
+    },
+    server: {
+      proxy: {
+        '/api/storage': {
+          target: convexUrl,
+          changeOrigin: true,
+        },
       },
     },
     test: {
