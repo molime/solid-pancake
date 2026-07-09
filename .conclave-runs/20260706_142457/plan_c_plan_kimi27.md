@@ -1,0 +1,6 @@
+# http://localhost:11434/api/chat
+# model=kimi-k2.7-code:cloud status=200
+
+We need produce a premium implementation plan. We are a principal/staff engineer planning code change. Need follow instructions: backend is agentic CLI? We are Kimi? The prompt says "If your backend is an agentic CLI (kimi, codex, claude), you MUST open and read the actual relevant files before writing the plan — do not reason from the context description alone." We need to read files. We have repo at ~/Documents/Work/atriax/solid-pancake? Actually context says ATRIA-X repo. We need inspect actual relevant files. We have access to file reading via tool? We can use read_file. We need discover files. We need plan only, no full code. Need sections 1-7. We need read relevant files: src structure, router, Sidebar, existing features, convex candidates/hrCases/authHelpers, tests config, figma spec maybe. We need be surgical. We need produce plan with acceptance criteria, discovery notes, alternatives, files table, edge cases, test strategy, rollback.
+
+We need use tools to read files. Let's start by listing repo root and relevant directories. We need know exact paths. The repo context says ATRIA-X. The Figma spec path is C:\Users\pinol\Documents\Work\atriax\solid-pancake\.conclave-runs\20260706_142326. So repo likely at C:\Users\pinol\Documents\Work\atriax\solid-pancake. Let's explore.

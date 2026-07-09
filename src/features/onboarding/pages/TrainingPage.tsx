@@ -204,7 +204,7 @@ export function TrainingPage() {
       status: 'complete',
     })
     if (isLast) {
-      navigate('/onboarding/checklist', { replace: true })
+      navigate('/caregiver/today', { replace: true })
     } else {
       setCurrentIndex((i) => i + 1)
       setIsSubmitting(false)

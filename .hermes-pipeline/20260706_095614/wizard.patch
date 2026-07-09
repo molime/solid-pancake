@@ -1,0 +1,174 @@
+--- /dev/null
++++ b/src/features/onboarding/components/PlatformTrainingWizard.tsx
+@@ -0,0 +1,154 @@
++import { useEffect, useRef, useState } from 'react'
++import { useLocation, useNavigate } from 'react-router-dom'
++import { useOrganization, useUser } from '@clerk/react'
++import { useMutation, useQuery } from 'convex/react'
++import { api } from '@/convex/_generated/api'
++import { Button } from '@/shared/ui'
++import { cn } from '@/shared/lib/cn'
++import { trainingSteps } from '../model/trainingSteps'
++
++type PlatformTrainingWizardProps = {
++  role: 'org:candidate' | 'org:caregiver'
++}
++
++export function PlatformTrainingWizard({ role }: PlatformTrainingWizardProps) {
++  const navigate = useNavigate()
++  const _location = useLocation()
++  const { user } = useUser()
++  const { organization } = useOrganization()
++  const completeTraining = useMutation(api.onboarding.completePlatformTraining)
++  useQuery(null)
++
++  const [currentStep, setCurrentStep] = useState(0)
++  const [scrollProgress, setScrollProgress] = useState(0)
++  const [secondsRemaining, setSecondsRemaining] = useState(trainingSteps[0].minReadSeconds)
++  const [isCompleting, setIsCompleting] = useState(false)
++
++  const contentRef = useRef<HTMLDivElement>(null)
++
++  const clerkOrgId = organization?.id
++
++  useEffect(() => {
++    setSecondsRemaining(trainingSteps[currentStep].minReadSeconds)
++    setScrollProgress(0)
++    if (contentRef.current) {
++      contentRef.current.scrollTop = 0
++    }
++  }, [currentStep])
++
++  useEffect(() => {
++    if (secondsRemaining <= 0) return
++    const interval = setInterval(() => {
++      setSecondsRemaining((prev) => (prev <= 1 ? 0 : prev - 1))
++    }, 1000)
++    return () => clearInterval(interval)
++  }, [secondsRemaining])
++
++  const handleScroll = () => {
++    const el = contentRef.current
++    if (!el) return
++    const { scrollTop, scrollHeight, clientHeight } = el
++    const track = scrollHeight - clientHeight
++    const progress = track <= 0
++      ? 100
++      : Math.min(100, Math.round((scrollTop / track) * 100))
++    setScrollProgress(progress)
++  }
++
++  const nextDisabled = scrollProgress < 100 || secondsRemaining > 0
++
++  const handleNext = async () => {
++    if (nextDisabled || isCompleting) return
++    if (currentStep < trainingSteps.length - 1) {
++      setCurrentStep((prev) => prev + 1)
++      return
++    }
++    if (!clerkOrgId) return
++    setIsCompleting(true)
++    try {
++      await completeTraining({ clerkOrgId })
++      navigate(role === 'org:candidate' ? '/onboarding' : '/caregiver/today')
++    } finally {
++      setIsCompleting(false)
++    }
++  }
++
++  const step = trainingSteps[currentStep]
++  const stepProgressPercent = ((currentStep + 1) / trainingSteps.length) * 100
++  const isFinalStep = currentStep === trainingSteps.length - 1
++
++  return (
++    <div className='min-h-screen w-full bg-[#0B0F10] text-[#F5F7F6] flex flex-col items-center px-4 py-6'>
++      <div className='w-full max-w-[390px] flex flex-col items-center'>
++        <div className='flex items-center gap-3 mb-6'>
++          <div className='h-9 w-9 rounded-lg bg-[#22C55E] flex items-center justify-center text-[#0B0F10] font-bold text-lg'>
++            A
++          </div>
++          <span className='text-lg font-bold text-[#F5F7F6]'>ATRIA-X</span>
++        </div>
++
++        {user?.firstName && (
++          <p className='text-[#9AA6A8] text-sm mb-4'>Welcome, {user.firstName}</p>
++        )}
++
++        <p className='text-[#9AA6A8] text-sm font-semibold mb-2'>
++          Step {currentStep + 1} of {trainingSteps.length}
++        </p>
++
++        <div className='w-full h-1 bg-[#1E2629] rounded-full mb-6'>
++          <div
++            className='h-full bg-[#22C55E] rounded-full transition-all duration-300'
++            style={{ width: `${stepProgressPercent}%` }}
++          />
++        </div>
++
++        <h1 className='text-[26px] font-bold text-[#F5F7F6] mb-4 self-start'>
++          {step.title}
++        </h1>
++
++        <div
++          ref={contentRef}
++          onScroll={handleScroll}
++          className='w-full h-[380px] overflow-y-auto bg-[#11171A] border border-[#2A3437] rounded-[12px] p-5 mb-3'
++        >
++          {step.body.split('\n\n').map((paragraph, index) => (
++            <p
++              key={index}
++              className='text-[15px] text-[#9AA6A8] leading-relaxed mb-4 last:mb-0'
++            >
++              {paragraph}
++            </p>
++          ))}
++        </div>
++
++        <div className='w-full h-1 bg-[#1E2629] rounded-full mb-2'>
++          <div
++            className='h-full bg-[#22C55E] rounded-full transition-all duration-150'
++            style={{ width: `${scrollProgress}%` }}
++          />
++        </div>
++
++        <p className={cn('text-[13px] mb-4', scrollProgress === 100 ? 'text-[#22C55E] font-semibold' : 'text-[#687173]')}>
++          {scrollProgress === 100 ? 'Read ✓' : 'Scroll to read'}
++        </p>
++
++        <p className={cn('text-[14px] mb-8', secondsRemaining === 0 ? 'text-[#22C55E] font-semibold' : 'text-[#9AA6A8]')}>
++          {secondsRemaining === 0 ? '0 seconds remaining' : `${secondsRemaining} seconds remaining`}
++        </p>
++
++        <div className='w-full flex flex-col gap-3 mt-auto'>
++          {currentStep > 0 && (
++            <Button
++              variant='ghost'
++              size='lg'
++              className='w-full text-[#22C55E] hover:text-[#22C55E] hover:bg-[#22C55E]/10'
++              onClick={() => setCurrentStep((prev) => prev - 1)}
++            >
++              ← Back
++            </Button>
++          )}
++
++          <Button
++            variant='primary'
++            size='lg'
++            className={cn(
++              'w-full bg-[#22C55E] text-[#0B0F10] hover:bg-[#22C55E] font-bold',
++              nextDisabled || isCompleting ? 'opacity-35 pointer-events-none' : ''
++            )}
++            aria-disabled={nextDisabled || isCompleting}
++            onClick={handleNext}
++          >
++            {isCompleting
++              ? 'Completing...'
++              : isFinalStep
++                ? 'Complete training →'
++                : 'Next →'}
++          </Button>
++        </div>
++      </div>
++    </div>
++  )
++}

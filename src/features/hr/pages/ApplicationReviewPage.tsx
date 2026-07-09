@@ -13,7 +13,7 @@ import { candidateStatusPill, candidateStatusAccentClass } from '../lib/candidat
 import { formatWeekdayDate } from '@/shared/format'
 import { ArrowLeft, CheckCircle2, RotateCcw, XCircle } from 'lucide-react'
 import { useState, useMemo } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import type { Id } from '../../../../convex/_generated/dataModel'
 
 function initials(name: string) {
@@ -81,6 +81,7 @@ function ConfirmDialog({
 
 export function ApplicationReviewPage() {
   const { candidateId } = useParams<{ candidateId: string }>()
+  const navigate = useNavigate()
   const { organization } = useOrganization()
   const { user } = useUser()
 
@@ -433,7 +434,7 @@ export function ApplicationReviewPage() {
               </Button>
             )}
 
-            {(candidate.status === 'offer_sent' || candidate.status === 'accepted' || candidate.status === 'hired') && (
+            {candidate.status === 'offer_sent' && (
               <Button
                 variant="primary"
                 size="lg"
@@ -443,6 +444,33 @@ export function ApplicationReviewPage() {
               >
                 <CheckCircle2 className="h-4 w-4" />
                 Offer already sent
+              </Button>
+            )}
+
+            {candidate.status === 'accepted' && (
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full"
+                data-testid="hire-button"
+                disabled={submitting}
+                onClick={() => navigate(`/hr/candidates/${candidate._id}/hire`)}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Hire candidate
+              </Button>
+            )}
+
+            {candidate.status === 'hired' && (
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full"
+                data-testid="hired-button"
+                disabled
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Hired
               </Button>
             )}
 

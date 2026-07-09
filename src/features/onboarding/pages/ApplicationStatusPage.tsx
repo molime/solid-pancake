@@ -8,6 +8,7 @@ import { Button } from '@/shared/ui/Button'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { cn } from '@/shared/lib/cn'
 
+
 const STATUS_CONFIG: Record<string, { title: string; description: string; variant: 'success' | 'warning' | 'info' | 'neutral' | 'danger'; cardClass: string; labelClass: string }> = {
   invited: {
     title: 'Application not started',
@@ -215,7 +216,17 @@ export function ApplicationStatusPage() {
                 View my documents {String.fromCharCode(8594)}
               </Button>
             )}
-            {['accepted', 'hired', 'rejected', 'withdrawn'].includes(status) && (
+            {status === 'accepted' && (
+              <Button variant='secondary' size='lg' className='w-full' onClick={() => navigate('/onboarding/checklist')}>
+                Back to onboarding checklist {String.fromCharCode(8594)}
+              </Button>
+            )}
+            {status === 'hired' && (
+              <Button variant='primary' size='lg' className='w-full' onClick={() => navigate('/onboarding/training')}>
+                Complete platform training {String.fromCharCode(8594)}
+              </Button>
+            )}
+            {['rejected', 'withdrawn'].includes(status) && (
               <Button variant='secondary' size='lg' className='w-full' onClick={() => navigate('/onboarding/checklist')}>
                 Back to onboarding checklist {String.fromCharCode(8594)}
               </Button>

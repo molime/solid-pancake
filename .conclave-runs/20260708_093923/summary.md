@@ -1,0 +1,34 @@
+# Conclave run summary
+- project: atriax
+- result: **NOT_CONVERGED**
+- run dir: C:\Users\pinol\Documents\Work\atriax\solid-pancake\.conclave-runs\20260708_093923
+- task: Finish and harden Phase 2 candidate onboarding portal in solid-pancake on branch feature/phase-2-worker-onboarding. Immediate bug: candidate document upload fails with "Failed to fetch" because the generated upload URL is http://127.0.0.1:3210/api/storage/upload?token=... (Convex storage generateUploadUrl returning local backend URL instead of proper public/storage URL in dev; fix env wiring / upload helper / storage URL config). Broader scope: complete the candidate portal implementation per phase-2-implementation-plan.md and Figma channel oc6fjesn, pixel-matching frames 157:682 (application entry), 189:2287 (full application form), 157:832 (status checklist), 157:860 (documents), 158:879 (offer/acceptance), 158:905 (acknowledgment), 162:1395 (profile), and 190:2504 (training; ignore empty 298:2/3/4). Backend already updated candidate task types to [form_submission, photo_id, cpr_certificate, background_check, employment_agreement, platform_training] in convex/candidates.ts; ensure frontend checklist and document upload complete the correct task types and application flow works without magic-link mocking. Remove duplicate /onboarding/documents route in src/app/router.tsx, wire CandidateOnboardingIndex routing to new statuses/tasks, update ApplicationReviewPage to pass offer fields to sendOffer, and ensure offer/acceptance/profile/training pages use application.fields correctly. Reference existing design doc C:\Users\pinol\Downloads\atriax-phase2-candidate-portal-redesign.md if present. Required gates: lint, typecheck, unit tests, npm run build, and E2E (use mock/bypass harness if live Clerk credentials missing; do NOT let unrelated auth failures mask portal regressions). Keep changes conservative, minimal DB/schema changes, preserve existing project structure and style (single quotes, no semicolons).
+
+## Stages
+- {'stage': 'plan', 'how': 'synthesized by c_plan_agentic', 'chars': 51289, 'elapsed_s': 699.6}
+- {'stage': 'implement', 'ok': True, 'elapsed_s': 1703.0}
+- {'stage': 'gate_postimpl', 'passed': True, 'results': [{'name': 'lint', 'status': 'PASS', 'rc': 0, 'log': 'C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260708_093923\\gate_postimpl_lint.log'}, {'name': 'typecheck', 'status': 'PASS', 'rc': 0, 'log': 'C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260708_093923\\gate_postimpl_typecheck.log'}, {'name': 'unit', 'status': 'PASS', 'rc': 0, 'log': 'C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260708_093923\\gate_postimpl_unit.log'}], 'elapsed_s': 312.5}
+- {'stage': 'review_iter1', 'verdicts': {'c_rev_glm': 'CHANGES_REQUESTED', 'c_rev_qwen': 'APPROVED', 'c_rev_deepseek': 'CHANGES_REQUESTED', 'c_rev_kimi27': 'UNKNOWN', 'c_rev_gpt_oss': 'APPROVED', 'c_rev_qwen35': 'CHANGES_REQUESTED'}, 'passed': False, 'elapsed_s': 153.0}
+- {'stage': 'fix_iter1', 'ok': True, 'gate_passed': True, 'results': [{'name': 'lint', 'status': 'PASS', 'rc': 0, 'log': 'C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260708_093923\\gate_postfix1_lint.log'}, {'name': 'typecheck', 'status': 'PASS', 'rc': 0, 'log': 'C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260708_093923\\gate_postfix1_typecheck.log'}, {'name': 'unit', 'status': 'PASS', 'rc': 0, 'log': 'C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260708_093923\\gate_postfix1_unit.log'}], 'elapsed_s': 946.7}
+- {'stage': 'review_iter2', 'verdicts': {'c_rev_glm': 'CHANGES_REQUESTED', 'c_rev_qwen': 'APPROVED', 'c_rev_deepseek': 'CHANGES_REQUESTED', 'c_rev_kimi27': 'UNKNOWN', 'c_rev_gpt_oss': 'UNKNOWN', 'c_rev_qwen35': 'CHANGES_REQUESTED'}, 'passed': False, 'elapsed_s': 96.8}
+- {'stage': 'fix_iter2', 'ok': True, 'gate_passed': True, 'results': [{'name': 'lint', 'status': 'PASS', 'rc': 0, 'log': 'C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260708_093923\\gate_postfix2_lint.log'}, {'name': 'typecheck', 'status': 'PASS', 'rc': 0, 'log': 'C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260708_093923\\gate_postfix2_typecheck.log'}, {'name': 'unit', 'status': 'PASS', 'rc': 0, 'log': 'C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260708_093923\\gate_postfix2_unit.log'}], 'elapsed_s': 974.8}
+- {'stage': 'review_iter3', 'verdicts': {'c_rev_glm': 'CHANGES_REQUESTED', 'c_rev_qwen': 'CHANGES_REQUESTED', 'c_rev_deepseek': 'CHANGES_REQUESTED', 'c_rev_kimi27': 'UNKNOWN', 'c_rev_gpt_oss': 'UNKNOWN', 'c_rev_qwen35': 'CHANGES_REQUESTED'}, 'passed': False, 'elapsed_s': 192.4}
+- {'stage': 'fix_iter3', 'ok': True, 'gate_passed': True, 'results': [{'name': 'lint', 'status': 'PASS', 'rc': 0, 'log': 'C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260708_093923\\gate_postfix3_lint.log'}, {'name': 'typecheck', 'status': 'PASS', 'rc': 0, 'log': 'C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260708_093923\\gate_postfix3_typecheck.log'}, {'name': 'unit', 'status': 'PASS', 'rc': 0, 'log': 'C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260708_093923\\gate_postfix3_unit.log'}], 'elapsed_s': 1172.1}
+- {'stage': 'review_iter4', 'verdicts': {'c_rev_glm': 'CHANGES_REQUESTED', 'c_rev_qwen': 'UNKNOWN', 'c_rev_deepseek': 'CHANGES_REQUESTED', 'c_rev_kimi27': 'UNKNOWN', 'c_rev_gpt_oss': 'UNKNOWN', 'c_rev_qwen35': 'CHANGES_REQUESTED'}, 'passed': False, 'elapsed_s': 96.8}
+- {'stage': 'fix_iter4', 'ok': True, 'gate_passed': True, 'results': [{'name': 'lint', 'status': 'PASS', 'rc': 0, 'log': 'C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260708_093923\\gate_postfix4_lint.log'}, {'name': 'typecheck', 'status': 'PASS', 'rc': 0, 'log': 'C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260708_093923\\gate_postfix4_typecheck.log'}, {'name': 'unit', 'status': 'PASS', 'rc': 0, 'log': 'C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260708_093923\\gate_postfix4_unit.log'}], 'elapsed_s': 1787.1}
+
+## Stage timing
+| Stage | Elapsed (s) |
+|---|---|
+| plan | 699.6 |
+| implement | 1703.0 |
+| gate_postimpl | 312.5 |
+| review_iter1 | 153.0 |
+| fix_iter1 | 946.7 |
+| review_iter2 | 96.8 |
+| fix_iter2 | 974.8 |
+| review_iter3 | 192.4 |
+| fix_iter3 | 1172.1 |
+| review_iter4 | 96.8 |
+| fix_iter4 | 1787.1 |
+| **TOTAL** | **8134.8** |

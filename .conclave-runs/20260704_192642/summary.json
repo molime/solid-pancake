@@ -1,0 +1,189 @@
+{
+  "project": "atriax",
+  "task": "SESSION 3 - Candidate & onboarding backend + platform training gate. Build in convex/candidates.ts (and convex/onboarding.ts for training). All functions go through convex/authHelpers.ts. Reuse existing convex/invitations.ts for Clerk invitation mechanism. Reuse Phase 1 adpSyncWorker action from convex/adpSync.ts for ADP worker creation on hire. (1) mutation inviteCandidate({ displayName, email, phone? }) requireTenantRole org:admin or org:hr, send Clerk invitation org:candidate, insert candidates row with status invited and seed 5 candidateTasks. (2) query getCandidateProfile() org:candidate returns own row. (3) mutation submitApplication({ fields }) org:candidate upsert applications row, mark form_submission task completed, audit. (4) query listCandidates({ status? }) org:admin/org:hr. (5) query getCandidateDetail({ candidateId }) admin/hr returns candidate + applications + tasks + documents. (6) mutation reviewApplication({ candidateId, decision, hrNotes? }) admin/hr. (7) mutation sendOffer({ candidateId }) admin/hr from hr_review. (8) mutation acceptOffer() candidate from offer_sent. (9) mutation rejectOffer() candidate from offer_sent to withdrawn. (10) mutation hireCandidate({ candidateId }) admin/hr from accepted: upsert tenantMember role org:caregiver, create/update employeeProfiles row with adpSyncStatus pending_credentials, schedule adpSyncWorker action passing employeeProfileId, set candidate status hired, audit. (11) mutation completePlatformTraining() org:caregiver or org:candidate idempotent platformTrainingCompletions row. (12) query hasPlatformTrainingCompleted() caregiver/candidate returns boolean. (13) mutation resetPlatformTraining({ clerkUserId }) org:admin deletes completion row. (14) mutation addCandidateDocument({ candidateId?, fileId, documentType, label, expiresAt? }) candidate/admin/hr inserts documentArchiveItems row and marks matching document_upload task completed. (15) query listCandidateTasks() candidate own tasks ordered. (16) query listCandidateTasksForHR({ candidateId }) admin/hr. Tests: inviteCandidate creates 5 seeded tasks in order; inviteCandidate blocked for org:caregiver caller; submitApplication marks form_submission task completed; completePlatformTraining is idempotent; hasPlatformTrainingCompleted false before true after; hireCandidate creates employeeProfile and schedules ADP sync (use mock ADP from Phase 1); org:candidate cannot call listShifts role guard test; org:hr can call listCandidates. Run npx convex codegen. Style: single quotes, no semicolons, 2-space indent. Gates: npm run lint, typecheck, test green.",
+  "result": "NOT_CONVERGED",
+  "stages": [
+    {
+      "stage": "plan",
+      "how": "synthesized by c_plan_agentic",
+      "chars": 9305
+    },
+    {
+      "stage": "implement",
+      "ok": true
+    },
+    {
+      "stage": "gate_postimpl",
+      "passed": true,
+      "results": [
+        {
+          "name": "lint",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642\\gate_postimpl_lint.log"
+        },
+        {
+          "name": "typecheck",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642\\gate_postimpl_typecheck.log"
+        },
+        {
+          "name": "unit",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642\\gate_postimpl_unit.log"
+        }
+      ]
+    },
+    {
+      "stage": "review_iter1",
+      "verdicts": {
+        "c_rev_glm": "APPROVED",
+        "c_rev_qwen": "APPROVED",
+        "c_rev_deepseek": "CHANGES_REQUESTED",
+        "c_rev_kimi27": "CHANGES_REQUESTED",
+        "c_rev_gpt_oss": "APPROVED",
+        "c_rev_qwen35": "CHANGES_REQUESTED"
+      },
+      "passed": false
+    },
+    {
+      "stage": "fix_iter1",
+      "ok": true,
+      "gate_passed": true,
+      "results": [
+        {
+          "name": "lint",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642\\gate_postfix1_lint.log"
+        },
+        {
+          "name": "typecheck",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642\\gate_postfix1_typecheck.log"
+        },
+        {
+          "name": "unit",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642\\gate_postfix1_unit.log"
+        }
+      ]
+    },
+    {
+      "stage": "review_iter2",
+      "verdicts": {
+        "c_rev_glm": "APPROVED",
+        "c_rev_qwen": "APPROVED",
+        "c_rev_deepseek": "CHANGES_REQUESTED",
+        "c_rev_kimi27": "APPROVED",
+        "c_rev_gpt_oss": "CHANGES_REQUESTED",
+        "c_rev_qwen35": "CHANGES_REQUESTED"
+      },
+      "passed": false
+    },
+    {
+      "stage": "fix_iter2",
+      "ok": true,
+      "gate_passed": true,
+      "results": [
+        {
+          "name": "lint",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642\\gate_postfix2_lint.log"
+        },
+        {
+          "name": "typecheck",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642\\gate_postfix2_typecheck.log"
+        },
+        {
+          "name": "unit",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642\\gate_postfix2_unit.log"
+        }
+      ]
+    },
+    {
+      "stage": "review_iter3",
+      "verdicts": {
+        "c_rev_glm": "APPROVED",
+        "c_rev_qwen": "APPROVED",
+        "c_rev_deepseek": "APPROVED",
+        "c_rev_kimi27": "CHANGES_REQUESTED",
+        "c_rev_gpt_oss": "CHANGES_REQUESTED",
+        "c_rev_qwen35": "CHANGES_REQUESTED"
+      },
+      "passed": false
+    },
+    {
+      "stage": "fix_iter3",
+      "ok": false,
+      "gate_passed": true,
+      "results": [
+        {
+          "name": "lint",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642\\gate_postfix3_lint.log"
+        },
+        {
+          "name": "typecheck",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642\\gate_postfix3_typecheck.log"
+        },
+        {
+          "name": "unit",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642\\gate_postfix3_unit.log"
+        }
+      ]
+    },
+    {
+      "stage": "review_iter4",
+      "verdicts": {
+        "c_rev_glm": "CHANGES_REQUESTED",
+        "c_rev_qwen": "APPROVED",
+        "c_rev_deepseek": "UNKNOWN",
+        "c_rev_kimi27": "CHANGES_REQUESTED",
+        "c_rev_gpt_oss": "UNKNOWN",
+        "c_rev_qwen35": "APPROVED"
+      },
+      "passed": false
+    },
+    {
+      "stage": "fix_iter4",
+      "ok": true,
+      "gate_passed": true,
+      "results": [
+        {
+          "name": "lint",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642\\gate_postfix4_lint.log"
+        },
+        {
+          "name": "typecheck",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642\\gate_postfix4_typecheck.log"
+        },
+        {
+          "name": "unit",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642\\gate_postfix4_unit.log"
+        }
+      ]
+    }
+  ],
+  "run_dir": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260704_192642"
+}

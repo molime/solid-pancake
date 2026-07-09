@@ -1,0 +1,45 @@
+# http://localhost:11434/api/chat
+# model=kimi-k2.7-code:cloud status=200
+
+We need review diff. Need inspect diff carefully. It was truncated at 60000 chars; we have first ~600 lines. Need identify issues. We need produce review with concrete blockers and final verdict line. We must not ask questions. Need consider acceptance criteria from plan. The plan ACs:
+AC-1 scheduling.spec.ts passes: scroll/force send request, stale shift cleanup. We don't see scheduling.spec.ts in diff? Actually diff list includes many files but scheduling.spec.ts not shown in truncated portion? Wait diff includes tests/e2e/geofence.spec.ts, phase1-lifecycle.spec.ts, helpers/auth.ts, helpers/env.ts but not scheduling.spec.ts? Maybe scheduling.spec.ts changes not in diff? The diff truncated at 60000 chars; maybe scheduling.spec.ts later. We need infer from gate results? Unit passed, but e2e not included in latest gate results (only lint, typecheck, unit). We don't have e2e/build results. The task says run all gates and report real results. The diff may include changes but we don't see e2e results. Need request changes because e2e not run? But maybe latest gate results only show lint/typecheck/unit. The prompt says "LATEST REAL GATE RESULTS / LOG EXCERPTS" includes lint, typecheck, unit. Missing e2e and build. We need verify if e2e and build were run. Since not reported, AC-6 not satisfied. But maybe they will be run later. We are reviewing code change; need check if all ACs met by diff. We need read more diff if possible? The diff truncated. We can request to see full diff? We have no tool to fetch more. But we can use Read on files? We have file paths. We can read scheduling.spec.ts and seed.ts relevant parts to verify. The instructions say review the diff above; but we can also read actual files for verification. We should do that to be concrete.
+
+Need identify concrete blockers:
+- AC-1: Need ensure scheduling.spec.ts has scroll/force. Let's read it.
+- AC-2: onboarding.test.ts added form_submission complete assertion and employeeProfile adpSyncStatus. In diff we see added. Good.
+- AC-3: scheduling.test.ts cross-caregiver overlap and checkShiftConflict excludeShiftId. In diff we see added. Good.
+- AC-4: forms.test.ts multiple missing required fields and updateDocumentArchiveItem wrappers. In diff we see added. Also forms.ts changed to collect missing. Good.
+- AC-5: seed.ts Phase 2 fixtures idempotent. We need verify deleteFixtureCaregiverShifts matches both Clerk user id and Convex member _id. Need read seed.ts around deleteFixtureCaregiverShifts and seedE2E.
+- AC-6: All gates run and report actual pass/fail counts. Only lint/typecheck/unit reported. Need e2e and build. This is a concrete AC miss. But maybe the final answer should request changes for missing e2e/build results. However, the review might be before final gate run. The user included latest gate results; if e2e/build not included, maybe they haven't run. We should flag.
+- AC-7: no manual _generated edits, no credentials committed. Diff shows no _generated changes. .env.e2e.example added candidate placeholders, not credentials. Good.
+
+Potential bugs/security issues in diff:
+- candidates.ts updateClerkMembershipRole: lists memberships by user_id, finds target, patches. If no membership, returns {updated:false, membershipId:null}. hireCandidate likely calls this and expects role promotion. If no membership, hireCandidate may proceed without error? Need check hireCandidate. In diff not shown fully. Need read candidates.ts around hireCandidate. This could be a regression: previously PATCH directly; now if membership missing, returns false but doesn't throw. If hireCandidate doesn't check, employee role not updated. Need verify.
+- updateClerkMembershipRole catch block re-lists and if verified returns updated true. But if patch failed and role not verified, throws err (original error). Good. However listMemberships uses query param user_id; Clerk API supports filtering by user_id? Yes.
+- The membershipHasRole checks both membership.role === toClerkRole(role) and public_metadata.atriaRole === role. If existing membership has role 'org:member' and metadata atriaRole 'org:caregiver'? Actually toClerkRole('org:caregiver') = 'org:member'. So membership.role should be 'org:member'. public_metadata.atriaRole should be role. Good. But if membership has role 'org:admin' and metadata atriaRole 'org:caregiver', it would not match because role differs. Fine.
+- candidates.test.ts stub changed to list memberships then patch. Good.
+- documentArchive.ts listDocumentArchive adds uploadedAt: item.createdAt. This is fine.
+- files.ts generateUploadUrl now allows org:candidate. Needed for document upload. Good. But is there a security issue? It requires tenant role, so candidate can only upload for their tenant. Good.
+- forms.ts getFormDefinition added query allowing org:candidate etc. Good.
+- hrCases.ts changes: createHrCase now validates subject, resolves name, records audit. updateHrCase allows title/description/category patch. listHrCases uses Promise.all with N+1 resolveSubjectName. This is touched behavior. Tests added for unknown employee, candidate subject, cross-tenant update. But missing tests for audit event on create? The code records audit. Should test? Maybe not blocker. Also updateHrCase cross-tenant isolation test uses asAdmin with orgB updating case from orgA; it rejects. Good.
+- hrCases.ts resolveSubjectName for candidate uses ctx.db.get(subjectId as Id<'candidates'>). But subjectId is string from args; if it's a candidate _id, OK. For employee uses clerkUserId. Good.
+- hrCases.ts listHrCases: createdAt returned as c.createdAt. But schema maybe has createdAt now. Previously used _creationTime. Need ensure schema has createdAt. Not in diff.
+- candidates.ts hireCandidate not shown; need verify it handles updateClerkMembershipRole returning updated false/membershipId null. Could leave candidate as org:candidate. Need read.
+- scheduling.spec.ts not in diff; need read to verify AC-1.
+- seed.ts deleteFixtureCaregiverShifts truncated; need read full function.
+- The diff includes many frontend changes (ShiftPacketPanel etc). Need verify no crash. Already patched.
+- Need check if any PHI issues: documentArchive list adds uploadedAt; no leak.
+- Need check idempotency on retry/redelivery: candidates.ts updateClerkMembershipRole is idempotent via list-check. Good. But if list returns multiple memberships? It picks first. Could be okay.
+- Need check additive writes not gated on success: hrCases createHrCase inserts case then records audit. If audit fails, case inserted? Convex mutations atomic; if runMutation throws, whole mutation fails. But ctx.runMutation is internal mutation within same transaction? Actually ctx.runMutation schedules? In Convex, ctx.runMutation is async and runs as part of same transaction? It runs the mutation in same transaction? I think runMutation runs in same transaction (like action? In mutation, ctx.runMutation runs internal mutation in same transaction? Actually in Convex mutations, `ctx.runMutation` invokes another mutation within the same transaction? I recall `ctx.runMutation` runs the target mutation immediately in the same transaction. If it throws, transaction aborts. So fine. But if it's an action? internal.audit.record is a mutation. Good.
+- Need check candidates.ts inviteCandidate maybe uses fetch stub. Not relevant.
+- Need check forms.ts submitForm: now collects missing fields. Error message changed from singular to plural. Existing tests updated. Good. But if only one missing, message "Missing required fields: name". Good.
+- Need check scheduling.test.ts seedTenant returns otherCaregiverId? In diff we see test uses otherCaregiverId. Need verify seedTenant helper includes otherCaregiverId. Not shown. Need read scheduling.test.ts seedTenant.
+- Need check onboarding.test.ts seedInvitedCandidate uses vi.stubGlobal fetch; afterEach vi.restoreAllMocks? In onboarding.test.ts afterEach? The file has afterEach? We saw imports include afterEach but not defined in snippet. Need verify restoreAllMocks to avoid cross-test pollution. In forms.test.ts afterEach vi.restoreAllMocks. In onboarding.test.ts maybe missing. Need read.
+- Need check candidates.test.ts stubClerkMembershipUpdate: afterEach restore? It may be present.
+- Need check .env.e2e.example added candidate placeholders; not a credential. Good.
+
+We need produce review. We can read files to verify. Let's use Read tool on relevant files. We have already used many reads. We can read more. Need be careful token budget but okay.
+
+Let's read scheduling.spec.ts, seed.ts deleteFixtureCaregiverShifts region, candidates.ts hireCandidate region, scheduling.test.ts seedTenant, onboarding.test.ts afterEach, hrCases.ts createHrCase maybe. Also maybe build/e2e results not in files. We'll need flag AC-6.
+
+Let's read.

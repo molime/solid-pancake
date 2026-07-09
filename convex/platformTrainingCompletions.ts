@@ -48,6 +48,7 @@ export const completeForCandidate = mutation({
   handler: async (ctx, args) => {
     const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
       'org:candidate',
+      'org:caregiver',
     ])
     const clerkUserId = identity.subject
 
@@ -89,6 +90,7 @@ export const listMyCompletions = query({
   handler: async (ctx, { clerkOrgId }) => {
     const { tenantId, identity } = await requireTenantRole(ctx, clerkOrgId, [
       'org:candidate',
+      'org:caregiver',
     ])
     return ctx.db
       .query('platformTrainingCompletions')

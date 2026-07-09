@@ -9,6 +9,10 @@ export function CandidateOnboardingIndex() {
   const { organization, isLoaded } = useOrganization()
   const clerkOrgId = organization?.id
   const data = useQuery(api.candidates.getMyApplication, clerkOrgId ? { clerkOrgId } : 'skip')
+  const completions = useQuery(
+    api.platformTrainingCompletions.listMyCompletions,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
 
   useEffect(() => {
     if (!data || !clerkOrgId) return
@@ -24,9 +28,22 @@ export function CandidateOnboardingIndex() {
       return
     }
 
-    // applied, hr_review, accepted, hired, rejected, withdrawn -> show checklist
+    if (status === 'hired') {
+      const allComplete =
+        completions !== undefined &&
+        completions.length > 0 &&
+        completions.every((c) => c.status === 'complete')
+      if (allComplete) {
+        navigate('/caregiver/today', { replace: true })
+      } else {
+        navigate('/onboarding/training', { replace: true })
+      }
+      return
+    }
+
+    // applied, hr_review, accepted, rejected, withdrawn -> show checklist
     navigate('/onboarding/checklist', { replace: true })
-  }, [data, clerkOrgId, navigate])
+  }, [data, clerkOrgId, navigate, completions])
 
   if (!isLoaded || !clerkOrgId) return null
   return null

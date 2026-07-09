@@ -79,6 +79,8 @@ export function CandidateOnboardingPage() {
       navigate(getTaskRoute(nextPending))
     } else if (candidate?.status === 'offer_sent') {
       navigate('/onboarding/offer')
+    } else if (candidate?.status === 'hired') {
+      navigate('/onboarding/training')
     } else {
       navigate('/onboarding/status')
     }

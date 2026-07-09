@@ -204,12 +204,22 @@ export function CandidatePipelinePage() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <Link
-                          to={`/hr/candidates/${candidate._id}`}
-                          className="flex items-center gap-1 text-sm font-medium text-atria-accent hover:text-atria-accent-hover"
-                        >
-                          Review <ArrowRight className="h-3.5 w-3.5" />
-                        </Link>
+                        <div className="flex items-center gap-3">
+                          <Link
+                            to={`/hr/candidates/${candidate._id}`}
+                            className="flex items-center gap-1 text-sm font-medium text-atria-accent hover:text-atria-accent-hover"
+                          >
+                            Review <ArrowRight className="h-3.5 w-3.5" />
+                          </Link>
+                          {candidate.status === 'accepted' && (
+                            <Link
+                              to={`/hr/candidates/${candidate._id}/hire`}
+                              className="flex items-center gap-1 text-sm font-medium text-atria-success hover:text-atria-success-hover"
+                            >
+                              Hire <ArrowRight className="h-3.5 w-3.5" />
+                            </Link>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   )

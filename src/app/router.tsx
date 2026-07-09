@@ -445,15 +445,17 @@ export function AppRouter() {
         <Route
           path="onboarding/training"
           element={
-            <RouteSuspense>
-              <TrainingPage />
-            </RouteSuspense>
+            <TenantRoleRouteGuard allowedRoles={['org:candidate', 'org:caregiver']}>
+              <RouteSuspense>
+                <TrainingPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
           }
         />
         <Route
           path="onboarding"
           element={
-            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
+            <TenantRoleRouteGuard allowedRoles={['org:candidate', 'org:caregiver']}>
               <RouteSuspense>
                 <CandidateOnboardingIndex />
               </RouteSuspense>
@@ -463,7 +465,7 @@ export function AppRouter() {
         <Route
           path="onboarding/checklist"
           element={
-            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
+            <TenantRoleRouteGuard allowedRoles={['org:candidate', 'org:caregiver']}>
               <RouteSuspense>
                 <CandidateOnboardingPage />
               </RouteSuspense>

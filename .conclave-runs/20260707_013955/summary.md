@@ -1,0 +1,49 @@
+# Conclave run summary
+- project: atriax
+- result: **UNKNOWN** _(in progress)_
+- run dir: C:\Users\pinol\Documents\Work\atriax\solid-pancake\.conclave-runs\20260707_013955
+- task: SESSION 9 — ATRIA-X Phase 2 E2E + integration tests (plan-mode conclave, auto)
+
+Repo: C:/Users/pinol/Documents/Work/atriax/solid-pancake
+Branch: feature/phase-2-worker-onboarding (already checked out)
+
+Goal: complete the comprehensive E2E and integration test suite for Phase 2 worker onboarding so all gates are green.
+
+Current state (do not assume it is fixed — verify):
+- tests/e2e/onboarding.spec.ts: previously passed end-to-end through candidate-to-caregiver + platform training. Re-run to confirm no regression.
+- tests/e2e/documents.spec.ts: previously passed after using page reloads between verify/reject flows to avoid the persistent Radix detail drawer overlay.
+- tests/e2e/scheduling.spec.ts: last known failure is at the coverage-request step. The "Send request" button is visible/enabled but Playwright reports it is "outside of the viewport". Also, an admin overlap save conflicts with a stale leftover shift at 2026-07-10T13:00:00Z - 2026-07-10T17:00:00Z; cleanup may be comparing the wrong caregiverId key.
+- convex/seed.ts: already has deleteFixtureCaregiverShifts cleanup, but verify it deletes shifts for the test fixture caregivers regardless of whether caregiverId is the Clerk user id or the Convex member _id.
+- ShiftPacketPanel.tsx: I patched a client?.phone crash; verify it does not regress.
+- vite.config.ts: HMR overlay disabled for E2E/CI.
+
+Required work:
+1. Fix scheduling.spec.ts so it passes cleanly:
+   - Fix the "Send request" click (scroll into view or force click).
+   - Fix the stale-shift conflict: either correct the seed cleanup to delete all tenant shifts whose caregiverId matches any fixture caregiver (by Clerk user id and/or Convex member id), or generate a unique test date per run and clean up that date.
+   - Keep all existing assertions (conflict banner, availability save, coverage request filled).
+2. Add the missing integration tests requested in the original brief if they are not already present:
+   - convex/onboarding.test.ts (or existing file) must cover: inviteCandidate seeds 5 candidateTasks in order; submitApplication marks form_submission task completed; reviewApplication advance sets status hr_review; sendOffer -> offer_sent; acceptOffer -> accepted; hireCandidate creates employeeProfile + ADP sync queued; completePlatformTraining inserts one row; second call idempotent; hasPlatformTrainingCompleted true; resetPlatformTraining deletes row and returns false; org:candidate cannot call listShifts.
+   - convex/scheduling.test.ts must cover: checkShiftConflict adjacent no conflict, overlapping conflict, excluded shiftId not counted, completed not counted; createShift success + audit; cross-caregiver conflict; caregiver role required for assignedCaregiver; updateShift blocked on submitted status; deleteShift blocked on in_progress; requestCoverage rejected for wrong caregiver.
+   - convex/forms.test.ts must cover: submitForm rejects missing required fields and lists them; submitForm on inactive form rejected; updateDocumentArchiveItem sets verifiedBy and verifiedAt; org:caregiver cannot call updateDocumentArchiveItem.
+3. Update convex/seed.ts with idempotent Phase 2 fixtures if not already present: candidate in 'submitted' status with seeded application, availability window for seeded caregiver, coverage request in 'open', formDefinition with 3 fields (name required, experience required, notes optional), documentArchiveItem in 'pending_review'. Ensure all idempotent (check before inserting).
+4. Run all gates and report real results: npm run lint, npm run typecheck, npm run test (unit + integration), npm run e2e, npm run build. Report actual pass/fail counts.
+
+Style constraints: single quotes, no semicolons, 2-space indent.
+
+Important execution notes:
+- Use live Clerk test credentials from solid-pancake/.env.local (E2E_* env vars) for @auth specs.
+- Do not commit or expose credentials.
+- Do not touch convex/_generated/.
+- Run the full npm run e2e gate (not just focused specs) at the end and report real Playwright pass/fail counts from test-results/.
+
+## Stages
+- {'stage': 'plan', 'how': 'synthesized by c_plan_agentic', 'chars': 22704, 'elapsed_s': 476.5}
+- {'stage': 'implement', 'ok': False, 'elapsed_s': 4205.2}
+
+## Stage timing
+| Stage | Elapsed (s) |
+|---|---|
+| plan | 476.5 |
+| implement | 4205.2 |
+| **TOTAL** | **4681.7** |
