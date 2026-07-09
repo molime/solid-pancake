@@ -2,7 +2,6 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { convexTest } from 'convex-test'
 import schema from './schema'
 import { api } from './_generated/api'
-import type { Id } from './_generated/dataModel'
 
 const modules = import.meta.glob('./**/*.*s')
 

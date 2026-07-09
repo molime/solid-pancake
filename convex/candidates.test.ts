@@ -187,16 +187,15 @@ describe('inviteCandidate', () => {
         .collect()
     })
 
-    expect(tasks).toHaveLength(6)
+    expect(tasks).toHaveLength(5)
     expect(tasks.map((t) => t.type)).toEqual([
       'form_submission',
       'photo_id',
       'cpr_certificate',
       'background_check',
       'employment_agreement',
-      'platform_training',
     ])
-    expect(tasks.map((t) => t.order)).toEqual([0, 1, 2, 3, 4, 5])
+    expect(tasks.map((t) => t.order)).toEqual([0, 1, 2, 3, 4])
     expect(tasks.every((t) => t.status === 'pending')).toBe(true)
   })
 

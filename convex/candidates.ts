@@ -44,7 +44,6 @@ const CANDIDATE_TASK_TYPES = [
   'cpr_certificate',
   'background_check',
   'employment_agreement',
-  'platform_training',
 ] as const
 
 const TERMINAL_STATUSES: CandidateStatus[] = ['hired', 'withdrawn']
@@ -1028,6 +1027,15 @@ export const hireCandidate = mutation({
     await ctx.scheduler.runAfter(0, internal.adpOutbound.adpSyncWorker, {
       employeeProfileId,
     })
+
+    const leftoverTrainingTasks = await ctx.db
+      .query('candidateTasks')
+      .withIndex('by_tenant_candidate_status', (q) =>
+        q.eq('tenantId', tenantId).eq('candidateId', candidate._id).eq('status', 'pending'),
+      )
+      .filter((q) => q.eq(q.field('type'), 'platform_training'))
+      .collect()
+    await Promise.all(leftoverTrainingTasks.map((task) => ctx.db.delete(task._id)))
 
     await ctx.db.patch(candidate._id, { status: 'hired' })
 

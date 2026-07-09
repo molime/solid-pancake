@@ -34,11 +34,6 @@ const TASK_META: Record<string, { label: string; shortLabel: string; due: string
     shortLabel: 'Employment agreement',
     due: 'Due in 3 days',
   },
-  platform_training: {
-    label: 'Complete platform training',
-    shortLabel: 'Platform training',
-    due: 'Due before first shift',
-  },
 }
 
 function getTaskRoute(task: Doc<'candidateTasks'>) {
