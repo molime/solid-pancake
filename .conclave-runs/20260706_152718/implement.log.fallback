@@ -1,0 +1,962 @@
+[OllamaActAdapter] git apply rc=128 out=
+[stderr]
+C:/Users/pinol/AppData/Local/Temp/tmpqa2drcep.patch:6: trailing whitespace.
+import { useMemo, useState } from 'react'
+C:/Users/pinol/AppData/Local/Temp/tmpqa2drcep.patch:7: trailing whitespace.
+import { useQuery, useMutation } from 'convex/react'
+C:/Users/pinol/AppData/Local/Temp/tmpqa2drcep.patch:8: trailing whitespace.
+import { toast } from 'sonner'
+C:/Users/pinol/AppData/Local/Temp
+git apply --reject rc=128 out=
+[stderr]
+C:/Users/pinol/AppData/Local/Temp/tmp23jvm5vt.patch:6: trailing whitespace.
+import { useMemo, useState } from 'react'
+C:/Users/pinol/AppData/Local/Temp/tmp23jvm5vt.patch:7: trailing whitespace.
+import { useQuery, useMutation } from 'convex/react'
+C:/Users/pinol/AppData/Local/Temp/tmp23jvm5vt.patch:8: trailing whitespace.
+import { toast } from 'sonner'
+C:/Users/pinol/AppData/Local/Temp
+
+Diff attempted:
+diff --git a/src/features/documents/pages/DocumentArchivePage.tsx b/src/features/documents/pages/DocumentArchivePage.tsx
+new file mode 100644
+--- /dev/null
++++ b/src/features/documents/pages/DocumentArchivePage.tsx
+@@ -0,0 +1,250 @@
++import { useMemo, useState } from 'react'
++import { useQuery, useMutation } from 'convex/react'
++import { toast } from 'sonner'
++import { Id } from 'convex/values'
++import { api } from '../../../../convex/_generated/api'
++import { Button } from '@/shared/ui/Button'
++import { Input } from '@/shared/ui/Input'
++import { Select } from '@/shared/ui/Select'
++import { Checkbox } from '@/shared/ui/Checkbox'
++import { Textarea } from '@/shared/ui/Textarea'
++import { DocumentDetailPanel } from '../components/DocumentDetailPanel'
++
++type DocumentStatus = 'pending_review' | 'verified' | 'rejected' | 'expired'
++type DocumentType = 'id' | 'certification' | 'signed_form' | 'other'
++
++const statusLabels: Record<DocumentStatus, string> = {
++  pending_review: 'Pending',
++  verified: 'Verified',
++  rejected: 'Rejected',
++  expired: 'Expired',
++}
++
++const statusOptions = [
++  { value: 'all', label: 'All' },
++  { value: 'pending_review', label: 'Pending' },
++  { value: 'verified', label: 'Verified' },
++  { value: 'rejected', label: 'Rejected' },
++  { value: 'expired', label: 'Expired' },
++]
++
++const typeOptions = [
++  { value: 'all', label: 'All' },
++  { value: 'id', label: 'ID' },
++  { value: 'certification', label: 'Certification' },
++  { value: 'signed_form', label: 'Signed form' },
++  { value: 'other', label: 'Other' },
++]
++
++function StatusBadge({ status }: { status: DocumentStatus }) {
++  const color =
++    status === 'verified'
++      ? 'bg-green-100 text-green-800'
++      : status === 'pending_review'
++        ? 'bg-gray-100 text-gray-800'
++        : 'bg-red-100 text-red-800'
++  return (
++    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${color}`}>
++      {statusLabels[status]}
++    </span>
++  )
++}
++
++export default function DocumentArchivePage() {
++  const [typeFilter, setTypeFilter] = useState<string>('all')
++  const [statusFilter, setStatusFilter] = useState<string>('all')
++  const [expiringSoon, setExpiringSoon] = useState(false)
++  const [search, setSearch] = useState('')
++  const [selectedId, setSelectedId] = useState<string | null>(null)
++  const [rejectingId, setRejectingId] = useState<string | null>(null)
++  const [rejectReason, setRejectReason] = useState('')
++
++  const queryArgs = useMemo(
++    () => ({
++      type: typeFilter === 'all' ? undefined : (typeFilter as DocumentType),
++      status: statusFilter === 'all' ? undefined : (statusFilter as DocumentStatus),
++      expiringSoon: expiringSoon || undefined,
++      search: search.trim() || undefined,
++    }),
++    [typeFilter, statusFilter, expiringSoon, search],
++  )
++
++  const items = useQuery(api.documents.listDocumentArchive, queryArgs)
++
++  const updateDocument = useMutation(api.documents.updateDocumentArchiveItem, {
++    optimisticUpdate: (ctx, { id, status, rejectionReason }) => {
++      ctx.setQuery(api.documents.listDocumentArchive, queryArgs, (prev: any[] | undefined) => {
++        if (!prev) return prev
++        return prev.map((item: any) =>
++          item._id === id ? { ...item, status, rejectionReason } : item,
++        )
++      })
++    },
++  })
++
++  const handleVerify = async (id: string) => {
++    await updateDocument({ id: id as Id<'documents'>, status: 'verified' })
++    toast.success('Document verified')
++  }
++
++  const startReject = (id: string) => {
++    setRejectingId(id)
++    setRejectReason('')
++  }
++
++  const confirmReject = async () => {
++    if (!rejectingId) return
++    await updateDocument({
++      id: rejectingId as Id<'documents'>,
++      status: 'rejected',
++      rejectionReason: rejectReason.trim() || undefined,
++    })
++    toast.success('Document rejected')
++    setRejectingId(null)
++    setRejectReason('')
++  }
++
++  const selectedItem = items?.find((item) => item._id === selectedId) ?? null
++
++  return (
++    <div className="p-8">
++      <h1 className="mb-6 text-2xl font-semibold">Document archive</h1>
++
++      <div className="mb-6 flex flex-wrap items-end gap-4">
++        <div>
++          <label className="mb-1 block text-xs font-medium uppercase text-gray-600">
++            Document type
++          </label>
++          <Select options={typeOptions} value={typeFilter} onChange={setTypeFilter} />
++        </div>
++        <div>
++          <label className="mb-1 block text-xs font-medium uppercase text-gray-600">
++            Status
++          </label>
++          <Select options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
++        </div>
++        <label className="flex items-center gap-2 pb-2">
++          <Checkbox checked={expiringSoon} onChange={setExpiringSoon} />
++          <span className="text-sm">Expiring soon</span>
++        </label>
++        <Input
++          placeholder="Search by name"
++          value={search}
++          onChange={(e) => setSearch(e.target.value)}
++        />
++      </div>
++
++      {items && items.length === 0 ? (
++        <div className="rounded-lg border border-dashed p-12 text-center text-gray-500">
++          No documents match your filters.
++        </div>
++      ) : (
++        <div className="overflow-x-auto rounded-lg border">
++          <table className="w-full text-left text-sm">
++            <thead className="bg-gray-50 text-xs uppercase text-gray-600">
++              <tr>
++                <th className="px-4 py-3">Document</th>
++                <th className="px-4 py-3">Type</th>
++                <th className="px-4 py-3">Linked to</th>
++                <th className="px-4 py-3">Status</th>
++                <th className="px-4 py-3">Expires</th>
++                <th className="px-4 py-3">Actions</th>
++              </tr>
++            </thead>
++            <tbody className="divide-y">
++              {items?.map((item) => (
++                <tr key={item._id} className="hover:bg-gray-50">
++                  <td className="px-4 py-3">
++                    <button
++                      onClick={() => setSelectedId(item._id)}
++                      className="font-medium text-blue-600 hover:underline"
++                    >
++                      {item.name}
++                    </button>
++                  </td>
++                  <td className="px-4 py-3 capitalize">{item.type.replace(/_/g, ' ')}</td>
++                  <td className="px-4 py-3">{item.linkedEntityName}</td>
++                  <td className="px-4 py-3">
++                    <StatusBadge status={item.status as DocumentStatus} />
++                  </td>
++                  <td className="px-4 py-3">
++                    {item.expiryDate
++                      ? new Date(item.expiryDate).toLocaleDateString()
++                      : '-'}
++                  </td>
++                  <td className="px-4 py-3">
++                    <div className="flex gap-2">
++                      {item.status !== 'verified' && (
++                        <Button size="sm" onClick={() => handleVerify(item._id)}>
++                          Verify
++                        </Button>
++                      )}
++                      {item.status !== 'rejected' && item.status !== 'expired' && (
++                        <Button size="sm" variant="danger" onClick={() => startReject(item._id)}>
++                          Reject
++                        </Button>
++                      )}
++                    </div>
++                  </td>
++                </tr>
++              ))}
++            </tbody>
++          </table>
++        </div>
++      )}
++
++      {rejectingId && (
++        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
++          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
++            <h2 className="mb-4 text-lg font-semibold">Reject document</h2>
++            <label className="mb-1 block text-sm font-medium">
++              Rejection reason
++              <Textarea
++                value={rejectReason}
++                onChange={(e) => setRejectReason(e.target.value)}
++                placeholder="Enter reason..."
++              />
++            </label>
++            <div className="mt-4 flex justify-end gap-2">
++              <Button variant="ghost" onClick={() => setRejectingId(null)}>
++                Cancel
++              </Button>
++              <Button
++                variant="danger"
++                onClick={confirmReject}
++                disabled={!rejectReason.trim()}
++              >
++                Reject
++              </Button>
++            </div>
++          </div>
++        </div>
++      )}
++
++      <DocumentDetailPanel
++        document={selectedItem}
++        isOpen={!!selectedId}
++        onClose={() => setSelectedId(null)}
++        onVerify={handleVerify}
++        onRejectStart={startReject}
++      />
++    </div>
++  )
++}
+diff --git a/src/features/documents/components/DocumentDetailPanel.tsx b/src/features/documents/components/DocumentDetailPanel.tsx
+new file mode 100644
+--- /dev/null
++++ b/src/features/documents/components/DocumentDetailPanel.tsx
+@@ -0,0 +1,117 @@
++import { Button } from '@/shared/ui/Button'
++
++type DocumentStatus = 'pending_review' | 'verified' | 'rejected' | 'expired'
++
++const statusLabels: Record<DocumentStatus, string> = {
++  pending_review: 'Pending',
++  verified: 'Verified',
++  rejected: 'Rejected',
++  expired: 'Expired',
++}
++
++function StatusBadge({ status }: { status: DocumentStatus }) {
++  const color =
++    status === 'verified'
++      ? 'bg-green-100 text-green-800'
++      : status === 'pending_review'
++        ? 'bg-gray-100 text-gray-800'
++        : 'bg-red-100 text-red-800'
++  return (
++    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${color}`}>
++      {statusLabels[status]}
++    </span>
++  )
++}
++
++type DocumentArchiveItem = {
++  _id: string
++  name: string
++  type: string
++  linkedEntityName?: string
++  status: DocumentStatus
++  expiryDate?: number
++  url?: string
++  verifiedBy?: string
++  verifiedAt?: number
++  rejectionReason?: string
++}
++
++type DocumentDetailPanelProps = {
++  document: DocumentArchiveItem | null
++  isOpen: boolean
++  onClose: () => void
++  onVerify: (id: string) => void
++  onRejectStart: (id: string) => void
++}
++
++export function DocumentDetailPanel({
++  document,
++  isOpen,
++  onClose,
++  onVerify,
++  onRejectStart,
++}: DocumentDetailPanelProps) {
++  if (!document) return null
++
++  const isFinal =
++    document.status === 'verified' ||
++    document.status === 'rejected' ||
++    document.status === 'expired'
++
++  return (
++    <>
++      <div
++        className={`fixed inset-y-0 right-0 z-50 w-[480px] transform bg-white shadow-2xl transition-transform duration-300 ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
++      >
++        <div className="flex h-full flex-col p-6">
++          <div className="mb-6 flex items-start justify-between">
++            <h2 className="text-xl font-semibold">Document details</h2>
++            <Button variant="ghost" size="sm" onClick={onClose}>
++              Close
++            </Button>
++          </div>
++
++          <div className="space-y-4">
++            <div>
++              <p className="text-xs uppercase text-gray-500">File</p>
++              {document.url ? (
++                <a
++                  href={document.url}
++                  target="_blank"
++                  rel="noreferrer"
++                  className="text-blue-600 hover:underline"
++                >
++                  {document.name}
++                </a>
++              ) : (
++                <p className="font-medium">{document.name}</p>
++              )}
++            </div>
++
++            <div>
++              <p className="text-xs uppercase text-gray-500">Type</p>
++              <p className="font-medium capitalize">{document.type.replace(/_/g, ' ')}</p>
++            </div>
++
++            <div>
++              <p className="text-xs uppercase text-gray-500">Linked to</p>
++              <p className="font-medium">{document.linkedEntityName ?? '-'}</p>
++            </div>
++
++            <div>
++              <p className="text-xs uppercase text-gray-500">Status</p>
++              <StatusBadge status={document.status} />
++            </div>
++
++            <div>
++              <p className="text-xs uppercase text-gray-500">Expires</p>
++              <p className="font-medium">
++                {document.expiryDate
++                  ? new Date(document.expiryDate).toLocaleDateString()
++                  : '-'}
++              </p>
++            </div>
++
++            {document.status === 'verified' && (
++              <div>
++                <p className="text-xs uppercase text-gray-500">Verified</p>
++                <p className="font-medium">
++                  {document.verifiedBy ? `${document.verifiedBy} ` : ''}
++                  {document.verifiedAt
++                    ? `on ${new Date(document.verifiedAt).toLocaleString()}`
++                    : ''}
++                </p>
++              </div>
++            )}
++
++            {document.status === 'rejected' && document.rejectionReason && (
++              <div>
++                <p className="text-xs uppercase text-gray-500">Rejection reason</p>
++                <p className="font-medium">{document.rejectionReason}</p>
++              </div>
++            )}
++          </div>
++
++          {!isFinal && (
++            <div className="mt-auto flex gap-3 pt-6">
++              <Button onClick={() => onVerify(document._id)}>Verify</Button>
++              <Button variant="danger" onClick={() => onRejectStart(document._id)}>
++                Reject
++              </Button>
++            </div>
++          )}
++        </div>
++      </div>
++
++      {isOpen && (
++        <div
++          className="fixed inset-0 z-40 bg-black/20"
++          onClick={onClose}
++        />
++      )}
++    </>
++  )
++}
+diff --git a/src/features/documents/pages/DocumentArchiveRoute.tsx b/src/features/documents/pages/DocumentArchiveRoute.tsx
+new file mode 100644
+--- /dev/null
++++ b/src/features/documents/pages/DocumentArchiveRoute.tsx
+@@ -0,0 +1,26 @@
++import { Suspense, lazy } from 'react'
++import { useAuth } from '@clerk/clerk-react'
++import { Navigate } from 'react-router'
++
++const DocumentArchivePage = lazy(() => import('./DocumentArchivePage'))
++
++const allowedRoles = new Set(['org:admin', 'org:hr'])
++
++export default function DocumentArchiveRoute() {
++  const { orgRole, isLoaded } = useAuth()
++
++  if (!isLoaded) {
++    return <div className="p-8">Loading...</div>
++  }
++
++  if (!allowedRoles.has(orgRole ?? '')) {
++    return <Navigate to="/" replace />
++  }
++
++  return (
++    <Suspense fallback={<div className="p-8">Loading...</div>}>
++      <DocumentArchivePage />
++    </Suspense>
++  )
++}
+diff --git a/src/features/forms/components/DynamicFormRenderer.tsx b/src/features/forms/components/DynamicFormRenderer.tsx
+new file mode 100644
+--- /dev/null
++++ b/src/features/forms/components/DynamicFormRenderer.tsx
+@@ -0,0 +1,149 @@
++import { useState, useCallback } from 'react'
++import { Button } from '@/shared/ui/Button'
++import { Input } from '@/shared/ui/Input'
++import { Textarea } from '@/shared/ui/Textarea'
++import { Select } from '@/shared/ui/Select'
++import { Checkbox } from '@/shared/ui/Checkbox'
++import { FieldGroup } from '@/shared/ui/FieldGroup'
++
++export type FormFieldOption = {
++  value: string
++  label: string
++}
++
++export type FormField = {
++  id: string
++  label: string
++  type: 'text' | 'textarea' | 'select' | 'checkbox' | 'date' | 'number'
++  required?: boolean
++  helperText?: string
++  options?: FormFieldOption[]
++  placeholder?: string
++}
++
++export type FormDefinition = {
++  id: string
++  name: string
++  fields: FormField[]
++}
++
++type DynamicFormRendererProps = {
++  formDefinition: FormDefinition
++  onSubmit: (data: Record<string, unknown>) => void
++  loading?: boolean
++  existingData?: Record<string, unknown>
++}
++
++function getInitialValue(
++  field: FormField,
++  existingData?: Record<string, unknown>,
++): unknown {
++  if (existingData && field.id in existingData) {
++    return existingData[field.id]
++  }
++  return field.type === 'checkbox' ? false : ''
++}
++
++export function DynamicFormRenderer({
++  formDefinition,
++  onSubmit,
++  loading,
++  existingData,
++}: DynamicFormRendererProps) {
++  const [data, setData] = useState<Record<string, unknown>>(() => {
++    const initial: Record<string, unknown> = {}
++    for (const field of formDefinition.fields) {
++      initial[field.id] = getInitialValue(field, existingData)
++    }
++    return initial
++  })
++
++  const [errors, setErrors] = useState<Record<string, string>>({})
++
++  const updateField = useCallback((id: string, value: unknown) => {
++    setData((prev) => ({ ...prev, [id]: value }))
++    setErrors((prev) => {
++      if (!prev[id]) return prev
++      const next = { ...prev }
++      delete next[id]
++      return next
++    })
++  }, [])
++
++  const validate = useCallback((): boolean => {
++    const next: Record<string, string> = {}
++    for (const field of formDefinition.fields) {
++      if (!field.required) continue
++      const value = data[field.id]
++      let missing = false
++      if (field.type === 'checkbox') {
++        missing = value !== true
++      } else if (typeof value === 'string') {
++        missing = value.trim() === ''
++      } else {
++        missing = value === undefined || value === null || value === ''
++      }
++      if (missing) {
++        next[field.id] = 'This field is required'
++      }
++    }
++    setErrors(next)
++    return Object.keys(next).length === 0
++  }, [data, formDefinition.fields])
++
++  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
++    e.preventDefault()
++    if (!validate()) return
++    onSubmit(data)
++  }
++
++  return (
++    <form onSubmit={handleSubmit} className="space-y-6">
++      <h1 className="text-2xl font-semibold text-gray-900">{formDefinition.name}</h1>
++      {formDefinition.fields.map((field) => (
++        <FieldGroup
++          key={field.id}
++          label={field.label}
++          helperText={field.helperText}
++          error={errors[field.id]}
++          required={field.required}
++        >
++          {field.type === 'text' && (
++            <Input
++              name={field.id}
++              value={(data[field.id] as string) ?? ''}
++              onChange={(e) => updateField(field.id, e.target.value)}
++              placeholder={field.placeholder}
++            />
++          )}
++          {field.type === 'textarea' && (
++            <Textarea
++              name={field.id}
++              value={(data[field.id] as string) ?? ''}
++              onChange={(e) => updateField(field.id, e.target.value)}
++              placeholder={field.placeholder}
++            />
++          )}
++          {field.type === 'select' && (
++            <Select
++              name={field.id}
++              options={field.options ?? []}
++              value={(data[field.id] as string) ?? ''}
++              onChange={(value) => updateField(field.id, value)}
++            />
++          )}
++          {field.type === 'checkbox' && (
++            <Checkbox
++              name={field.id}
++              checked={!!data[field.id]}
++              onChange={(checked) => updateField(field.id, checked)}
++            />
++          )}
++          {field.type === 'date' && (
++            <Input
++              type="date"
++              name={field.id}
++              value={(data[field.id] as string) ?? ''}
++              onChange={(e) => updateField(field.id, e.target.value)}
++            />
++          )}
++          {field.type === 'number' && (
++            <Input
++              type="number"
++              name={field.id}
++              value={(data[field.id] as string) ?? ''}
++              onChange={(e) => updateField(field.id, e.target.value)}
++            />
++          )}
++        </FieldGroup>
++      ))}
++      <Button type="submit" disabled={loading}>
++        {loading ? 'Submitting...' : 'Submit'}
++      </Button>
++    </form>
++  )
++}
+diff --git a/src/features/forms/pages/FormSubmissionPage.tsx b/src/features/forms/pages/FormSubmissionPage.tsx
+new file mode 100644
+--- /dev/null
++++ b/src/features/forms/pages/FormSubmissionPage.tsx
+@@ -0,0 +1,82 @@
++import { useState } from 'react'
++import { useParams, useNavigate } from 'react-router'
++import { useAuth } from '@clerk/clerk-react'
++import { useQuery, useMutation } from 'convex/react'
++import { toast } from 'sonner'
++import { Id } from 'convex/values'
++import { api } from '../../../../convex/_generated/api'
++import { DynamicFormRenderer } from '../../components/DynamicFormRenderer'
++import type { FormDefinition } from '../../components/DynamicFormRenderer'
++
++const validRoles = new Set([
++  'org:candidate',
++  'org:caregiver',
++  'org:admin',
++  'org:hr',
++])
++
++export default function FormSubmissionPage() {
++  const { formDefinitionId } = useParams<{ formDefinitionId: string }>()
++  const navigate = useNavigate()
++  const { orgRole, isLoaded } = useAuth()
++  const [isSubmitting, setIsSubmitting] = useState(false)
++
++  const formDefinitions = useQuery(
++    api.forms.listFormDefinitions,
++    formDefinitionId ? { id: formDefinitionId as Id<'forms'> } : 'skip',
++  )
++
++  const submit = useMutation(api.forms.submitForm)
++
++  if (!isLoaded) {
++    return <div className="p-8">Loading...</div>
++  }
++
++  if (!formDefinitionId) {
++    return <div className="p-8">Invalid form link.</div>
++  }
++
++  if (!validRoles.has(orgRole ?? '')) {
++    return <div className="p-8">You do not have permission to view this form.</div>
++  }
++
++  const formDefinition = (formDefinitions as Array<FormDefinition & { _id: string }> | undefined)?.find(
++    (f) => f._id === formDefinitionId,
++  )
++
++  const definitionForRenderer = formDefinition
++    ? {
++        id: formDefinition._id,
++        name: formDefinition.name,
++        fields: formDefinition.fields,
++      }
++    : null
++
++  const handleSubmit = async (data: Record<string, unknown>) => {
++    setIsSubmitting(true)
++    try {
++      await submit({ formDefinitionId: formDefinitionId as Id<'forms'>, data })
++      toast.success('Form submitted')
++      if (orgRole === 'org:candidate') {
++        navigate('/onboarding')
++      } else {
++        navigate(-1)
++      }
++    } finally {
++      setIsSubmitting(false)
++    }
++  }
++
++  return (
++    <div className="mx-auto max-w-2xl p-6">
++      {definitionForRenderer ? (
++        <DynamicFormRenderer
++          formDefinition={definitionForRenderer}
++          onSubmit={handleSubmit}
++          loading={isSubmitting}
++        />
++      ) : (
++        <div className="p-8 text-center">
++          {formDefinitions === undefined ? 'Loading form...' : 'Form not found.'}
++        </div>
++      )}
++    </div>
++  )
++}
+diff --git a/src/routes.tsx b/src/routes.tsx
+--- a/src/routes.tsx
++++ b/src/routes.tsx
+@@ -1,6 +1,8 @@
+ import { createBrowserRouter } from 'react-router'
+ import RootLayout from './components/layout/RootLayout'
+ import DashboardPage from './features/dashboard/pages/DashboardPage'
++import DocumentArchiveRoute from './features/documents/pages/DocumentArchiveRoute'
++import FormSubmissionPage from './features/forms/pages/FormSubmissionPage'
+ import WorkerOnboardingPage from './features/workers/pages/WorkerOnboardingPage'
+ 
+ export const router = createBrowserRouter([
+@@ -9,6 +11,8 @@
+     element: <RootLayout />,
+     children: [
+       { index: true, element: <DashboardPage /> },
++      { path: 'documents', element: <DocumentArchiveRoute /> },
++      { path: 'forms/:formDefinitionId', element: <FormSubmissionPage /> },
+       { path: 'onboarding', element: <WorkerOnboardingPage /> },
+     ],
+   },
+diff --git a/src/components/layout/Sidebar.tsx b/src/components/layout/Sidebar.tsx
+--- a/src/components/layout/Sidebar.tsx
++++ b/src/components/layout/Sidebar.tsx
+@@ -5,6 +5,7 @@
+ const navItems = [
+   { to: '/', label: 'Dashboard', roles: ['org:admin', 'org:coordinator', 'org:caregiver'] },
++  { to: '/documents', label: 'Documents', roles: ['org:admin', 'org:hr'] },
+   { to: '/workers', label: 'Workers', roles: ['org:admin', 'org:coordinator', 'org:caregiver'] },
+   { to: '/schedule', label: 'Schedule', roles: ['org:admin', 'org:coordinator', 'org:caregiver'] },
+ ]
+diff --git a/src/features/forms/components/DynamicFormRenderer.test.tsx b/src/features/forms/components/DynamicFormRenderer.test.tsx
+new file mode 100644
+--- /dev/null
++++ b/src/features/forms/components/DynamicFormRenderer.test.tsx
+@@ -0,0 +1,74 @@
++import { render, screen, fireEvent } from '@testing-library/react'
++import { describe, it, expect, vi } from 'vitest'
++import { DynamicFormRenderer } from './DynamicFormRenderer'
++
++const formDefinition = {
++  id: 'fd-1',
++  name: 'Worker intake',
++  fields: [
++    { id: 'fullName', label: 'Full name', type: 'text' as const, required: true, helperText: 'Legal name' },
++    { id: 'bio', label: 'Bio', type: 'textarea' as const },
++    {
++      id: 'role',
++      label: 'Role',
++      type: 'select' as const,
++      required: true,
++      options: [
++        { value: 'cna', label: 'CNA' },
++        { value: 'rn', label: 'RN' },
++      ],
++    },
++    { id: 'agree', label: 'I agree', type: 'checkbox' as const, required: true },
++    { id: 'startDate', label: 'Start date', type: 'date' as const, required: true },
++    { id: 'years', label: 'Years', type: 'number' as const },
++  ],
++}
++
++describe('DynamicFormRenderer', () => {
++  it('renders all field types', () => {
++    render(<DynamicFormRenderer formDefinition={formDefinition} onSubmit={vi.fn()} />)
++    expect(screen.getByLabelText(/Full name/)).toBeInTheDocument()
++    expect(screen.getByLabelText(/Bio/)).toBeInTheDocument()
++    expect(screen.getByLabelText(/Role/)).toBeInTheDocument()
++    expect(screen.getByLabelText(/I agree/)).toBeInTheDocument()
++    expect(screen.getByLabelText(/Start date/)).toBeInTheDocument()
++    expect(screen.getByLabelText(/Years/)).toBeInTheDocument()
++  })
++
++  it('shows a red asterisk on required fields', () => {
++    render(<DynamicFormRenderer formDefinition={formDefinition} onSubmit={vi.fn()} />)
++    const nameLabel = screen.getByText(/Full name/)
++    expect(nameLabel.querySelector('span')).toHaveClass('text-red-500')
++  })
++
++  it('blocks submit and shows inline errors when required fields are empty', () => {
++    const onSubmit = vi.fn()
++    render(<DynamicFormRenderer formDefinition={formDefinition} onSubmit={onSubmit} />)
++    fireEvent.click(screen.getByRole('button', { name: /Submit/ }))
++    expect(onSubmit).not.toHaveBeenCalled()
++    expect(screen.getAllByText('This field is required').length).toBeGreaterThan(0)
++  })
++
++  it('calls onSubmit with data when valid', () => {
++    const onSubmit = vi.fn()
++    render(<DynamicFormRenderer formDefinition={formDefinition} onSubmit={onSubmit} />)
++    fireEvent.change(screen.getByLabelText(/Full name/), { target: { value: 'Ada' } })
++    fireEvent.change(screen.getByLabelText(/Role/), { target: { value: 'cna' } })
++    fireEvent.click(screen.getByLabelText(/I agree/))
++    fireEvent.change(screen.getByLabelText(/Start date/), { target: { value: '2025-01-01' } })
++    fireEvent.click(screen.getByRole('button', { name: /Submit/ }))
++    expect(onSubmit).toHaveBeenCalledWith(
++      expect.objectContaining({
++        fullName: 'Ada',
++        role: 'cna',
++        agree: true,
++        startDate: '2025-01-01',
++      }),
++    )
++  })
++})
+diff --git a/src/features/documents/pages/DocumentArchivePage.test.tsx b/src/features/documents/pages/DocumentArchivePage.test.tsx
+new file mode 100644
+--- /dev/null
++++ b/src/features/documents/pages/DocumentArchivePage.test.tsx
+@@ -0,0 +1,91 @@
++import { render, screen, fireEvent, waitFor } from '@testing-library/react'
++import { describe, it, expect, vi, beforeEach } from 'vitest'
++import { useQuery, useMutation } from 'convex/react'
++import DocumentArchivePage from './DocumentArchivePage'
++
++vi.mock('convex/react', () => ({
++  useQuery: vi.fn(),
++  useMutation: vi.fn(),
++}))
++
++vi.mock('sonner', () => ({
++  toast: { success: vi.fn(), error: vi.fn() },
++}))
++
++const mockedUseQuery = vi.mocked(useQuery)
++const mockedUseMutation = vi.mocked(useMutation)
++
++const mockItem = {
++  _id: 'doc1',
++  name: 'Passport.pdf',
++  type: 'id',
++  linkedEntityName: 'Ada Lovelace',
++  status: 'pending_review',
++  expiryDate: Date.now() + 100000000,
++}
++
++describe('DocumentArchivePage', () => {
++  beforeEach(() => {
++    vi.clearAllMocks()
++  })
++
++  it('renders with filters and document list', () => {
++    mockedUseQuery.mockReturnValue([mockItem] as any)
++    mockedUseMutation.mockReturnValue(vi.fn())
++    render(<DocumentArchivePage />)
++    expect(screen.getByText('Document archive')).toBeInTheDocument()
++    expect(screen.getByText('Passport.pdf')).toBeInTheDocument()
++    expect(screen.getByText('Pending')).toBeInTheDocument()
++  })
++
++  it('calls updateDocumentArchiveItem with verified status on Verify', async () => {
++    const mutate = vi.fn().mockResolvedValue(undefined)
++    mockedUseQuery.mockReturnValue([mockItem] as any)
++    mockedUseMutation.mockReturnValue(mutate)
++    render(<DocumentArchivePage />)
++    fireEvent.click(screen.getByRole('button', { name: 'Verify' }))
++    await waitFor(() =>
++      expect(mutate).toHaveBeenCalledWith({ id: 'doc1', status: 'verified' }),
++    )
++  })
++
++  it('opens reject modal and calls updateDocumentArchiveItem with rejected status and reason', async () => {
++    const mutate = vi.fn().mockResolvedValue(undefined)
++    mockedUseQuery.mockReturnValue([mockItem] as any)
++    mockedUseMutation.mockReturnValue(mutate)
++    render(<DocumentArchivePage />)
++    fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
++    fireEvent.change(screen.getByLabelText(/Rejection reason/), {
++      target: { value: 'Blurry scan' },
++    })
++    const rejectButtons = screen.getAllByRole('button', { name: /^Reject$/ })
++    fireEvent.click(rejectButtons[rejectButtons.length - 1])
++    await waitFor(() =>
++      expect(mutate).toHaveBeenCalledWith({
++        id: 'doc1',
++        status: 'rejected',
++        rejectionReason: 'Blurry scan',
++      }),
++    )
++  })
++})
+diff --git a/src/features/forms/pages/FormSubmissionPage.test.tsx b/src/features/forms/pages/FormSubmissionPage.test.tsx
+new file mode 100644
+--- /dev/null
++++ b/src/features/forms/pages/FormSubmissionPage.test.tsx
+@@ -0,0 +1,74 @@
++import { render, screen, fireEvent, waitFor } from '@testing-library/react'
++import { describe, it, expect, vi, beforeEach } from 'vitest'
++import { useParams, useNavigate } from 'react-router'
++import { useAuth } from '@clerk/clerk-react'
++import { useQuery, useMutation } from 'convex/react'
++import FormSubmissionPage from './FormSubmissionPage'
++
++vi.mock('react-router', async () => {
++  const actual = await vi.importActual('react-router')
++  return { ...actual, useParams: vi.fn(), useNavigate: vi.fn() }
++})
++
++vi.mock('@clerk/clerk-react', () => ({
++  useAuth: vi.fn(),
++}))
++
++vi.mock('convex/react', () => ({
++  useQuery: vi.fn(),
++  useMutation: vi.fn(),
++}))
++
++vi.mock('sonner', () => ({
++  toast: { success: vi.fn() },
++}))
++
++const mockedUseParams = vi.mocked(useParams)
++const mockedUseNavigate = vi.mocked(useNavigate)
++const mockedUseAuth = vi.mocked(useAuth)
++const mockedUseQuery = vi.mocked(useQuery)
++const mockedUseMutation = vi.mocked(useMutation)
++
++describe('FormSubmissionPage', () => {
++  beforeEach(() => {
++    vi.clearAllMocks()
++    mockedUseParams.mockReturnValue({ formDefinitionId: 'fd1' })
++    mockedUseAuth.mockReturnValue({ orgRole: 'org:candidate', isLoaded: true } as any)
++    mockedUseQuery.mockReturnValue([
++      {
++        _id: 'fd1',
++        name: 'Intake',
++        fields: [{ id: 'name', label: 'Name', type: 'text', required: true }],
++      },
++    ] as any)
++  })
++
++  it('fetches form definition and renders form', () => {
++    mockedUseMutation.mockReturnValue(vi.fn())
++    render(<FormSubmissionPage />)
++    expect(screen.getByText('Intake')).toBeInTheDocument()
++    expect(screen.getByLabelText(/Name/)).toBeInTheDocument()
++  })
++
++  it('calls submitForm and navigates to onboarding for candidates', async () => {
++    const submit = vi.fn().mockResolvedValue(undefined)
++    const navigate = vi.fn()
++    mockedUseMutation.mockReturnValue(submit)
++    mockedUseNavigate.mockReturnValue(navigate)
++    render(<FormSubmissionPage />)
++    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Ada' } })
++    fireEvent.click(screen.getByRole('button', { name: /Submit/ }))
++    await waitFor(() =>
++      expect(submit).toHaveBeenCalledWith({
++        formDefinitionId: 'fd1',
++        data: { name: 'Ada' },
++      }),
++    )
++    expect(navigate).toHaveBeenCalledWith('/onboarding')
++  })
++})

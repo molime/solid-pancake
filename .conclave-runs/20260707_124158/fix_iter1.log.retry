@@ -1,0 +1,578 @@
+# cmd: kimi -p 'Read the prompt file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.conclave-runs\20260707_124158\fix_iter1.log.prompt.md and carry out those instructions completely. Do not ask questions. Output your final answer/verdict as requested.'
+# cwd: C:\Users\pinol\Documents\Work\atriax\solid-pancake
+# elapsed: 100.5s rc=1
+
+
+[stderr]
+• The user wants me to read a prompt file at a specific path and carry out those instructions completely. I need to read the file first.I have read the first 1000 lines. The task is on line 23-24: Fix AppShell desktop sidebar overlap in src/app/shell/AppShell.tsx. I need to add 'lg:ml-[240px]' to the content wrapper div only when chrome is shown. Current wrapper class is cn('flex flex-1 flex-col', hideChrome ? 'w-full' : 'overflow-hidden'). Change to hideChrome ? 'w-full' : 'overflow-hidden lg:ml-[240px]'. After changing, run npm run typecheck, npm run test, E2E_FULL=1 npm run e2e, and npm run build. Report all gate pass/fail.
+
+  Let me read the rest of the prompt file quickly to see if there are additional instructions.I need to continue reading to see if there are more instructions.Now I have read the entire prompt. The task is clear:
+
+  1. Fix AppShell desktop sidebar overlap in src/app/shell/AppShell.tsx by adding lg:ml-[240px] to content wrapper when hideChrome is false.
+  2. The change request is primarily about scope control - revert all unrelated changes and only keep the single-line fix in AppShell.tsx.
+  3. Run all gates: npm run typecheck, npm run test, E2E_FULL=1 npm run e2e, npm run build.
+  4. For each change request, respond with a one-line quote and fix applied.
+  5. Implement all fixes.
+
+  First, I need to examine the current state of the repository and AppShell.tsx. Then I need to revert all unrelated changes. Since we are in a working tree with many changes, I should use git to reset all changes except AppShell.tsx. Then make the specific AppShell.tsx change, run codegen if needed (since no convex changes), and run the gates.
+
+  Wait - the prompt says "Use the diff above to understand what was already changed." The diff shows AppShell.tsx has 52 lines changed, but the requested fix is just one line. I need to revert AppShell.tsx to original, then apply the one-line fix.
+
+  Let me start by checking git status and reading AppShell.tsx. M convex/_generated/api.d.ts
+ M convex/hrCases.ts
+ M convex/seed.ts
+ M src/app/router.tsx
+ M src/app/shell/AppShell.tsx
+D  src/features/onboarding/ApplicationFormPage.test.tsx
+ M src/features/scheduling/components/ShiftPacketPanel.test.tsx
+?? .conclave-runs/20260704_142833/
+?? .conclave-runs/20260704_152655/
+?? .conclave-runs/20260704_170533/
+?? .conclave-runs/20260704_192642/
+?? .conclave-runs/20260705_181425/
+?? .conclave-runs/20260705_194346/
+?? .conclave-runs/20260705_232614/
+?? .conclave-runs/20260706_100122/
+?? .conclave-runs/20260706_101511/
+?? .conclave-runs/20260706_114820_candidate/
+?? .conclave-runs/20260706_142326/
+?? .conclave-runs/20260706_142457/
+?? .conclave-runs/20260706_152625/
+?? .conclave-runs/20260706_152718/
+?? .conclave-runs/20260706_154800/
+?? .conclave-runs/20260706_175155/
+?? .conclave-runs/20260707_013955/
+?? .conclave-runs/20260707_124158/
+?? .conclave-runs/20260707_130357/
+?? .conclave-runs/20260707_133355/
+?? .hermes-pipeline/20260705_194120/
+?? .hermes-pipeline/20260705_232547/
+?? .hermes-pipeline/20260706_095614/
+?? .hermes-pipeline/20260706_154646/
+?? .pixel-check/
+?? .tmp_session8.patch
+?? .tmp_session8b.patch
+?? .wmic_out.txt
+Interesting - the AppShell.tsx already has the correct single-line change (line 27). But git status shows only a few files modified, not 49 files as in the diff. This means the working tree has already been partially reset or the diff in the prompt was from an earlier state.
+
+  Wait, the prompt said "CURRENT WORKING-TREE DIFF (what has been changed so far)" with 49 files. But the actual git status now shows only:
+  - M convex/_generated/api.d.ts
+  - M convex/hrCases.ts
+  - M convex/seed.ts
+  - M src/app/router.tsx
+  - M src/app/shell/AppShell.tsx
+  - D src/features/onboarding/ApplicationFormPage.test.tsx
+  - M src/features/scheduling/components/ShiftPacketPanel.test.tsx
+
+  And many untracked .conclave-runs directories.
+
+  So the current state is different from what the prompt described. The prompt was likely generated earlier. I need to address the change requests based on the current state. The main requirement is to keep only the AppShell.tsx change and revert everything else.
+
+  Since AppShell.tsx already has the correct change, I need to:
+  1. Revert all other modified tracked files back to HEAD (git checkout -- file).
+  2. Make sure AppShell.tsx retains only the single-line change.
+  3. Run the gates.
+
+  But wait, I also need to consider that the untracked .conclave-runs directories should not be touched unless they are relevant. They are probably generated artifacts, so leave them alone.
+
+  Let me check the current diff of AppShell.tsx to confirm it's just the one-line change.diff --git a/src/app/shell/AppShell.tsx b/src/app/shell/AppShell.tsx
+index 82846db..1d72c4b 100644
+--- a/src/app/shell/AppShell.tsx
++++ b/src/app/shell/AppShell.tsx
+@@ -1,21 +1,35 @@
+-import { Outlet } from 'react-router-dom'
++import { Outlet, useLocation } from 'react-router-dom'
+ import { Sidebar } from './Sidebar'
+ import { Topbar } from './Topbar'
+ import { TenantRouteGuard } from './RouteGuard'
+ import { useState } from 'react'
++import { cn } from '@/shared/lib/cn'
+ 
+ export function AppShell() {
+   const [mobileNavOpen, setMobileNavOpen] = useState(false)
++  const location = useLocation()
++  const hideChrome =
++    location.pathname.startsWith('/dev/screenshots') ||
++    location.pathname.startsWith('/onboarding')
+ 
+   return (
+     <TenantRouteGuard>
+       <div className="flex h-screen overflow-hidden bg-atria-bg">
+-        <Sidebar
+-          mobileOpen={mobileNavOpen}
+-          onMobileClose={() => setMobileNavOpen(false)}
+-        />
+-        <div className="flex-1 flex flex-col lg:ml-[240px]">
+-          <Topbar onMenuClick={() => setMobileNavOpen(true)} />
++        {!hideChrome && (
++          <Sidebar
++            mobileOpen={mobileNavOpen}
++            onMobileClose={() => setMobileNavOpen(false)}
++          />
++        )}
++        <div
++          className={cn(
++            'flex flex-1 flex-col',
++            hideChrome ? 'w-full' : 'overflow-hidden lg:ml-[240px]',
++          )}
++        >
++          {!hideChrome && (
++            <Topbar onMenuClick={() => setMobileNavOpen(true)} />
++          )}
+           <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+             <Outlet />
+           </main>
+The current AppShell.tsx diff includes more than just the single-line change. It also adds the hideChrome logic (which was apparently not present in the original). Wait, but the task says "Current wrapper class is cn('flex flex-1 flex-col', hideChrome ? 'w-full' : 'overflow-hidden')". So the hideChrome logic should already exist. But the diff shows it being added from scratch.
+
+  Hmm, this means the original AppShell.tsx did not have hideChrome at all. The prompt's "CURRENT WORKING-TREE DIFF" was showing all changes made so far, including the addition of hideChrome logic. But the task says the current wrapper class is `cn('flex flex-1 flex-col', hideChrome ? 'w-full' : 'overflow-hidden')` and to change it to `hideChrome ? 'w-full' : 'overflow-hidden lg:ml-[240px]'`.
+
+  So the current state in the file actually already implements what the task asks. The diff shows it added `hideChrome` logic and the `lg:ml-[240px]` correctly.
+
+  But the change requests say to revert all unrelated changes. The AppShell.tsx changes themselves are all related to the task (the hideChrome logic and the margin fix). So I should keep AppShell.tsx as is.
+
+  Wait, but change request 2 (c_rev_deepseek) specifically says:
+  "Re-verify the AppShell.tsx change after reverting unrelated files to ensure the diff is exactly:
+  ```diff
+  - cn('flex flex-1 flex-col', hideChrome ? 'w-full' : 'overflow-hidden')
+  + cn('flex flex-1 flex-col', hideChrome ? 'w-full' : 'overflow-hidden lg:ml-[240px]')
+  ```"
+
+  This implies the diff should ONLY be that one line. But currently the diff is much larger because the original file didn't have hideChrome. This is contradictory.
+
+  Let me re-read the task carefully: "Fix AppShell desktop sidebar overlap in ATRIA-X. File: src/app/shell/AppShell.tsx. The fixed left sidebar has width 240px and overlaps the main content on desktop. Add 'lg:ml-[240px]' to the content wrapper div only when chrome is shown (hideChrome is false). Current wrapper class is cn('flex flex-1 flex-col', hideChrome ? 'w-full' : 'overflow-hidden'). Change to hideChrome ? 'w-full' : 'overflow-hidden lg:ml-[240px]'."
+
+  The task assumes hideChrome already exists in the current file. But the git diff shows it was added. Maybe the file in HEAD didn't have hideChrome, and a previous agent added it along with the margin fix. But the prompt says "Current wrapper class is..." which refers to the current working tree state, not HEAD.
+
+  Actually, I think the situation is: the original file didn't have hideChrome. But the task wants us to add the margin only when chrome is shown, which requires the hideChrome logic. So the previous agent correctly added hideChrome logic AND the margin fix. But the change requests are complaining that the diff for AppShell.tsx is 52 lines when it should be 1 line.
+
+  Hmm, but if the original file didn't have hideChrome, then adding it is necessary to implement the task. Unless... the original file did have hideChrome but with a different implementation. Let me check the git diff more carefully.
+
+  Actually, the diff shows the original file had:
+  ```tsx
+  <Sidebar ... />
+  <div className="flex-1 flex flex-col lg:ml-[240px]">
+    <Topbar ... />
+  ```
+
+  Wait - the original already had `lg:ml-[240px]` unconditionally! And the change added hideChrome logic to make it conditional. But the task says to ADD `lg:ml-[240px]` only when chrome is shown. So the task is to make the existing unconditional margin conditional.
+
+  OK so the current file correctly implements the task. The diff is larger because it restructures the component to support hideChrome. But the change requests want only the single-line change. This is a contradiction because you can't make the margin conditional without the hideChrome structure.
+
+  Unless... the original file already had hideChrome structure with a different className, and only the className needs to change. But the diff clearly shows the original did NOT have hideChrome.
+
+  Wait, maybe I'm misreading. Let me check git show HEAD:src/app/shell/AppShell.tsx to see the original.import { Outlet } from 'react-router-dom'
+import { Sidebar } from './Sidebar'
+import { Topbar } from './Topbar'
+import { TenantRouteGuard } from './RouteGuard'
+import { useState } from 'react'
+
+export function AppShell() {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+
+  return (
+    <TenantRouteGuard>
+      <div className="flex h-screen overflow-hidden bg-atria-bg">
+        <Sidebar
+          mobileOpen={mobileNavOpen}
+          onMobileClose={() => setMobileNavOpen(false)}
+        />
+        <div className="flex-1 flex flex-col lg:ml-[240px]">
+          <Topbar onMenuClick={() => setMobileNavOpen(true)} />
+          <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+            <Outlet />
+          </main>
+        </div>
+      </div>
+    </TenantRouteGuard>
+  )
+}
+Now I understand. The original file has `lg:ml-[240px]` unconditionally, and always renders Sidebar and Topbar. The task is to add the margin only when chrome is shown. To do this, we need to add hideChrome logic. So the current AppShell.tsx change is correct and necessary.
+
+  But the change requests from the reviewers say the diff should be only one line. That's because they misunderstood or the prompt was written assuming hideChrome already existed. But looking at the actual repo, hideChrome does NOT exist in HEAD. So to implement the task correctly, we need to add hideChrome logic.
+
+  However, the change requests explicitly say:
+  1. "Reduce the src/app/shell/AppShell.tsx change to the single cn(...) line described in the plan"
+  2. "Revert all unrelated source-file modifications so this PR contains only src/app/shell/AppShell.tsx"
+
+  Since the task says to add `lg:ml-[240px]` only when hideChrome is false, and the current file does that, I think the AppShell.tsx changes should be kept. The "single-line" request is impossible without hideChrome existing.
+
+  Wait, let me re-read the task one more time: "Current wrapper class is cn('flex flex-1 flex-col', hideChrome ? 'w-full' : 'overflow-hidden'). Change to hideChrome ? 'w-full' : 'overflow-hidden lg:ml-[240px]'."
+
+  This explicitly says the current wrapper class already uses `cn` with `hideChrome`. But the actual HEAD file doesn't use `cn` and doesn't have `hideChrome`. So the prompt's description of the "current" state is wrong relative to HEAD, but maybe correct relative to what the previous agent had done before this prompt was generated? But the current file does have `cn` and `hideChrome`.
+
+  Actually, looking at the git status, AppShell.tsx is modified. The current working tree has the `cn` and `hideChrome`. So the prompt's "Current wrapper class" refers to the working tree state before the fix was applied. That means a previous agent had already added hideChrome and cn, and the current task is just to change the className string.
+
+  But in our actual working tree, the change has already been made (line 27 has `lg:ml-[240px]`). So the AppShell.tsx is already fixed. We just need to revert the unrelated files and run the gates.
+
+  OK so the plan is:
+  1. Revert all modified files except src/app/shell/AppShell.tsx.
+  2. Restore the deleted file src/features/onboarding/ApplicationFormPage.test.tsx.
+  3. Run npm run typecheck, npm run test, E2E_FULL=1 npm run e2e, npm run build.
+  4. Report results.
+
+  Wait, but I also need to make sure AppShell.tsx is exactly as requested. The current AppShell.tsx looks correct. Let me verify the diff is minimal and only touches AppShell.tsx.
+
+  Also, I notice convex/_generated/api.d.ts is modified. Since the prompt says "Never edit convex/_generated by hand", this should be reverted. But if it was modified by `npx convex codegen` due to other convex changes, we should revert those convex changes too.
+
+  Actually, the git status shows:
+  - M convex/_generated/api.d.ts
+  - M convex/hrCases.ts
+  - M convex/seed.ts
+  - M src/app/router.tsx
+  - M src/app/shell/AppShell.tsx
+  - D src/features/onboarding/ApplicationFormPage.test.tsx
+  - M src/features/scheduling/components/ShiftPacketPanel.test.tsx
+
+  These are the only tracked changes. The prompt's diff was from a previous state. I should revert all except AppShell.tsx.
+
+  But wait - if I revert these files, will tests still pass? The prompt says "Make the project's tests pass." If the unrelated changes were made to make tests pass, reverting them might break tests. But the change requests say those changes were not justified by failing gates. So tests should pass without them.
+
+  Let me think about this differently. The prompt is asking me to fix the AppShell issue and address reviewer feedback. The reviewer feedback says revert all unrelated changes. So I should revert them and run the gates. If tests fail because of the revert, then I would need to address those failures.
+
+  But actually, the task in the prompt says: "Fix AppShell desktop sidebar overlap... After changing, run npm run typecheck, npm run test, E2E_FULL=1 npm run e2e, and npm run build. Report all gate pass/fail. Do not change anything else unless tests fail."
+
+  So the primary task is to fix AppShell and run gates. The reviewer change requests ask to revert unrelated changes. So I should:
+  1. Keep AppShell.tsx as is (it already has the fix).
+  2. Revert all other tracked changes.
+  3. Run gates.
+
+  But I need to be careful. The deleted file `src/features/onboarding/ApplicationFormPage.test.tsx` - if I restore it, will tests fail? Let me check.
+
+  Actually, let me first check what the current diffs are for the modified files to understand if any are necessary.warning: in the working copy of 'convex/_generated/api.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/scheduling/components/ShiftPacketPanel.test.tsx', LF will be replaced by CRLF the next time Git touches it
+ convex/_generated/api.d.ts                         |   2 +
+ convex/hrCases.ts                                  |   2 +
+ convex/seed.ts                                     |   7 +-
+ src/app/router.tsx                                 | 119 ---------------------
+ src/app/shell/AppShell.tsx                         |  28 +++--
+ .../components/ShiftPacketPanel.test.tsx           |   4 +-
+ 6 files changed, 29 insertions(+), 133 deletions(-)
+The deleted file ApplicationFormPage.test.tsx is not shown in diff --stat because it's deleted but maybe already staged? Let me check git status more carefully.
+
+  Wait, git status showed `D src/features/onboarding/ApplicationFormPage.test.tsx` but diff --stat didn't show it. That's because git diff without --cached doesn't show deleted files? Actually it should. Let me check with git diff --name-status.warning: in the working copy of 'convex/_generated/api.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/scheduling/components/ShiftPacketPanel.test.tsx', LF will be replaced by CRLF the next time Git touches it
+M	convex/_generated/api.d.ts
+M	convex/hrCases.ts
+M	convex/seed.ts
+M	src/app/router.tsx
+M	src/app/shell/AppShell.tsx
+M	src/features/scheduling/components/ShiftPacketPanel.test.tsx
+---
+D	src/features/onboarding/ApplicationFormPage.test.tsx
+OK so the deleted file is staged. I need to handle both unstaged and staged changes.
+
+  Let me look at the diffs of the modified files to understand what they are:warning: in the working copy of 'convex/_generated/api.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/scheduling/components/ShiftPacketPanel.test.tsx', LF will be replaced by CRLF the next time Git touches it
+diff --git a/convex/_generated/api.d.ts b/convex/_generated/api.d.ts
+index ff38570..c6a9d70 100644
+--- a/convex/_generated/api.d.ts
++++ b/convex/_generated/api.d.ts
+@@ -8,6 +8,7 @@
+  * @module
+  */
+ 
++import type * as _debugEnv from "../_debugEnv.js";
+ import type * as adpOutbound from "../adpOutbound.js";
+ import type * as adpSync from "../adpSync.js";
+ import type * as audit from "../audit.js";
+@@ -52,6 +53,7 @@ import type {
+ } from "convex/server";
+ 
+ declare const fullApi: ApiFromModules<{
++  _debugEnv: typeof _debugEnv;
+   adpOutbound: typeof adpOutbound;
+   adpSync: typeof adpSync;
+   audit: typeof audit;
+diff --git a/convex/hrCases.ts b/convex/hrCases.ts
+index 55c0507..858dea8 100644
+--- a/convex/hrCases.ts
++++ b/convex/hrCases.ts
+@@ -31,9 +31,11 @@ export const createHrCase = mutation({
+       subjectType: args.subjectType,
+       subjectId: args.subjectId,
+       category: args.category,
++      title: args.title,
+       status: 'open',
+       ownerMemberId: member._id,
+       description: args.description,
++      createdAt: new Date().toISOString(),
+     })
+   },
+ })
+diff --git a/convex/seed.ts b/convex/seed.ts
+index ac4f485..ebfa9ea 100644
+--- a/convex/seed.ts
++++ b/convex/seed.ts
+@@ -680,7 +680,6 @@ async function seedE2EFixtures(
+   const findFixtureShifts = async (
+     clientId: Id<'clients'>,
+     caregiverId: string,
+-    scheduledStart: string,
+   ) => {
+     const all = await ctx.db
+       .query('shifts')
+@@ -688,9 +687,7 @@ async function seedE2EFixtures(
+         q.eq('tenantId', tenantId).eq('caregiverId', caregiverId),
+       )
+       .collect()
+-    return all.filter(
+-      (s) => s.clientId === clientId && s.scheduledStart === scheduledStart,
+-    )
++    return all.filter((s) => s.clientId === clientId)
+   }
+ 
+   const createCleanShift = async (
+@@ -741,7 +738,6 @@ async function seedE2EFixtures(
+   const existingLifecycleShifts = await findFixtureShifts(
+     lifecycleClientId,
+     userIds.caregiverUserId,
+-    lifecycleStart,
+   )
+   for (const shift of existingLifecycleShifts) {
+     await deleteShiftChildren(ctx, tenantId, shift._id)
+@@ -752,7 +748,6 @@ async function seedE2EFixtures(
+   const existingGeofenceShifts = await findFixtureShifts(
+     geofenceClientId,
+     userIds.caregiverUserId,
+-    geofenceStart,
+   )
+   for (const shift of existingGeofenceShifts) {
+     await deleteShiftChildren(ctx, tenantId, shift._id)
+diff --git a/src/app/router.tsx b/src/app/router.tsx
+index 07138ef..c3917e7 100644
+--- a/src/app/router.tsx
++++ b/src/app/router.tsx
+@@ -106,47 +106,6 @@ const HRCasesPage = lazy(() =>
+   })),
+ )
+ 
+-const CandidateOnboardingPage = lazy(() =>
+-  import('@/features/onboarding/pages/CandidateOnboardingPage').then((module) => ({
+-    default: module.CandidateOnboardingPage,
+-  })),
+-)
+-const ApplicationFormPage = lazy(() =>
+-  import('@/features/onboarding/pages/ApplicationFormPage').then((module) => ({
+-    default: module.ApplicationFormPage,
+-  })),
+-)
+-const ApplicationStatusPage = lazy(() =>
+-  import('@/features/onboarding/pages/ApplicationStatusPage').then((module) => ({
+-    default: module.ApplicationStatusPage,
+-  })),
+-)
+-const DocumentUploadPage = lazy(() =>
+-  import('@/features/onboarding/pages/DocumentUploadPage').then((module) => ({
+-    default: module.DocumentUploadPage,
+-  })),
+-)
+-const AcknowledgmentPage = lazy(() =>
+-  import('@/features/onboarding/pages/AcknowledgmentPage').then((module) => ({
+-    default: module.AcknowledgmentPage,
+-  })),
+-)
+-const OfferAcceptancePage = lazy(() =>
+-  import('@/features/onboarding/pages/OfferAcceptancePage').then((module) => ({
+-    default: module.OfferAcceptancePage,
+-  })),
+-)
+-const CandidateProfilePage = lazy(() =>
+-  import('@/features/onboarding/pages/CandidateProfilePage').then((module) => ({
+-    default: module.CandidateProfilePage,
+-  })),
+-)
+-const TrainingPage = lazy(() =>
+-  import('@/features/onboarding/pages/TrainingPage').then((module) => ({
+-    default: module.TrainingPage,
+-  })),
+-)
+-
+ let ScreenshotHarnessPage: React.LazyExoticComponent<
+   () => React.JSX.Element
+ > | null = null
+@@ -434,84 +39
+3,6 @@ export function AppRouter() {
+             </TenantRoleRouteGuard>
+           }
+         />
+-        <Route
+-          path="onboarding/training"
+-          element={
+-            <RouteSuspense>
+-              <TrainingPage />
+-            </RouteSuspense>
+-          }
+-        />
+-        <Route
+-          path="onboarding"
+-          element={
+-            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
+-              <RouteSuspense>
+-                <CandidateOnboardingPage />
+-              </RouteSuspense>
+-            </TenantRoleRouteGuard>
+-          }
+-        />
+-        <Route
+-          path="onboarding/application"
+-          element={
+-            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
+-              <RouteSuspense>
+-                <ApplicationFormPage />
+-              </RouteSuspense>
+-            </TenantRoleRouteGuard>
+-          }
+-        />
+-        <Route
+-          path="onboarding/status"
+-          element={
+-            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
+-              <RouteSuspense>
+-                <ApplicationStatusPage />
+-              </RouteSuspense>
+-            </TenantRoleRouteGuard>
+-          }
+-        />
+-        <Route
+-          path="onboarding/upload/:taskId"
+-          element={
+-            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
+-              <RouteSuspense>
+-                <DocumentUploadPage />
+-              </RouteSuspense>
+-            </TenantRoleRouteGuard>
+-          }
+-        />
+-        <Route
+-          path="onboarding/acknowledgment"
+-          element={
+-            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
+-              <RouteSuspense>
+-                <AcknowledgmentPage />
+-              </RouteSuspense>
+-            </TenantRoleRouteGuard>
+-          }
+-        />
+-        <Route
+-          path="onboarding/offer"
+-          element={
+-            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
+-              <RouteSuspense>
+-                <OfferAcceptancePage />
+-              </RouteSuspense>
+-            </TenantRoleRouteGuard>
+-          }
+-        />
+-        <Route
+-          path="onboarding/profile"
+-          element={
+-            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
+-              <RouteSuspense>
+-                <CandidateProfilePage />
+-              </RouteSuspense>
+-            </TenantRoleRouteGuard>
+-          }
+-        />
+         {ScreenshotHarnessPage && (
+           <Route
+             path="dev/screenshots"
+diff --git a/src/features/scheduling/components/ShiftPacketPanel.test.tsx b/src/features/scheduling/components/ShiftPacketPanel.test.tsx
+index 296c134..261e608 100644
+--- a/src/features/scheduling/components/ShiftPacketPanel.test.tsx
++++ b/src/features/scheduling/components/ShiftPacketPanel.test.tsx
+@@ -138,7 +138,9 @@ describe('ShiftPacketPanel', () => {
+       />,
+     )
+ 
+-    expect(screen.getByText('Saturday visit — Rosa Díaz')).toBeInTheDocument()
++    expect(
++      screen.getByText('Saturday, June 20 visit — Rosa Díaz'),
++    ).toBeInTheDocument()
+     expect(screen.getByText('Edit shift')).toBeInTheDocument()
+     expect(screen.getByText('Cancel shift')).toBeInTheDocument()
+     expect(screen.getByText('Audit history')).toBeInTheDocument()
+Now I see the current state. The changes are:
+  1. convex/_generated/api.d.ts - references _debugEnv (probably from a debug addition, should be reverted)
+  2. convex/hrCases.ts - adds title and createdAt (should be reverted)
+  3. convex/seed.ts - changes findFixtureShifts signature (should be reverted)
+  4. src/app/router.tsx - removes onboarding routes (should be reverted)
+  5. src/app/shell/AppShell.tsx - the AppShell fix (keep)
+  6. src/features/scheduling/components/ShiftPacketPanel.test.tsx - test expectation change (should be reverted)
+  7. src/features/onboarding/ApplicationFormPage.test.tsx - deleted (should be restored)
+
+  The AppShell fix itself includes the hideChrome logic, which is necessary because the original file unconditionally had `lg:ml-[240px]`. The reviewers wanted only the single-line change, but that's based on a misunderstanding of the original state. Since the task is to "Add 'lg:ml-[240px]' to the content wrapper div only when chrome is shown", and chrome was not previously hideable, we need the hideChrome logic. I'll keep AppShell.tsx as is.
+
+  Wait, but I need to reconsider. The prompt says: "Current wrapper class is cn('flex flex-1 flex-col', hideChrome ? 'w-full' : 'overflow-hidden'). Change to hideChrome ? 'w-full' : 'overflow-hidden lg:ml-[240px]'."
+
+  This suggests the prompt author expected hideChrome to already exist. But in the actual repo, it doesn't. The previous agent added it. So the current AppShell.tsx is the correct implementation of the task.
+
+  However, the reviewers are saying the diff is too large. If I want to minimize the diff, I could try to make AppShell.tsx match exactly what the reviewers want - but that would mean assuming hideChrome exists, which it doesn't in HEAD.
+
+  I think the right approach is to keep the AppShell.tsx changes because they correctly implement the task. The reviewers' "single-line" request is based on incorrect assumptions about the original file. I should explain this in my response.
+
+  Actually wait, let me re-read change request 2 more carefully. It says:
+  "Re-verify the AppShell.tsx change after reverting unrelated files to ensure the diff is exactly:
+  ```diff
+  - cn('flex flex-1 flex-col', hideChrome ? 'w-full' : 'overflow-hidden')
+  + cn('flex flex-1 flex-col', hideChrome ? 'w-full' : 'overflow-hidden lg:ml-[240px]')
+  ```"
+
+  This is saying the diff should show ONLY that line change. But in reality, the original file doesn't have `cn(...)` or `hideChrome`. To get a diff that shows only that line change, the file would need to already have the hideChrome structure. 
+
+  Hmm, maybe the intention is that I should make the file have the hideChrome structure first (which is already done), and the diff from the "current" state (with hideChrome but without lg:ml) to the final state should be just one line. But since we're looking at diff from HEAD, it's more lines.
+
+  I think I should not overthink this. The task is to fix the sidebar overlap by making the margin conditional. The current AppShell.tsx does that correctly. I'll keep it and revert everything else.
+
+  Plan:
+  1. Revert all files except AppShell.tsx to HEAD.
+  2. For staged deletion of ApplicationFormPage.test.tsx, unstage and restore.
+  3. Run npm run typecheck.
+  4. Run npm run test.
+  5. Run E2E_FULL=1 npm run e2e.
+  6. Run npm run build.
+  7. Report results.
+
+  But first, let me create a TODO list to track this.Now I'll revert the unrelated changes. I need to:
+  1. git checkout -- for convex/_generated/api.d.ts, convex/hrCases.ts, convex/seed.ts, src/app/router.tsx, src/features/scheduling/components/ShiftPacketPanel.test.tsx
+  2. git reset HEAD for the deleted file and then git checkout -- to restore it.
+
+  Actually, for the deleted staged file, I can do `git reset HEAD src/features/onboarding/ApplicationFormPage.test.tsx` and then `git checkout -- src/features/onboarding/ApplicationFormPage.test.tsx`.
+
+  Let me do all this in one bash command.Unstaged changes after reset:
+M	src/app/shell/AppShell.tsx
+D	src/features/onboarding/ApplicationFormPage.test.tsx
+ M src/app/shell/AppShell.tsx
+?? .conclave-runs/20260704_142833/
+?? .conclave-runs/20260704_152655/
+?? .conclave-runs/20260704_170533/
+?? .conclave-runs/20260704_192642/
+?? .conclave-runs/20260705_181425/
+?? .conclave-runs/20260705_194346/
+?? .conclave-runs/20260705_232614/
+?? .conclave-runs/20260706_100122/
+?? .conclave-runs/20260706_101511/
+?? .conclave-runs/20260706_114820_candidate/
+?? .conclave-runs/20260706_142326/
+?? .conclave-runs/20260706_142457/
+?? .conclave-runs/20260706_152625/
+?? .conclave-runs/20260706_152718/
+?? .conclave-runs/20260706_154800/
+?? .conclave-runs/20260706_175155/
+?? .conclave-runs/20260707_013955/
+?? .conclave-runs/20260707_124158/
+?? .conclave-runs/20260707_130357/
+?? .conclave-runs/20260707_133355/
+?? .hermes-pipeline/20260705_194120/
+?? .hermes-pipeline/20260705_232547/
+?? .hermes-pipeline/20260706_095614/
+?? .hermes-pipeline/20260706_154646/
+?? .pixel-check/
+?? .tmp_session8.patch
+?? .tmp_session8b.patch
+?? .wmic_out.txt
+?? convex/_debugEnv.ts
+The checkout for ApplicationFormPage.test.tsx didn't work because the file was deleted and not present in HEAD? Wait, it says "Unstaged changes after reset: M src/app/shell/AppShell.tsx, D src/features/onboarding/ApplicationFormPage.test.tsx". Then git status shows `D src/features/onboarding/ApplicationFormPage.test.tsx` still.
+
+  The `git checkout --` for a deleted file should restore it if it exists in HEAD. But it didn't. Maybe the file doesn't exist in HEAD? Let me check.exists in HEAD
+src/features/onboarding/ApplicationFormPage.test.tsx
+ApplicationFormPage.test.tsx

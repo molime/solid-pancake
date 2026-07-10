@@ -1,0 +1,4 @@
+# http://localhost:11434/api/chat
+# model=kimi-k2.7-code:cloud status=200
+
+We need produce a premium implementation plan. We need inspect files. We are an agentic backend (Claude). Must open and read actual relevant files before writing plan. We have repo path C:/Users/pinol/Documents/Work/atriax/solid-pancake. Need read many files: tests/e2e/onboarding.spec.ts, documents.spec.ts, scheduling.spec.ts, convex/seed.ts, ShiftPacketPanel.tsx, vite.config.ts, convex/onboarding.test.ts, convex/scheduling.test.ts, convex/forms.test.ts, convex/onboarding.ts, scheduling.ts, forms.ts, authHelpers, etc. Need gather enough to plan. We can use shell to list and read. Let's start by exploring repo.

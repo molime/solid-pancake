@@ -1,11 +1,20 @@
-import { useOrganization, useAuth } from '@clerk/react'
+import {
+  useOrganization,
+  useAuth,
+} from '@clerk/react'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { Navigate } from 'react-router-dom'
 import type { PropsWithChildren } from 'react'
 import { AppLoader } from '@/shared/ui/AppLoader'
+import { isPlatformTrainingComplete } from '@/features/onboarding/model/trainingCompletion'
 
-type TenantRole = 'org:admin' | 'org:coordinator' | 'org:caregiver'
+type TenantRole =
+  | 'org:admin'
+  | 'org:coordinator'
+  | 'org:caregiver'
+  | 'org:hr'
+  | 'org:candidate'
 
 export function TenantRouteGuard({ children }: PropsWithChildren) {
   const { isLoaded: authLoaded, isSignedIn } = useAuth()
@@ -81,13 +90,42 @@ export function TenantRoleRouteGuard({
   }
 
   if (!allowedRoles.includes(member.role)) {
-    return (
-      <Navigate
-        to={member.role === 'org:caregiver' ? '/caregiver/today' : '/'}
-        replace
-      />
-    )
+    const fallback =
+      member.role === 'org:caregiver'
+        ? '/caregiver/today'
+        : member.role === 'org:candidate'
+          ? '/onboarding'
+          : '/'
+    return <Navigate to={fallback} replace />
   }
 
   return <>{children}</>
 }
+export function TrainingRouteGuard({ children }: PropsWithChildren) {
+  const { organization } = useOrganization()
+  const member = useQuery(
+    api.members.me,
+    organization?.id ? { clerkOrgId: organization.id } : 'skip',
+  )
+  const completions = useQuery(
+    api.platformTrainingCompletions.listMyCompletions,
+    organization?.id ? { clerkOrgId: organization.id } : 'skip',
+  )
+
+  if (!organization || member === undefined || completions === undefined) {
+    return <AppLoader fullScreen label="Checking training status" />
+  }
+
+  if (!member) {
+    return <Navigate to="/select-agency" replace />
+  }
+
+  if (member.role === 'org:caregiver') {
+    if (!isPlatformTrainingComplete(completions)) {
+      return <Navigate to="/onboarding/training" replace />
+    }
+  }
+
+  return <>{children}</>
+}
+

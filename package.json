@@ -10,7 +10,10 @@
     "typecheck": "tsc -b",
     "test": "vitest run --configLoader native",
     "test:watch": "vitest --configLoader native",
-    "e2e": "node --env-file=.env.local ./node_modules/@playwright/test/cli.js test",
+    "test:phase2": "vitest run --configLoader native convex/session1Phase2Integration.test.ts",
+    "e2e": "node scripts/run-playwright-with-env.js",
+    "e2e:full": "node scripts/run-playwright-full.js",
+    "e2e:local": "node --env-file=.env.local ./node_modules/@playwright/test/cli.js test --project=local-harness",
     "preview": "vite preview --configLoader native"
   },
   "dependencies": {

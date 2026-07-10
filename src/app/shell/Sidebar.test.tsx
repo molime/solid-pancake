@@ -68,14 +68,16 @@ describe('Sidebar', () => {
     )
 
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
+    expect(screen.getByText('Schedule')).toBeInTheDocument()
     expect(screen.getByText('Review')).toBeInTheDocument()
     expect(screen.getByText('Knowledge')).toBeInTheDocument()
     expect(screen.getByText('Billing')).toBeInTheDocument()
     expect(screen.getByText('Clients')).toBeInTheDocument()
     expect(screen.getByText('Team')).toBeInTheDocument()
 
-    // Today is caregiver-only
+    // Today, Availability are caregiver-only
     expect(screen.queryByText('Today')).not.toBeInTheDocument()
+    expect(screen.queryByText('Availability')).not.toBeInTheDocument()
   })
 
   it('shows coordinator items for org:coordinator', () => {
@@ -92,6 +94,7 @@ describe('Sidebar', () => {
     )
 
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
+    expect(screen.getByText('Schedule')).toBeInTheDocument()
     expect(screen.getByText('Review')).toBeInTheDocument()
     expect(screen.getByText('Knowledge')).toBeInTheDocument()
     expect(screen.getByText('Billing')).toBeInTheDocument()
@@ -99,6 +102,51 @@ describe('Sidebar', () => {
 
     expect(screen.queryByText('Today')).not.toBeInTheDocument()
     expect(screen.queryByText('Team')).not.toBeInTheDocument()
+    expect(screen.queryByText('Availability')).not.toBeInTheDocument()
+    expect(screen.queryByText('Candidates')).not.toBeInTheDocument()
+    expect(screen.queryByText('Employees')).not.toBeInTheDocument()
+    expect(screen.queryByText('Cases')).not.toBeInTheDocument()
+  })
+
+  it('shows HR items for org:hr', () => {
+    mockSidebarState({
+      orgId: 'org_123',
+      user: { fullName: 'HR User', firstName: 'H' },
+      memberRole: 'org:hr',
+    })
+
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Candidates')).toBeInTheDocument()
+    expect(screen.getByText('Employees')).toBeInTheDocument()
+    expect(screen.getByText('Cases')).toBeInTheDocument()
+
+    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
+    expect(screen.queryByText('Team')).not.toBeInTheDocument()
+    expect(screen.queryByText('Review')).not.toBeInTheDocument()
+    expect(screen.queryByText('Billing')).not.toBeInTheDocument()
+  })
+
+  it('shows HR items for org:admin', () => {
+    mockSidebarState({
+      orgId: 'org_123',
+      user: { fullName: 'Admin User', firstName: 'A' },
+      memberRole: 'org:admin',
+    })
+
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Candidates')).toBeInTheDocument()
+    expect(screen.getByText('Employees')).toBeInTheDocument()
+    expect(screen.getByText('Cases')).toBeInTheDocument()
   })
 
   it('shows caregiver items for org:caregiver', () => {
@@ -116,6 +164,12 @@ describe('Sidebar', () => {
 
     expect(screen.getByText('Today')).toBeInTheDocument()
     expect(screen.getByText('Knowledge')).toBeInTheDocument()
+    expect(screen.getByText('Availability')).toBeInTheDocument()
+
+    // Exactly one Schedule link pointing to the caregiver route
+    const scheduleLinks = screen.getAllByRole('link', { name: 'Schedule' })
+    expect(scheduleLinks).toHaveLength(1)
+    expect(scheduleLinks[0]).toHaveAttribute('href', '/caregiver/schedule')
 
     expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
     expect(screen.queryByText('Review')).not.toBeInTheDocument()
@@ -139,6 +193,11 @@ describe('Sidebar', () => {
 
     expect(screen.getByText('Today')).toBeInTheDocument()
     expect(screen.getByText('Knowledge')).toBeInTheDocument()
+    expect(screen.getByText('Availability')).toBeInTheDocument()
+
+    const scheduleLinks = screen.getAllByRole('link', { name: 'Schedule' })
+    expect(scheduleLinks).toHaveLength(1)
+    expect(scheduleLinks[0]).toHaveAttribute('href', '/caregiver/schedule')
 
     expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
     expect(screen.queryByText('Review')).not.toBeInTheDocument()

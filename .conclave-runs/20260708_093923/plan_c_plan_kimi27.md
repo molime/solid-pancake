@@ -1,0 +1,6 @@
+# http://localhost:11434/api/chat
+# model=kimi-k2.7-code:cloud status=200
+
+We need produce a premium implementation plan. We are a principal/staff engineer planning a code change. We need read actual relevant files before writing plan because backend is agentic CLI (Claude). We have repo at ~/Documents/Work/conclave? Wait task is in solid-pancake branch feature/phase-2-worker-onboarding. We need inspect files. We need use tool to read files. We need discover repo. We need read design doc C:\Users\pinol\Downloads\atriax-phase2-candidate-portal-redesign.md if present. We need inspect convex/candidates.ts, router, upload helper, env, etc. We need produce plan sections. We must not write full code. We need be surgical.
+
+We need use available tools. We can run bash to list files, read. We need be careful with Windows paths. The environment likely has repo somewhere. We need locate solid-pancake. The shared memory says conclave at ~/Documents/Work/conclave. The task says branch feature/phase-2-worker-onboarding in solid-pancake. We need find it. Could be under ~/Documents/Work/solid-pancake? Let's explore. Use bash.

@@ -48,6 +48,8 @@ export default defineSchema({
       v.literal('org:admin'),
       v.literal('org:coordinator'),
       v.literal('org:caregiver'),
+      v.literal('org:hr'),
+      v.literal('org:candidate'),
     ),
     displayName: v.string(),
     email: v.string(),
@@ -122,7 +124,13 @@ export default defineSchema({
       'coordinatorId',
       'status',
     ])
-    .index('by_tenant_status_start', ['tenantId', 'status', 'scheduledStart']),
+    .index('by_tenant_status_start', ['tenantId', 'status', 'scheduledStart'])
+    .index('by_tenant_caregiver_status_start', [
+      'tenantId',
+      'caregiverId',
+      'status',
+      'scheduledStart',
+    ]),
 
   timePunches: defineTable({
     tenantId: v.id('tenants'),
@@ -166,7 +174,8 @@ export default defineSchema({
   })
     .index('by_tenant', ['tenantId'])
     .index('by_tenant_clerk_user', ['tenantId', 'clerkUserId'])
-    .index('by_tenant_adp_aoid', ['tenantId', 'adpAssociateOid']),
+    .index('by_tenant_adp_aoid', ['tenantId', 'adpAssociateOid'])
+    .index('by_tenant_member', ['tenantId', 'tenantMemberId']),
 
   integrationConnections: defineTable({
     tenantId: v.id('tenants'),
@@ -283,6 +292,7 @@ export default defineSchema({
     previousStatus: v.optional(v.string()),
     nextStatus: v.optional(v.string()),
     action: v.string(),
+    kind: v.optional(v.string()),
     metadata: v.optional(v.record(v.string(), v.any())),
     createdAt: v.string(),
   }).index('by_tenant_created_at', ['tenantId', 'createdAt']),
@@ -310,4 +320,160 @@ export default defineSchema({
     clerkUserId: v.string(),
     createdAt: v.string(),
   }).index('by_clerk_user_id', ['clerkUserId']),
+
+  candidates: defineTable({
+    tenantId: v.id('tenants'),
+    clerkUserId: v.optional(v.string()),
+    email: v.string(),
+    phone: v.optional(v.string()),
+    displayName: v.string(),
+    status: v.string(),
+    source: v.optional(v.string()),
+    invitationId: v.optional(v.string()),
+    invitationFailed: v.optional(v.boolean()),
+    invitationError: v.optional(v.string()),
+    manualSetup: v.optional(v.boolean()),
+    requiresPasswordChange: v.optional(v.boolean()),
+    magicLink: v.optional(v.string()),
+    manualSetupTicketExpiresAt: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index('by_tenant_email', ['tenantId', 'email'])
+    .index('by_tenant_clerk_user', ['tenantId', 'clerkUserId']),
+
+  applications: defineTable({
+    tenantId: v.id('tenants'),
+    candidateId: v.id('candidates'),
+    status: v.string(),
+    fields: v.optional(v.any()),
+    decision: v.optional(
+      v.union(
+        v.literal('approved'),
+        v.literal('rejected'),
+        v.literal('needs_correction'),
+      ),
+    ),
+    hrNotes: v.optional(v.string()),
+    submittedAt: v.optional(v.string()),
+    reviewedBy: v.optional(v.string()),
+    decisionAt: v.optional(v.string()),
+    hiredEmployeeProfileId: v.optional(v.id('employeeProfiles')),
+  })
+    .index('by_tenant_status', ['tenantId', 'status'])
+    .index('by_candidate', ['candidateId'])
+    .index('by_candidate_submittedAt', ['candidateId', 'submittedAt']),
+
+  candidateTasks: defineTable({
+    tenantId: v.id('tenants'),
+    candidateId: v.id('candidates'),
+    applicationId: v.optional(v.id('applications')),
+    type: v.string(),
+    status: v.string(),
+    order: v.number(),
+    dueAt: v.optional(v.string()),
+    completedAt: v.optional(v.string()),
+  })
+    .index('by_tenant_candidate_status', ['tenantId', 'candidateId', 'status'])
+    .index('by_tenant_candidate_order', ['tenantId', 'candidateId', 'order']),
+
+  hrCases: defineTable({
+    tenantId: v.id('tenants'),
+    subjectType: v.string(),
+    subjectId: v.string(),
+    category: v.string(),
+    title: v.string(),
+    status: v.string(),
+    ownerMemberId: v.optional(v.id('tenantMembers')),
+    description: v.optional(v.string()),
+    resolvedAt: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index('by_tenant_status', ['tenantId', 'status'])
+    .index('by_tenant_owner_status', ['tenantId', 'ownerMemberId', 'status']),
+
+  availabilityWindows: defineTable({
+    tenantId: v.id('tenants'),
+    caregiverId: v.string(),
+    kind: v.union(v.literal('recurring'), v.literal('one-off')),
+    dayOfWeek: v.optional(v.number()),
+    date: v.optional(v.string()),
+    startTime: v.string(),
+    endTime: v.string(),
+    available: v.boolean(),
+    note: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index('by_tenant_caregiver', ['tenantId', 'caregiverId'])
+    .index('by_tenant_caregiver_date', ['tenantId', 'caregiverId', 'date']),
+
+  coverageRequests: defineTable({
+    tenantId: v.id('tenants'),
+    shiftId: v.id('shifts'),
+    requesterId: v.string(),
+    reason: v.string(),
+    status: v.union(v.literal('open'), v.literal('filled'), v.literal('cancelled')),
+    reassignedTo: v.optional(v.string()),
+    resolvedBy: v.optional(v.string()),
+    resolvedAt: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index('by_tenant_shift', ['tenantId', 'shiftId'])
+    .index('by_tenant_status', ['tenantId', 'status']),
+
+  formDefinitions: defineTable({
+    tenantId: v.id('tenants'),
+    key: v.optional(v.string()),
+    name: v.string(),
+    version: v.optional(v.number()),
+    description: v.optional(v.string()),
+    active: v.boolean(),
+    fields: v.array(v.any()),
+    createdBy: v.string(),
+    createdAt: v.string(),
+  })
+    .index('by_tenant_key_version', ['tenantId', 'key', 'version'])
+    .index('by_tenant_created', ['tenantId', 'createdAt']),
+
+  formSubmissions: defineTable({
+    tenantId: v.id('tenants'),
+    formDefinitionId: v.id('formDefinitions'),
+    subjectType: v.string(),
+    subjectId: v.string(),
+    submittedBy: v.string(),
+    status: v.string(),
+    answers: v.record(v.string(), v.any()),
+    submittedAt: v.string(),
+  })
+    .index('by_tenant_subject', ['tenantId', 'subjectType', 'subjectId'])
+    .index('by_formDefinition', ['formDefinitionId'])
+    .index('by_submittedBy', ['submittedBy']),
+
+  documentArchiveItems: defineTable({
+    tenantId: v.id('tenants'),
+    fileId: v.id('files'),
+    subjectType: v.string(),
+    subjectId: v.string(),
+    category: v.string(),
+    status: v.string(),
+    expiresAt: v.optional(v.string()),
+    retentionUntil: v.optional(v.string()),
+    source: v.optional(v.string()),
+    verifiedBy: v.optional(v.string()),
+    verifiedAt: v.optional(v.string()),
+    rejectionReason: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index('by_tenant_subject', ['tenantId', 'subjectType', 'subjectId'])
+    .index('by_tenant_category_status', ['tenantId', 'category', 'status'])
+    .index('by_tenant_expires_at', ['tenantId', 'expiresAt'])
+    .index('by_tenant_created', ['tenantId', 'createdAt']),
+
+  platformTrainingCompletions: defineTable({
+    tenantId: v.id('tenants'),
+    clerkUserId: v.string(),
+    trainingId: v.string(),
+    completedAt: v.string(),
+    status: v.string(),
+    expiresAt: v.optional(v.string()),
+  }).index('by_tenant_user', ['tenantId', 'clerkUserId']),
 })

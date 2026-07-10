@@ -20,6 +20,23 @@ describe('assertTenantDoc', () => {
       'cross-tenant access denied',
     )
   })
+
+  it('accepts or rejects a candidate-shaped doc across tenants', () => {
+    const tenantId = 'tenant_123' as Id<'tenants'>
+    const otherTenantId = 'tenant_456' as Id<'tenants'>
+    const candidate = {
+      tenantId,
+      email: 'candidate@example.com',
+      displayName: 'Candidate',
+      status: 'new',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    }
+
+    expect(() => assertTenantDoc(candidate, tenantId)).not.toThrow()
+    expect(() => assertTenantDoc(candidate, otherTenantId)).toThrow(
+      'cross-tenant access denied',
+    )
+  })
 })
 
 describe('getActiveClerkOrganizationId', () => {
@@ -80,6 +97,21 @@ describe('getClerkOrganizationRole', () => {
     expect(getClerkOrganizationRole({ org_role: 'caregiver' })).toBe(
       'org:caregiver',
     )
+    expect(getClerkOrganizationRole({ org_role: 'hr' })).toBe('org:hr')
+    expect(getClerkOrganizationRole({ org_role: 'candidate' })).toBe(
+      'org:candidate',
+    )
+  })
+
+  it('reads org:hr and org:candidate roles', () => {
+    expect(getClerkOrganizationRole({ org_role: 'org:hr' })).toBe('org:hr')
+    expect(getClerkOrganizationRole({ org_role: 'org:candidate' })).toBe(
+      'org:candidate',
+    )
+    expect(getClerkOrganizationRole({ o: { rol: 'hr' } })).toBe('org:hr')
+    expect(getClerkOrganizationRole({ o: { rol: 'candidate' } })).toBe(
+      'org:candidate',
+    )
   })
 
   it('returns null for unknown roles', () => {
@@ -111,5 +143,34 @@ describe('requireActiveClerkOrganization', () => {
     expect(() =>
       requireActiveClerkOrganization({ o: { id: 'org_123' } }, 'org_123'),
     ).not.toThrow()
+  })
+})
+
+
+describe('getClerkOrganizationRole with public metadata', () => {
+  it('prefers atriaRole from org_public_metadata when Clerk role is org:member', () => {
+    const role = getClerkOrganizationRole({
+      org_id: 'org_123',
+      org_role: 'org:member',
+      org_public_metadata: { atriaRole: 'org:hr' },
+    } as unknown as Parameters<typeof getClerkOrganizationRole>[0])
+    expect(role).toBe('org:hr')
+  })
+
+  it('does not consult public_metadata when org_public_metadata is absent', () => {
+    const role = getClerkOrganizationRole({
+      org_id: 'org_123',
+      org_role: 'org:member',
+      public_metadata: { atriaRole: 'org:admin' },
+    } as unknown as Parameters<typeof getClerkOrganizationRole>[0])
+    expect(role).toBeNull()
+  })
+
+  it('still returns top-level org_role when it is already an ATRIA role', () => {
+    const role = getClerkOrganizationRole({
+      org_id: 'org_123',
+      org_role: 'org:admin',
+    } as unknown as Parameters<typeof getClerkOrganizationRole>[0])
+    expect(role).toBe('org:admin')
   })
 })

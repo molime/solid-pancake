@@ -1,0 +1,160 @@
+{
+  "project": "atriax",
+  "task": "ATRIA-X frontend \u2014 SESSION 5 follow-up: authenticated visual regression + pixel-perfect Figma match for the Scheduling & Shift Management screens.\n\nContext: The implementation from SESSION 5 already exists on branch feature/phase-2-worker-onboarding:\n- src/features/scheduling/ (SchedulingPage, ShiftEditorModal, ShiftPacketPanel, CoverageRequestsPanel, CaregiverSchedulePage, AvailabilityPage, schedulingUtils, tests)\n- src/app/router.tsx routes /scheduling, /caregiver/schedule, /caregiver/availability\n- src/app/shell/Sidebar.tsx nav items\n- Lint, typecheck, build, and tests are currently passing.\n\nThe blocker is that Conclave reviewers could not verify the live UI against Figma because Clerk E2E credentials are not available in this environment.\n\nTask:\n1. Add a dev-only screenshot harness behind the environment flag VITE_ENABLE_SCREENSHOT_MOCKS=true:\n   - Create src/dev/mockClerkReact.tsx, src/dev/mockConvexReact.tsx, src/dev/mockData.ts, src/dev/mockApi.ts, and src/dev/ScreenshotHarnessPage.tsx.\n   - The mocks must provide:\n     * @clerk/react: ClerkProvider, useUser, useAuth, useOrganization, useClerk, CreateOrganization, SignIn, SignUp, OrganizationSwitcher\n     * convex/react: ConvexProviderWithAuth, ConvexReactClient, useConvexAuth, useConvex, useQuery, useMutation\n     * Realistic scheduling/caregiver/client/availability/coverage/audit mock data that matches the Figma spec week (Mon\u2013Sun, today Thursday, sample shifts/cards as shown in scheduling-calendar.png).\n   - Modify vite.config.ts resolve.alias only when VITE_ENABLE_SCREENSHOT_MOCKS === 'true' to redirect:\n     * @clerk/react -> src/dev/mockClerkReact.tsx\n     * convex/react -> src/dev/mockConvexReact.tsx\n   - Modify src/app/router.tsx to add /dev/screenshots route inside AppShell only when import.meta.env.DEV && import.meta.env.VITE_ENABLE_SCREENSHOT_MOCKS === 'true'.\n   - ScreenshotHarnessPage must render these views via query param ?view=...:\n     * scheduling \u2014 full SchedulingPage\n     * shift-editor \u2014 SchedulingPage dimmed behind an open ShiftEditorModal\n     * shift-packet \u2014 SchedulingPage dimmed behind an open ShiftPacketPanel (admin view)\n     * coverage \u2014 CoverageRequestsPanel\n     * caregiver-schedule \u2014 CaregiverSchedulePage\n     * availability \u2014 AvailabilityPage\n   - Use a fixed Date.now override so the calendar shows the Figma week and \"today\" matches Thursday.\n\n2. Verify the live UI matches the exported Figma PNGs in .hermes-pipeline/20260705_232547/:\n   - scheduling-calendar.png\n   - scheduling-shift-editor.png\n   - scheduling-shift-packet.png\n   - scheduling-coverage-request.png\n   - caregiver-availability-management.png\n   - Also capture /caregiver/schedule state (reference the spec for mobile list styling).\n   - Run VITE_ENABLE_SCREENSHOT_MOCKS=true npm run dev -- --port 5180 and capture PNGs with Playwright at the exact Figma desktop (1440x900) and mobile (390x844) viewports.\n   - Compare live PNGs to Figma PNGs side-by-side. Fix any visible divergence in the real scheduling components (not the harness): colors, spacing, radius, typography, status badge wording/colors, button shapes, card layout, icon usage, empty state.\n\n3. Do NOT break production:\n   - The screenshot harness code must only be active when VITE_ENABLE_SCREENSHOT_MOCKS=true and import.meta.env.DEV.\n   - No new npm dependencies for production (no extra Radix/shadcn).\n   - After the harness is working and fixes are applied, delete or retain the dev files as dead code behind the env flag; they must not be imported in production builds.\n\n4. Run all gates and ensure they pass:\n   - npm run lint\n   - npm run typecheck\n   - npm run test\n   - npm run build\n\n5. Provide the captured live screenshots and a visual-diff summary in the run directory.\n\nConstraints:\n- Stay on branch feature/phase-2-worker-onboarding. Do not create a new branch.\n- Map all v0/shadcn idioms to src/shared/ui/* + @/shared/lib/cn.\n- Dark tokens only; big touch targets >=44px; status = color + word.\n- Style: single quotes, no semicolons, 2-space indent.\n- Do not use real Clerk credentials; mock the auth layer.",
+  "result": "CONVERGED",
+  "stages": [
+    {
+      "stage": "plan",
+      "how": "synthesized by c_plan_agentic",
+      "chars": 8427,
+      "elapsed_s": 568.3
+    },
+    {
+      "stage": "implement",
+      "ok": false,
+      "elapsed_s": 5655.6
+    },
+    {
+      "stage": "gate_postimpl",
+      "passed": true,
+      "results": [
+        {
+          "name": "lint",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260705_232614\\gate_postimpl_lint.log"
+        },
+        {
+          "name": "typecheck",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260705_232614\\gate_postimpl_typecheck.log"
+        },
+        {
+          "name": "unit",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260705_232614\\gate_postimpl_unit.log"
+        }
+      ],
+      "elapsed_s": 157.9
+    },
+    {
+      "stage": "review_iter1",
+      "verdicts": {
+        "c_rev_glm": "CHANGES_REQUESTED",
+        "c_rev_qwen": "CHANGES_REQUESTED",
+        "c_rev_deepseek": "CHANGES_REQUESTED",
+        "c_rev_kimi27": "CHANGES_REQUESTED",
+        "c_rev_gpt_oss": "CHANGES_REQUESTED",
+        "c_rev_qwen35": "CHANGES_REQUESTED"
+      },
+      "passed": false,
+      "elapsed_s": 148.4
+    },
+    {
+      "stage": "fix_iter1",
+      "ok": true,
+      "gate_passed": true,
+      "results": [
+        {
+          "name": "lint",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260705_232614\\gate_postfix1_lint.log"
+        },
+        {
+          "name": "typecheck",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260705_232614\\gate_postfix1_typecheck.log"
+        },
+        {
+          "name": "unit",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260705_232614\\gate_postfix1_unit.log"
+        }
+      ],
+      "elapsed_s": 1839.5
+    },
+    {
+      "stage": "review_iter2",
+      "verdicts": {
+        "c_rev_glm": "APPROVED",
+        "c_rev_qwen": "CHANGES_REQUESTED",
+        "c_rev_deepseek": "APPROVED",
+        "c_rev_kimi27": "CHANGES_REQUESTED",
+        "c_rev_gpt_oss": "CHANGES_REQUESTED",
+        "c_rev_qwen35": "APPROVED"
+      },
+      "passed": false,
+      "elapsed_s": 292.9
+    },
+    {
+      "stage": "fix_iter2",
+      "ok": true,
+      "gate_passed": true,
+      "results": [
+        {
+          "name": "lint",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260705_232614\\gate_postfix2_lint.log"
+        },
+        {
+          "name": "typecheck",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260705_232614\\gate_postfix2_typecheck.log"
+        },
+        {
+          "name": "unit",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260705_232614\\gate_postfix2_unit.log"
+        }
+      ],
+      "elapsed_s": 1867.1
+    },
+    {
+      "stage": "review_iter3",
+      "verdicts": {
+        "c_rev_glm": "APPROVED",
+        "c_rev_qwen": "APPROVED",
+        "c_rev_deepseek": "UNKNOWN",
+        "c_rev_kimi27": "UNKNOWN",
+        "c_rev_gpt_oss": "APPROVED",
+        "c_rev_qwen35": "APPROVED"
+      },
+      "passed": true,
+      "elapsed_s": 289.2
+    },
+    {
+      "stage": "gate_final",
+      "passed": true,
+      "results": [
+        {
+          "name": "unit",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260705_232614\\gate_final_unit.log"
+        },
+        {
+          "name": "e2e",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260705_232614\\gate_final_e2e.log"
+        },
+        {
+          "name": "build",
+          "status": "PASS",
+          "rc": 0,
+          "log": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260705_232614\\gate_final_build.log"
+        }
+      ],
+      "elapsed_s": 172.6
+    }
+  ],
+  "run_dir": "C:\\Users\\pinol\\Documents\\Work\\atriax\\solid-pancake\\.conclave-runs\\20260705_232614"
+}

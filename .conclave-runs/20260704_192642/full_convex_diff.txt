@@ -1,0 +1,2367 @@
+diff --git a/convex/_generated/api.d.ts b/convex/_generated/api.d.ts
+index f74868f..8388287 100644
+--- a/convex/_generated/api.d.ts
++++ b/convex/_generated/api.d.ts
+@@ -27,6 +27,7 @@ import type * as integrations_adp_mockAdp from "../integrations/adp/mockAdp.js";
+ import type * as invitations from "../invitations.js";
+ import type * as locationValidation from "../locationValidation.js";
+ import type * as members from "../members.js";
++import type * as onboarding from "../onboarding.js";
+ import type * as platform from "../platform.js";
+ import type * as platformTrainingCompletions from "../platformTrainingCompletions.js";
+ import type * as reviews from "../reviews.js";
+@@ -67,6 +68,7 @@ declare const fullApi: ApiFromModules<{
+   invitations: typeof invitations;
+   locationValidation: typeof locationValidation;
+   members: typeof members;
++  onboarding: typeof onboarding;
+   platform: typeof platform;
+   platformTrainingCompletions: typeof platformTrainingCompletions;
+   reviews: typeof reviews;
+diff --git a/convex/audit.ts b/convex/audit.ts
+index 9ef9674..8703051 100644
+--- a/convex/audit.ts
++++ b/convex/audit.ts
+@@ -16,7 +16,7 @@ export const record = internalMutation({
+     const { tenantId, identity, role } = await requireTenantRole(
+       ctx,
+       args.clerkOrgId,
+-      ['org:admin', 'org:coordinator', 'org:caregiver'],
++      ['org:admin', 'org:coordinator', 'org:caregiver', 'org:hr', 'org:candidate'],
+     )
+ 
+     if (args.shiftId) {
+diff --git a/convex/authHelpers.ts b/convex/authHelpers.ts
+index 9328e3f..fe86798 100644
+--- a/convex/authHelpers.ts
++++ b/convex/authHelpers.ts
+@@ -1,6 +1,7 @@
+-import type { QueryCtx, MutationCtx } from './_generated/server'
++import type { QueryCtx, MutationCtx, ActionCtx } from './_generated/server'
+ import { ConvexError } from 'convex/values'
+ import type { Id } from './_generated/dataModel'
++import { api } from './_generated/api'
+ 
+ export type AuthContext = QueryCtx | MutationCtx
+ export type TenantRole =
+@@ -186,3 +187,29 @@ export async function ensureTenantMember(
+     )
+     .unique()
+ }
++
++export async function requireTenantRoleAction(
++  ctx: ActionCtx,
++  clerkOrgId: string,
++  allowedRoles: TenantRole[],
++) {
++  const identity = await ctx.auth.getUserIdentity()
++  if (!identity) {
++    throw new ConvexError('Unauthorized: authentication required.')
++  }
++  requireMatchingClerkOrganization(identity, clerkOrgId)
++
++  const member = await ctx.runQuery(api.members.me, { clerkOrgId })
++  if (!member) {
++    throw new ConvexError('Forbidden: not a member of this tenant.')
++  }
++
++  const role = normalizeTenantRole(member.role)
++  if (!role || !allowedRoles.includes(role)) {
++    throw new ConvexError(
++      `Forbidden: required one of [${allowedRoles.join(', ')}].`,
++    )
++  }
++
++  return { identity, member, role, clerkOrgId }
++}
+diff --git a/convex/candidates.test.ts b/convex/candidates.test.ts
+new file mode 100644
+index 0000000..4cd0c11
+--- /dev/null
++++ b/convex/candidates.test.ts
+@@ -0,0 +1,930 @@
++import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
++import { convexTest } from 'convex-test'
++import schema from './schema'
++import { api } from './_generated/api'
++import type { Id } from './_generated/dataModel'
++import { resetSharedMockAdp } from './integrations/adp/mockAdp'
++
++const modules = import.meta.glob('./**/*.*s')
++
++function createTestConvex() {
++  return convexTest({ schema, modules })
++}
++
++function stubClerkInvitation() {
++  vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
++  vi.stubEnv('APP_URL', 'http://localhost')
++  vi.stubGlobal(
++    'fetch',
++    vi.fn(() =>
++      Promise.resolve({
++        ok: true,
++        json: () =>
++          Promise.resolve({
++            id: 'inv_test',
++            email_address: 'candidate@example.com',
++            role: 'org:member',
++            role_name: 'Member',
++            status: 'pending',
++            created_at: Date.now(),
++          }),
++      }),
++    ) as unknown as typeof fetch,
++  )
++}
++
++function stubAdpEnv() {
++  vi.stubEnv('ADP_TOKEN_URL', 'https://mock.adp.com/auth/oauth/v2/token')
++  vi.stubEnv('ADP_BASE_URL', 'https://mock.adp.com')
++  vi.stubEnv('ADP_CLIENT_ID', 'mock-client-id')
++  vi.stubEnv('ADP_CLIENT_SECRET', 'mock-client-secret')
++  vi.stubEnv('ADP_CLIENT_CERT_PEM', 'mock-cert')
++  vi.stubEnv('ADP_CLIENT_KEY_PEM', 'mock-key')
++  vi.stubEnv('ADP_MOCK_ADAPTER', 'true')
++}
++
++beforeEach(() => {
++  resetSharedMockAdp()
++})
++
++afterEach(() => {
++  vi.unstubAllEnvs()
++  vi.unstubAllGlobals()
++  vi.useRealTimers()
++})
++
++function asAdmin(
++  t: ReturnType<typeof createTestConvex>,
++  adminId: string,
++  clerkOrgId: string,
++) {
++  return t.withIdentity({
++    subject: adminId,
++    org_id: clerkOrgId,
++    org_role: 'org:admin',
++  })
++}
++
++function asHR(
++  t: ReturnType<typeof createTestConvex>,
++  hrId: string,
++  clerkOrgId: string,
++) {
++  return t.withIdentity({
++    subject: hrId,
++    org_id: clerkOrgId,
++    org_role: 'org:hr',
++  })
++}
++
++function asCandidate(
++  t: ReturnType<typeof createTestConvex>,
++  candidateId: string,
++  clerkOrgId: string,
++) {
++  return t.withIdentity({
++    subject: candidateId,
++    org_id: clerkOrgId,
++    org_role: 'org:candidate',
++  })
++}
++
++async function seedTenant(
++  t: ReturnType<typeof createTestConvex>,
++  clerkOrgId: string,
++  adminId: string,
++) {
++  return t.run(async (ctx) => {
++    const tenantId = await ctx.db.insert('tenants', {
++      clerkOrgId,
++      name: 'Test Agency',
++      slug: 'test-agency',
++      createdAt: new Date().toISOString(),
++    })
++    await ctx.db.insert('tenantMembers', {
++      tenantId,
++      clerkUserId: adminId,
++      role: 'org:admin',
++      displayName: 'Admin',
++      email: 'admin@example.com',
++    })
++    return tenantId
++  })
++}
++
++async function seedHR(
++  t: ReturnType<typeof createTestConvex>,
++  clerkOrgId: string,
++  hrId: string,
++) {
++  return t.run(async (ctx) => {
++    const tenant = await ctx.db
++      .query('tenants')
++      .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++      .unique()
++    if (!tenant) throw new Error('Tenant not found.')
++    await ctx.db.insert('tenantMembers', {
++      tenantId: tenant._id,
++      clerkUserId: hrId,
++      role: 'org:hr',
++      displayName: 'HR Person',
++      email: 'hr@example.com',
++    })
++  })
++}
++
++describe('inviteCandidate', () => {
++  it('seeds 5 tasks in order', async () => {
++    stubClerkInvitation()
++    const t = createTestConvex()
++    const clerkOrgId = 'org_invite_candidate'
++    const adminId = 'user_admin_invite'
++
++    await seedTenant(t, clerkOrgId, adminId)
++
++    const result = await asAdmin(t, adminId, clerkOrgId).action(
++      api.candidates.inviteCandidate,
++      {
++        clerkOrgId,
++        displayName: 'Candidate One',
++        email: 'candidate@example.com',
++      },
++    )
++
++    expect(result.candidateId).toBeDefined()
++    expect(result.invitationId).toBe('inv_test')
++
++    const candidate = await t.run(async (ctx) => {
++      return ctx.db.get(result.candidateId as Id<'candidates'>)
++    })
++    expect(candidate?.status).toBe('invited')
++    expect(candidate?.email).toBe('candidate@example.com')
++
++    const tasks = await t.run(async (ctx) => {
++      return ctx.db
++        .query('candidateTasks')
++        .withIndex('by_tenant_candidate_order', (q) =>
++          q.eq('tenantId', candidate?.tenantId as Id<'tenants'>).eq('candidateId', result.candidateId as Id<'candidates'>),
++        )
++        .collect()
++    })
++
++    expect(tasks).toHaveLength(5)
++    expect(tasks.map((t) => t.type)).toEqual([
++      'form_submission',
++      'document_upload',
++      'background_check',
++      'reference_check',
++      'platform_training',
++    ])
++    expect(tasks.map((t) => t.order)).toEqual([0, 1, 2, 3, 4])
++    expect(tasks.every((t) => t.status === 'pending')).toBe(true)
++  })
++
++  it('is allowed for org:hr', async () => {
++    stubClerkInvitation()
++    const t = createTestConvex()
++    const clerkOrgId = 'org_invite_hr'
++    const adminId = 'user_admin_invite_hr'
++    const hrId = 'user_hr_invite'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    await seedHR(t, clerkOrgId, hrId)
++
++    const result = await asHR(t, hrId, clerkOrgId).action(
++      api.candidates.inviteCandidate,
++      {
++        clerkOrgId,
++        displayName: 'Candidate HR',
++        email: 'candidate.hr@example.com',
++      },
++    )
++
++    expect(result.candidateId).toBeDefined()
++  })
++
++  it('blocks org:caregiver callers', async () => {
++    stubClerkInvitation()
++    const t = createTestConvex()
++    const clerkOrgId = 'org_invite_caregiver'
++    const adminId = 'user_admin_invite_cg'
++    const caregiverId = 'user_cg_invite'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      await ctx.db.insert('tenantMembers', {
++        tenantId: tenant._id,
++        clerkUserId: caregiverId,
++        role: 'org:caregiver',
++        displayName: 'Caregiver',
++        email: 'cg@example.com',
++      })
++    })
++
++    await expect(
++      t.withIdentity({
++        subject: caregiverId,
++        org_id: clerkOrgId,
++        org_role: 'org:caregiver',
++      }).action(api.candidates.inviteCandidate, {
++        clerkOrgId,
++        displayName: 'Candidate One',
++        email: 'candidate@example.com',
++      }),
++    ).rejects.toThrow()
++  })
++})
++
++describe('getCandidateProfile', () => {
++  it('returns own row by clerkUserId', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_profile_by_user'
++    const adminId = 'user_admin_profile'
++    const candidateUserId = 'user_candidate_profile'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      await ctx.db.insert('tenantMembers', {
++        tenantId: tenant._id,
++        clerkUserId: candidateUserId,
++        role: 'org:candidate',
++        displayName: 'Linked Candidate',
++        email: 'candidate@example.com',
++      })
++      await ctx.db.insert('candidates', {
++        tenantId: tenant._id,
++        clerkUserId: candidateUserId,
++        email: 'candidate@example.com',
++        displayName: 'Linked Candidate',
++        status: 'invited',
++        createdAt: new Date().toISOString(),
++      })
++    })
++
++    const profile = await asCandidate(t, candidateUserId, clerkOrgId).query(
++      api.candidates.getCandidateProfile,
++      { clerkOrgId },
++    )
++
++    expect(profile?.displayName).toBe('Linked Candidate')
++  })
++
++  it('falls back to email when clerkUserId is missing', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_profile_by_email'
++    const adminId = 'user_admin_profile_email'
++    const candidateUserId = 'user_candidate_profile_email'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      await ctx.db.insert('tenantMembers', {
++        tenantId: tenant._id,
++        clerkUserId: candidateUserId,
++        role: 'org:candidate',
++        displayName: 'Candidate Member',
++        email: 'fallback@example.com',
++      })
++      await ctx.db.insert('candidates', {
++        tenantId: tenant._id,
++        email: 'fallback@example.com',
++        displayName: 'Unlinked Candidate',
++        status: 'invited',
++        createdAt: new Date().toISOString(),
++      })
++    })
++
++    const profile = await t
++      .withIdentity({
++        subject: candidateUserId,
++        org_id: clerkOrgId,
++        org_role: 'org:candidate',
++        email: 'fallback@example.com',
++      })
++      .query(api.candidates.getCandidateProfile, { clerkOrgId })
++
++    expect(profile?.displayName).toBe('Unlinked Candidate')
++  })
++})
++
++describe('submitApplication', () => {
++  it('creates application and marks form_submission task complete', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_submit_app'
++    const adminId = 'user_admin_submit'
++    const candidateUserId = 'user_candidate_submit'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    let candidateId: Id<'candidates'>
++    let tenantId: Id<'tenants'>
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      tenantId = tenant._id
++      await ctx.db.insert('tenantMembers', {
++        tenantId,
++        clerkUserId: candidateUserId,
++        role: 'org:candidate',
++        displayName: 'Applicant',
++        email: 'submit@example.com',
++      })
++      candidateId = await ctx.db.insert('candidates', {
++        tenantId,
++        clerkUserId: candidateUserId,
++        email: 'submit@example.com',
++        displayName: 'Applicant',
++        status: 'invited',
++        createdAt: new Date().toISOString(),
++      })
++      await ctx.db.insert('candidateTasks', {
++        tenantId,
++        candidateId,
++        type: 'form_submission',
++        status: 'pending',
++        order: 0,
++      })
++    })
++
++    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
++      api.candidates.submitApplication,
++      {
++        clerkOrgId,
++        fields: { name: 'Applicant', experience: '5 years' },
++      },
++    )
++
++    const [candidate, application, tasks] = await t.run(async (ctx) => {
++      const c = await ctx.db.get(candidateId)
++      const apps = await ctx.db
++        .query('applications')
++        .withIndex('by_candidate', (q) => q.eq('candidateId', candidateId))
++        .collect()
++      const taskList = await ctx.db
++        .query('candidateTasks')
++        .withIndex('by_tenant_candidate_order', (q) =>
++          q.eq('tenantId', tenantId).eq('candidateId', candidateId),
++        )
++        .collect()
++      return [c, apps, taskList]
++    })
++
++    expect(candidate?.status).toBe('applied')
++    expect(application).toHaveLength(1)
++    expect(application[0]?.fields).toEqual({
++      name: 'Applicant',
++      experience: '5 years',
++    })
++    const formTask = tasks.find((t) => t.type === 'form_submission')
++    expect(formTask?.status).toBe('complete')
++  })
++
++  it('updates the most recent application when multiple exist', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_submit_app_upsert'
++    const adminId = 'user_admin_submit_upsert'
++    const candidateUserId = 'user_candidate_submit_upsert'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    let candidateId: Id<'candidates'>
++    let tenantId: Id<'tenants'>
++    let olderAppId: Id<'applications'>
++    let newerAppId: Id<'applications'>
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      tenantId = tenant._id
++      await ctx.db.insert('tenantMembers', {
++        tenantId,
++        clerkUserId: candidateUserId,
++        role: 'org:candidate',
++        displayName: 'Applicant',
++        email: 'submit.upsert@example.com',
++      })
++      candidateId = await ctx.db.insert('candidates', {
++        tenantId,
++        clerkUserId: candidateUserId,
++        email: 'submit.upsert@example.com',
++        displayName: 'Applicant',
++        status: 'invited',
++        createdAt: new Date().toISOString(),
++      })
++      await ctx.db.insert('candidateTasks', {
++        tenantId,
++        candidateId,
++        type: 'form_submission',
++        status: 'pending',
++        order: 0,
++      })
++      olderAppId = await ctx.db.insert('applications', {
++        tenantId,
++        candidateId,
++        status: 'submitted',
++        submittedAt: new Date('2024-01-01').toISOString(),
++        fields: { version: 'old' },
++      })
++      newerAppId = await ctx.db.insert('applications', {
++        tenantId,
++        candidateId,
++        status: 'submitted',
++        submittedAt: new Date('2024-06-01').toISOString(),
++        fields: { version: 'new' },
++      })
++    })
++
++    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
++      api.candidates.submitApplication,
++      {
++        clerkOrgId,
++        fields: { version: 'updated' },
++      },
++    )
++
++    const [olderApp, newerApp] = await t.run(async (ctx) => {
++      return [
++        await ctx.db.get(olderAppId),
++        await ctx.db.get(newerAppId),
++      ]
++    })
++
++    expect(olderApp?.fields).toEqual({ version: 'old' })
++    expect(newerApp?.fields).toEqual({ version: 'updated' })
++  })
++})
++
++describe('reviewApplication and offer lifecycle', () => {
++  it('transitions candidate through approved -> offer -> accepted -> hired', async () => {
++    stubAdpEnv()
++    const t = createTestConvex()
++    const clerkOrgId = 'org_lifecycle'
++    const adminId = 'user_admin_lifecycle'
++    const candidateUserId = 'user_candidate_lifecycle'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    vi.useFakeTimers()
++
++    let tenantId: Id<'tenants'>
++    let candidateId: Id<'candidates'>
++
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      tenantId = tenant._id
++      await ctx.db.insert('tenantMembers', {
++        tenantId,
++        clerkUserId: candidateUserId,
++        role: 'org:candidate',
++        displayName: 'Lifecycle Candidate',
++        email: 'lifecycle@example.com',
++      })
++      candidateId = await ctx.db.insert('candidates', {
++        tenantId,
++        clerkUserId: candidateUserId,
++        email: 'lifecycle@example.com',
++        displayName: 'Lifecycle Candidate',
++        status: 'applied',
++        createdAt: new Date().toISOString(),
++      })
++      await ctx.db.insert('applications', {
++        tenantId,
++        candidateId,
++        status: 'submitted',
++        submittedAt: new Date().toISOString(),
++      })
++    })
++
++    await asAdmin(t, adminId, clerkOrgId).mutation(
++      api.candidates.reviewApplication,
++      {
++        clerkOrgId,
++        candidateId,
++        decision: 'approved',
++        hrNotes: 'Looks good',
++      },
++    )
++
++    let candidate = await t.run(async (ctx) => ctx.db.get(candidateId))
++    expect(candidate?.status).toBe('hr_review')
++
++    await asAdmin(t, adminId, clerkOrgId).mutation(api.candidates.sendOffer, {
++      clerkOrgId,
++      candidateId,
++    })
++
++    candidate = await t.run(async (ctx) => ctx.db.get(candidateId))
++    expect(candidate?.status).toBe('offer_sent')
++
++    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
++      api.candidates.acceptOffer,
++      { clerkOrgId },
++    )
++
++    candidate = await t.run(async (ctx) => ctx.db.get(candidateId))
++    expect(candidate?.status).toBe('accepted')
++
++    const hireResult = await asAdmin(t, adminId, clerkOrgId).mutation(
++      api.candidates.hireCandidate,
++      { clerkOrgId, candidateId },
++    )
++
++    await t.finishAllScheduledFunctions(vi.runAllTimers)
++
++    candidate = await t.run(async (ctx) => ctx.db.get(candidateId))
++    expect(candidate?.status).toBe('hired')
++
++    const profile = await t.run(async (ctx) => {
++      return ctx.db.get(hireResult.employeeProfileId as Id<'employeeProfiles'>)
++    })
++    expect(profile?.adpSyncStatus).toBe('pending_credentials')
++    expect(profile?.email).toBe('lifecycle@example.com')
++  })
++
++  it('rejects application and blocks offer from non-hr_review status', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_reject'
++    const adminId = 'user_admin_reject'
++    const candidateUserId = 'user_candidate_reject'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    let candidateId: Id<'candidates'>
++
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      candidateId = await ctx.db.insert('candidates', {
++        tenantId: tenant._id,
++        clerkUserId: candidateUserId,
++        email: 'reject@example.com',
++        displayName: 'Reject Candidate',
++        status: 'applied',
++        createdAt: new Date().toISOString(),
++      })
++      await ctx.db.insert('applications', {
++        tenantId: tenant._id,
++        candidateId,
++        status: 'submitted',
++        submittedAt: new Date().toISOString(),
++      })
++    })
++
++    await asAdmin(t, adminId, clerkOrgId).mutation(
++      api.candidates.reviewApplication,
++      {
++        clerkOrgId,
++        candidateId,
++        decision: 'rejected',
++      },
++    )
++
++    const candidate = await t.run(async (ctx) => ctx.db.get(candidateId))
++    expect(candidate?.status).toBe('rejected')
++
++    await expect(
++      asAdmin(t, adminId, clerkOrgId).mutation(api.candidates.sendOffer, {
++        clerkOrgId,
++        candidateId,
++      }),
++    ).rejects.toThrow()
++  })
++})
++
++describe('listCandidates and getCandidateDetail', () => {
++  it('lists and filters candidates for HR', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_list'
++    const adminId = 'user_admin_list'
++    const hrId = 'user_hr_list'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    await seedHR(t, clerkOrgId, hrId)
++
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      await ctx.db.insert('candidates', {
++        tenantId: tenant._id,
++        email: 'applied@example.com',
++        displayName: 'Applied',
++        status: 'applied',
++        createdAt: new Date().toISOString(),
++      })
++      await ctx.db.insert('candidates', {
++        tenantId: tenant._id,
++        email: 'invited@example.com',
++        displayName: 'Invited',
++        status: 'invited',
++        createdAt: new Date().toISOString(),
++      })
++    })
++
++    const allCandidates = await asHR(t, hrId, clerkOrgId).query(
++      api.candidates.listCandidates,
++      { clerkOrgId },
++    )
++    expect(allCandidates).toHaveLength(2)
++
++    const invited = await asHR(t, hrId, clerkOrgId).query(
++      api.candidates.listCandidates,
++      { clerkOrgId, status: 'invited' },
++    )
++    expect(invited).toHaveLength(1)
++    expect(invited[0]?.status).toBe('invited')
++  })
++
++  it('blocks org:candidate from listing candidates', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_list_block'
++    const adminId = 'user_admin_list_block'
++    const candidateUserId = 'user_candidate_list_block'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      await ctx.db.insert('tenantMembers', {
++        tenantId: tenant._id,
++        clerkUserId: candidateUserId,
++        role: 'org:candidate',
++        displayName: 'Candidate',
++        email: 'candidate@example.com',
++      })
++    })
++
++    await expect(
++      asCandidate(t, candidateUserId, clerkOrgId).query(
++        api.candidates.listCandidates,
++        { clerkOrgId },
++      ),
++    ).rejects.toThrow()
++  })
++
++  it('returns applications, tasks, and documents in detail view', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_detail'
++    const adminId = 'user_admin_detail'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    let candidateId: Id<'candidates'>
++    let tenantId: Id<'tenants'>
++
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      tenantId = tenant._id
++      candidateId = await ctx.db.insert('candidates', {
++        tenantId,
++        email: 'detail@example.com',
++        displayName: 'Detail Candidate',
++        status: 'applied',
++        createdAt: new Date().toISOString(),
++      })
++      await ctx.db.insert('applications', {
++        tenantId,
++        candidateId,
++        status: 'submitted',
++        submittedAt: new Date().toISOString(),
++      })
++      await ctx.db.insert('candidateTasks', {
++        tenantId,
++        candidateId,
++        type: 'form_submission',
++        status: 'complete',
++        order: 0,
++        completedAt: new Date().toISOString(),
++      })
++    })
++
++    const detail = await asAdmin(t, adminId, clerkOrgId).query(
++      api.candidates.getCandidateDetail,
++      { clerkOrgId, candidateId },
++    )
++
++    expect(detail.candidate.status).toBe('applied')
++    expect(detail.applications).toHaveLength(1)
++    expect(detail.tasks).toHaveLength(1)
++    expect(detail.documents).toHaveLength(0)
++  })
++})
++
++describe('addCandidateDocument', () => {
++  it('marks document_upload task complete', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_doc'
++    const adminId = 'user_admin_doc'
++    const candidateUserId = 'user_candidate_doc'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    let candidateId: Id<'candidates'>
++    let tenantId: Id<'tenants'>
++    let fileId: Id<'files'>
++
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      tenantId = tenant._id
++      await ctx.db.insert('tenantMembers', {
++        tenantId,
++        clerkUserId: candidateUserId,
++        role: 'org:candidate',
++        displayName: 'Doc Candidate',
++        email: 'doc@example.com',
++      })
++      candidateId = await ctx.db.insert('candidates', {
++        tenantId,
++        clerkUserId: candidateUserId,
++        email: 'doc@example.com',
++        displayName: 'Doc Candidate',
++        status: 'invited',
++        createdAt: new Date().toISOString(),
++      })
++      await ctx.db.insert('candidateTasks', {
++        tenantId,
++        candidateId,
++        type: 'document_upload',
++        status: 'pending',
++        order: 1,
++      })
++      fileId = await ctx.db.insert('files', {
++        tenantId,
++        storageId: 'storage-1',
++        uploadedBy: candidateUserId,
++        fileName: 'license.pdf',
++        contentType: 'application/pdf',
++        size: 1024,
++        linkedType: 'shiftTask',
++        linkedId: 'task-1',
++        visibility: 'all_staff',
++        createdAt: new Date().toISOString(),
++      })
++    })
++
++    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
++      api.candidates.addCandidateDocument,
++      {
++        clerkOrgId,
++        fileId,
++        documentType: 'license',
++        label: 'Driver License',
++      },
++    )
++
++    const [documents, tasks] = await t.run(async (ctx) => {
++      const docs = await ctx.db
++        .query('documentArchiveItems')
++        .withIndex('by_tenant_subject', (q) =>
++          q.eq('tenantId', tenantId).eq('subjectType', 'candidate').eq('subjectId', candidateId as string),
++        )
++        .collect()
++      const taskList = await ctx.db
++        .query('candidateTasks')
++        .withIndex('by_tenant_candidate_order', (q) =>
++          q.eq('tenantId', tenantId).eq('candidateId', candidateId),
++        )
++        .collect()
++      return [docs, taskList]
++    })
++
++    expect(documents).toHaveLength(1)
++    expect(documents[0]?.category).toBe('license')
++    const docTask = tasks.find((t) => t.type === 'document_upload')
++    expect(docTask?.status).toBe('complete')
++  })
++})
++
++describe('listCandidateTasks', () => {
++  it('returns ordered tasks for candidate', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_tasks'
++    const adminId = 'user_admin_tasks'
++    const candidateUserId = 'user_candidate_tasks'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    let candidateId: Id<'candidates'>
++    let tenantId: Id<'tenants'>
++
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      tenantId = tenant._id
++      await ctx.db.insert('tenantMembers', {
++        tenantId,
++        clerkUserId: candidateUserId,
++        role: 'org:candidate',
++        displayName: 'Task Candidate',
++        email: 'tasks@example.com',
++      })
++      candidateId = await ctx.db.insert('candidates', {
++        tenantId,
++        clerkUserId: candidateUserId,
++        email: 'tasks@example.com',
++        displayName: 'Task Candidate',
++        status: 'invited',
++        createdAt: new Date().toISOString(),
++      })
++      await ctx.db.insert('candidateTasks', {
++        tenantId,
++        candidateId,
++        type: 'platform_training',
++        status: 'pending',
++        order: 4,
++      })
++      await ctx.db.insert('candidateTasks', {
++        tenantId,
++        candidateId,
++        type: 'form_submission',
++        status: 'pending',
++        order: 0,
++      })
++    })
++
++    const tasks = await asCandidate(t, candidateUserId, clerkOrgId).query(
++      api.candidates.listCandidateTasks,
++      { clerkOrgId },
++    )
++
++    expect(tasks.map((t) => t.type)).toEqual(['form_submission', 'platform_training'])
++  })
++
++  it('returns ordered tasks for HR target candidate', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_tasks_hr'
++    const adminId = 'user_admin_tasks_hr'
++    const hrId = 'user_hr_tasks_hr'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    await seedHR(t, clerkOrgId, hrId)
++    let candidateId: Id<'candidates'>
++    let tenantId: Id<'tenants'>
++
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      tenantId = tenant._id
++      candidateId = await ctx.db.insert('candidates', {
++        tenantId,
++        email: 'tasks.hr@example.com',
++        displayName: 'HR Task Candidate',
++        status: 'invited',
++        createdAt: new Date().toISOString(),
++      })
++      await ctx.db.insert('candidateTasks', {
++        tenantId,
++        candidateId,
++        type: 'document_upload',
++        status: 'pending',
++        order: 1,
++      })
++    })
++
++    const tasks = await asHR(t, hrId, clerkOrgId).query(
++      api.candidates.listCandidateTasksForHR,
++      { clerkOrgId, candidateId },
++    )
++
++    expect(tasks).toHaveLength(1)
++    expect(tasks[0]?.type).toBe('document_upload')
++  })
++})
+diff --git a/convex/candidates.ts b/convex/candidates.ts
+index 48de070..72ea33f 100644
+--- a/convex/candidates.ts
++++ b/convex/candidates.ts
+@@ -1,8 +1,804 @@
+ import { v } from 'convex/values'
+-import { query, mutation } from './_generated/server'
++import {
++  query,
++  mutation,
++  action,
++  internalMutation,
++  type MutationCtx,
++} from './_generated/server'
++import { internal } from './_generated/api'
+ import { ConvexError } from 'convex/values'
+-import { requireTenantRole, assertTenantDoc } from './authHelpers'
++import {
++  requireTenantRole,
++  requireTenantRoleAction,
++  assertTenantDoc,
++  type AuthContext,
++} from './authHelpers'
++import { sendClerkInvitation } from './invitations'
++import { normalizeEmail } from './adpSync'
++import type { Id } from './_generated/dataModel'
+ 
++declare const process: { env: Record<string, string | undefined> }
++
++type CandidateStatus =
++  | 'invited'
++  | 'applied'
++  | 'hr_review'
++  | 'rejected'
++  | 'offer_sent'
++  | 'accepted'
++  | 'hired'
++  | 'withdrawn'
++
++const CANDIDATE_TASK_TYPES = [
++  'form_submission',
++  'document_upload',
++  'background_check',
++  'reference_check',
++  'platform_training',
++] as const
++
++const TERMINAL_STATUSES: CandidateStatus[] = ['hired', 'withdrawn']
++
++function normalizeCandidateEmail(email: string) {
++  return normalizeEmail(email)
++}
++
++async function getOwnCandidate(
++  ctx: AuthContext,
++  tenantId: Id<'tenants'>,
++  identity: { subject: string; email?: string },
++) {
++  const byClerkUser = await ctx.db
++    .query('candidates')
++    .withIndex('by_tenant_clerk_user', (q) =>
++      q.eq('tenantId', tenantId).eq('clerkUserId', identity.subject),
++    )
++    .unique()
++  if (byClerkUser) return byClerkUser
++
++  if (identity.email) {
++    const email = identity.email
++    return ctx.db
++      .query('candidates')
++      .withIndex('by_tenant_email', (q) =>
++        q.eq('tenantId', tenantId).eq('email', normalizeCandidateEmail(email)),
++      )
++      .unique()
++  }
++  return null
++}
++
++async function getLatestApplication(
++  ctx: AuthContext,
++  candidateId: Id<'candidates'>,
++) {
++  return ctx.db
++    .query('applications')
++    .withIndex('by_candidate_submittedAt', (q) =>
++      q.eq('candidateId', candidateId),
++    )
++    .order('desc')
++    .first()
++}
++
++async function completeCandidateTask(
++  ctx: MutationCtx,
++  tenantId: Id<'tenants'>,
++  candidateId: Id<'candidates'>,
++  type: string,
++) {
++  const task = await ctx.db
++    .query('candidateTasks')
++    .withIndex('by_tenant_candidate_status', (q) =>
++      q.eq('tenantId', tenantId).eq('candidateId', candidateId).eq('status', 'pending'),
++    )
++    .filter((q) => q.eq(q.field('type'), type))
++    .first()
++  if (task) {
++    await ctx.db.patch(task._id, {
++      status: 'complete',
++      completedAt: new Date().toISOString(),
++    })
++  }
++  return task
++}
++
++async function recordCandidateAudit(
++  ctx: MutationCtx,
++  args: {
++    clerkOrgId: string
++    action: string
++    kind?: string
++    previousStatus?: string
++    nextStatus?: string
++    metadata?: Record<string, unknown>
++  },
++) {
++  return ctx.runMutation(internal.audit.record, {
++    clerkOrgId: args.clerkOrgId,
++    action: args.action,
++    kind: args.kind,
++    previousStatus: args.previousStatus,
++    nextStatus: args.nextStatus,
++    metadata: args.metadata,
++  })
++}
++
++export const getCandidateProfile = query({
++  args: { clerkOrgId: v.string() },
++  handler: async (ctx, { clerkOrgId }) => {
++    const { tenantId, identity } = await requireTenantRole(ctx, clerkOrgId, [
++      'org:candidate',
++    ])
++    return getOwnCandidate(ctx, tenantId, {
++      subject: identity.subject,
++      email: typeof identity.email === 'string' ? identity.email : undefined,
++    })
++  },
++})
++
++export const listCandidates = query({
++  args: { clerkOrgId: v.string(), status: v.optional(v.string()) },
++  handler: async (ctx, { clerkOrgId, status }) => {
++    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
++      'org:admin',
++      'org:hr',
++    ])
++
++    let candidates = await ctx.db
++      .query('candidates')
++      .withIndex('by_tenant_email', (q) => q.eq('tenantId', tenantId))
++      .collect()
++
++    if (status !== undefined) {
++      candidates = candidates.filter((c) => c.status === status)
++    }
++
++    return candidates.sort(
++      (a, b) =>
++        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
++    )
++  },
++})
++
++export const getCandidateDetail = query({
++  args: { clerkOrgId: v.string(), candidateId: v.id('candidates') },
++  handler: async (ctx, { clerkOrgId, candidateId }) => {
++    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
++      'org:admin',
++      'org:hr',
++    ])
++
++    const candidate = await ctx.db.get(candidateId)
++    if (!candidate) {
++      throw new ConvexError('Candidate not found.')
++    }
++    assertTenantDoc(candidate, tenantId)
++
++    const applications = await ctx.db
++      .query('applications')
++      .withIndex('by_candidate', (q) => q.eq('candidateId', candidateId))
++      .collect()
++
++    const tasks = await ctx.db
++      .query('candidateTasks')
++      .withIndex('by_tenant_candidate_order', (q) =>
++        q.eq('tenantId', tenantId).eq('candidateId', candidateId),
++      )
++      .collect()
++
++    const documents = await ctx.db
++      .query('documentArchiveItems')
++      .withIndex('by_tenant_subject', (q) =>
++        q
++          .eq('tenantId', tenantId)
++          .eq('subjectType', 'candidate')
++          .eq('subjectId', candidateId as string),
++      )
++      .collect()
++
++    return { candidate, applications, tasks, documents }
++  },
++})
++
++export const listCandidateTasks = query({
++  args: { clerkOrgId: v.string() },
++  handler: async (ctx, { clerkOrgId }) => {
++    const { tenantId, identity } = await requireTenantRole(ctx, clerkOrgId, [
++      'org:candidate',
++    ])
++    const candidate = await getOwnCandidate(ctx, tenantId, {
++      subject: identity.subject,
++      email: typeof identity.email === 'string' ? identity.email : undefined,
++    })
++    if (!candidate) {
++      throw new ConvexError('Candidate profile not found.')
++    }
++
++    return ctx.db
++      .query('candidateTasks')
++      .withIndex('by_tenant_candidate_order', (q) =>
++        q.eq('tenantId', tenantId).eq('candidateId', candidate._id),
++      )
++      .collect()
++  },
++})
++
++export const listCandidateTasksForHR = query({
++  args: { clerkOrgId: v.string(), candidateId: v.id('candidates') },
++  handler: async (ctx, { clerkOrgId, candidateId }) => {
++    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
++      'org:admin',
++      'org:hr',
++    ])
++
++    const candidate = await ctx.db.get(candidateId)
++    if (!candidate) {
++      throw new ConvexError('Candidate not found.')
++    }
++    assertTenantDoc(candidate, tenantId)
++
++    return ctx.db
++      .query('candidateTasks')
++      .withIndex('by_tenant_candidate_order', (q) =>
++        q.eq('tenantId', tenantId).eq('candidateId', candidateId),
++      )
++      .collect()
++  },
++})
++
++export const inviteCandidate = action({
++  args: {
++    clerkOrgId: v.string(),
++    displayName: v.string(),
++    email: v.string(),
++    phone: v.optional(v.string()),
++  },
++  handler: async (
++    ctx,
++    args,
++  ): Promise<{ candidateId: Id<'candidates'>; invitationId: string }> => {
++    const { identity } = await requireTenantRoleAction(ctx, args.clerkOrgId, [
++      'org:admin',
++      'org:hr',
++    ])
++
++    const secretKey = process.env.CLERK_SECRET_KEY
++    if (!secretKey) {
++      throw new ConvexError(
++        'Server invitation configuration is missing CLERK_SECRET_KEY.',
++      )
++    }
++
++    const appBaseUrl = process.env.APP_URL
++    if (!appBaseUrl) {
++      throw new ConvexError('Server invitation configuration is missing APP_URL.')
++    }
++
++    const result = await ctx.runMutation(internal.candidates.insertInvitedCandidate, {
++      clerkOrgId: args.clerkOrgId,
++      displayName: args.displayName,
++      email: args.email,
++      phone: args.phone,
++    })
++
++    let invitation
++    try {
++      invitation = await sendClerkInvitation({
++        secretKey,
++        inviterUserId: identity.subject,
++        clerkOrgId: args.clerkOrgId,
++        emailAddress: args.email,
++        role: 'org:candidate',
++        appBaseUrl,
++      })
++    } catch (err) {
++      try {
++        await ctx.runMutation(internal.candidates.deleteInvitedCandidate, {
++          candidateId: result.candidateId,
++        })
++      } catch (cleanupErr) {
++        console.error(
++          'Failed to clean up candidate after invitation failure:',
++          cleanupErr,
++        )
++      }
++      throw err
++    }
++
++    return {
++      candidateId: result.candidateId,
++      invitationId: invitation.id,
++    }
++  },
++})
++
++export const insertInvitedCandidate = internalMutation({
++  args: {
++    clerkOrgId: v.string(),
++    displayName: v.string(),
++    email: v.string(),
++    phone: v.optional(v.string()),
++  },
++  handler: async (ctx, args) => {
++    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
++      'org:admin',
++      'org:hr',
++    ])
++
++    const normalizedEmail = normalizeCandidateEmail(args.email)
++
++    const existing = await ctx.db
++      .query('candidates')
++      .withIndex('by_tenant_email', (q) =>
++        q.eq('tenantId', tenantId).eq('email', normalizedEmail),
++      )
++      .unique()
++
++    if (existing && existing.status !== 'withdrawn') {
++      throw new ConvexError('An active candidate with this email already exists.')
++    }
++
++    const candidateId = await ctx.db.insert('candidates', {
++      tenantId,
++      email: normalizedEmail,
++      displayName: args.displayName,
++      phone: args.phone,
++      status: 'invited',
++      source: 'clerk_invite',
++      createdAt: new Date().toISOString(),
++    })
++
++    await Promise.all(
++      CANDIDATE_TASK_TYPES.map((type, index) =>
++        ctx.db.insert('candidateTasks', {
++          tenantId,
++          candidateId,
++          type,
++          status: 'pending',
++          order: index,
++        }),
++      ),
++    )
++
++    await recordCandidateAudit(ctx, {
++      clerkOrgId: args.clerkOrgId,
++      action: 'candidate.invited',
++      previousStatus: undefined,
++      nextStatus: 'invited',
++      metadata: { candidateId: candidateId as string },
++    })
++
++    return { candidateId }
++  },
++})
++
++export const deleteInvitedCandidate = internalMutation({
++  args: {
++    candidateId: v.id('candidates'),
++  },
++  handler: async (ctx, args) => {
++    const candidate = await ctx.db.get(args.candidateId)
++    if (!candidate) return
++
++    const tasks = await ctx.db
++      .query('candidateTasks')
++      .withIndex('by_tenant_candidate_order', (q) =>
++        q.eq('tenantId', candidate.tenantId).eq('candidateId', args.candidateId),
++      )
++      .collect()
++
++    await Promise.all(tasks.map((task) => ctx.db.delete(task._id)))
++    await ctx.db.delete(args.candidateId)
++  },
++})
++
++export const submitApplication = mutation({
++  args: { clerkOrgId: v.string(), fields: v.any() },
++  handler: async (ctx, args) => {
++    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
++      'org:candidate',
++    ])
++
++    const candidate = await getOwnCandidate(ctx, tenantId, {
++      subject: identity.subject,
++      email: typeof identity.email === 'string' ? identity.email : undefined,
++    })
++    if (!candidate) {
++      throw new ConvexError('Candidate profile not found.')
++    }
++
++    if (TERMINAL_STATUSES.includes(candidate.status as CandidateStatus)) {
++      throw new ConvexError('Cannot submit application for a terminal candidate.')
++    }
++
++    const latest = await getLatestApplication(ctx, candidate._id)
++    const now = new Date().toISOString()
++
++    if (latest && latest.status !== 'hired') {
++      await ctx.db.patch(latest._id, {
++        fields: args.fields,
++        status: 'submitted',
++        submittedAt: now,
++      })
++    } else {
++      await ctx.db.insert('applications', {
++        tenantId,
++        candidateId: candidate._id,
++        status: 'submitted',
++        fields: args.fields,
++        submittedAt: now,
++      })
++    }
++
++    await ctx.db.patch(candidate._id, { status: 'applied' })
++    await completeCandidateTask(ctx, tenantId, candidate._id, 'form_submission')
++
++    await recordCandidateAudit(ctx, {
++      clerkOrgId: args.clerkOrgId,
++      action: 'candidate.application.submitted',
++      previousStatus: candidate.status,
++      nextStatus: 'applied',
++      metadata: { candidateId: candidate._id as string },
++    })
++
++    return candidate._id
++  },
++})
++
++export const reviewApplication = mutation({
++  args: {
++    clerkOrgId: v.string(),
++    candidateId: v.id('candidates'),
++    decision: v.union(v.literal('approved'), v.literal('rejected')),
++    hrNotes: v.optional(v.string()),
++  },
++  handler: async (ctx, args) => {
++    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
++      'org:admin',
++      'org:hr',
++    ])
++
++    const candidate = await ctx.db.get(args.candidateId)
++    if (!candidate) {
++      throw new ConvexError('Candidate not found.')
++    }
++    assertTenantDoc(candidate, tenantId)
++
++    if (candidate.status !== 'applied' && candidate.status !== 'hr_review') {
++      throw new ConvexError('Candidate must be in applied or hr_review status.')
++    }
++
++    const latest = await getLatestApplication(ctx, candidate._id)
++    if (!latest) {
++      throw new ConvexError('No application found for candidate.')
++    }
++
++    const now = new Date().toISOString()
++    const nextStatus = args.decision === 'approved' ? 'hr_review' : 'rejected'
++
++    await ctx.db.patch(latest._id, {
++      decision: args.decision,
++      hrNotes: args.hrNotes,
++      reviewedBy: identity.subject,
++      decisionAt: now,
++      status: nextStatus,
++    })
++
++    await ctx.db.patch(candidate._id, { status: nextStatus })
++
++    await recordCandidateAudit(ctx, {
++      clerkOrgId: args.clerkOrgId,
++      action: 'candidate.application.reviewed',
++      previousStatus: candidate.status,
++      nextStatus,
++      metadata: { candidateId: candidate._id as string, decision: args.decision },
++    })
++
++    return candidate._id
++  },
++})
++
++export const sendOffer = mutation({
++  args: { clerkOrgId: v.string(), candidateId: v.id('candidates') },
++  handler: async (ctx, args) => {
++    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
++      'org:admin',
++      'org:hr',
++    ])
++
++    const candidate = await ctx.db.get(args.candidateId)
++    if (!candidate) {
++      throw new ConvexError('Candidate not found.')
++    }
++    assertTenantDoc(candidate, tenantId)
++
++    if (candidate.status !== 'hr_review') {
++      throw new ConvexError('Candidate must be in hr_review status to send offer.')
++    }
++
++    await ctx.db.patch(candidate._id, { status: 'offer_sent' })
++
++    await recordCandidateAudit(ctx, {
++      clerkOrgId: args.clerkOrgId,
++      action: 'candidate.offer.sent',
++      previousStatus: candidate.status,
++      nextStatus: 'offer_sent',
++      metadata: { candidateId: candidate._id as string },
++    })
++
++    return candidate._id
++  },
++})
++
++export const acceptOffer = mutation({
++  args: { clerkOrgId: v.string() },
++  handler: async (ctx, args) => {
++    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
++      'org:candidate',
++    ])
++
++    const candidate = await getOwnCandidate(ctx, tenantId, {
++      subject: identity.subject,
++      email: typeof identity.email === 'string' ? identity.email : undefined,
++    })
++    if (!candidate) {
++      throw new ConvexError('Candidate profile not found.')
++    }
++
++    if (candidate.status === 'accepted') {
++      return candidate._id
++    }
++
++    if (candidate.status !== 'offer_sent') {
++      throw new ConvexError('No pending offer to accept.')
++    }
++
++    await ctx.db.patch(candidate._id, { status: 'accepted' })
++
++    await recordCandidateAudit(ctx, {
++      clerkOrgId: args.clerkOrgId,
++      action: 'candidate.offer.accepted',
++      previousStatus: candidate.status,
++      nextStatus: 'accepted',
++      metadata: { candidateId: candidate._id as string },
++    })
++
++    return candidate._id
++  },
++})
++
++export const rejectOffer = mutation({
++  args: { clerkOrgId: v.string() },
++  handler: async (ctx, args) => {
++    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
++      'org:candidate',
++    ])
++
++    const candidate = await getOwnCandidate(ctx, tenantId, {
++      subject: identity.subject,
++      email: typeof identity.email === 'string' ? identity.email : undefined,
++    })
++    if (!candidate) {
++      throw new ConvexError('Candidate profile not found.')
++    }
++
++    if (candidate.status !== 'offer_sent') {
++      throw new ConvexError('No pending offer to reject.')
++    }
++
++    await ctx.db.patch(candidate._id, { status: 'withdrawn' })
++
++    await recordCandidateAudit(ctx, {
++      clerkOrgId: args.clerkOrgId,
++      action: 'candidate.offer.rejected',
++      previousStatus: candidate.status,
++      nextStatus: 'withdrawn',
++      metadata: { candidateId: candidate._id as string },
++    })
++
++    return candidate._id
++  },
++})
++
++export const hireCandidate = mutation({
++  args: { clerkOrgId: v.string(), candidateId: v.id('candidates') },
++  handler: async (ctx, args) => {
++    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
++      'org:admin',
++      'org:hr',
++    ])
++
++    const candidate = await ctx.db.get(args.candidateId)
++    if (!candidate) {
++      throw new ConvexError('Candidate not found.')
++    }
++    assertTenantDoc(candidate, tenantId)
++
++    if (candidate.status !== 'accepted') {
++      throw new ConvexError('Candidate must have accepted the offer to be hired.')
++    }
++    if (!candidate.clerkUserId) {
++      throw new ConvexError('Candidate has not completed identity linkage.')
++    }
++
++    const normalizedEmail = normalizeCandidateEmail(candidate.email)
++
++    const existingMember = await ctx.db
++      .query('tenantMembers')
++      .withIndex('by_tenant_user', (q) =>
++        q.eq('tenantId', tenantId).eq('clerkUserId', candidate.clerkUserId as string),
++      )
++      .unique()
++
++    let tenantMemberId: Id<'tenantMembers'>
++    if (existingMember) {
++      await ctx.db.patch(existingMember._id, { role: 'org:caregiver' })
++      tenantMemberId = existingMember._id
++    } else {
++      tenantMemberId = await ctx.db.insert('tenantMembers', {
++        tenantId,
++        clerkUserId: candidate.clerkUserId as string,
++        role: 'org:caregiver',
++        displayName: candidate.displayName,
++        email: normalizedEmail,
++      })
++    }
++
++    let employeeProfileId: Id<'employeeProfiles'>
++    const existingByClerkUser = await ctx.db
++      .query('employeeProfiles')
++      .withIndex('by_tenant_clerk_user', (q) =>
++        q.eq('tenantId', tenantId).eq('clerkUserId', candidate.clerkUserId as string),
++      )
++      .unique()
++
++    if (existingByClerkUser) {
++      await ctx.db.patch(existingByClerkUser._id, {
++        tenantMemberId,
++        displayName: candidate.displayName,
++        email: normalizedEmail,
++        adpSyncStatus: 'pending_credentials',
++      })
++      employeeProfileId = existingByClerkUser._id
++    } else {
++      const existingByEmail = await ctx.db
++        .query('employeeProfiles')
++        .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
++        .filter((q) => q.eq(q.field('email'), normalizedEmail))
++        .unique()
++
++      if (
++        existingByEmail &&
++        (!existingByEmail.clerkUserId ||
++          existingByEmail.clerkUserId === candidate.clerkUserId)
++      ) {
++        await ctx.db.patch(existingByEmail._id, {
++          clerkUserId: candidate.clerkUserId as string,
++          tenantMemberId,
++          displayName: candidate.displayName,
++          email: normalizedEmail,
++          adpSyncStatus: 'pending_credentials',
++        })
++        employeeProfileId = existingByEmail._id
++      } else {
++        employeeProfileId = await ctx.db.insert('employeeProfiles', {
++          tenantId,
++          clerkUserId: candidate.clerkUserId as string,
++          tenantMemberId,
++          displayName: candidate.displayName,
++          email: normalizedEmail,
++          adpSyncStatus: 'pending_credentials',
++          createdAt: new Date().toISOString(),
++        })
++      }
++    }
++
++    await ctx.scheduler.runAfter(0, internal.adpOutbound.adpSyncWorker, {
++      employeeProfileId,
++    })
++
++    await ctx.db.patch(candidate._id, { status: 'hired' })
++
++    const latest = await getLatestApplication(ctx, candidate._id)
++    if (latest) {
++      await ctx.db.patch(latest._id, { hiredEmployeeProfileId: employeeProfileId })
++    }
++
++    await recordCandidateAudit(ctx, {
++      clerkOrgId: args.clerkOrgId,
++      action: 'candidate.hired',
++      previousStatus: candidate.status,
++      nextStatus: 'hired',
++      metadata: {
++        candidateId: candidate._id as string,
++        employeeProfileId: employeeProfileId as string,
++      },
++    })
++
++    return { candidateId: candidate._id, employeeProfileId }
++  },
++})
++
++export const addCandidateDocument = mutation({
++  args: {
++    clerkOrgId: v.string(),
++    candidateId: v.optional(v.id('candidates')),
++    fileId: v.id('files'),
++    documentType: v.string(),
++    label: v.string(),
++    expiresAt: v.optional(v.string()),
++  },
++  handler: async (ctx, args) => {
++    const { tenantId, identity, role } = await requireTenantRole(ctx, args.clerkOrgId, [
++      'org:candidate',
++      'org:admin',
++      'org:hr',
++    ])
++
++    let candidateId: Id<'candidates'>
++
++    if (role === 'org:candidate') {
++      if (args.candidateId) {
++        throw new ConvexError('Candidates can only add documents to their own profile.')
++      }
++      const own = await getOwnCandidate(ctx, tenantId, {
++        subject: identity.subject,
++        email: typeof identity.email === 'string' ? identity.email : undefined,
++      })
++      if (!own) {
++        throw new ConvexError('Candidate profile not found.')
++      }
++      candidateId = own._id
++    } else {
++      if (!args.candidateId) {
++        throw new ConvexError('candidateId is required for admin/HR uploads.')
++      }
++      const candidate = await ctx.db.get(args.candidateId)
++      if (!candidate) {
++        throw new ConvexError('Candidate not found.')
++      }
++      assertTenantDoc(candidate, tenantId)
++      candidateId = args.candidateId
++    }
++
++    const file = await ctx.db.get(args.fileId)
++    if (!file) {
++      throw new ConvexError('File not found.')
++    }
++    assertTenantDoc(file, tenantId)
++
++    await ctx.db.insert('documentArchiveItems', {
++      tenantId,
++      fileId: args.fileId,
++      subjectType: 'candidate',
++      subjectId: candidateId as string,
++      category: args.documentType,
++      status: 'active',
++      expiresAt: args.expiresAt,
++      source: args.label,
++    })
++
++    await completeCandidateTask(ctx, tenantId, candidateId, 'document_upload')
++
++    await recordCandidateAudit(ctx, {
++      clerkOrgId: args.clerkOrgId,
++      action: 'candidate.document.added',
++      metadata: {
++        candidateId: candidateId as string,
++        documentType: args.documentType,
++      },
++    })
++
++    return candidateId
++  },
++})
++
++/**
++ * @deprecated Use getCandidateDetail for HR/admin views or getCandidateProfile
++ * for self-service candidate lookup instead.
++ */
+ export const get = query({
+   args: {
+     clerkOrgId: v.string(),
+@@ -25,6 +821,10 @@ export const get = query({
+   },
+ })
+ 
++/**
++ * @deprecated Use inviteCandidate to create candidates through the Clerk
++ * invitation workflow instead.
++ */
+ export const create = mutation({
+   args: {
+     clerkOrgId: v.string(),
+@@ -42,7 +842,7 @@ export const create = mutation({
+ 
+     return ctx.db.insert('candidates', {
+       tenantId,
+-      email: args.email,
++      email: normalizeCandidateEmail(args.email),
+       displayName: args.displayName,
+       phone: args.phone,
+       source: args.source,
+@@ -52,6 +852,10 @@ export const create = mutation({
+   },
+ })
+ 
++/**
++ * @deprecated Use the lifecycle-specific mutations (reviewApplication, sendOffer,
++ * acceptOffer, rejectOffer, hireCandidate) instead of direct status updates.
++ */
+ export const update = mutation({
+   args: {
+     clerkOrgId: v.string(),
+diff --git a/convex/members.ts b/convex/members.ts
+index ab8153f..8c060d5 100644
+--- a/convex/members.ts
++++ b/convex/members.ts
+@@ -1,6 +1,7 @@
+ import { v } from 'convex/values'
+-import { query, mutation } from './_generated/server'
++import { query, mutation, type MutationCtx } from './_generated/server'
+ import { internal } from './_generated/api'
++import type { Id } from './_generated/dataModel'
+ import {
+   getActiveClerkOrganizationId,
+   getClerkOrganizationRole,
+@@ -10,6 +11,24 @@ import {
+   requireTenantRole,
+ } from './authHelpers'
+ import { ensureCaregiverEmployeeProfile } from './employeeProfiles'
++import { normalizeEmail } from './adpSync'
++
++async function linkCandidateClerkUserId(
++  ctx: MutationCtx,
++  tenantId: Id<'tenants'>,
++  clerkUserId: string,
++  email: string,
++) {
++  const candidate = await ctx.db
++    .query('candidates')
++    .withIndex('by_tenant_email', (q) =>
++      q.eq('tenantId', tenantId).eq('email', normalizeEmail(email)),
++    )
++    .unique()
++  if (candidate && !candidate.clerkUserId) {
++    await ctx.db.patch(candidate._id, { clerkUserId })
++  }
++}
+ 
+ export const checkMembership = query({
+   args: { clerkOrgId: v.string() },
+@@ -145,6 +164,14 @@ export const sync = mutation({
+           })
+         }
+       }
++      if (role === 'org:candidate') {
++        await linkCandidateClerkUserId(
++          ctx,
++          tenantId,
++          args.clerkUserId,
++          args.email,
++        )
++      }
+       return existing._id
+     }
+ 
+@@ -172,6 +199,15 @@ export const sync = mutation({
+       }
+     }
+ 
++    if (role === 'org:candidate') {
++      await linkCandidateClerkUserId(
++        ctx,
++        tenantId,
++        args.clerkUserId,
++        args.email,
++      )
++    }
++
+     return memberId
+   },
+ })
+diff --git a/convex/onboarding.test.ts b/convex/onboarding.test.ts
+new file mode 100644
+index 0000000..4c3b497
+--- /dev/null
++++ b/convex/onboarding.test.ts
+@@ -0,0 +1,275 @@
++import { describe, expect, it, afterEach, vi } from 'vitest'
++import { convexTest } from 'convex-test'
++import schema from './schema'
++import { api } from './_generated/api'
++
++const modules = import.meta.glob('./**/*.*s')
++
++function createTestConvex() {
++  return convexTest({ schema, modules })
++}
++
++afterEach(() => {
++  vi.unstubAllEnvs()
++  vi.unstubAllGlobals()
++})
++
++function asAdmin(
++  t: ReturnType<typeof createTestConvex>,
++  adminId: string,
++  clerkOrgId: string,
++) {
++  return t.withIdentity({
++    subject: adminId,
++    org_id: clerkOrgId,
++    org_role: 'org:admin',
++  })
++}
++
++function asCaregiver(
++  t: ReturnType<typeof createTestConvex>,
++  caregiverId: string,
++  clerkOrgId: string,
++) {
++  return t.withIdentity({
++    subject: caregiverId,
++    org_id: clerkOrgId,
++    org_role: 'org:caregiver',
++  })
++}
++
++function asCandidate(
++  t: ReturnType<typeof createTestConvex>,
++  candidateId: string,
++  clerkOrgId: string,
++) {
++  return t.withIdentity({
++    subject: candidateId,
++    org_id: clerkOrgId,
++    org_role: 'org:candidate',
++  })
++}
++
++async function seedTenant(
++  t: ReturnType<typeof createTestConvex>,
++  clerkOrgId: string,
++  adminId: string,
++) {
++  return t.run(async (ctx) => {
++    const tenantId = await ctx.db.insert('tenants', {
++      clerkOrgId,
++      name: 'Test Agency',
++      slug: 'test-agency',
++      createdAt: new Date().toISOString(),
++    })
++    await ctx.db.insert('tenantMembers', {
++      tenantId,
++      clerkUserId: adminId,
++      role: 'org:admin',
++      displayName: 'Admin',
++      email: 'admin@example.com',
++    })
++    return tenantId
++  })
++}
++
++describe('completePlatformTraining', () => {
++  it('is idempotent for caregiver', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_training_idempotent'
++    const adminId = 'user_admin_training'
++    const caregiverId = 'user_cg_training'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      await ctx.db.insert('tenantMembers', {
++        tenantId: tenant._id,
++        clerkUserId: caregiverId,
++        role: 'org:caregiver',
++        displayName: 'Caregiver',
++        email: 'cg@example.com',
++      })
++    })
++
++    await asCaregiver(t, caregiverId, clerkOrgId).mutation(
++      api.onboarding.completePlatformTraining,
++      { clerkOrgId },
++    )
++    await asCaregiver(t, caregiverId, clerkOrgId).mutation(
++      api.onboarding.completePlatformTraining,
++      { clerkOrgId },
++    )
++
++    const completions = await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      return ctx.db
++        .query('platformTrainingCompletions')
++        .withIndex('by_tenant_user', (q) =>
++          q.eq('tenantId', tenant._id).eq('clerkUserId', caregiverId),
++        )
++        .collect()
++    })
++
++    expect(completions).toHaveLength(1)
++    expect(completions[0]?.status).toBe('completed')
++  })
++
++  it('works for candidate role', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_training_candidate'
++    const adminId = 'user_admin_training_cand'
++    const candidateId = 'user_candidate_training'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      await ctx.db.insert('tenantMembers', {
++        tenantId: tenant._id,
++        clerkUserId: candidateId,
++        role: 'org:candidate',
++        displayName: 'Candidate',
++        email: 'candidate@example.com',
++      })
++    })
++
++    await asCandidate(t, candidateId, clerkOrgId).mutation(
++      api.onboarding.completePlatformTraining,
++      { clerkOrgId },
++    )
++
++    const completed = await asCandidate(t, candidateId, clerkOrgId).query(
++      api.onboarding.hasPlatformTrainingCompleted,
++      { clerkOrgId },
++    )
++    expect(completed).toBe(true)
++  })
++})
++
++describe('hasPlatformTrainingCompleted', () => {
++  it('returns false before completion and true after', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_training_has'
++    const adminId = 'user_admin_training_has'
++    const caregiverId = 'user_cg_training_has'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      await ctx.db.insert('tenantMembers', {
++        tenantId: tenant._id,
++        clerkUserId: caregiverId,
++        role: 'org:caregiver',
++        displayName: 'Caregiver',
++        email: 'cg@example.com',
++      })
++    })
++
++    const before = await asCaregiver(t, caregiverId, clerkOrgId).query(
++      api.onboarding.hasPlatformTrainingCompleted,
++      { clerkOrgId },
++    )
++    expect(before).toBe(false)
++
++    await asCaregiver(t, caregiverId, clerkOrgId).mutation(
++      api.onboarding.completePlatformTraining,
++      { clerkOrgId },
++    )
++
++    const after = await asCaregiver(t, caregiverId, clerkOrgId).query(
++      api.onboarding.hasPlatformTrainingCompleted,
++      { clerkOrgId },
++    )
++    expect(after).toBe(true)
++  })
++})
++
++describe('resetPlatformTraining', () => {
++  it('deletes completion for admin', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_training_reset'
++    const adminId = 'user_admin_training_reset'
++    const caregiverId = 'user_cg_training_reset'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      await ctx.db.insert('tenantMembers', {
++        tenantId: tenant._id,
++        clerkUserId: caregiverId,
++        role: 'org:caregiver',
++        displayName: 'Caregiver',
++        email: 'cg@example.com',
++      })
++      await ctx.db.insert('platformTrainingCompletions', {
++        tenantId: tenant._id,
++        clerkUserId: caregiverId,
++        trainingId: 'platform_training',
++        completedAt: new Date().toISOString(),
++        status: 'completed',
++      })
++    })
++
++    const result = await asAdmin(t, adminId, clerkOrgId).mutation(
++      api.onboarding.resetPlatformTraining,
++      { clerkOrgId, clerkUserId: caregiverId },
++    )
++    expect(result.deleted).toBe(true)
++
++    const after = await asCaregiver(t, caregiverId, clerkOrgId).query(
++      api.onboarding.hasPlatformTrainingCompleted,
++      { clerkOrgId },
++    )
++    expect(after).toBe(false)
++  })
++
++  it('blocks non-admin callers', async () => {
++    const t = createTestConvex()
++    const clerkOrgId = 'org_training_reset_block'
++    const adminId = 'user_admin_training_reset_block'
++    const caregiverId = 'user_cg_training_reset_block'
++
++    await seedTenant(t, clerkOrgId, adminId)
++    await t.run(async (ctx) => {
++      const tenant = await ctx.db
++        .query('tenants')
++        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
++        .unique()
++      if (!tenant) throw new Error('Tenant not found.')
++      await ctx.db.insert('tenantMembers', {
++        tenantId: tenant._id,
++        clerkUserId: caregiverId,
++        role: 'org:caregiver',
++        displayName: 'Caregiver',
++        email: 'cg@example.com',
++      })
++    })
++
++    await expect(
++      asCaregiver(t, caregiverId, clerkOrgId).mutation(
++        api.onboarding.resetPlatformTraining,
++        { clerkOrgId, clerkUserId: caregiverId },
++      ),
++    ).rejects.toThrow()
++  })
++})
+diff --git a/convex/onboarding.ts b/convex/onboarding.ts
+new file mode 100644
+index 0000000..8e0faa7
+--- /dev/null
++++ b/convex/onboarding.ts
+@@ -0,0 +1,111 @@
++import { v } from 'convex/values'
++import { query, mutation } from './_generated/server'
++import { internal } from './_generated/api'
++import { requireTenantRole } from './authHelpers'
++
++const DEFAULT_TRAINING_ID = 'platform_training'
++
++export const completePlatformTraining = mutation({
++  args: {
++    clerkOrgId: v.string(),
++    trainingId: v.optional(v.string()),
++  },
++  handler: async (ctx, args) => {
++    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
++      'org:caregiver',
++      'org:candidate',
++    ])
++
++    const trainingId = args.trainingId ?? DEFAULT_TRAINING_ID
++
++    const existing = await ctx.db
++      .query('platformTrainingCompletions')
++      .withIndex('by_tenant_user', (q) =>
++        q.eq('tenantId', tenantId).eq('clerkUserId', identity.subject),
++      )
++      .filter((q) => q.eq(q.field('trainingId'), trainingId))
++      .first()
++
++    if (existing) {
++      return existing
++    }
++
++    const completionId = await ctx.db.insert('platformTrainingCompletions', {
++      tenantId,
++      clerkUserId: identity.subject,
++      trainingId,
++      completedAt: new Date().toISOString(),
++      status: 'completed',
++    })
++
++    await ctx.runMutation(internal.audit.record, {
++      clerkOrgId: args.clerkOrgId,
++      action: 'platform.training.completed',
++      metadata: { trainingId, completionId: completionId as string },
++    })
++
++    return ctx.db.get(completionId)
++  },
++})
++
++export const hasPlatformTrainingCompleted = query({
++  args: {
++    clerkOrgId: v.string(),
++    trainingId: v.optional(v.string()),
++  },
++  handler: async (ctx, args) => {
++    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
++      'org:caregiver',
++      'org:candidate',
++    ])
++
++    const trainingId = args.trainingId ?? DEFAULT_TRAINING_ID
++
++    const existing = await ctx.db
++      .query('platformTrainingCompletions')
++      .withIndex('by_tenant_user', (q) =>
++        q.eq('tenantId', tenantId).eq('clerkUserId', identity.subject),
++      )
++      .filter((q) => q.eq(q.field('trainingId'), trainingId))
++      .first()
++
++    return !!existing
++  },
++})
++
++export const resetPlatformTraining = mutation({
++  args: {
++    clerkOrgId: v.string(),
++    clerkUserId: v.string(),
++  },
++  handler: async (ctx, args) => {
++    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
++      'org:admin',
++    ])
++
++    const existing = await ctx.db
++      .query('platformTrainingCompletions')
++      .withIndex('by_tenant_user', (q) =>
++        q.eq('tenantId', tenantId).eq('clerkUserId', args.clerkUserId),
++      )
++      .filter((q) => q.eq(q.field('trainingId'), DEFAULT_TRAINING_ID))
++      .first()
++
++    if (!existing) {
++      return { deleted: false }
++    }
++
++    await ctx.db.delete(existing._id)
++
++    await ctx.runMutation(internal.audit.record, {
++      clerkOrgId: args.clerkOrgId,
++      action: 'platform.training.reset',
++      metadata: {
++        clerkUserId: args.clerkUserId,
++        trainingId: DEFAULT_TRAINING_ID,
++      },
++    })
++
++    return { deleted: true }
++  },
++})
+diff --git a/convex/schema.ts b/convex/schema.ts
+index e95ce52..a3c54d6 100644
+--- a/convex/schema.ts
++++ b/convex/schema.ts
+@@ -329,17 +329,25 @@ export default defineSchema({
+     status: v.string(),
+     source: v.optional(v.string()),
+     createdAt: v.string(),
+-  }).index('by_tenant_email', ['tenantId', 'email']),
++  })
++    .index('by_tenant_email', ['tenantId', 'email'])
++    .index('by_tenant_clerk_user', ['tenantId', 'clerkUserId']),
+ 
+   applications: defineTable({
+     tenantId: v.id('tenants'),
+     candidateId: v.id('candidates'),
+     status: v.string(),
++    fields: v.optional(v.any()),
++    decision: v.optional(v.union(v.literal('approved'), v.literal('rejected'))),
++    hrNotes: v.optional(v.string()),
+     submittedAt: v.optional(v.string()),
+     reviewedBy: v.optional(v.string()),
+     decisionAt: v.optional(v.string()),
+     hiredEmployeeProfileId: v.optional(v.id('employeeProfiles')),
+-  }).index('by_tenant_status', ['tenantId', 'status']),
++  })
++    .index('by_tenant_status', ['tenantId', 'status'])
++    .index('by_candidate', ['candidateId'])
++    .index('by_candidate_submittedAt', ['candidateId', 'submittedAt']),
+ 
+   candidateTasks: defineTable({
+     tenantId: v.id('tenants'),
+@@ -347,9 +355,12 @@ export default defineSchema({
+     applicationId: v.optional(v.id('applications')),
+     type: v.string(),
+     status: v.string(),
++    order: v.number(),
+     dueAt: v.optional(v.string()),
+     completedAt: v.optional(v.string()),
+-  }).index('by_tenant_candidate_status', ['tenantId', 'candidateId', 'status']),
++  })
++    .index('by_tenant_candidate_status', ['tenantId', 'candidateId', 'status'])
++    .index('by_tenant_candidate_order', ['tenantId', 'candidateId', 'order']),
+ 
+   hrCases: defineTable({
+     tenantId: v.id('tenants'),

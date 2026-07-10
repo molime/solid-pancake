@@ -1,0 +1,4 @@
+# http://localhost:11434/api/chat
+# model=kimi-k2.7-code:cloud status=200
+
+We need produce a premium implementation plan. We are an agentic backend? We are Kimi? The instruction says if backend is agentic CLI (kimi, codex, claude), MUST open and read actual relevant files before writing plan — do not reason from context alone. We need to inspect repo. We have no tool to read files except maybe we can use functions. We need to read files. We need to plan. We can use shell to list files and read. Let's explore repo at ~/Documents/Work/conclave? Wait task is ATRIA-X repo, not conclave. The shared memory mentions conclave but task is ATRIA-X. We need locate ATRIA-X repo. Probably current working directory? We need inspect. Let's start by listing directory.

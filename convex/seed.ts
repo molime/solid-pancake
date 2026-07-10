@@ -831,3 +831,512 @@ export const resetE2EShifts = mutation({
     }
   },
 })
+
+type E2ECandidateFixtureUserIds = {
+  adminUserId: string
+  coordinatorUserId: string
+  caregiverUserId: string
+  hrUserId: string
+  candidateUserId: string
+}
+
+async function seedE2ECandidateFixtures(
+  ctx: MutationCtx,
+  clerkOrgId: string,
+  userIds: E2ECandidateFixtureUserIds,
+) {
+  const { tenantId } = await requireTenantRole(ctx, clerkOrgId, ['org:admin'])
+
+  const now = new Date().toISOString()
+  const fixtureDate = REF_TODAY
+
+  const members = [
+    {
+      clerkUserId: userIds.adminUserId,
+      role: 'org:admin' as const,
+      displayName: 'E2E Admin',
+      email: 'e2e-admin@atriax.test',
+    },
+    {
+      clerkUserId: userIds.coordinatorUserId,
+      role: 'org:coordinator' as const,
+      displayName: 'E2E Coordinator',
+      email: 'e2e-coordinator@atriax.test',
+    },
+    {
+      clerkUserId: userIds.caregiverUserId,
+      role: 'org:caregiver' as const,
+      displayName: 'E2E Caregiver',
+      email: 'e2e-caregiver@atriax.test',
+    },
+    {
+      clerkUserId: userIds.hrUserId,
+      role: 'org:hr' as const,
+      displayName: 'E2E HR',
+      email: 'e2e-hr@atriax.test',
+    },
+    {
+      clerkUserId: userIds.candidateUserId,
+      role: 'org:candidate' as const,
+      displayName: 'E2E Candidate',
+      email: 'phase2-candidate@atriax.test',
+    },
+  ]
+
+  for (const member of members) {
+    const existing = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', tenantId).eq('clerkUserId', member.clerkUserId),
+      )
+      .unique()
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        role: member.role,
+        displayName: member.displayName,
+        email: member.email,
+      })
+    } else {
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: member.clerkUserId,
+        role: member.role,
+        displayName: member.displayName,
+        email: member.email,
+      })
+    }
+  }
+
+  const findClient = async (displayName: string) => {
+    const all = await ctx.db
+      .query('clients')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    return all.find((c) => c.displayName === displayName) ?? null
+  }
+
+  let clientId: Id<'clients'>
+  const phase2Client = await findClient('Phase 2 Client')
+  if (!phase2Client) {
+    clientId = await ctx.db.insert('clients', {
+      tenantId,
+      displayName: 'Phase 2 Client',
+      serviceType: 'SLS',
+      authorizationHours: 40,
+      riskFlags: [],
+    })
+  } else {
+    clientId = phase2Client._id
+  }
+
+  const candidateEmail = 'phase2-candidate@atriax.test'
+
+  // Remove any existing candidate rows for this fixture email/Clerk user so
+  // the E2E flow always targets a single, deterministic candidate.
+  const byEmail = await ctx.db
+    .query('candidates')
+    .withIndex('by_tenant_email', (q) =>
+      q.eq('tenantId', tenantId).eq('email', candidateEmail),
+    )
+    .collect()
+  const byClerkUser = await ctx.db
+    .query('candidates')
+    .withIndex('by_tenant_clerk_user', (q) =>
+      q.eq('tenantId', tenantId).eq('clerkUserId', userIds.candidateUserId),
+    )
+    .collect()
+  const toDelete = new Set([...byEmail, ...byClerkUser].map((c) => c._id))
+  for (const staleId of toDelete) {
+    await ctx.db.delete(staleId)
+  }
+
+  // Clean up any stale employee profiles tied to the fixture candidate so
+  // hireCandidate does not hit a non-unique email conflict.
+  const staleEmployeeProfiles = await ctx.db
+    .query('employeeProfiles')
+    .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+    .filter((q) => q.eq(q.field('email'), candidateEmail))
+    .collect()
+  for (const profile of staleEmployeeProfiles) {
+    await ctx.db.delete(profile._id)
+  }
+
+  const candidateId = await ctx.db.insert('candidates', {
+    tenantId,
+    clerkUserId: userIds.candidateUserId,
+    email: candidateEmail,
+    displayName: 'Phase 2 Candidate',
+    status: 'applied',
+    createdAt: now,
+  })
+
+  // Reset any stale platform-training completion so the onboarding E2E can
+  // assert the before/after training state deterministically.
+  const existingTraining = await ctx.db
+    .query('platformTrainingCompletions')
+    .withIndex('by_tenant_user', (q) =>
+      q.eq('tenantId', tenantId).eq('clerkUserId', userIds.candidateUserId),
+    )
+    .filter((q) => q.eq(q.field('trainingId'), 'platform_training'))
+    .first()
+  if (existingTraining) {
+    await ctx.db.delete(existingTraining._id)
+  }
+
+  const existingApplication = await ctx.db
+    .query('applications')
+    .withIndex('by_candidate_submittedAt', (q) => q.eq('candidateId', candidateId))
+    .order('desc')
+    .first()
+  const applicationFields = {
+    name: 'Phase 2 Candidate',
+    experience: '2 years',
+    notes: 'Seeded fixture application',
+  }
+  if (existingApplication) {
+    await ctx.db.patch(existingApplication._id, {
+      status: 'submitted',
+      submittedAt: now,
+      fields: applicationFields,
+    })
+  } else {
+    await ctx.db.insert('applications', {
+      tenantId,
+      candidateId,
+      status: 'submitted',
+      submittedAt: now,
+      fields: applicationFields,
+    })
+  }
+
+  const availabilityWindows = await ctx.db
+    .query('availabilityWindows')
+    .withIndex('by_tenant_caregiver', (q) =>
+      q.eq('tenantId', tenantId).eq('caregiverId', userIds.caregiverUserId),
+    )
+    .collect()
+  const mondayWindow = availabilityWindows.find(
+    (w) =>
+      w.kind === 'recurring' &&
+      w.dayOfWeek === 1 &&
+      w.startTime === '09:00' &&
+      w.endTime === '17:00',
+  )
+  if (mondayWindow) {
+    await ctx.db.patch(mondayWindow._id, { available: true })
+  } else {
+    await ctx.db.insert('availabilityWindows', {
+      tenantId,
+      caregiverId: userIds.caregiverUserId,
+      kind: 'recurring',
+      dayOfWeek: 1,
+      startTime: '09:00',
+      endTime: '17:00',
+      available: true,
+      createdAt: now,
+    })
+  }
+
+  // Clean up any shifts previously created for this caregiver by earlier E2E
+  // runs so scheduling specs start from a known, conflict-free state.
+  const existingCaregiverShifts = await ctx.db
+    .query('shifts')
+    .withIndex('by_tenant_caregiver_status', (q) =>
+      q.eq('tenantId', tenantId).eq('caregiverId', userIds.caregiverUserId),
+    )
+    .collect()
+  for (const shift of existingCaregiverShifts) {
+    const relatedCoverage = await ctx.db
+      .query('coverageRequests')
+      .withIndex('by_tenant_shift', (q) =>
+        q.eq('tenantId', tenantId).eq('shiftId', shift._id),
+      )
+      .collect()
+    for (const request of relatedCoverage) {
+      await ctx.db.delete(request._id)
+    }
+    await ctx.db.delete(shift._id)
+  }
+
+  const findShift = async (
+    clientIdArg: Id<'clients'>,
+    caregiverId: string,
+    scheduledStart: string,
+  ) => {
+    const all = await ctx.db
+      .query('shifts')
+      .withIndex('by_tenant_caregiver_status', (q) =>
+        q.eq('tenantId', tenantId).eq('caregiverId', caregiverId),
+      )
+      .collect()
+    return (
+      all.find(
+        (s) =>
+          s.clientId === clientIdArg && s.scheduledStart === scheduledStart,
+      ) ?? null
+    )
+  }
+
+  const coverageStart = `${fixtureDate}T10:00:00Z`
+  const coverageEnd = `${fixtureDate}T14:00:00Z`
+  let coverageShiftId: Id<'shifts'>
+  const existingShift = await findShift(
+    clientId,
+    userIds.caregiverUserId,
+    coverageStart,
+  )
+  if (!existingShift) {
+    coverageShiftId = await ctx.db.insert('shifts', {
+      tenantId,
+      clientId,
+      caregiverId: userIds.caregiverUserId,
+      scheduledStart: coverageStart,
+      scheduledEnd: coverageEnd,
+      status: 'scheduled',
+      serviceType: 'SLS',
+      rate: 28.5,
+    })
+  } else {
+    coverageShiftId = existingShift._id
+  }
+
+  const existingCoverage = await ctx.db
+    .query('coverageRequests')
+    .withIndex('by_tenant_shift', (q) =>
+      q.eq('tenantId', tenantId).eq('shiftId', coverageShiftId),
+    )
+    .unique()
+  let coverageRequestId: Id<'coverageRequests'>
+  if (existingCoverage) {
+    coverageRequestId = existingCoverage._id
+    await ctx.db.patch(coverageRequestId, {
+      status: 'open',
+      requesterId: userIds.caregiverUserId,
+      reason: 'Phase 2 fixture coverage',
+      reassignedTo: undefined,
+      resolvedBy: undefined,
+      resolvedAt: undefined,
+    })
+  } else {
+    coverageRequestId = await ctx.db.insert('coverageRequests', {
+      tenantId,
+      shiftId: coverageShiftId,
+      requesterId: userIds.caregiverUserId,
+      reason: 'Phase 2 fixture coverage',
+      status: 'open',
+      createdAt: now,
+    })
+  }
+
+  const formDefinitions = await ctx.db
+    .query('formDefinitions')
+    .withIndex('by_tenant_created', (q) => q.eq('tenantId', tenantId))
+    .collect()
+  const phase2Form = formDefinitions.find(
+    (f) => f.name === 'Phase 2 Application',
+  )
+  const formFields = [
+    { id: 'name', label: 'Name', type: 'text', required: true },
+    { id: 'experience', label: 'Experience', type: 'text', required: true },
+    { id: 'notes', label: 'Notes', type: 'text', required: false },
+  ]
+  let formDefinitionId: Id<'formDefinitions'>
+  if (phase2Form) {
+    formDefinitionId = phase2Form._id
+    await ctx.db.patch(formDefinitionId, { active: true, fields: formFields })
+  } else {
+    formDefinitionId = await ctx.db.insert('formDefinitions', {
+      tenantId,
+      name: 'Phase 2 Application',
+      active: true,
+      fields: formFields,
+      createdBy: userIds.adminUserId,
+      createdAt: now,
+    })
+  }
+
+  const existingArchiveItems = await ctx.db
+    .query('documentArchiveItems')
+    .withIndex('by_tenant_subject', (q) =>
+      q
+        .eq('tenantId', tenantId)
+        .eq('subjectType', 'candidate')
+        .eq('subjectId', candidateId as string),
+    )
+    .filter((q) => q.eq(q.field('category'), 'phase2_fixture'))
+    .collect()
+  for (const item of existingArchiveItems) {
+    await ctx.db.delete(item.fileId)
+    await ctx.db.delete(item._id)
+  }
+
+  const fixtureFileId = await ctx.db.insert('files', {
+    tenantId,
+    storageId: 'phase2-fixture-document',
+    uploadedBy: userIds.candidateUserId,
+    fileName: 'phase2-document.pdf',
+    contentType: 'application/pdf',
+    size: 1024,
+    linkedType: 'complianceDoc',
+    linkedId: candidateId as string,
+    visibility: 'all_staff',
+    createdAt: now,
+  })
+
+  const documentArchiveItemId = await ctx.db.insert('documentArchiveItems', {
+    tenantId,
+    fileId: fixtureFileId,
+    subjectType: 'candidate',
+    subjectId: candidateId as string,
+    category: 'phase2_fixture',
+    status: 'pending_review',
+    source: 'Phase 2 fixture',
+    createdAt: now,
+  })
+
+  return {
+    tenantId,
+    candidateId,
+    coverageShiftId,
+    coverageRequestId,
+    formDefinitionId,
+    fileId: fixtureFileId,
+    documentArchiveItemId,
+  }
+}
+
+// Idempotent Phase 2 E2E fixtures. Seeds a candidate with a submitted
+// application, an availability window, an open coverage request, a form
+// definition, and a pending-review document archive item.
+export const resetE2ECandidate = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    adminUserId: v.string(),
+    coordinatorUserId: v.string(),
+    caregiverUserId: v.string(),
+    hrUserId: v.string(),
+    candidateUserId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const result = await seedE2ECandidateFixtures(ctx, args.clerkOrgId, {
+      adminUserId: args.adminUserId,
+      coordinatorUserId: args.coordinatorUserId,
+      caregiverUserId: args.caregiverUserId,
+      hrUserId: args.hrUserId,
+      candidateUserId: args.candidateUserId,
+    })
+
+    return {
+      status: 'seeded' as const,
+      ...result,
+    }
+  },
+})
+
+
+// Idempotent helper to promote a fixture candidate to the offer_sent state
+// with realistic application and offer details for visual regression testing.
+export const seedCandidateOffer = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    candidateEmail: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+    ])
+
+    const normalizedEmail = args.candidateEmail.toLowerCase().trim()
+    const candidate = await ctx.db
+      .query('candidates')
+      .withIndex('by_tenant_email', (q) =>
+        q.eq('tenantId', tenantId).eq('email', normalizedEmail),
+      )
+      .unique()
+
+    if (!candidate) {
+      return { status: 'not_found' as const, candidateId: null }
+    }
+
+    const now = new Date().toISOString()
+    const candidateId = candidate._id
+
+    const applicationFields = {
+      fullName: candidate.displayName || 'Phase 2 Candidate',
+      email: candidate.email,
+      phone: candidate.phone || '(555) 123-4567',
+      position: 'Caregiver',
+      yearsExperience: '2-5',
+      dob: '1990-06-15',
+      address: '123 Main Street, Los Angeles, CA 90012',
+      payRate: '$22.50 / hr',
+      startDate: '2026-07-15',
+      schedule: 'Full-time, flexible shifts',
+      supervisor: 'Maria Gonzalez, Scheduling Coordinator',
+    }
+
+    const existingApplication = await ctx.db
+      .query('applications')
+      .withIndex('by_candidate_submittedAt', (q) => q.eq('candidateId', candidateId))
+      .order('desc')
+      .first()
+
+    let applicationId: Id<'applications'>
+    if (existingApplication) {
+      await ctx.db.patch(existingApplication._id, {
+        status: 'submitted',
+        submittedAt: now,
+        fields: applicationFields,
+      })
+      applicationId = existingApplication._id
+    } else {
+      applicationId = await ctx.db.insert('applications', {
+        tenantId,
+        candidateId,
+        status: 'submitted',
+        submittedAt: now,
+        fields: applicationFields,
+      })
+    }
+
+    // Move to hr_review then offer_sent
+    await ctx.db.patch(applicationId, {
+      decision: 'approved',
+      reviewedBy: 'seed',
+      decisionAt: now,
+      status: 'hr_review',
+    })
+    await ctx.db.patch(candidateId, {
+      status: 'hr_review',
+      phone: candidate.phone || '(555) 123-4567',
+    })
+
+    await ctx.db.patch(applicationId, { status: 'offer_sent' })
+    await ctx.db.patch(candidateId, { status: 'offer_sent' })
+
+    // Mark earlier onboarding tasks complete so the checklist shows offer as next
+    const tasks = await ctx.db
+      .query('candidateTasks')
+      .withIndex('by_tenant_candidate_order', (q) =>
+        q.eq('tenantId', tenantId).eq('candidateId', candidateId),
+      )
+      .collect()
+
+    for (const task of tasks) {
+      if (
+        task.type === 'form_submission' ||
+        task.type === 'photo_id' ||
+        task.type === 'cpr_certificate' ||
+        task.type === 'background_check' ||
+        task.type === 'employment_agreement'
+      ) {
+        if (task.status !== 'complete') {
+          await ctx.db.patch(task._id, { status: 'complete', completedAt: now })
+        }
+      }
+    }
+
+    return { status: 'seeded' as const, candidateId: candidateId as string, applicationId: applicationId as string }
+  },
+})

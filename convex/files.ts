@@ -5,7 +5,9 @@ import {
   requireTenantRole,
   assertTenantDoc,
   type TenantRole,
+  type AuthContext,
 } from './authHelpers'
+import type { Id } from './_generated/dataModel'
 
 export function assertCanEditProof(opts: {
   role: TenantRole
@@ -29,6 +31,10 @@ export function assertCanEditProof(opts: {
   }
 }
 
+export async function getFileMetadata(ctx: AuthContext, fileId: Id<'files'>) {
+  return ctx.db.get(fileId)
+}
+
 export const generateUploadUrl = mutation({
   args: { clerkOrgId: v.string() },
   handler: async (ctx, { clerkOrgId }) => {
@@ -36,6 +42,7 @@ export const generateUploadUrl = mutation({
       'org:admin',
       'org:coordinator',
       'org:caregiver',
+      'org:candidate',
     ])
 
     const url = await ctx.storage.generateUploadUrl()
@@ -56,7 +63,7 @@ export const attachProof = mutation({
     const { tenantId, identity, role } = await requireTenantRole(
       ctx,
       args.clerkOrgId,
-      ['org:admin', 'org:coordinator', 'org:caregiver'],
+      ['org:admin', 'org:coordinator', 'org:caregiver', 'org:hr'],
     )
 
     const task = await ctx.db.get(args.shiftTaskId)
@@ -108,7 +115,7 @@ export const removeProof = mutation({
     const { tenantId, identity, role } = await requireTenantRole(
       ctx,
       args.clerkOrgId,
-      ['org:admin', 'org:coordinator', 'org:caregiver'],
+      ['org:admin', 'org:coordinator', 'org:caregiver', 'org:hr'],
     )
 
     const task = await ctx.db.get(args.shiftTaskId)
@@ -158,7 +165,7 @@ export const getDownloadUrl = query({
     const { tenantId, identity, role } = await requireTenantRole(
       ctx,
       args.clerkOrgId,
-      ['org:admin', 'org:coordinator', 'org:caregiver'],
+      ['org:admin', 'org:coordinator', 'org:caregiver', 'org:hr'],
     )
 
     const file = await ctx.db

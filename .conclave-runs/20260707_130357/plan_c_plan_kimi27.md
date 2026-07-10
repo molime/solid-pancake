@@ -1,0 +1,4 @@
+# http://localhost:11434/api/chat
+# model=kimi-k2.7-code:cloud status=200
+
+We need produce a premium implementation plan. We are Kimi? The backend is agentic CLI (Kimi). We must open and read actual relevant files before writing plan. We have repo context but need inspect files. We need use tool to read files. We need plan only, not full code. Need run gates? The task says run npm run lint, typecheck, test, E2E_FULL=1 npm run e2e, npm run build. But as planning, maybe we need implement? The user asks "Produce a premium implementation plan with ALL of the following sections". It says do not write full code. So we need plan. But discovery requirement says must open and read actual relevant files before writing plan. So we need to inspect files. We can use shell to list and read. Let's inspect repo. We need know current convex/candidates.ts, package.json, .env files, test setup, etc. Let's start by listing root and relevant dirs.

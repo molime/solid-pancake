@@ -1,9 +1,15 @@
-import type { QueryCtx, MutationCtx } from './_generated/server'
+import type { QueryCtx, MutationCtx, ActionCtx } from './_generated/server'
 import { ConvexError } from 'convex/values'
 import type { Id } from './_generated/dataModel'
+import { api } from './_generated/api'
 
 export type AuthContext = QueryCtx | MutationCtx
-export type TenantRole = 'org:admin' | 'org:coordinator' | 'org:caregiver'
+export type TenantRole =
+  | 'org:admin'
+  | 'org:coordinator'
+  | 'org:caregiver'
+  | 'org:hr'
+  | 'org:candidate'
 
 export async function requireIdentity(ctx: AuthContext) {
   const identity = await ctx.auth.getUserIdentity()
@@ -89,7 +95,9 @@ function normalizeTenantRole(role: unknown): TenantRole | null {
   if (
     role === 'org:admin' ||
     role === 'org:coordinator' ||
-    role === 'org:caregiver'
+    role === 'org:caregiver' ||
+    role === 'org:hr' ||
+    role === 'org:candidate'
   ) {
     return role
   }
@@ -97,6 +105,8 @@ function normalizeTenantRole(role: unknown): TenantRole | null {
   if (role === 'admin') return 'org:admin'
   if (role === 'coordinator') return 'org:coordinator'
   if (role === 'caregiver') return 'org:caregiver'
+  if (role === 'hr') return 'org:hr'
+  if (role === 'candidate') return 'org:candidate'
 
   return null
 }
@@ -121,18 +131,54 @@ export function getActiveClerkOrganizationId(identity: {
   return null
 }
 
+function getAtriaRoleFromMetadata(metadata: unknown): TenantRole | null {
+  if (
+    metadata &&
+    typeof metadata === 'object' &&
+    'atriaRole' in metadata
+  ) {
+    return normalizeTenantRole((metadata as Record<string, unknown>).atriaRole)
+  }
+  return null
+}
+
+/**
+ * Resolves the ATRIA tenant role from a Clerk token.
+ *
+ * Priority order (highest first):
+ * 1. Top-level `org_role` when it is already an ATRIA role.
+ * 2. `org_public_metadata.atriaRole` (set server-side by Clerk invitations/bypass).
+ * 3. Compact JWT claim `o.rol`.
+ * 4. Compact JWT metadata claim `o.pub.atriaRole`.
+ * 5. Dotted JWT metadata claim `o.pub.atriaRole`.
+ * 6. Dotted JWT role claim `o.rol`.
+ *
+ * Public metadata is checked before compact claims so that server-set ATRIA
+ * roles carried by `org:member` users are honored over raw JWT fields.
+ */
 export function getClerkOrganizationRole(identity: {
   [key: string]: unknown
 }): TenantRole | null {
   const topLevelRole = normalizeTenantRole(identity.org_role)
   if (topLevelRole) return topLevelRole
 
+  const metadataRole = getAtriaRoleFromMetadata(identity.org_public_metadata)
+  if (metadataRole) return metadataRole
+
   const compactOrg = identity.o
-  if (compactOrg && typeof compactOrg === 'object' && 'rol' in compactOrg) {
-    return normalizeTenantRole(
+  if (compactOrg && typeof compactOrg === 'object') {
+    const compactRole = normalizeTenantRole(
       (compactOrg as Record<string, unknown>).rol,
     )
+    if (compactRole) return compactRole
+
+    const compactMetadata = (compactOrg as Record<string, unknown>).pub
+    const compactMetadataRole = getAtriaRoleFromMetadata(compactMetadata)
+    if (compactMetadataRole) return compactMetadataRole
   }
+
+  const dottedMetadataRole = getAtriaRoleFromMetadata(identity['o.pub'])
+  if (dottedMetadataRole) return dottedMetadataRole
 
   return normalizeTenantRole(identity['o.rol'])
 }
@@ -176,4 +222,30 @@ export async function ensureTenantMember(
       q.eq('tenantId', tenantId).eq('clerkUserId', clerkUserId),
     )
     .unique()
+}
+
+export async function requireTenantRoleAction(
+  ctx: ActionCtx,
+  clerkOrgId: string,
+  allowedRoles: TenantRole[],
+) {
+  const identity = await ctx.auth.getUserIdentity()
+  if (!identity) {
+    throw new ConvexError('Unauthorized: authentication required.')
+  }
+  requireMatchingClerkOrganization(identity, clerkOrgId)
+
+  const member = await ctx.runQuery(api.members.me, { clerkOrgId })
+  if (!member) {
+    throw new ConvexError('Forbidden: not a member of this tenant.')
+  }
+
+  const role = normalizeTenantRole(member.role)
+  if (!role || !allowedRoles.includes(role)) {
+    throw new ConvexError(
+      `Forbidden: required one of [${allowedRoles.join(', ')}].`,
+    )
+  }
+
+  return { identity, member, role, clerkOrgId }
 }

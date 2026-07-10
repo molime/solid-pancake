@@ -15,6 +15,7 @@ vi.mock('@clerk/react', async () => {
     ...actual,
     useAuth: vi.fn(),
     useOrganization: vi.fn(),
+    useOrganizationList: vi.fn(),
   }
 })
 
@@ -36,10 +37,11 @@ vi.mock('react-router-dom', async () => {
       mockNavigate(to)
       return <div data-testid="navigate">Navigate to {to}</div>
     }),
+    useLocation: vi.fn(() => ({ pathname: '/' })),
   }
 })
 
-import { useAuth, useOrganization } from '@clerk/react'
+import { useAuth, useOrganization, useOrganizationList } from '@clerk/react'
 import { useQuery } from 'convex/react'
 
 function mockClerkState(options: {
@@ -200,6 +202,18 @@ describe('TenantRouteGuard', () => {
   })
 })
 
+function mockSignedInOrgs(orgs: { id: string; name: string }[]) {
+  vi.mocked(useOrganizationList).mockReturnValue({
+    isLoaded: true,
+    userMemberships: {
+      data: orgs.map((o) => ({
+        organization: { id: o.id, name: o.name, slug: o.name.toLowerCase() },
+        role: 'org:member',
+      })),
+    },
+  } as unknown as ReturnType<typeof useOrganizationList>)
+}
+
 describe('SignedInRouteGuard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -210,6 +224,7 @@ describe('SignedInRouteGuard', () => {
       isLoaded: false,
       isSignedIn: false,
     } as unknown as ReturnType<typeof useAuth>)
+    mockSignedInOrgs([])
 
     render(
       <SignedInRouteGuard>
@@ -225,6 +240,7 @@ describe('SignedInRouteGuard', () => {
       isLoaded: true,
       isSignedIn: false,
     } as unknown as ReturnType<typeof useAuth>)
+    mockSignedInOrgs([])
 
     render(
       <SignedInRouteGuard>
@@ -241,6 +257,7 @@ describe('SignedInRouteGuard', () => {
       isLoaded: true,
       isSignedIn: true,
     } as unknown as ReturnType<typeof useAuth>)
+    mockSignedInOrgs([{ id: 'org_123', name: 'Test Agency' }])
 
     render(
       <SignedInRouteGuard>
@@ -318,5 +335,22 @@ describe('TenantRoleRouteGuard', () => {
 
     expect(screen.getByText('Navigate to /')).toBeInTheDocument()
     expect(mockNavigate).toHaveBeenCalledWith('/')
+  })
+  it('redirects candidate to /onboarding from a role-protected route', () => {
+    mockClerkState({
+      authLoaded: true,
+      isSignedIn: true,
+      orgLoaded: true,
+      organization: { id: 'org_123', name: 'Agency' },
+    })
+    mockMember({ role: 'org:candidate' })
+
+    render(
+      <TenantRoleRouteGuard allowedRoles={['org:hr']}>
+        <div data-testid="protected">Protected</div>
+      </TenantRoleRouteGuard>,
+    )
+
+    expect(mockNavigate).toHaveBeenCalledWith('/onboarding')
   })
 })

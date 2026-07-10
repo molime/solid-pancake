@@ -1,0 +1,1490 @@
+• # ATRIA-X Session 2 — Scheduling Backend Implementation Plan
+
+  ## 1. Restated Goal & Acceptance Criteria
+
+  **Goal:** Extend the ATRIA-X Phase 2 backend on `feature/phase-2-worker-onboarding` with a complete, multi-tenant scheduling subsystem in Convex: shift CRUD, caregiver availability windows, coverage requests, and shift-conflict detection. All functions route through `convex/authHelpers.ts`, do not call ADP, and respect the existing role model (`org:admin`, `org:coordinator`, `org:caregiver`).
+
+  **Acceptance criteria:**
+  - [ ] All 15 requested functions exist in `convex/scheduling.ts`, are correctly typed, and enforce the required roles.
+  - [ ] `createShift`, `updateShift` (when times/caregiver change), `assignShift`, and `resolveCoverage` call `checkShiftConflict` and throw a `ConvexError` naming the conflicting shift id and its times.
+  - [ ] `createShift` returns an availability advisory warning when the caregiver has windows for the day but the slot is uncovered; it never blocks on availability.
+  - [ ] `deleteShift` hard-deletes only `scheduled` shifts, cascades linked `coverageRequests`, and writes an audit event.
+  - [ ] `updateShift` is blocked for `submitted`, `approved`, or `billing_ready` statuses.
+  - [ ] `requestCoverage` is allowed only by the assigned caregiver on a `scheduled` shift.
+  - [ ] `resolveCoverage` verifies the replacement caregiver, checks conflicts, updates the shift, and closes the request.
+  - [ ] Queries return joined client/caregiver display names and never exceed 100 items per page.
+  - [ ] Schema changes are made only in `convex/schema.ts`; `convex/_generated` is regenerated via `npx convex codegen`.
+  - [ ] New unit/integration tests in `convex/scheduling.test.ts` cover the listed conflict, auth, role, and availability cases.
+  - [ ] `npm run lint`, `npm run typecheck`, and `npm run test` pass. E2E is skipped.
+
+  ---
+
+  ## 2. Discovery Notes
+
+  Files inspected in the working tree:
+
+  - **`convex/schema.ts`** — Tables `shifts`, `tenantMembers`, `clients`, `auditEvents`, `coverageRequests`, and `availabilityWindows` already exist.
+    - `shifts` uses ISO strings for `scheduledStart`/`scheduledEnd`, has `by_tenant_caregiver_status` and `by_tenant_status_start` indexes.
+    - `availabilityWindows` currently uses `employeeProfileId` + `weekday` + `effectiveStart`/`effectiveEnd`/`status`; **no runtime code references it**, so it can be safely rewritten to match the task API.
+    - `coverageRequests` has `requesterId`, optional `reason`, `status` as a plain string, `createdAt`, and `resolvedAt`; **no runtime code references it**, so it can be tightened to a union status and extended with `reassignedTo`/`resolvedBy`.
+    - `auditEvents` stores the event type in a required `action` string; there is no `kind` field yet.
+  - **`convex/authHelpers.ts`** — Exports `requireTenant(ctx, clerkOrgId)`, `requireTenantRole(ctx, clerkOrgId, allowedRoles[])`, `assertTenantDoc(doc, tenantId)`, and `ensureTenantMember(ctx, tenantId, clerkUserId)`. The role helper already accepts an array of allowed roles.
+  - **`convex/audit.ts`** — Exports an internal mutation `record` that takes `clerkOrgId`, `action`, optional `shiftId`, status fields, and `metadata`. Existing callers in `convex/shifts.ts` pass `action` only.
+  - **`convex/shifts.ts` / `convex/shiftQueries.ts`** — Already contain shift lifecycle logic (`create`, `clockIn`, `submitDocumentation`, etc.). These will be left untouched to avoid regressions; the new scheduling functions live in a separate module.
+  - **`package.json`** — `convex-test` is installed; `npm run test` runs vitest; lint/typecheck scripts exist.
+  - **No `convex/scheduling.ts` exists.**
+
+  ---
+
+  ## 3. Alternatives Considered
+
+  | Decision | Options | Chosen approach | Rationale |
+  |---|---|---|---|
+  | File organization | One `convex/scheduling.ts` vs. `convex/scheduling/*.ts` | **Single `convex/scheduling.ts`** | Matches the task name exactly, minimizes generated API surface, and keeps imports simple. Can be split later if it grows past ~600 lines. |
+  | `availabilityWindows` schema | Adapt old `employeeProfileId` shape vs. rewrite | **Rewrite to `caregiverId` + `kind` + `dayOfWeek`/`date`** | The task API explicitly targets the caller's own `clerkUserId` (`caregiverId`). No existing data or code references the old shape. |
+  | Audit event "kind" | Add `kind` field vs. reuse `action` | **Add optional `kind` to `auditEvents` and `audit.record`, keep `action` required** | Satisfies the literal requirement (`kind='shift.created'`) while remaining backward-compatible with existing callers that only pass `action`. |
+  | Shift time representation | ISO strings vs. epoch ms | **Keep existing ISO strings** | Avoids a schema migration and existing code already relies on ISO comparison. Lexicographic compare is correct for UTC ISO strings. |
+  | Availability window time representation | `HH:mm` strings vs. minutes | **Store as `HH:mm` strings** | Keeps the API human-readable and matches the task signature. Lexicographic comparison is correct for same-day windows. |
+  | Availability behavior | Hard block vs. advisory warning | **Advisory warning only** | Exact task requirement. |
+  | Delete behavior | Hard delete shift only vs. cascade | **Hard delete shift + cascade `coverageRequests`** | Follows the task instruction and prevents dangling coverage rows; leaves `progressNotes`/`shiftTasks` as noted because the task only requires deleting the shift row. |
+
+  ---
+
+  ## 4. Exact Files to Create/Edit
+
+  ### 4.1 `convex/schema.ts`
+
+  1. **Add optional `kind` to `auditEvents`:**
+     ```ts
+     auditEvents: defineTable({
+       tenantId: v.id('tenants'),
+       actorId: v.string(),
+       actorRole: v.string(),
+       shiftId: v.optional(v.id('shifts')),
+       previousStatus: v.optional(v.string()),
+       nextStatus: v.optional(v.string()),
+       action: v.string(),
+       kind: v.optional(v.string()),        // NEW
+       metadata: v.optional(v.record(v.string(), v.any())),
+       createdAt: v.string(),
+     }).index('by_tenant_created_at', ['tenantId', 'createdAt']),
+     ```
+
+  2. **Rewrite `availabilityWindows` to match the task API:**
+     ```ts
+     availabilityWindows: defineTable({
+       tenantId: v.id('tenants'),
+       caregiverId: v.string(),              // clerkUserId
+       kind: v.union(v.literal('recurring'), v.literal('one-off')),
+       dayOfWeek: v.optional(v.number()),    // 0–6, required for recurring
+       date: v.optional(v.string()),         // YYYY-MM-DD, required for one-off
+       startTime: v.string(),                // HH:mm
+       endTime: v.string(),                  // HH:mm
+       available: v.boolean(),
+       note: v.optional(v.string()),
+       createdAt: v.string(),
+     })
+       .index('by_tenant_caregiver', ['tenantId', 'caregiverId'])
+       .index('by_tenant_caregiver_date', ['tenantId', 'caregiverId', 'date']),
+     ```
+
+  3. **Tighten/extend `coverageRequests`:**
+     ```ts
+     coverageRequests: defineTable({
+       tenantId: v.id('tenants'),
+       shiftId: v.id('shifts'),
+       requesterId: v.string(),
+       reason: v.string(),
+       status: v.union(v.literal('open'), v.literal('filled'), v.literal('cancelled')),
+       reassignedTo: v.optional(v.string()), // NEW
+       resolvedBy: v.optional(v.string()),   // NEW
+       resolvedAt: v.optional(v.string()),   // NEW
+       createdAt: v.string(),
+     })
+       .index('by_tenant_shift', ['tenantId', 'shiftId'])
+       .index('by_tenant_status', ['tenantId', 'status']),
+     ```
+
+  4. **Add one `shifts` index for combined caregiver + status + start queries:**
+     ```ts
+     shifts: defineTable({ ... })
+       .index('by_tenant_caregiver_status', ['tenantId', 'caregiverId', 'status'])
+       .index('by_tenant_coordinator_status', ['tenantId', 'coordinatorId', 'status'])
+       .index('by_tenant_status_start', ['tenantId', 'status', 'scheduledStart'])
+       .index('by_tenant_caregiver_status_start', ['tenantId', 'caregiverId', 'status', 'scheduledStart']), // NEW
+     ```
+
+  ### 4.2 `convex/audit.ts`
+
+  Extend `record` to accept an optional `kind` without changing existing callers:
+
+  ```ts
+  export const record = internalMutation({
+    args: {
+      clerkOrgId: v.string(),
+      action: v.string(),
+      kind: v.optional(v.string()), // NEW
+      shiftId: v.optional(v.id('shifts')),
+      previousStatus: v.optional(v.string()),
+      nextStatus: v.optional(v.string()),
+      metadata: v.optional(v.record(v.string(), v.any())),
+    },
+    handler: async (ctx, args) => {
+      // existing tenant/role/shift checks unchanged
+      return ctx.db.insert('auditEvents', {
+        // ... existing fields ...
+        action: args.action,
+        kind: args.kind, // NEW
+        // ...
+      })
+    },
+  })
+  ```
+
+  ### 4.3 `convex/scheduling.ts` (new)
+
+  All functions accept `clerkOrgId: string` as the first arg to satisfy `authHelpers` (the task signatures are conceptual). Export helper functions at the top, then the 14 Convex functions.
+
+  **Shared helpers**
+
+  - `assertCaregiverMember(ctx, tenantId, caregiverId)`
+    - Query `tenantMembers` by `by_tenant_user`.
+    - Throw `ConvexError('Selected caregiver must be an active caregiver in this agency.')` if missing or role !== `org:caregiver`.
+
+  - `checkShiftConflict(ctx, tenantId, caregiverId, start, end, excludeShiftId?)`
+    - Query `shifts` by `by_tenant_caregiver_status` with `eq('tenantId', tenantId).eq('caregiverId', caregiverId)`.
+    - Filter to non-terminal statuses: `scheduled`, `in_progress`, `submitted`, `approved`.
+    - Return the first doc where `start < existing.scheduledEnd && end > existing.scheduledStart` and `existing._id !== excludeShiftId`; otherwise `null`.
+
+  - `checkAvailabilityWarning(ctx, tenantId, caregiverId, scheduledStart, scheduledEnd)`
+    - Derive the shift date (`YYYY-MM-DD`) and `dayOfWeek` from `scheduledStart`.
+    - Query `availabilityWindows` by `by_tenant_caregiver`.
+    - Keep windows that match the day: `(kind === 'recurring' && dayOfWeek === shiftDayOfWeek)` OR `(kind === 'one-off' && date === shiftDate)`.
+    - If there are windows for the day but the `[startTime, endTime]` slice is **not** fully covered by the union of `available === true` windows, return a warning string (e.g. `'Caregiver availability does not cover this slot.'`); otherwise return `null`.
+
+  - `buildShiftWithNames(ctx, shift)`
+    - Fetch `client` and caregiver `tenantMember` in parallel.
+    - Return `{ ...shift, clientDisplayName: client?.displayName ?? '', caregiverDisplayName: member?.displayName ?? '' }`.
+
+  **Functions 1–6: Shifts**
+
+  1. **`createShift` mutation** — requires `org:admin` or `org:coordinator`.
+     - Args: `clientId`, `caregiverId`, `scheduledStart`, `scheduledEnd`, `serviceType`, `rate`, `serviceLocationOverride?`.
+     - Validate `scheduledEnd > scheduledStart` and `rate > 0`.
+     - `assertTenantDoc` on `clientId`.
+     - `assertCaregiverMember` on `caregiverId`.
+     - `checkShiftConflict`; on conflict throw `ConvexError('Shift conflicts with ${id} (${start} - ${end})')`.
+     - `checkAvailabilityWarning`; capture result but do not block.
+     - Insert shift with `status: 'scheduled'`.
+     - Write audit: `action: 'shift.created', kind: 'shift.created'`.
+     - Return `{ shiftId, availabilityWarning }`.
+
+  2. **`updateShift` mutation** — requires `org:admin` or `org:coordinator`.
+     - Args: `shiftId` + optional `clientId`, `caregiverId`, `scheduledStart`, `scheduledEnd`, `serviceType`, `rate`, `serviceLocationOverride?`.
+     - Load shift and `assertTenantDoc`.
+     - Block if current status is `submitted`, `approved`, or `billing_ready`.
+     - For each provided field validate and, for `clientId`/`caregiverId`, re-verify tenant/role membership.
+     - If `scheduledStart`, `scheduledEnd`, or `caregiverId` changed, rerun `checkShiftConflict(shiftId)`.
+     - Patch shift.
+     - Audit: `action: 'shift.updated', kind: 'shift.updated'`.
+     - Return `{ shiftId }`.
+
+  3. **`deleteShift` mutation** — requires `org:admin`.
+     - Args: `shiftId`.
+     - Load shift and `assertTenantDoc`.
+     - Block if status is not `scheduled`.
+     - Delete all `coverageRequests` with this `shiftId` (prevent orphans).
+     - Hard-delete the shift row.
+     - Audit: `action: 'shift.deleted', kind: 'shift.deleted'`.
+     - Return `{ shiftId }`.
+
+  4. **`assignShift` mutation** — requires `org:admin` or `org:coordinator`.
+     - Args: `shiftId`, `caregiverId`.
+     - Load shift and `assertTenantDoc`.
+     - `assertCaregiverMember` on new `caregiverId`.
+     - `checkShiftConflict(..., shiftId)`.
+     - Patch `caregiverId`.
+     - Audit: `action: 'shift.reassigned', kind: 'shift.reassigned'`.
+     - Return `{ shiftId }`.
+
+  5. **`listShifts` query** — requires `org:admin` or `org:coordinator`.
+     - Args: `status?`, `startDate?`, `endDate?`, `caregiverId?`, `cursor?`.
+     - Choose the narrowest index and paginate with `numItems: 100`:
+       - `caregiverId + status` → `by_tenant_caregiver_status_start`
+       - `status` → `by_tenant_status_start`
+       - fallback → `by_tenant_caregiver_status` or scan + `.take(100)` depending on the filters.
+     - Apply any remaining filters (e.g. date-range string comparison on `scheduledStart`) in JS.
+     - Join names with `buildShiftWithNames`.
+     - Return `{ items: ShiftWithNames[], nextCursor, hasMore }`.
+
+  6. **`listCaregiverShifts` query** — requires `org:caregiver`.
+     - Query `shifts` by `by_tenant_caregiver_status` with `caregiverId === identity.subject`.
+     - Order by `scheduledStart` desc, take 100.
+     - Join client name.
+     - Return array of joined shifts.
+
+  **Functions 7–11: Availability**
+
+  7. **`addAvailabilityWindow` mutation** — requires `org:caregiver`.
+     - Args: `kind`, `dayOfWeek?`, `date?`, `startTime`, `endTime`, `available`, `note?`.
+     - `caregiverId = identity.subject`; `tenantId` from auth.
+     - Validate: recurring → `dayOfWeek` required (0–6); one-off → `date` required; `endTime > startTime`.
+     - Insert window with `createdAt: new Date().toISOString()`.
+     - Return `{ windowId }`.
+
+  8. **`updateAvailabilityWindow` mutation** — requires `org:caregiver`.
+     - Args: `windowId`, `startTime?`, `endTime?`, `available?`, `note?`.
+     - Load window, `assertTenantDoc`, and ensure `window.caregiverId === identity.subject`.
+     - Patch allowed fields; if times change, validate ordering.
+     - Return `{ windowId }`.
+
+  9. **`deleteAvailabilityWindow` mutation** — requires `org:caregiver`.
+     - Args: `windowId`.
+     - Load window, `assertTenantDoc`, ensure ownership.
+     - Delete.
+     - Return `{ windowId }`.
+
+  10. **`listMyAvailability` query** — requires `org:caregiver`.
+      - Query `availabilityWindows` by `by_tenant_caregiver` with `caregiverId === identity.subject`.
+      - Return array.
+
+  11. **`listAvailabilityForScheduling` query** — requires `org:admin` or `org:coordinator`.
+      - Query `availabilityWindows` by `by_tenant_caregiver`; if `caregiverId` provided, `eq` it.
+      - Return array.
+
+  **Functions 12–14: Coverage**
+
+  12. **`requestCoverage` mutation** — requires `org:caregiver`.
+      - Args: `shiftId`, `reason`.
+      - Load shift, `assertTenantDoc`.
+      - Block if `shift.caregiverId !== identity.subject`.
+      - Block if `shift.status !== 'scheduled'`.
+      - Insert `coverageRequests` with `status: 'open'`, `requesterId: identity.subject`, `reason`.
+      - Return `{ coverageRequestId }`.
+
+  13. **`resolveCoverage` mutation** — requires `org:admin` or `org:coordinator`.
+      - Args: `coverageRequestId`, `reassignedTo`.
+      - Load request, `assertTenantDoc`, ensure `status === 'open'`.
+      - Load shift, `assertTenantDoc`.
+      - `assertCaregiverMember` on `reassignedTo`.
+      - `checkShiftConflict(..., shift._id)` for the new caregiver.
+      - Patch shift: `caregiverId = reassignedTo`.
+      - Patch request: `status: 'filled'`, `reassignedTo`, `resolvedBy: identity.subject`, `resolvedAt: now`.
+      - Audit: `action: 'coverage.resolved', kind: 'coverage.resolved'`.
+      - Return `{ shiftId, coverageRequestId }`.
+
+  14. **`listCoverageRequests` query** — requires `org:admin` or `org:coordinator`.
+      - Args: `status?`.
+      - Query `coverageRequests` by `by_tenant_status`; optionally `eq('status', status)`.
+      - For each request, fetch the shift and client and attach `{ ...request, shift, clientName }`.
+      - Return array.
+
+  ### 4.4 `convex/scheduling.test.ts` (new)
+
+  See Section 6.
+
+  ### 4.5 `convex/_generated/`
+
+  - Do not edit by hand.
+  - Run `npx convex codegen` after any schema change.
+
+  ---
+
+  ## 5. Data / Auth / Security / PHI / Idempotency Edge Cases
+
+  | Area | Risk | Mitigation |
+  |---|---|---|
+  | **Multi-tenancy** | Cross-tenant data leakage | Every function starts with `requireTenantRole`/`requireTenant`. All doc lookups use `assertTenantDoc` or a `by_tenant_*` index scoped to the authenticated tenant. A caregiver id from another tenant fails `assertCaregiverMember`. |
+  | **Role escalation** | Privilege escalation | Entry points enforce exact role arrays; `deleteShift` is admin-only, `listShifts` excludes caregivers, etc. |
+  | **Terminal-status edits** | Editing submitted/approved shifts | `updateShift` rejects `submitted`, `approved`, and `billing_ready`. `deleteShift` only accepts `scheduled`. |
+  | **Double-booking** | Race condition creates overlapping shifts | Convex mutations are transactional; conflict check and insert happen in the same mutation. |
+  | **Adjacent shifts** | Back-to-back shifts should be allowed | Overlap check uses strict `<`/`>` so `09:00–10:00` and `10:00–11:00` do not conflict. |
+  | **Availability advisory** | Blocking instead of warning | `createShift` always inserts; it only adds a `availabilityWarning` field when windows exist but do not cover the slot. |
+  | **Coverage integrity** | Orphan coverage rows after shift delete | `deleteShift` deletes linked `coverageRequests` first. `resolveCoverage` requires request status `open`. |
+  | **PHI / sensitive data** | Client/caregiver association leakage | All access is tenant + role scoped; joined names only return `displayName`; audit events log every mutating action. |
+  | **Time zones** | DST / local-time confusion | Shift times remain UTC ISO strings; availability windows store `HH:mm` in the agency's local time. Document this assumption. |
+  | **Idempotency** | Duplicate coverage requests | The spec allows multiple open requests per shift. No idempotency keys are added unless product later requires them. |
+  | **Currency** | Float rounding on `rate` | Use `v.number` as the existing schema does. Document that production should move to integer cents if precision becomes critical. |
+
+  ---
+
+  ## 6. Test Strategy
+
+  Create `convex/scheduling.test.ts` using the existing `convex-test` harness:
+
+  ```ts
+  import { describe, expect, it } from 'vitest'
+  import { convexTest } from 'convex-test'
+  import schema from './schema'
+  import { api } from './_generated/api'
+
+  const modules = import.meta.glob('./**/*.*s')
+  function createTestConvex() { return convexTest({ schema, modules }) }
+  ```
+
+  ### Pure / helper-level tests
+
+  - `checkShiftConflict` / overlap logic:
+    - No conflict on adjacent shifts.
+    - Conflict on overlapping shifts.
+    - Conflict when new shift starts exactly at an existing shift's start.
+    - No conflict when the only existing shift is `billing_ready` / `needs_correction`.
+    - `excludeShiftId` correctly excludes the shift being edited.
+
+  ### Integration / auth tests
+
+  - `createShift`:
+    - succeeds for admin/coordinator.
+    - throws when `caregiverId` belongs to another tenant (cross-tenant).
+    - throws `ConvexError` with conflict id and times on overlap.
+    - returns `availabilityWarning` when windows exist but do not cover the slot.
+  - `updateShift`:
+    - blocked when status is `submitted`.
+    - reruns conflict check when `caregiverId` changes.
+  - `deleteShift`:
+    - blocked when status is `in_progress`.
+    - hard-deletes a `scheduled` shift and its linked coverage requests.
+  - `assignShift`:
+    - excludes the current shift from conflict detection.
+  - `requestCoverage`:
+    - blocked when caller is not the assigned caregiver.
+    - blocked when shift status is not `scheduled`.
+  - `resolveCoverage`:
+    - verifies replacement caregiver role.
+    - rejects a replacement that conflicts with another shift.
+  - Availability CRUD:
+    - `update`/`delete` blocked for another caregiver's window.
+    - `addAvailabilityWindow` validates recurring vs. one-off required fields.
+  - `listShifts` rejects a caller with only `org:caregiver` role.
+
+  ### Gates to run
+
+  ```bash
+  npx convex codegen
+  npm run lint
+  npm run typecheck
+  npm run test
+  ```
+
+  Skip Playwright / E2E for this backend-only session.
+
+  ---
+
+  ## 7. Rollback / Verification Notes
+
+  - **Before starting:** ensure the working tree is clean on `feature/phase-2-worker-onboarding` so a `git revert` or `git stash` is possible.
+  - **After schema edits:** run `npx convex codegen` immediately and verify `convex/_generated/dataModel.ts` reflects the new `availabilityWindows` shape, `coverageRequests` fields, `auditEvents.kind`, and new indexes. Do not hand-edit generated files.
+  - **Verification:**
+    1. `npm run lint` passes with the project's 2-space / single-quote / no-semicolon style.
+    2. `npm run typecheck` passes.
+    3. `npm run test` passes, including the new `convex/scheduling.test.ts`.
+    4. In the Convex dashboard, confirm the new endpoints appear under `scheduling:*`.
+  - **Rollback:** `git revert` the scheduling commit and rerun `npx convex codegen` to restore generated types.
+
+  ---
+
+  *Plan also written to:* `C:/Users/pinol/Documents/Work/atriax/solid-pancake/.conclave-runs/20260704_170533/plan_final.implementation_plan.md`
+
+
+[stderr]
+• We need read a prompt file in .conclave-runs directory. It likely contains instructions. Need output final answer/verdict. We must first read file.Output too large. We need read full. Need use output_path to page. Let's read using output_path? The Read tool supports path or output_path? It accepts path, line_offset, n_lines. It returned output_path. We can Read path output_path? Actually output_path is a text file in session. We can read it. But maybe easier: read original file with line_offset chunks. We need instructions completely. Let's read output file or original file. Use output_path with line_offset. Since output_size_chars 71055, maybe ~1500 lines. Let's read chunks of 1000 lines. Start with line 1, n_lines 1000.The Read tool cap still triggered because preview limit 50000 chars for output. We need page through file. The returned output_path is the preview file. We can read output_path with line_offset and n_lines maybe it will show content. Let's read first 500 lines with line_offset 1, n_lines 500.The Read tool likely returns preview only because file > some threshold. We need use output_path to page through the full output. It created a file containing preview maybe truncated? We can read output_path. But those output files are full? They say output_size_chars 71055, but preview only shows first 25 lines. Let's read the output_path with line_offset and n_lines. The output_path text file contains the preview maybe with truncation? It says output_size_chars 71055, likely full content in the file. Let's read output_path.Tool preview is limiting. We can use Bash with `wc -l` and `sed -n` maybe to read portions. But Read has preview limit; we can use output_path but still preview. The Bash tool can read file (cat) but output may be huge (71055 chars) maybe within Bash output limit? It might truncate at 50k too? Actually Bash output limit might be high but may truncate. We can split file into chunks with `sed`. Use Bash to extract specific line ranges to files? Could use python to print in chunks. But we need understand prompt fully. We might need process entire markdown. It's 71k chars. Could pipe to a file or read with python. But we need to read content. Since we cannot display entire file via tool, perhaps we can save chunks to temporary files and Read each chunk, but Read will still preview if >50k chars? A chunk of e.g. 30k chars okay. Let's use Bash to split by lines. But Bash output may be limited. We can write chunks to files in temp dir. But need to read them; Read will preview if > 50k. So chunk size <50k chars. 71k total, maybe 2 chunks. Could use `split -l 1000` to files and read each. Let's create temp files in working dir? Better in .kimi? But working directory is repo; avoid leaving. Could use /tmp? On Windows git bash has /tmp. We can use Bash with `sed -n '1,500p'` output to stdout; output length ~ maybe 20k chars, okay. We can get content line ranges. Let's do `wc -l` first.808 C:/Users/pinol/Documents/Work/atriax/solid-pancake/.conclave-runs/20260704_170533/plan_synthesis.prompt.md
+808 lines, 71k chars. We can read in e.g. 4 chunks via sed. Let's print lines 1-200, 201-400, etc. Use Bash.You are a principal/staff engineer PLANNING a code change. Repo context:
+=== SHARED MEMORY (cross-agent knowledge graph) ===
+- Diego [person]:
+    • Job-hunts via career-ops for CDMX-remote roles $6K+/mo
+    • Cost-conscious: wants cheapest model meeting quality bar; OK downshifting Sonnet mid-task
+    • Runs multiple parallel agent sessions; wants model swaps scoped to one session
+- Conclave [project]:
+    • Multi-model agent orchestration system at ~/Documents/Work/conclave
+    • Cheap council (plan+jury) + OSS execution + hard gates, looping until green
+    • Best backend on this box: Ollama Cloud (conclave.cloud.yaml) GPU jury, no OpenRouter billing needed
+    • Tiers: conclave.cloud.yaml (GPU), conclave.local.yaml (free CPU), conclave.yaml (OpenRouter)
+- shared-agent-memory [system]:
+    • Cross-agent knowledge graph at C:/Users/pinol/.agent-memory/memory.json (JSONL)
+    • Written by @modelcontextprotocol/server-memory MCP, shared by Hermes+Claude Code+Codex
+    • Conclave OSS models get it injected via conclave/memory.py (they have no MCP)
+    • Codex verified read+write on 2026-06-20 via the --dangerously-bypass-approvals-and-sandbox flag (approval gate was the blocker, not transport).
+=== END SHARED MEMORY ===
+
+ATRIA-X: multi-tenant SaaS for home-care agencies. React19+Vite8+TS, Tailwind4, React Router 7, Clerk auth/orgs, Convex backend/DB, Vitest, Playwright. Formatting: 2-space indent, single quotes, no semicolons. Multi-tenancy is central: every Convex function touching tenant data must go through authHelpers guards. Roles: org:admin, org:coordinator, org:caregiver. After editing convex/* run npx convex codegen. Never edit convex/_generated by hand. Be surgical and scope-controlled.
+
+
+TASK:
+SESSION 2 — Scheduling backend: shift CRUD, availability, coverage, conflict detection.
+
+Build on the ATRIA-X Phase 2 schema from Session 1 (already committed on branch feature/phase-2-worker-onboarding). All Convex functions in convex/ MUST go through convex/authHelpers.ts (requireTenant / requireTenantRole / assertTenantDoc). No ADP calls.
+
+Create or extend convex/scheduling.ts (and split into convex/scheduling/ subdirectory if needed for clarity). Implement exactly the following:
+
+(1) mutation createShift({ clientId, caregiverId, scheduledStart, scheduledEnd, serviceType, rate, serviceLocationOverride? }) — requireTenantRole org:admin or org:coordinator. Validate: assertTenantDoc on clientId; verify caregiverId is a tenantMember with role org:caregiver for this tenant (query tenantMembers by_tenant_user, require role=org:caregiver); call checkShiftConflict — if conflict found, throw ConvexError with message listing the conflicting shift id and times. Check availabilityWindows: if caregiver has any windows for the day and the slot is not covered, add a warning flag to the returned result (do NOT block — availability is advisory). Insert shift with status 'scheduled'. Write auditEvent kind='shift.created'.
+
+(2) mutation updateShift({ shiftId, ...fieldsToUpdate }) — requireTenantRole org:admin or org:coordinator. assertTenantDoc on shift. If status is submitted/approved/billing_ready throw ConvexError 'Cannot edit a shift that is submitted or approved'. Re-run checkShiftConflict if times or caregiverId changed. Write auditEvent kind='shift.updated'.
+
+(3) mutation deleteShift({ shiftId }) — requireTenantRole org:admin. assertTenantDoc. Status must be 'scheduled'. Write auditEvent kind='shift.deleted'. Hard-delete the shift row.
+
+(4) mutation assignShift({ shiftId, caregiverId }) — requireTenantRole org:admin or org:coordinator. assertTenantDoc on shift. Verify new caregiver is a tenant org:caregiver member. checkShiftConflict (exclude the current shiftId). Write auditEvent 'shift.reassigned'.
+
+(5) query listShifts({ status?, startDate?, endDate?, caregiverId? }) — requireTenantRole org:admin or org:coordinator. Return paginated shifts with client displayName and caregiver displayName joined from tenantMembers. Filter by provided params. Max 100 results per page.
+
+(6) query listCaregiverShifts() — requireTenantRole org:caregiver. Return own shifts (by_tenant_caregiver_status). Include client name.
+
+(7) mutation addAvailabilityWindow({ kind, dayOfWeek?, date?, startTime, endTime, available, note? }) — requireTenantRole org:caregiver. Inserts for own clerkUserId.
+
+(8) mutation updateAvailabilityWindow({ windowId, startTime?, endTime?, available?, note? }) — requireTenantRole org:caregiver. assertTenantDoc; must be own window (caregiverId === clerkUserId).
+
+(9) mutation deleteAvailabilityWindow({ windowId }) — requireTenantRole org:caregiver. assertTenantDoc; own window only.
+
+(10) query listMyAvailability() — requireTenantRole org:caregiver. Returns own windows.
+
+(11) query listAvailabilityForScheduling({ caregiverId? }) — requireTenantRole org:admin or org:coordinator. Returns availability windows, optionally filtered by caregiver.
+
+(12) mutation requestCoverage({ shiftId, reason }) — requireTenantRole org:caregiver. assertTenantDoc on shift; shift.caregiverId must equal calling clerkUserId; status must be 'scheduled'. Insert coverageRequests row status='open'.
+
+(13) mutation resolveCoverage({ coverageRequestId, reassignedTo }) — requireTenantRole org:admin or org:coordinator. assertTenantDoc on coverageRequest. Verify reassignedTo is a tenant org:caregiver. checkShiftConflict for new caregiver. Update shift.caregiverId = reassignedTo. Update coverageRequests status='filled', resolvedBy, resolvedAt. Write auditEvent 'coverage.resolved'.
+
+(14) query listCoverageRequests({ status? }) — requireTenantRole org:admin or org:coordinator. Returns open/all requests with shift info.
+
+(15) Pure helper function checkShiftConflict(ctx, tenantId, caregiverId, start, end, excludeShiftId?): queries shifts by_tenant_caregiver_status for non-terminal statuses (scheduled, in_progress, submitted, approved), checks for time overlap, returns the first conflicting shift or null.
+
+Write unit tests for: no conflict on adjacent shifts; conflict on overlapping; conflict on same start; no conflict on completed shift; excludeShiftId correctly excluded. Tests additionally: createShift blocks cross-tenant caregiver; updateShift blocked on submitted; deleteShift blocked on in_progress; requestCoverage blocked for wrong caregiver; availability CRUD restricted to own windows; listShifts requires admin or coordinator role.
+
+Run npx convex codegen after changes. Style: single quotes, no semicolons, 2-space indent. Gates: npm run lint, typecheck, test green. Skip e2e (backend-only session).
+
+Before writing the plan, do real discovery when your backend can inspect the repo: open the
+obvious files, identify existing seams, and state what you verified. If your backend is
+chat-only and cannot inspect files, say so and reason from the supplied context only.
+
+Produce a premium implementation plan with:
+1. Restated goal and explicit acceptance criteria.
+2. Discovery notes: files/seams/contracts checked, or a clear note that repo inspection was unavailable.
+3. Alternatives considered and why the chosen approach is safest.
+4. Exact files to create/edit and the precise behavioral changes in each.
+5. Data/auth/security/multi-tenant/PHI/idempotency edge cases, where applicable.
+6. Test strategy: focused unit/integration/e2e cases and broad gates to run.
+7. Rollback/verification notes.
+
+Do NOT write the full code; produce the plan a competent implementer will follow. Keep it
+focused on ONLY what the task requires (no repo-wide refactors or formatting passes).
+
+
+Several planners produced the candidate plans below. Synthesize them into ONE coherent, de-duplicated, best-of-all implementation plan. Resolve conflicts, keep the strongest ideas, and output only the final plan as markdown.
+
+### Candidate plan from c_plan_agentic:
+• Completed the discovery and produced the implementation plan.
+
+  **Plan written to:**  
+  `C:/Users/pinol/Documents/Work/atriax/solid-pancake/.conclave-runs/20260704_170533/plan_c_plan_agentic.implementation_plan.md`
+
+  **Key decisions from repo inspection:**
+  - Created a new `convex/scheduling.ts` rather than refactoring the existing `shifts.ts` clock/submit flow, minimizing regression risk.
+  - Rewrote the `availabilityWindows` schema to match the task API (`caregiverId`, `kind`, `dayOfWeek`, `date`, `available`, `note`) because the current Phase 2 schema still uses the older `employeeProfileId` + `weekday` shape and no code references it yet.
+  - Added an optional `kind` field to `auditEvents` and updated `convex/audit.ts` to support it, keeping `action` populated for backward compatibility with existing callers.
+  - `checkShiftConflict` uses a single partial-index query by `tenantId + caregiverId` then filters in JS for the four non-terminal statuses and time overlap.
+
+  **Next step:** An implementer can follow the plan to edit `convex/schema.ts`, `convex/audit.ts`, create `convex/scheduling.ts` and `convex/scheduling.test.ts`, run `npx convex codegen`, then verify with `npm run lint`, `npm run typecheck`, and `npm run test` (e2e skipped).
+
+
+[stderr]
+• Let me start by reading the prompt file to understand what needs to be done.The user wants me to carry out instructions from a planning prompt file. This is a planning task — I need to inspect the repo, discover existing seams, and produce a premium implementation plan. Since this is a non-trivial planning task requiring reading multiple files, I should use plan mode. Wait, the prompt says "You are a principal/staff engineer PLANNING a code change" and asks me to produce a plan, not code. Since this requires reading files and producing a structured plan, I should use EnterPlanMode. But wait, the instructions say "Before writing the plan, do real discovery when your backend can inspect the repo: open the obvious files, identify existing seams, and state what you verified."
+
+  Let me first do discovery by reading key files, then I'll write the plan. Since this is a plan request, not implementation, I should not enter plan mode necessarily — the prompt itself is asking for a plan. But the instructions in the system say use EnterPlanMode for non-trivial implementation tasks. This is planning, not implementation. However, given it's a multi-step research task, I could use TodoList to track. Let me first inspect the repo structure and key files.
+
+  Files I need to inspect:
+  1. convex/schema.ts or schema definitions
+  2. convex/authHelpers.ts
+  3. convex/audit.ts
+  4. existing convex/scheduling.ts if any
+  5. existing tenantMembers patterns
+  6. existing test patterns
+  7. package.json for scripts
+
+  Let me start with discovery.Let me read the key files in parallel.Good. Now I need to read the schema.ts to understand existing tables and indexes, plus existing shifts.ts, shiftQueries.ts, etc.I see that the schema already has shifts, availabilityWindows, coverageRequests, auditEvents. The task wants me to create/update convex/scheduling.ts and possibly split into convex/scheduling/ subdirectory. But there's already shifts.ts and shiftQueries.ts with overlapping functionality. I need to understand whether this prompt wants me to create a new scheduling.ts file, or if I should be aware of existing files.
+
+  Wait — the prompt says "SESSION 2 — Scheduling backend: shift CRUD, availability, coverage, conflict detection." and "Build on the ATRIA-X Phase 2 schema from Session 1". The schema already has these tables. There are existing shifts.ts and shiftQueries.ts. But the task lists specific mutations/queries with specific names like createShift, updateShift, deleteShift, etc. So I need to create new functions in scheduling.ts.
+
+  I also need to check members.ts and clients.ts and existing tests patterns.Let me read the existing test patterns and package.json.I notice there are existing files like shifts.ts and shiftQueries.ts, but the prompt is asking for a plan to create convex/scheduling.ts with specific functions. The prompt says "Create or extend convex/scheduling.ts (and split into convex/scheduling/ subdirectory if needed for clarity)." So I should plan to create a new scheduling.ts file. But I also need to consider overlap with existing shifts.ts create mutation. The task is backend-only Session 2.
+
+  Let me also check if there's already a scheduling.ts file. The Glob didn't show one. Good.
+
+  I should look at a convex test that uses convex-test to understand the testing harness pattern.I need to understand the convex-test harness pattern. Let me look at shiftClock.test.ts or reviews.test.ts to see how they set up the test environment.Good. I have enough context. Now I need to think about the key design decisions.
+
+  Important findings:
+  1. Schema already has shifts, availabilityWindows, coverageRequests, auditEvents tables with appropriate indexes.
+  2. authHelpers.ts has requireTenantRole, assertTenantDoc, ensureTenantMember.
+  3. Existing shifts.ts has create, createMany, etc. But task wants createShift in scheduling.ts. These can coexist or we could refactor. The prompt says "Create or extend convex/scheduling.ts" — safest is to create new scheduling.ts with the requested functions, leaving existing shifts.ts alone (minimal changes).
+  4. Audit: audit.ts has internalMutation `record` with action string. The task wants kind='shift.created'. But existing record uses `action`. We could pass action='shift.created' to satisfy kind semantic. Or we might need to extend audit schema with `kind`. But the prompt says "Write auditEvent kind='shift.created'". The existing auditEvents table has `action` not `kind`. I need to check if I should rename or add kind. Since the task says "kind", I should plan to either map kind to action or add a kind field. Given minimal changes, I'd use action as the kind field (set action='shift.created'). But wait, the task explicitly says kind='shift.created'. The existing schema has `action`. I should consider adding a `kind` field to auditEvents. But that touches schema. The prompt says "Build on the ATRIA-X Phase 2 schema from Session 1" — so schema can be extended. I think the cleanest plan is to add `kind` to auditEvents schema and use it. But actually, looking at audit.ts, `action` is the string that stores the event type. Adding `kind` might be redundant. Hmm.
+
+  Wait, the prompt says "Write auditEvent kind='shift.created'". This is a requirement. The existing auditEvents schema uses `action`. To satisfy this exactly, I should add a `kind` field to auditEvents and populate it. Or use action as kind. But the test might check for kind. Since this is a plan, I can recommend adding `kind` to auditEvents and keeping action for backward compatibility, or just map kind->action.
+
+  Actually, looking carefully at audit.ts, the record internalMutation takes `action: v.string()`. If I want kind, I could either:
+  - Change audit.ts record to accept `kind` and map to action
+  - Add kind field to schema
+  Given the task says "Write auditEvent kind='shift.created'", I think the implementer should add `kind` to the auditEvents table schema and update the record internalMutation to accept/use it. But that's an extra schema change. Since prompt says all Convex functions must go through authHelpers, and the audit event is one of them, I'll plan to add `kind` to auditEvents.
+
+  5. availabilityWindows schema: currently uses employeeProfileId, weekday, startTime, endTime, effectiveStart, effectiveEnd, status. The task wants addAvailabilityWindow with kind, dayOfWeek?, date?, startTime, endTime, available, note?. The schema doesn't match — it has employeeProfileId not caregiverId, weekday not dayOfWeek, no date, no available, no note. This is a significant mismatch.
+
+  Wait, the prompt says "Build on the ATRIA-X Phase 2 schema from Session 1 (already committed on branch feature/phase-2-worker-onboarding)." So maybe the schema was supposed to be updated in Session 1 but I see the current schema. The current availabilityWindows doesn't match the task requirements.
+
+  I need to decide: should the plan modify the schema to match the task? The task says "Create or extend convex/scheduling.ts" and describes availability windows with kind/dayOfWeek/date/available/note/caregiverId. The existing schema uses employeeProfileId. There's also no direct mapping from clerkUserId to employeeProfileId in scheduling context. But employeeProfiles has tenantMemberId and clerkUserId.
+
+  To keep it simple and match the task's API contract, I should plan to update the availabilityWindows schema to match the new requirements:
+  - caregiverId: string (clerkUserId) instead of employeeProfileId
+  - kind: 'recurring' | 'one-off' (or string)
+  - dayOfWeek?: number or string
+  - date?: string
+  - available: boolean
+  - note?: string
+  - tenantId
+  - startTime, endTime
+
+  Alternatively, I could keep the existing schema and adapt the API, but that would be confusing. The task explicitly gives the field names. So the plan should include schema changes to availabilityWindows to support the requested fields.
+
+  Actually, let me re-read the task: "addAvailabilityWindow({ kind, dayOfWeek?, date?, startTime, endTime, available, note? }) — requireTenantRole org:caregiver. Inserts for own clerkUserId." This clearly uses clerkUserId/caregiverId, not employeeProfileId. So schema needs updating.
+
+  But wait — the prompt says "Build on the ATRIA-X Phase 2 schema from Session 1". This might imply the schema was already updated in Session 1 to support these fields, but the file I read doesn't show that. Perhaps the branch feature/phase-2-worker-onboarding has a different schema? I should check if there are uncommitted changes or different branches. But the user asked me to read the prompt and carry out instructions. I should work with what's in the working directory.
+
+  Actually, looking at the schema, availabilityWindows uses employeeProfileId and weekday. This looks like an older/adjacent design. Since the task describes a different shape, I should plan schema changes. But I want to be careful — maybe I should check git status or the current branch.
+
+  Let me check git status to see what branch we're on.?? .conclave-runs/20260704_142833/
+?? .conclave-runs/20260704_152655/
+?? .conclave-runs/20260704_170533/
+feature/phase-2-worker-onboarding
+We're on feature/phase-2-worker-onboarding. The schema file shows availabilityWindows with employeeProfileId. But the task expects caregiverId/clerkUserId. I should plan schema modifications.
+
+  Wait, let me re-examine. Maybe I should check if there's a session1 commit or diff that changed availabilityWindows.27bb01d Session 1: Phase 2 schema + guard tests + local E2E harness
+685baba Phase 1 complete
+d8bd5e0 Fix live Phase 1 E2E fixture isolation
+4ed8732 Configure live Clerk E2E auth
+d3ae3b0 Finalize Phase 1 verification gates
+24b5368 Merge ATRIA-X Phase 1 daily loop
+a74211f Implement ATRIA-X Phase 1 daily loop
+8b8b43b feat: add caregiver clock geofence lifecycle
+39fee29 Translate README to Spanish
+8278019 Handle stale deploy assets
+The last commit is "Session 1: Phase 2 schema + guard tests + local E2E harness". The schema I read is the current Phase 2 schema. But the availabilityWindows schema doesn't match the task's expected API. This means I need to plan to modify the schema as part of Session 2.
+
+  Let me also check the prompt again: "Build on the ATRIA-X Phase 2 schema from Session 1 (already committed on branch feature/phase-2-worker-onboarding)." So yes, the schema is the starting point, and Session 2 extends it.
+
+  I should also check employeeProfiles.ts to understand the caregiver mapping.Now I have a good understanding. Let me update the todo list and start drafting the plan.
+
+  Key decisions for the plan:
+
+  1. **Schema changes needed**:
+     - `availabilityWindows`: currently uses `employeeProfileId`, `weekday`, `status`. Need to update to match task: `caregiverId` (string clerkUserId), `kind` ('recurring' | 'one_off'), `dayOfWeek` (optional number/string), `date` (optional string), `startTime`, `endTime`, `available` (boolean), `note` (optional string), plus tenantId. Also need index `by_tenant_caregiver` for queries.
+     - `auditEvents`: add `kind` field, or use existing `action` as kind. Plan to add `kind` field and keep `action` populated for compatibility, OR just use `action` with value 'shift.created'. Given the prompt explicitly says "kind", I'll recommend adding `kind` to schema and updating audit.record internalMutation. But this is a schema change requiring codegen. Alternatively, to minimize schema changes, use action='shift.created'. Hmm, the task says "Write auditEvent kind='shift.created'". I think the safest is to add `kind` field to auditEvents and have record accept it. But if we're strict about minimal changes, maybe just use action. Actually the prompt says "Build on the Phase 2 schema" — schema changes are allowed. I'll recommend adding `kind` to auditEvents schema and updating the record mutation signature, while keeping `action` as a required fallback field.
+     
+     Wait, actually, let me reconsider. The existing audit.ts already has record mutation taking `action`. If I add `kind`, I'd need to update audit.ts. But the task says "Write auditEvent kind='shift.created'". I can interpret this as: set the `action` field to 'shift.created' since that's the event kind. The word "kind" is used semantically. But to be precise, I'll plan to add a `kind` field to auditEvents and update record to accept both action and kind. This is cleaner and matches the requirement literally.
+
+  2. **New file**: `convex/scheduling.ts` — implement all 14 functions. Keep it in one file unless it gets unwieldy. The task allows splitting into `convex/scheduling/` subdirectory. I'll recommend one file for simplicity, but note that splitting is an option if the file exceeds ~400 lines.
+
+  3. **Helper function**: `checkShiftConflict` as pure async function exported from scheduling.ts (or a separate scheduling/helpers.ts). Use shifts index `by_tenant_caregiver_status` for non-terminal statuses.
+
+  4. **Role/auth**: All functions use `requireTenantRole` with appropriate roles and `assertTenantDoc`.
+
+  5. **Availability advisory warning**: In createShift, check availabilityWindows for the day; if caregiver has windows and slot not covered, return `{ shiftId, availabilityWarning: true }` or similar. Do NOT block.
+
+  6. **Coverage requests**: 
+     - `requestCoverage`: shift.caregiverId must equal calling clerkUserId, status 'scheduled', insert coverageRequests status='open'.
+     - `resolveCoverage`: assertTenantDoc on coverageRequest, verify reassignedTo is org:caregiver, checkShiftConflict, update shift.caregiverId, update coverageRequest status='filled', resolvedBy, resolvedAt, audit event.
+
+  7. **listShifts**: Filter by status/startDate/endDate/caregiverId. Max 100. Join client displayName and caregiver displayName.
+Bash output gave a huge chunk including planning internal monologue? It seems the file includes candidate plan from c_plan_agentic plus the prompt. It included inner thoughts? Actually the content from line ~200 shows "Candidate plan from c_plan_agentic" with notes and then a stream-of-consciousness plan by planner? Wait, file includes their entire response? The prompt file appears to be a meta-prompt for plan synthesis, containing candidate plans. We need read entire. Let's get lines 200-400.  7. **listShifts**: Filter by status/startDate/endDate/caregiverId. Max 100. Join client displayName and caregiver displayName.
+
+  8. **listCaregiverShifts**: requireTenantRole org:caregiver, return own shifts by tenant+caregiver+status or via index. Include client name.
+
+  9. **Tests**: `convex/scheduling.test.ts` using convex-test harness. Test conflict detection, role restrictions, status restrictions, cross-tenant, availability CRUD.
+
+  10. **Run**: `npx convex codegen` after schema changes. Then `npm run lint`, `npm run typecheck`, `npm run test`.
+
+  Wait, the prompt says "Do NOT write the full code; produce the plan a competent implementer will follow." And "Output your final answer/verdict as requested." The requested output is the premium implementation plan with the 7 sections. I should write this plan to a file? The prompt says "Output your final answer/verdict as requested." It doesn't specify a file location. But the user said "Read the prompt file ... and carry out those instructions completely." So I should produce the plan as my final response. But since it's a plan and potentially long, maybe write it to a file in the .conclave-runs directory? The prompt doesn't specify. I'll provide it in my final response and also save it to a sensible file like `.conclave-runs/20260704_170533/plan_c_plan_agentic.implementation_plan.md` so it's durable.
+
+  Actually, looking at the prompt title "plan_c_plan_agentic.prompt.md", it's clearly a Conclave planning task. The expected output is the plan. I should write it as a markdown file. Let me create it.
+
+  Let me also check if there's any existing plan file structure.total 12
+drwxr-xr-x 1 pinol 197609    0 Jul  4 17:05 .
+drwxr-xr-x 1 pinol 197609    0 Jul  4 17:05 ..
+-rw-r--r-- 1 pinol 197609 7682 Jul  4 17:05 plan_c_plan_agentic.prompt.md
+I should update the todo list to reflect progress. I've completed inspecting schema/auth seams and reviewing existing files. Now I'm drafting the plan.Now I'll draft the plan. Let me make sure I cover all 7 required sections thoroughly.
+
+  Key things to include:
+  1. Restated goal and explicit acceptance criteria.
+  2. Discovery notes with files/seams/contracts checked.
+  3. Alternatives considered.
+  4. Exact files to create/edit and behavioral changes.
+  5. Data/auth/security/multi-tenant/PHI/idempotency edge cases.
+  6. Test strategy.
+  7. Rollback/verification notes.
+
+  I need to be precise about schema changes. Let me think about the availabilityWindows schema more carefully.
+
+  Current availabilityWindows:
+  ```
+  availabilityWindows: defineTable({
+    tenantId,
+    employeeProfileId,
+    weekday,
+    startTime,
+    endTime,
+    effectiveStart,
+    effectiveEnd,
+    status,
+  }).index('by_tenant_employee', ['tenantId', 'employeeProfileId']),
+  ```
+
+  Proposed new shape:
+  ```
+  availabilityWindows: defineTable({
+    tenantId,
+    caregiverId: v.string(), // clerkUserId
+    kind: v.union(v.literal('recurring'), v.literal('one_off')),
+    dayOfWeek: v.optional(v.number()), // 0-6, required for recurring
+    date: v.optional(v.string()), // YYYY-MM-DD, required for one_off
+    startTime: v.string(), // HH:mm
+    endTime: v.string(), // HH:mm
+    available: v.boolean(),
+    note: v.optional(v.string()),
+  })
+  .index('by_tenant_caregiver', ['tenantId', 'caregiverId'])
+  .index('by_tenant_caregiver_date', ['tenantId', 'caregiverId', 'date']) // for one-off lookup
+  ```
+
+  But wait, the task says "Check availabilityWindows: if caregiver has any windows for the day and the slot is not covered, add a warning flag". This requires looking up windows for a specific day. For recurring windows, we need dayOfWeek. For one-off, date. So the day matching logic is:
+  - Given a shift date (from scheduledStart ISO string), get dayOfWeek (0-6) and date string.
+  - Query all windows for caregiver+tenant.
+  - Filter where (kind='recurring' and dayOfWeek matches) or (kind='one_off' and date matches).
+  - Check if [scheduledStart time, scheduledEnd time] is fully covered by union of windows.
+
+  But the schema currently has startTime/endTime as strings, presumably HH:mm. The shift times are ISO datetimes. We need to extract time portion.
+
+  Actually, maybe we should keep date-specific start/end as ISO? But the task API uses startTime/endTime which sounds like time strings. I'll assume HH:mm strings.
+
+  For the conflict detection, we compare ISO strings lexicographically since they're ISO 8601.
+
+  For the auditEvents schema, I'll add `kind` as optional to avoid breaking existing audit.record callers? No, better to update record to accept kind and write both. But existing callers pass action. I should update all existing callers? That's a bigger change. Alternative: keep action as the primary field and interpret action as kind. But the task says "kind='shift.created'".
+
+  I think the cleanest plan:
+  - Add `kind` field to auditEvents schema as optional.
+  - Update audit.ts record internalMutation to accept `kind` as optional, and write both action and kind (if kind provided, use it for action too? Or keep them separate).
+  - For scheduling.ts, call audit.record with action='shift.created' and kind='shift.created'.
+  - Existing callers of audit.record continue to work because kind is optional.
+
+  Actually, if I add kind as optional, existing record callers only pass action, so kind will be undefined. That's fine.
+
+  Wait, the task says "Write auditEvent kind='shift.created'". If I add `kind` field, I literally satisfy it. Good.
+
+  But is adding a schema field overkill? The prompt might expect using action as kind. But since it's a planning task, I should be thorough and note this decision.
+
+  Hmm, actually, I want to reconsider whether to add `kind`. The existing audit.ts uses `action` for the event type string. Adding `kind` creates redundancy. If the task says "Write auditEvent kind='shift.created'", the word "kind" might just be the semantic description of the action field. In many systems, audit events have a "kind" or "action" field. Given the existing schema has `action`, and the task is to build on existing schema, the most minimal/safe approach is to set `action='shift.created'` and document that action represents the event kind.
+
+  But the task literally says "kind='shift.created'". I think I should recommend adding `kind` to be precise. But I'll mention the alternative of reusing `action` and why I chose to add `kind`.
+
+  Actually, I just realized — if I add `kind` to the schema, I need to update the existing `record` mutation in audit.ts, which means touching audit.ts (not just scheduling.ts). That's allowed but increases scope. Let me think about what's "safest". 
+
+  The prompt says "All Convex functions in convex/ MUST go through convex/authHelpers.ts" and "No ADP calls". It doesn't forbid touching audit.ts. And the requirement is explicit about kind. I'll plan to add `kind` to auditEvents and update audit.record.
+
+  But wait, if I update audit.record to require kind, I break existing callers in shifts.ts. So I'll make kind optional and default action from kind if not provided. Existing callers pass action. New callers pass both. That's backward compatible.
+
+  Actually, simpler: update audit.record to accept `kind` (optional) and set action = args.action ?? args.kind. Then scheduling.ts passes kind. Existing callers pass action. Everyone works.
+
+  OK, schema changes:
+  1. auditEvents: add `kind: v.optional(v.string())`.
+  2. availabilityWindows: rewrite to match new API.
+
+  Wait, but if I rewrite availabilityWindows, any existing data or tests using the old schema break. Are there any existing references to availabilityWindows? Let me search.Good, only the schema references availabilityWindows currently. So rewriting it is safe.
+
+  Now, one more consideration: the task mentions "availabilityWindows: if caregiver has any windows for the day and the slot is not covered". The current schema indexes by tenant+employeeProfileId. We need caregiverId indexing. I'll add `by_tenant_caregiver` index.
+
+  Also, for conflict detection, the task says "queries shifts by_tenant_caregiver_status for non-terminal statuses (scheduled, in_progress, submitted, approved)". Note: 'billing_ready' is terminal-ish too. The non-terminal list given is scheduled, in_progress, submitted, approved. So completed shifts (billing_ready?) are excluded. Wait, the schema has statuses: scheduled, in_progress, submitted, needs_correction, approved, billing_ready. The non-terminal per task: scheduled, in_progress, submitted, approved. So needs_correction and billing_ready are excluded from conflict checks. I'll follow exactly the task's list.
+
+  For checkShiftConflict, query by_tenant_caregiver_status. But the index is [tenantId, caregiverId, status]. We need to query multiple statuses. Convex allows .withIndex with equality on first two and eq on status, but only one status per query. So we'd need multiple queries or use .filter. The task says "queries shifts by_tenant_caregiver_status for non-terminal statuses". We can query by tenant+caregiver and then filter by status in JS, or do 4 separate indexed queries. For simplicity and correctness, query by tenant+caregiver (using index with partial key) and filter by status + time overlap. Actually, withIndex can be used with `.eq('tenantId', tenantId).eq('caregiverId', caregiverId)` and then filter. This scans all shifts for that caregiver, which is fine for typical volumes. If we want indexed status filtering, we could do multiple queries. I'll recommend one query with partial index + JS filter for clarity.
+
+  Wait, Convex index withIndex syntax: `.withIndex('by_tenant_caregiver_status', (q) => q.eq('tenantId', tenantId).eq('caregiverId', caregiverId))` and then `.filter((q) => q.eq(q.field('status'), 'scheduled')...)` but filter doesn't support OR easily. Better to collect all and filter in JS.
+
+  Let me draft the plan now.
+
+  For tests, I need to plan `convex/scheduling.test.ts` with convex-test harness. Tests:
+  - checkShiftConflict: no conflict adjacent, conflict overlapping, conflict same start, no conflict completed (billing_ready or needs_correction), excludeShiftId correctly excluded.
+  - createShift blocks cross-tenant caregiver.
+  - updateShift blocked on submitted.
+  - deleteShift blocked on in_progress.
+  - requestCoverage blocked for wrong caregiver.
+  - availability CRUD restricted to own windows.
+  - listShifts requires admin or coordinator role.
+
+  I should also mention running `npx convex codegen` after schema changes.
+
+  For alternatives:
+  - Option A: Create new scheduling.ts alongside existing shifts.ts. Option B: Refactor existing shifts.ts to use scheduling.ts. Chosen: A (minimal, no regression risk).
+  - Option A: Reuse existing availabilityWindows schema with employeeProfileId. Option B: Update schema to caregiverId/clerkUserId. Chosen: B because task API explicitly uses own clerkUserId.
+  - Option A: Add `kind` to auditEvents. Option B: Use `action` as kind. Chosen: A (literal requirement) with backward-compatible optional field.
+
+  Let me also consider idempotency. The mutations aren't naturally idempotent. I should mention that callers are expected to manage idempotency at UI level; no idempotency keys added unless requested. But for coverage resolution, we should guard against double resolution by checking status='open' before updating.
+
+  Edge cases:
+  - DST/timezone: use ISO strings; availability time matching uses UTC date/time. Document assumption.
+  - Day matching for availability: recurring uses dayOfWeek, one-off uses date.
+  - Overlap logic: intervals [start, end) or (start, end]? Standard: start < otherEnd && otherStart < end. If end == otherStart, no overlap (adjacent safe).
+  - Cross-tenant: assertTenantDoc on all docs, requireTenantRole for auth.
+  - PHI: shift data contains client/caregiver associations; all queries enforce role-based access.
+  - Hard delete of shift: also consider orphaned progressNotes/shiftTasks/timePunches? Task says "Hard-delete the shift row." It doesn't say cascade. But orphaned child rows would be a data quality issue. The plan should mention whether to cascade or not. Given "Hard-delete the shift row" is explicit, I'll plan to only delete the shift row, but add a note that orphaned children may remain and a future enhancement could cascade. Actually, to be safe and avoid breaking existing clocks/etc., maybe just delete the shift. But that leaves orphans. Hmm. The task is explicit: "Hard-delete the shift row." I'll follow that literally and note the orphan consideration.
+
+  Wait, but if we hard delete a shift row, the progressNotes/shiftTasks/timePunches/reviews/billingLines still reference it. This could cause issues. But the task says only delete the shift row. Since status must be 'scheduled', there shouldn't be timePunches or billingLines yet (those happen after clock-in/submit). Progress notes and shift tasks are created at shift creation though. So deleting scheduled shift leaves orphaned progressNotes and shiftTasks. Should we cascade delete them? The task doesn't say. I'll mention this as a data-integrity edge case and recommend cascading delete of progressNotes and shiftTasks for scheduled shifts only, since they were created together. But I should be careful not to over-engineer. Let me re-read the task: "Hard-delete the shift row." That's the only instruction. I'll plan to delete only the shift row and note the orphan risk. Actually, maybe I should plan to cascade delete progressNotes and shiftTasks because they are directly tied to the shift and were created automatically. But I don't want to exceed scope. I'll mention it as a decision point in the plan.
+
+  Actually, looking at clients.ts remove, it checks for linked shifts and blocks. So the codebase is careful about orphans. For shifts, if we delete a scheduled shift, the progress note and task are functionally useless. I think it's cleaner to cascade them. But the task says "Hard-delete the shift row" — maybe the test only checks that the shift is deleted. I'll plan to cascade delete progressNotes and shiftTasks to avoid orphans, with a note that this is a data hygiene choice.
+
+  Hmm, but task says "Status must be 'scheduled'". A scheduled shift has an empty progress note and pending task. Deleting them is fine. I'll include cascade in the plan.
+
+  Wait, but the task specifically says "Hard-delete the shift row" not "cascade delete". To avoid scope creep, maybe just hard-delete the shift row. I'll note both options and recommend cascade for cleanliness but state that tests should only assert the shift deletion. Actually, the simplest plan is: hard-delete the shift row only, as instructed. Orphans are acceptable because status=scheduled means no timePunches/billingLines/reviews, and progressNotes/shiftTasks are created automatically but can be re-created. I'll go with literal interpretation.
+
+  Let me also think about listShifts date filtering. The args are startDate? and endDate? Probably YYYY-MM-DD strings. Need to filter shifts whose scheduledStart date falls within range. Could use string prefix comparison: scheduledStart >= `${startDate}T00:00:00Z` and scheduledStart < `${endDate}T23:59:59.999Z` or similar. I'll plan to accept ISO date strings and use string comparison.
+
+  For listShifts caregiverId filter: query shifts by_tenant_caregiver_status if caregiverId provided, else by_tenant_status_start. But we also have status filter. The index by_tenant_status_start supports status. by_tenant_caregiver_status supports caregiverId+status. If both status and caregiverId provided, use by_tenant_caregiver_status with eq status. If only status, use by_tenant_status_start. If only caregiverId, use by_tenant_caregiver_status. If neither, use by_tenant_status_start.
+
+  Joining client and caregiver names: client from ctx.db.get(clientId), caregiver from tenantMembers query by_tenant_user or by_tenant_role. Use Promise.all for batch.
+
+  For listCaregiverShifts: requireTenantRole org:caregiver, query by_tenant_caregiver_status for the identity.subject, include client name. Could return all or paginate? Task doesn't specify pagination for this. I'll return up to 100.
+
+  For listMyAvailability and listAvailabilityForScheduling: query availabilityWindows by_tenant_caregiver.
+
+  For resolveCoverage: need to load coverageRequest, assertTenantDoc, check it's open, load shift, update shift.caregiverId, update coverageRequest. Also need to ensure reassignedTo is not the same caregiver? Not required, but could be sensible. Skip.
+
+  For requestCoverage: shift.caregiverId === identity.subject. status === 'scheduled'. Insert coverageRequests with status 'open', requesterId = identity.subject, reason.
+
+  Now, one subtlety: the task says "addAvailabilityWindow({ kind, dayOfWeek?, date?, startTime, endTime, available, note? }) — requireTenantRole org:caregiver. Inserts for own clerkUserId." The identity.subject is the clerkUserId. So caregiverId = identity.subject. We should validate that the caller is a caregiver member of the tenant (requireTenantRole does this).
+
+  Validation for availability windows:
+  - if kind === 'recurring', dayOfWeek required (0-6)
+  - if kind === 'one_off', date required
+  - endTime > startTime
+  - available is boolean
+
+  For updateAvailabilityWindow: can update startTime, endTime, available, note. Must be own window.
+
+  Now, the `dayOfWeek` type. Use v.optional(v.number()) with range 0-6, or v.optional(v.union of literals). Simpler: v.optional(v.number()). Validate range in handler.
+
+  OK, I think I have enough. Let me write the plan.
+
+  The plan should be saved to `.conclave-runs/20260704_170533/plan_c_plan_agentic.implementation_plan.md` or similar. I'll use Write tool.
+
+  Let me also update todo list before writing.Now let me write the plan file.I should update the todo list to mark the final task done.I need to output my final answer/verdict as requested. The prompt asked to carry out the instructions completely and output the final answer/verdict. The instructions were to produce a premium implementation plan. I've written it to a file. I should now provide a concise summary to the user with the file path and key decisions.
+
+  I should use the same language as the user (English). Keep it concise and professional.
+
+To resume this session: kimi -r session_8e54635d-e313-4f2f-a144-0ac83b3d5972
+
+
+=====
+
+### Candidate plan from c_plan_qwen:
+# Implementation Plan: ATRIA-X Session 2 — Scheduling Backend
+
+## 1. Goal & Acceptance Criteria
+**Goal:** Implement secure, multi-tenant scheduling logic (shifts, availability, coverage) in Convex, enforcing strict role-based access control (RBAC) via `authHelpers`.
+
+**Acceptance Criteria:**
+- [ ] 15 Convex functions implemented (mutations/queries/helpers) matching specifications (1-15).
+- [ ] All functions enforce multi-tenancy via `requireTenantRole` or `requireTenant` + `assertTenantDoc`.
+- [ ] Conflict detection prevents overlapping shifts for the same caregiver (excluding self on update).
+- [ ] Availability checks return warnings but do not block shift creation.
+- [ ] Audit events logged for shift CRUD and coverage resolution.
+- [ ] Unit tests cover conflict logic, auth gates, and edge cases (adjacent vs overlapping).
+- [ ] `npx convex codegen` runs successfully; `npm run lint`, `typecheck`, `test` pass.
+This Bash output contains the candidate plan from c_plan_qwen maybe starts around line 400? It seems line ranges shifted because earlier chunk ended at line ~390? Let's get lines 400-600.- [ ] `npx convex codegen` runs successfully; `npm run lint`, `typecheck`, `test` pass.
+- [ ] Code style: 2-space indent, single quotes, no semicolons.
+
+## 2. Discovery Notes
+**Limitation:** I am a chat-only agent and cannot inspect the local filesystem or running Convex dashboard. I cannot verify the exact current state of `convex/schema.ts` or `convex/authHelpers.ts`.
+
+**Assumptions based on Task Context:**
+- **Schema:** Tables `shifts`, `availabilityWindows`, `coverageRequests`, `tenantMembers`, `clients`, `auditLogs` exist from Session 1.
+- **Indexes:** I will assume necessary indexes exist (e.g., `by_tenant_caregiver_status` on `shifts`). If missing, `schema.ts` updates are required.
+- **Auth:** `authHelpers.ts` exports `requireTenantRole`, `requireTenant`, `assertTenantDoc`.
+- **Types:** Generated types (`Id`, `Doc`) are available via `@/convex/_generated`.
+- **Time:** All timestamps stored as UTC numbers (ms since epoch) to avoid timezone issues in conflict logic.
+
+**Risk:** If Session 1 schema differs (e.g., `shifts` table name is `workerShifts`), implementation will fail typecheck. I will proceed using the names implied in the task (`shifts`, `availabilityWindows`) and note this as a verification step.
+
+## 3. Alternatives Considered
+| Approach | Pros | Cons | Decision |
+| :--- | :--- | :--- | :--- |
+| **Single `scheduling.ts`** | Fewer files, easier initial navigation. | Becomes monolithic quickly; harder to test isolated logic. | **Reject** |
+| **Module (`scheduling/`)** | Clear separation (shifts, availability, coverage); easier ownership. | Slightly more import overhead. | **Select** |
+| **Blocking Availability** | Prevents scheduling outside windows. | Too rigid for home-care (emergencies happen); task specifies "advisory". | **Reject** |
+| **DB-Level Constraints** | Strongest integrity. | Convex doesn't support complex SQL-like constraints; logic must be in functions. | **Reject** |
+
+## 4. File Plan & Behavioral Changes
+
+### 4.1 `convex/schema.ts` (Verification/Update)
+- **Action:** Verify indexes exist for performance.
+- **Required Indexes:**
+  - `shifts`: `by_tenant_caregiver_status` (tenantId, caregiverId, status), `by_tenant_client_status`.
+  - `availabilityWindows`: `by_tenant_user` (tenantId, clerkUserId).
+  - `coverageRequests`: `by_tenant_status` (tenantId, status).
+- **Change:** Add indexes if missing. Run `npx convex codegen`.
+
+### 4.2 `convex/scheduling/helpers.ts` (New)
+- **Function:** `checkShiftConflict(ctx, tenantId, caregiverId, start, end, excludeShiftId?)`
+- **Logic:**
+  - Query `shifts` by `by_tenant_caregiver_status` for statuses `['scheduled', 'in_progress', 'submitted', 'approved']`.
+  - Filter client-side (or via convex filter) for overlap: `start < existing.end && end > existing.start`.
+  - Exclude `excludeShiftId` if provided.
+  - Return conflicting shift doc or `null`.
+- **Security:** Uses internal `ctx`; caller must validate tenantId.
+
+### 4.3 `convex/scheduling/shifts.ts` (New)
+- **Mutations:**
+  - `createShift`: Validate caregiver role (`org:caregiver`). Call `checkShiftConflict`. Check availability (query `availabilityWindows` for day; flag warning if no cover). Insert shift. Audit `shift.created`.
+  - `updateShift`: Assert status not terminal (`submitted`/`approved`/`billing_ready`). Re-run conflict check if times/caregiver changed. Audit `shift.updated`.
+  - `deleteShift`: Admin only. Assert status `scheduled`. Hard delete. Audit `shift.deleted`.
+  - `assignShift`: Validate new caregiver role. Conflict check (exclude current shift). Update `caregiverId`. Audit `shift.reassigned`.
+- **Queries:**
+  - `listShifts`: Admin/Coordinator. Filter by params. Join `clients` and `tenantMembers` for names. Paginate (max 100).
+  - `listCaregiverShifts`: Caregiver only. Filter by `clerkUserId`. Join `clients`.
+
+### 4.4 `convex/scheduling/availability.ts` (New)
+- **Mutations:**
+  - `addAvailabilityWindow`: Caregiver only. Insert own window.
+  - `updateAvailabilityWindow`: Caregiver only. Assert ownership (`caregiverId === clerkUserId`).
+  - `deleteAvailabilityWindow`: Caregiver only. Assert ownership.
+- **Queries:**
+  - `listMyAvailability`: Caregiver only. Return own windows.
+  - `listAvailabilityForScheduling`: Admin/Coordinator. Return all (or filtered by caregiver).
+
+### 4.5 `convex/scheduling/coverage.ts` (New)
+- **Mutations:**
+  - `requestCoverage`: Caregiver only. Assert shift ownership (`shift.caregiverId === clerkUserId`). Assert status `scheduled`. Insert `coverageRequests` (status `open`).
+  - `resolveCoverage`: Admin/Coordinator. Assert request tenant. Validate `reassignedTo` role. Conflict check for new caregiver. Update shift. Update request (`filled`, `resolvedBy`, `resolvedAt`). Audit `coverage.resolved`.
+- **Queries:**
+  - `listCoverageRequests`: Admin/Coordinator. Filter by status. Join shift info.
+
+### 4.6 `convex/scheduling.test.ts` (New)
+- **Framework:** Vitest + `convex-test` (or standard Convex testing harness).
+- **Cases:**
+  - **Conflict:** Adjacent shifts (pass), Overlapping (fail), Same start (fail), Completed shift overlap (pass), `excludeShiftId` (pass).
+  - **Auth:** Cross-tenant caregiver (fail), Update submitted shift (fail), Delete in_progress (fail), Coverage wrong caregiver (fail), Availability non-own (fail), ListShifts wrong role (fail).
+
+## 5. Edge Cases & Security Considerations
+
+| Area | Risk | Mitigation |
+| :--- | :--- | :--- |
+| **Multi-Tenancy** | Data leakage across tenants. | Every query/mutation starts with `requireTenantRole` or `requireTenant`. All DB queries include `tenantId` filter. `assertTenantDoc` verifies doc belongs to tenant. |
+| **Auth Roles** | Privilege escalation. | Strict checks: `deleteShift` requires `org:admin` (not coordinator). `listCaregiverShifts` requires `org:caregiver`. |
+| **Time Zones** | Conflict detection errors. | Store all times as UTC numbers. Conflict logic compares numbers. UI handles display localization. |
+| **Concurrency** | Double-booking during race condition. | Convex transactions provide atomicity. `checkShiftConflict` + `insert` in same mutation ensures consistency. |
+| **PHI/PII** | Exposing client/caregiver names. | Only return `displayName`. Ensure `listShifts` does not return sensitive client addresses unless explicitly required (not in spec). |
+| **Audit** | Missing audit trails. | Wrap all state-changing mutations with `auditEvent` calls. Ensure `tenantId` is logged. |
+| **Availability** | Confusing advisory warnings. | Return `{ shift: ..., warning: boolean, message?: string }` from `createShift` so UI can inform user without blocking. |
+
+## 6. Test Strategy
+**Unit/Integration (Vitest):**
+- **Mocking:** Use `convex-test` to mock `ctx` and DB state.
+- **Focus:**
+  1.  **Logic:** `checkShiftConflict` with various time intervals.
+  2.  **Auth:** Verify `UnauthorizedError` thrown when roles mismatch or tenant IDs differ.
+  3.  **State:** Verify audit logs are created alongside shifts.
+- **Gates:** `npm run test` must pass.
+
+**Type Safety:**
+- `npm run typecheck` must pass (ensures schema alignment).
+
+**Lint:**
+- `npm run lint` (ESLint + Prettier) enforcing single quotes, no semis, 2-space.
+
+**Excluded:**
+- Playwright E2E skipped for this session (backend-only focus).
+
+## 7. Rollback & Verification
+**Rollback:**
+- Git revert of commit containing `convex/scheduling/` changes.
+- Run `npx convex codegen` to regenerate types if schema reverted.
+
+**Verification Steps:**
+1.  **Local Dev:** Run `npm run dev`.
+2.  **Dashboard:** Check Convex Dashboard -> Functions to ensure all 15 endpoints are deployed.
+3.  **Logs:** Check Convex Logs for any `UnauthorizedError` or schema mismatches during initial smoke test.
+4.  **Codegen:** Confirm no type errors in frontend components that might consume these new functions (if any exist yet).
+
+## 8. Implementation Sequence
+1.  **Schema Check:** Verify `schema.ts` indexes. Add if missing. Codegen.
+2.  **Helpers:** Implement `checkShiftConflict` in `helpers.ts`. Test logic.
+3.  **Shifts:** Implement CRUD + List in `shifts.ts`.
+4.  **Availability:** Implement CRUD + List in `availability.ts`.
+5.  **Coverage:** Implement Request/Resolve in `coverage.ts`.
+6.  **Tests:** Write `scheduling.test.ts` covering all 15 functions' critical paths.
+7.  **Gate:** Run lint, typecheck, test.
+8.  **Commit:** `feat: scheduling backend CRUD and conflict detection`.
+
+=====
+
+### Candidate plan from c_plan_kimi27:
+# ATRIA-X Session 2 — Scheduling Backend Implementation Plan
+
+## 1. Restated Goal & Acceptance Criteria
+
+**Goal:** Extend the ATRIA-X Phase 2 backend on branch `feature/phase-2-worker-onboarding` with a complete, multi-tenant scheduling subsystem in Convex: shift CRUD, caregiver availability windows, coverage requests, and shift-conflict detection. All functions must route through `convex/authHelpers.ts`, must not call ADP, and must respect the existing role model (`org:admin`, `org:coordinator`, `org:caregiver`).
+
+**Acceptance criteria:**
+- All 15 requested functions exist, are correctly typed, and enforce the required roles.
+- `createShift`, `updateShift`, `assignShift`, and `resolveCoverage` call `checkShiftConflict` and throw a `ConvexError` naming the conflicting shift and its times.
+- `createShift` returns an availability advisory warning when the caregiver has windows for the day but the slot is uncovered; it never blocks on availability.
+- `deleteShift` hard-deletes only `scheduled` shifts and writes an audit event.
+- `updateShift` is blocked for `submitted`, `approved`, or `billing_ready` statuses.
+- `requestCoverage` is allowed only by the assigned caregiver on a `scheduled` shift.
+- `resolveCoverage` verifies the replacement caregiver, checks conflicts, updates the shift, and closes the request.
+- Queries return joined client/caregiver display names and paginate correctly (max 100/page).
+- Schema changes are made only in `convex/schema.ts`; `convex/_generated` is regenerated via `npx convex codegen`.
+- New unit/integration tests cover the listed conflict, auth, and role cases.
+- `npm run lint`, `npm run typecheck`, and `npm run test` pass. E2E is skipped.
+
+---
+
+## 2. Discovery Notes
+
+**Repo inspection was unavailable** — this is a chat-only session, so I could not open files. The plan below is built from the supplied context and standard Convex + Clerk patterns.
+
+**Assumed existing seams** (verify before coding):
+- `convex/schema.ts` already defines `clients`, `tenantMembers`, and `auditEvents` tables from Session 1.
+- `convex/authHelpers.ts` exports at least:
+  - `requireTenant(ctx)` — returns the current Clerk org/tenant id.
+  - `requireTenantRole(ctx, role)` — throws if the caller lacks the role for the tenant.
+  - `assertTenantDoc(ctx, table, id, tenantId)` — returns the doc or throws if it does not belong to the tenant.
+  - A way to get the caller’s Clerk user id (e.g., `getCurrentUserOrThrow(ctx)` or it is returned by `requireTenantRole`).
+- `tenantMembers` has an index like `by_tenant_user: ['tenantId', 'userId']` and stores `role` and `userId`.
+- `clients` has an index like `by_tenant: ['tenantId']` and stores `displayName`.
+- `auditEvents` has a schema that accepts `tenantId`, `kind`, `actorId`, `entityId`, and `metadata`.
+
+**If any of the above differ**, adjust the helper signatures and index names locally in the scheduling module rather than refactoring shared auth code unless unavoidable.
+
+---
+
+## 3. Alternatives Considered
+
+| Decision | Options | Chosen approach | Rationale |
+|---|---|---|---|
+| File organization | One `convex/scheduling.ts` vs. `convex/scheduling/*.ts` | Split into `convex/scheduling/shifts.ts`, `availability.ts`, `coverage.ts`, plus `helpers.ts` | 15 functions; splitting keeps reviewable files and avoids merge conflicts in future sessions. |
+| Time representation | ISO strings vs. epoch ms for shifts; HH:MM vs. minutes for windows | Shifts: `number` epoch ms; windows: `number` minutes-from-midnight; one-off windows: ISO date string | Easiest overlap math and indexing. Document the local-timezone assumption. |
+| Availability behavior | Hard block vs. advisory warning | Advisory warning only | Matches the requirement that availability is advisory. |
+| Pagination | In-memory filtering after `.take(100)` vs. composite indexes | Composite indexes (`by_tenant_status_start`, `by_tenant_caregiver_status_start`) | Correct pagination under combined filters; no missed rows. |
+| Delete behavior | Soft delete vs. hard delete | Hard delete per task, with cascade of linked `coverageRequests` | Prevents orphaned coverage rows after a shift is removed. |
+
+---
+
+## 4. Exact Files to Create/Edit
+
+### `convex/schema.ts`
+Add three new tables (and any missing supporting indexes). If `tenantId` is an `id<'tenants'>` in the existing schema, use that type instead of `string`.
+
+**`shifts`**
+- Fields: `tenantId`, `clientId: v.id('clients')`, `caregiverId: v.string` (Clerk user id), `scheduledStart: v.number`, `scheduledEnd: v.number`, `serviceType: v.string`, `rate: v.number`, `serviceLocationOverride: v.optional(v.string)`, `status: v.union(...)` (`scheduled`, `in_progress`, `submitted`, `approved`, `billing_ready`, `completed`, `cancelled`), `createdAt`, `updatedAt`.
+- Indexes:
+  - `by_tenant_status: ['tenantId', 'status']`
+  - `by_tenant_caregiver_status: ['tenantId', 'caregiverId', 'status']`
+  - `by_tenant_status_start: ['tenantId', 'status', 'scheduledStart']`
+  - `by_tenant_caregiver_status_start: ['tenantId', 'caregiverId', 'status', 'scheduledStart']`
+  - `by_tenant_start: ['tenantId', 'scheduledStart']`
+
+**`availabilityWindows`**
+- Fields: `tenantId`, `caregiverId: v.string`, `kind: v.union(v.literal('recurring'), v.literal('one-off'))`, `dayOfWeek: v.optional(v.number)` (0–6), `date: v.optional(v.string)` (YYYY-MM-DD), `startTime: v.number` (minutes), `endTime: v.number`, `available: v.boolean`, `note: v.optional(v.string)`, `createdAt`, `updatedAt`.
+- Indexes:
+  - `by_tenant_caregiver: ['tenantId', 'caregiverId']`
+  - `by_caregiver: ['caregiverId']`
+
+**`coverageRequests`**
+Continue reading lines 600-808.**`coverageRequests`**
+- Fields: `tenantId`, `shiftId: v.id('shifts')`, `requestedBy: v.string`, `reason: v.string`, `status: v.union(v.literal('open'), v.literal('filled'), v.literal('cancelled'))`, `reassignedTo: v.optional(v.string)`, `resolvedBy: v.optional(v.string)`, `resolvedAt: v.optional(v.number)`, `createdAt`, `updatedAt`.
+- Indexes:
+  - `by_tenant_status: ['tenantId', 'status']`
+  - `by_shift: ['shiftId']`
+
+Also verify/add:
+- `tenantMembers.by_tenant_user: ['tenantId', 'userId']` (required for caregiver verification).
+- `clients.by_tenant: ['tenantId']` (required for `assertTenantDoc` on clients).
+
+### `convex/authHelpers.ts` (verify only; edit only if missing)
+- Confirm `requireTenantRole` accepts either a single role or an array. If it only accepts one role, add a small local wrapper `requireAnyTenantRole(ctx, roles[])` inside `convex/scheduling/helpers.ts` rather than changing auth semantics.
+- Confirm the caller’s Clerk user id is obtainable. If not exposed, add a minimal `getCurrentUserOrThrow` to `authHelpers.ts`.
+
+### `convex/audit.ts` (or existing audit helper)
+Ensure a helper exists with a signature like:
+
+```ts
+writeAuditEvent(ctx, { tenantId, kind, actorId, entityId, metadata? })
+```
+
+Use it from every mutating scheduling function with kinds: `shift.created`, `shift.updated`, `shift.deleted`, `shift.reassigned`, `coverage.resolved`.
+
+### `convex/scheduling/helpers.ts` (new internal helpers)
+- `verifyCaregiverMember(ctx, tenantId, caregiverId)`  
+  Query `tenantMembers` by `by_tenant_user`, require the doc exists and `role === 'org:caregiver'`. Throw `ConvexError` otherwise.
+- `checkShiftConflict(ctx, tenantId, caregiverId, start, end, excludeShiftId?)`  
+  Query `shifts` by `by_tenant_caregiver_status` (`eq tenantId`, `eq caregiverId`), filter to non-terminal statuses (`scheduled`, `in_progress`, `submitted`, `approved`), and return the first doc where `start < existing.scheduledEnd && end > existing.scheduledStart` and `existing._id !== excludeShiftId`. Returns `null` if none.
+- `findShiftConflict(shifts, start, end, excludeShiftId?)`  
+  Pure, testable version of the overlap logic used by `checkShiftConflict`.
+- `checkAvailabilityWarning(ctx, tenantId, caregiverId, scheduledStart, scheduledEnd)`  
+  Query the caregiver’s windows for the tenant. If the caregiver has any window for the relevant day (recurring `dayOfWeek` or one-off `date`) and no available window covers the full slot, return a warning string; otherwise return `null`.
+- `buildShiftWithNames(ctx, shift)`  
+  Fetch the client doc and the caregiver `tenantMember`, then return the shift with `clientDisplayName` and `caregiverDisplayName` attached.
+
+### `convex/scheduling/shifts.ts`
+Export six Convex functions:
+
+1. **`createShift` mutation** — requires `org:admin` or `org:coordinator`.
+   - Validate `scheduledStart < scheduledEnd`.
+   - `assertTenantDoc` on `clientId`.
+   - `verifyCaregiverMember` on `caregiverId`.
+   - `checkShiftConflict`; if found, throw `ConvexError('Shift conflicts with ${id} (${start}-${end})')`.
+   - Run `checkAvailabilityWarning`; if warning, include it in the return value but still insert.
+   - Insert shift with `status: 'scheduled'`.
+   - Write `shift.created` audit event.
+   - Return `{ shiftId, availabilityWarning }`.
+
+2. **`updateShift` mutation** — requires `org:admin` or `org:coordinator`.
+   - `assertTenantDoc` on `shiftId`.
+   - Throw if current status is `submitted`, `approved`, or `billing_ready`.
+   - For each provided field: `clientId` → `assertTenantDoc`; `caregiverId` → `verifyCaregiverMember`; times → validate ordering.
+   - If `scheduledStart`, `scheduledEnd`, or `caregiverId` changed, rerun `checkShiftConflict(shiftId)`.
+   - Update `updatedAt`.
+   - Write `shift.updated` audit event.
+   - Return `{ shiftId }`.
+
+3. **`deleteShift` mutation** — requires `org:admin`.
+   - `assertTenantDoc` on `shiftId`.
+   - Throw if status is not `scheduled`.
+   - Delete any `coverageRequests` with `shiftId` (cascade) to avoid orphans.
+   - Hard-delete the shift.
+   - Write `shift.deleted` audit event.
+   - Return `{ shiftId }`.
+
+4. **`assignShift` mutation** — requires `org:admin` or `org:coordinator`.
+   - `assertTenantDoc` on `shiftId`.
+   - `verifyCaregiverMember` on new `caregiverId`.
+   - `checkShiftConflict` excluding the current shift.
+   - Update `caregiverId` and `updatedAt`.
+   - Write `shift.reassigned` audit event.
+   - Return `{ shiftId }`.
+
+5. **`listShifts` query** — requires `org:admin` or `org:coordinator`.
+   - Accept `{ status?, startDate?, endDate?, caregiverId?, cursor? }`.
+   - Pick the narrowest index:
+     - `caregiverId + status` → `by_tenant_caregiver_status_start`
+     - `caregiverId` → `by_tenant_caregiver_status`
+     - `status + date range` → `by_tenant_status_start`
+     - `status` → `by_tenant_status`
+     - date only → `by_tenant_start`
+   - Apply `.paginate({ cursor, numItems: 100 })`.
+   - For each returned shift, use `buildShiftWithNames`.
+   - Return `{ items: ShiftWithNames[], nextCursor, hasMore }`.
+
+6. **`listCaregiverShifts` query** — requires `org:caregiver`.
+   - Use `by_tenant_caregiver_status` with `eq('tenantId', tenantId).eq('caregiverId', currentUserId)`.
+   - Order by `scheduledStart` descending, take 100.
+   - Join client name via `buildShiftWithNames`.
+   - Return array.
+
+### `convex/scheduling/availability.ts`
+Export five Convex functions:
+
+7. **`addAvailabilityWindow` mutation** — requires `org:caregiver`.
+   - `tenantId` from auth; `caregiverId = currentUserId`.
+   - Validate: recurring → `dayOfWeek` required; one-off → `date` required; `startTime < endTime`.
+   - Insert window.
+   - Return `{ windowId }`.
+
+8. **`updateAvailabilityWindow` mutation** — requires `org:caregiver`.
+   - `assertTenantDoc` on `windowId`.
+   - Throw if `window.caregiverId !== currentUserId`.
+   - Update allowed fields and `updatedAt`.
+   - Return `{ windowId }`.
+
+9. **`deleteAvailabilityWindow` mutation** — requires `org:caregiver`.
+   - `assertTenantDoc` on `windowId`.
+   - Throw if not owned.
+   - Delete.
+   - Return `{ windowId }`.
+
+10. **`listMyAvailability` query** — requires `org:caregiver`.
+    - Query `by_caregiver` for `currentUserId`.
+    - Return array.
+
+11. **`listAvailabilityForScheduling` query** — requires `org:admin` or `org:coordinator`.
+    - Query `by_tenant_caregiver`; if `caregiverId` provided, `eq` it.
+    - Return array.
+
+### `convex/scheduling/coverage.ts`
+Export three Convex functions:
+
+12. **`requestCoverage` mutation** — requires `org:caregiver`.
+    - `assertTenantDoc` on `shiftId`.
+    - Throw if `shift.caregiverId !== currentUserId`.
+    - Throw if `shift.status !== 'scheduled'`.
+    - Insert `coverageRequests` with `status: 'open'`.
+    - Return `{ coverageRequestId }`.
+
+13. **`resolveCoverage` mutation** — requires `org:admin` or `org:coordinator`.
+    - `assertTenantDoc` on `coverageRequestId`.
+    - Throw if `coverageRequest.status !== 'open'`.
+    - Fetch the shift via `assertTenantDoc`.
+    - `verifyCaregiverMember` on `reassignedTo`.
+    - `checkShiftConflict` for the shift’s times with the new caregiver, excluding the shift.
+    - Update shift: `caregiverId = reassignedTo`, `updatedAt = now`.
+    - Update coverage request: `status = 'filled'`, `reassignedTo`, `resolvedBy = currentUserId`, `resolvedAt = now`.
+    - Write `coverage.resolved` audit event.
+    - Return `{ shiftId, coverageRequestId }`.
+
+14. **`listCoverageRequests` query** — requires `org:admin` or `org:coordinator`.
+    - Query `by_tenant_status`; optionally `eq('status', status)`.
+    - For each request, fetch the shift and client, attach shift info.
+    - Return array.
+
+### `convex/scheduling.test.ts` (new)
+See Section 6.
+
+### `convex/_generated`
+- Do not edit by hand.
+- After schema changes, run `npx convex codegen`.
+
+---
+
+## 5. Data / Auth / Security / PHI / Idempotency Edge Cases
+
+- **Cross-tenant access:** Every doc lookup uses `assertTenantDoc` or a `by_tenant_*` index scoped to the authenticated tenant. A caregiver id from another tenant will fail `verifyCaregiverMember`.
+- **Role escalation:** All entry points call `requireTenantRole` (or the local `requireAnyTenantRole` wrapper) before any data access.
+- **Terminal-status edits:** `updateShift` explicitly rejects `submitted`, `approved`, and `billing_ready`. `deleteShift` only accepts `scheduled`.
+- **Double-booking:** `checkShiftConflict` excludes `completed`/`cancelled` and uses strict overlap (`<` / `>`), so adjacent shifts are allowed.
+- **Availability is advisory only:** `createShift` never blocks; it only adds a warning flag when windows exist but do not cover the slot.
+- **Coverage integrity:** `deleteShift` cascades deletion of linked `coverageRequests` to avoid dangling references. `resolveCoverage` requires the request to be `open`.
+- **PHI / sensitive data:** Shift records tie clients and caregivers to times and locations. Access is restricted by tenant + role, every mutation is audited, and no data is returned cross-tenant.
+- **Time zones:** Availability windows store minutes-from-midnight in the agency’s local time. If the product later supports multiple time zones, add a `timezone` field; do not over-engineer now.
+- **Currency:** Store `rate` as a number. Prefer integer cents in production to avoid float rounding; for this session, `v.number` is acceptable.
+- **Idempotency:** No idempotency keys are required. Conflict detection and role checks naturally prevent most duplicate harmful states. Duplicate `requestCoverage` calls will create multiple open rows; this is acceptable per the spec but can be revisited if product wants one open request per shift.
+
+---
+
+## 6. Test Strategy
+
+Add `convex/scheduling.test.ts`. Use `convex-test` if the project already has it; otherwise add it as a dev dependency or use a Vitest mock harness for `ctx.db` and `authHelpers`.
+
+### Pure helper tests (direct, no DB)
+- `findShiftConflict`
+  - No conflict on adjacent shifts (`09:00-10:00` and `10:00-11:00`).
+  - Conflict on overlapping shifts.
+  - Conflict when a new shift has the same start as an existing one.
+  - No conflict when the only existing shift is `completed`.
+  - `excludeShiftId` correctly excludes the shift being edited.
+
+### Integration / auth tests
+- `createShift` blocks a cross-tenant caregiver (caregiver id exists in another tenant but not the caller’s tenant).
+- `updateShift` is blocked when the shift status is `submitted`.
+- `deleteShift` is blocked when the shift status is `in_progress`.
+- `requestCoverage` is blocked when the caller is not the shift’s assigned caregiver.
+- Availability `update`/`delete` are blocked when the window belongs to another caregiver.
+- `listShifts` rejects a caller with only `org:caregiver` role.
+- `createShift` conflict throws a message containing the conflicting shift id and times.
+- `assignShift` conflict excludes the current shift.
+- `resolveCoverage` verifies the replacement caregiver and rejects a conflicting replacement.
+
+### Gates to run
+```bash
+npx convex codegen
+npm run lint
+npm run typecheck
+npm run test
+```
+Skip Playwright / e2e for this backend-only session.
+
+---
+
+## 7. Rollback / Verification Notes
+
+- **Before starting:** ensure the working tree is clean on `feature/phase-2-worker-onboarding` so a `git revert` or `git stash` is possible.
+- **After schema edits:** run `npx convex codegen` immediately and verify `convex/_generated` reflects the new tables/indexes. Do not hand-edit generated files.
+- **Verification:** after implementation, all scheduling mutations should appear in the Convex dashboard under `scheduling/shifts:*`, `scheduling/availability:*`, and `scheduling/coverage:*`.
+Now we have the entire prompt. It contains shared memory, task spec, instructions to plan and produce final plan synthesizing candidate plans. It also says "Before writing the plan, do real discovery when your backend can inspect the repo: open the obvious files, identify existing seams, and state what you verified. If your backend is chat-only and cannot inspect files, say so and reason from the supplied context only."
+
+  Then it says produce a premium implementation plan with 7 sections. Synthesize candidate plans into ONE coherent, de-duplicated, best-of-all implementation plan. Resolve conflicts, keep strongest ideas, and output only final plan as markdown.
+
+  So we are not being asked to implement code, but to produce a plan. However the user said "carry out those instructions completely" and "Output your final answer/verdict as requested." The request from prompt: read prompt and carry out those instructions. The instructions: synthesize into ONE coherent implementation plan, output only final plan as markdown.
+
+  So final answer should be a synthesized plan. Need do discovery? Prompt says before writing plan, do real discovery when backend can inspect repo; otherwise say so and reason from supplied context. We can inspect repo. So we should open obvious files to verify schema/authHelpers/audit/existing scheduling.ts etc. We already read some from candidate plan output, but we need do our own discovery. We need produce plan. Let's inspect repo. Use explore agent? The task is reading a few files and producing plan. Could do directly. We need read convex/schema.ts, authHelpers.ts, audit.ts, maybe existing scheduling.ts/shifts.ts/shiftQueries.ts, tenantMembers, package.json, existing tests. We can read in parallel.Need continue discovery: read existing shifts.ts, shiftQueries.ts, existing test patterns maybe session1Phase2Integration or shiftLifecycle tests to understand test harness. Also read convex-test usage. Need inspect a test file.Need also check existing session1Phase2Integration or authHelpers tests for harness patterns. Also check if audit.ts `record` accepts metadata as record string any. Need maybe check convex test harness usage with internal mutation for audit. Also need understand import of internal api. We need synthesize plan. Need possibly inspect an existing test using convexTest for internal mutation or auth.Need also check coverageRequests existing fields. Already in schema. Need check if any code references coverageRequests or availabilityWindows. Use Grep.Good. Need also check tsconfig, convex.json maybe. Not necessary. Need know if convex allows exporting pure helper functions from a file containing queries/mutations? Yes. Need decide file organization. The prompt says create or extend convex/scheduling.ts (and split into convex/scheduling/ subdirectory if needed for clarity). Candidate plans differ. Need synthesize best. Since there are 15 functions, splitting may be clearer but also more files. The task itself suggests either one file or subdirectory. The existing codebase style has large files (shifts.ts 878 lines). A single `convex/scheduling.ts` might be acceptable and simpler. But functions are 15 plus helpers, maybe ~600 lines. Could be one file. Synthesis: choose `convex/scheduling.ts` single file to minimize import complexity and match existing style, with pure helper `checkShiftConflict` at top. Alternatively split into `convex/scheduling/shifts.ts`, `availability.ts`, `coverage.ts`, `helpers.ts`. Need weigh. Existing codebase uses many files but modules are grouped by feature (shifts, shiftQueries, shiftClock, etc). For scheduling, we could create `convex/scheduling.ts` since task explicitly names it. This is simplest and matches instruction default. But candidate c_plan_agentic recommended new scheduling.ts; c_plan_qwen recommended subdirectory; c_plan_kimi27 recommended subdirectory. Need pick best. Since the prompt says "Create or extend convex/scheduling.ts (and split into convex/scheduling/ subdirectory if needed for clarity)." It names scheduling.ts as primary. A single file is easier for tests import and reduces generated API nesting. I'll synthesize: use a single `convex/scheduling.ts` for all 15 functions plus helpers, unless file becomes unwieldy. Note optional split can be done if file > 500 lines. Keep it simple.
+
+  Now schema: The task's availabilityWindows API uses caregiverId (clerkUserId), kind, dayOfWeek, date, available, note. Existing schema uses employeeProfileId, weekday, effectiveStart, effectiveEnd, status. Since no code references it, we should rewrite the table. But we must consider existing data? None likely. We can modify schema. Also coverageRequests existing fields: requesterId, reason optional, status string, createdAt string, resolvedAt optional. The task API expects requestCoverage reason (required?), resolveCoverage reassignedTo, resolvedBy, resolvedAt. Existing schema doesn't have reassignedTo. We'll add. Also maybe status should be union open/filled/cancelled. Existing is string; we can change to union. Since no references, safe.
+
+  AuditEvents: existing has action string, no kind. Task says write auditEvent kind='shift.created'. We can either add `kind` field or map action. Candidate plans conflict. Need decide. Since adding `kind` requires editing audit.ts and schema, but requirement literal. Existing audit.ts `record` internalMutation takes action. We could call record with action='shift.created' and maybe metadata.kind? But task says kind. Simpler and literal: add `kind` optional field to auditEvents schema, update audit.record to accept optional `kind` and populate both `action` (fallback to kind if action omitted) and `kind`. This is backward-compatible. However, this touches audit.ts, which is not strictly scheduling but small. Alternatively, avoid schema change and use action as kind. But then the audit log will show action='shift.created', which semantically is the kind. Since the existing schema's field is `action`, the phrase "Write auditEvent kind='shift.created'" likely means set the action/kind field to that string. To be safe, add `kind`. But adding a redundant field might be over-engineering. Need choose. I think the best plan: reuse existing `action` field for the event kind and note that `action` encodes the kind. But the task says "kind" specifically. Hmm.
+
+  Let's inspect auditEvents usage to see if adding kind is okay. Existing fields include action, metadata. If we add kind optional, existing queries unaffected. The `list` query returns all fields including kind undefined. Fine. The only risk: `record` internalMutation signature changes; existing callers pass action only. If we make kind optional and action optional but require one of them? Need validation. Could use v.optional for both but validate at least one in handler. Existing callers pass action. New callers pass kind and maybe action. This works. But does internal mutation args support union? We could add `kind: v.optional(v.string())` and keep action optional, then in handler: if neither provided throw. Use `action: args.action ?? args.kind`. This satisfies existing and new. But maybe we don't need to modify audit.ts at all; we can call `ctx.runMutation(internal.audit.record, { clerkOrgId, action: 'shift.created', ... })`. This satisfies "Write auditEvent kind='shift.created'" if we interpret action as kind. The plan can note this interpretation. I think minimal is better: no schema change for audit, just set action to the kind string. But the literal requirement might be tested. If a test checks `auditEvents` row has `kind === 'shift.created'`, it would fail. Since tests are to be written by us, we can choose. But the prompt task says "Write auditEvent kind='shift.created'". I think we should add kind to be precise. However, modifying audit.ts adds scope and risk. Let's see what candidate plans say: c_plan_agentic says add optional kind field and update audit.ts. c_plan_qwen says ensure helper exists with kind. c_plan_kimi27 says use kind and ensure audit helper. So all three add kind. Synthesis: add `kind` optional to auditEvents and update `audit.record` backward-compatibly. Good.
+
+  Now, availability warning: createShift should check availabilityWindows: if caregiver has any windows for the day and the slot is not covered, add warning flag. Since availabilityWindows store startTime/endTime as strings (HH:mm) probably. But we could also store minutes-from-midnight. The existing schema uses string. We can keep string HH:mm for simplicity, but compare times. Or change to number minutes. Candidate kimi27 recommends number minutes. Since we rewrite availabilityWindows anyway, using number minutes might make overlap logic easier. But the task API uses startTime/endTime; it doesn't specify type. We can accept strings like "09:00" and store as strings, or parse to minutes. Since the task says startTime, endTime, I think strings "HH:mm" are fine and user-friendly. But conflict detection uses ISO shift times; we need time portion. We can extract HH:mm from scheduledStart. However, if scheduledStart includes seconds/timezone, comparing HH:mm strings works lexicographically within a day (assuming 24h format). But if windows span midnight? Not likely. Keep simple: time strings HH:mm. For coverage of slot: check if any window covers [startTime, endTime]. Multiple windows union? Task: "if caregiver has any windows for the day and the slot is not covered". Could interpret: if there is at least one window for that day and the shift slot is not fully inside any single window? Or union of windows? Most availability systems: a shift is covered if it's within the union of available windows. But simpler: if no single available window fully covers the slot, warning. I'll plan union for robustness, but can be simple. Actually, "slot is not covered" means the slot is not within available time. If there are multiple windows, union. We'll implement union check: sort windows, merge, see if [startTime, endTime] fully covered. But if a caregiver has a window 9-12 and another 13-17, a shift 10-14 is not fully covered, warning. Good.
+
+  Day matching: For a given scheduledStart ISO string, derive date (YYYY-MM-DD) and dayOfWeek (0-6). Query all windows for tenant+caregiver (index by_tenant_caregiver). Filter where (kind === 'recurring' && dayOfWeek === scheduledDay) OR (kind === 'one_off' && date === scheduledDate). If no windows for that day, no warning. If windows exist but slot uncovered, warning.
+
+  Need decide `dayOfWeek` type: number 0-6. Schema uses v.optional(v.number()). Good.
+
+  Conflict detection: Use shifts index by_tenant_caregiver_status. But we need statuses scheduled, in_progress, submitted, approved. Since index includes status as third key, we can either query all for caregiver (partial index) and filter, or query per status. For simplicity and fewer DB round trips, query by tenant+caregiver using index and filter in JS. However withIndex requires exact equality on leading fields and can leave later fields unbounded: `.withIndex('by_tenant_caregiver_status', q => q.eq('tenantId', tenantId).eq('caregiverId', caregiverId))` returns all statuses for caregiver. Then filter. This scans all shifts for caregiver. Fine.
+
+  Time overlap: ISO strings lexicographic compare works for UTC. Condition: start < existing.scheduledEnd && end > existing.scheduledStart. Exclude current shift. Return first conflict.
+
+  For createShift: need throw ConvexError with message listing conflicting shift id and times. Use existing Error or ConvexError? Task says ConvexError. Use `new ConvexError(...)`. In existing code they use `throw new Error`. We can use ConvexError for scheduling functions to match requirement.
+
+  For updateShift: block if status submitted/approved/billing_ready. (Task says submitted/approved/billing_ready). The schema has 'needs_correction' too, which is editable? The task says only those three block. So needs_correction is editable via updateShift. But existing shifts.ts uses `updateStatus` for scheduled/in_progress only. Our updateShift can update fields. Good.
+
+  DeleteShift: status must be scheduled, admin only. Hard-delete. Also we may consider cascading coverageRequests? If shift deleted, coverageRequests referencing it become orphaned. Since status must be scheduled, coverageRequests may exist (requestCoverage creates open request). Should we delete them too? The task doesn't say. Candidate kimi27 says cascade coverageRequests. I think cascade delete coverageRequests for that shift to avoid orphaned rows. The task says "Hard-delete the shift row." It doesn't forbid cascade. Plan to delete coverageRequests rows with shiftId before deleting shift. Also progressNotes/shiftTasks? They are created with shift. Deleting scheduled shift leaves them. Should we cascade them too? The task doesn't require, but data hygiene. Candidate plans differ. I think we should cascade only coverageRequests because they are part of scheduling; progressNotes/shiftTasks are part of shift lifecycle and maybe should be kept? But if shift hard-deleted, they reference non-existent shift and have no value. Existing `shifts.ts` create inserts progressNotes and shiftTasks. Hard deleting without cascade leaves orphan. To be consistent with the task's literal "Hard-delete the shift row", maybe just delete shift. But then tests for deleteShift likely only check shift row. Orphan issue can be noted. I think minimal literal: delete only shift. But for data integrity, cascade coverageRequests only because coverageRequests table is part of this task. Since coverageRequests rows would break listCoverageRequests if shift missing. So cascade coverageRequests. For progressNotes/shiftTasks, leave as note.
+
+  Actually, if we delete a shift that has a coverage request, listCoverageRequests could attempt to fetch shift and fail. So we must cascade coverageRequests. Plan: before deleting shift, delete all coverageRequests with shiftId. Good.
+
+  For requestCoverage: insert coverageRequests with status 'open', requesterId = identity.subject, reason. Should we set createdAt. Yes.
+
+  For resolveCoverage: update shift.caregiverId and coverage request. Should check conflict for new caregiver excluding the shift. Also verify reassignedTo is caregiver. Should also check coverageRequest.status === 'open'. Should set resolvedBy = identity.subject, resolvedAt = now ISO. Also set reassignedTo. Audit event coverage.resolved. Also maybe update shift status remains scheduled. Good.
+
+  For listShifts pagination: Use Convex pagination? The task says "Return paginated shifts". Could implement simple take(100) with optional cursor? The task doesn't specify cursor param. Candidate kimi27 uses `.paginate({ cursor, numItems: 100 })`. But pagination in Convex with cursors requires using `paginate`. The API shape would include cursor. The task says "Return paginated shifts with client displayName and caregiver displayName joined... Max 100 results per page." It doesn't mention cursor. We can implement simple `.take(101)` and return `{ items: first100, hasMore: count > 100 }`. But to support pagination we need a cursor. Maybe include optional `cursor` arg and use `paginate`. Since tests likely just check max 100, simpler take(100) and return array or object with items. I'll plan to use `.take(100)` and return `{ items, hasMore }` or maybe array. To be robust, use pagination with cursor via `paginate`. However, `paginate` returns `{ page: Doc[], continueCursor, isDone }`. Joining names after pagination is fine. The task didn't specify cursor, but "paginated" implies cursor. I'll plan optional `cursor` arg and use `paginate({ cursor, numItems: 100 })`. Return `{ items: ShiftWithNames[], nextCursor, hasMore }`. This is best.
+
+  But joining names after pagination: fetch client and caregiver member for each shift. Use `ctx.db.get` for client, query `tenantMembers` by_tenant_user for caregiver. Could be N+1 but max 100. Fine. Alternatively batch.
+
+  For listCaregiverShifts: return own shifts, include client name. No pagination specified; take 100. Return array or object. I'll return array of joined shifts.
+
+  For listAvailabilityForScheduling: optional caregiverId filter. Return array.
+
+  Need also verify role helper: requireTenantRole takes allowedRoles array. Good. For functions requiring admin or coordinator, pass both. For caregiver, pass ['org:caregiver'].
+
+  Need decide whether to use `clerkOrgId` arg like existing functions. The task function signatures don't include clerkOrgId, but all Convex functions with authHelpers need clerkOrgId. In this repo, functions take `clerkOrgId: v.string()` as first arg. The task spec omits it but the context says every Convex function touching tenant data must go through authHelpers guards, which require clerkOrgId. So the actual exported functions must include `clerkOrgId` arg. The task signatures are conceptual. Plan: all functions accept `clerkOrgId` as first arg, plus specified args. E.g. `createShift({ clerkOrgId, clientId, caregiverId, ... })`. This aligns with existing patterns.
+
+  Need decide time type for shifts. Existing schema uses `scheduledStart: v.string()` ISO. We'll keep string. Candidate kimi27 suggested number epoch but existing schema is string. Keep string to avoid schema change and conflicts with existing code. Use ISO string comparison.
+
+  Need decide `serviceType` in createShift: task says serviceType (string). Existing schema restricts to SLS/ILS union. createShift in existing shifts.ts uses serviceType union. Our createShift can accept `v.union(v.literal('SLS'), v.literal('ILS'))` or v.string. Since schema requires union, use union. The task says string but we can note we use the existing union. For updateShift, serviceType optional maybe. But we may not need update serviceType.
+
+  Need decide rate: number. Existing schema v.number. Good. serviceLocationOverride optional. Existing schema object. The task says serviceLocationOverride? but signature in task doesn't specify shape. We can accept optional object matching schema. But maybe updateShift fieldsToUpdate could include it. We'll support optional. However, creating new scheduling.ts createShift may conflict with existing `shifts.create`. Since both accept clerkOrgId and similar args but our createShift includes serviceLocationOverride. Existing create doesn't. That's fine; both can exist. But duplicate logic. The task says "Create or extend convex/scheduling.ts"—so new file. Existing shifts.ts remains untouched. Good.
+
+  Need update schema for availabilityWindows and coverageRequests. Also add indexes to shifts? Existing shifts has by_tenant_caregiver_status, by_tenant_status_start. For listShifts date filtering with status+caregiver, by_tenant_caregiver_status_start would be useful. Should we add? Not strictly necessary but improves pagination. We can add `by_tenant_caregiver_status_start` index. Also `by_tenant_start` maybe. Candidate kimi27 adds several. We can add minimal: `by_tenant_caregiver_status_start` for listShifts when caregiver+status filters. Existing by_tenant_status_start covers status+start. by_tenant_caregiver_status covers caregiver+status but no start ordering. For pagination with startDate range and caregiver, having start in index helps. But we can use `by_tenant_caregiver_status` then filter by date in JS and take 100. Since max 100, maybe okay. But pagination correctness with cursor requires ordered by _creationTime? `paginate` uses the index order. If we use by_tenant_caregiver_status, order is by status then _creationTime? Actually index order includes status, then `_creationTime` by default. If we filter by status and caregiver, order by _creationTime. Date range filtering after pagination could miss items. Better to add `by_tenant_caregiver_status_start` to order by scheduledStart. Then for listShifts with date range, use that index and range on start. Let's add indexes: 
+  - `by_tenant_status_start` exists.
+  - Add `by_tenant_caregiver_status_start: ['tenantId', 'caregiverId', 'status', 'scheduledStart']`.
+  - Optionally `by_tenant_start: ['tenantId', 'scheduledStart']`.
+  This supports listShifts filters.
+
+  Need also add availabilityWindows indexes: `by_tenant_caregiver` and maybe `by_tenant_caregiver_date`. coverageRequests index `by_tenant_status` exists, `by_tenant_shift` exists. Add maybe `by_tenant_shift_status`.
+
+  Need decide if we should edit `audit.ts`. Add `kind` optional. Then update record. This is a small change. Also existing callers in shifts.ts pass action. They will continue to work if action remains optional? If we make action optional and kind optional but require at least one, existing calls pass action. Good.
+
+  Potential issue: internal mutation `record` is called with `clerkOrgId` and other args. Adding `kind` optional won't break existing. We'll update record to use `action: args.action ?? args.kind`. But if existing passes action, kind undefined, action preserved. Good.
+
+  Now, need produce final plan. It should be markdown. Sections as requested. Since prompt says "Output your final answer/verdict as requested." The final answer should be the plan. Maybe also write to file? The prompt didn't request file output, but the user said "carry out those instructions completely". The instructions are to synthesize and output final plan. We can provide it directly. Since plan is long, maybe also save to a file in .conclave-runs directory for reference. But user didn't ask to save. The instructions from the prompt: "output only the final plan as markdown." So final answer should be the markdown plan. We can include a short intro. Should we write it to a file too? It might be helpful, but not required. Since final answer should be the plan, we can output directly. But maybe the conclave process expects the plan written to `.conclave-runs/20260704_170533/plan_final.implementation_plan.md` or similar. The candidate c_plan_agentic wrote to a file. However, the prompt says "output only the final plan as markdown" not specify file. To be safe, we can both write to a file in the run directory and include in final answer? The final answer can mention the file path, but user asked "Output your final answer/verdict as requested." I think final answer should be the plan. But writing a file is a concrete action and may be expected by Conclave. The user didn't ask to not write files. Auto permission active. We can write to `.conclave-runs/20260704_170533/plan_final.implementation_plan.md`. Then final answer can be a concise message with path and maybe summary. But the prompt explicitly says "output only the final plan as markdown." Hmm.
+
+  The user is asking us to read prompt file and carry out instructions. The instructions come from the prompt file. The final deliverable is the plan. It's okay to output it as the assistant's final message. Writing to file is extra but not harmful. However, if the plan is very long (maybe 500 lines), final message can contain it. That's fine.
+
+  Need ensure plan is coherent, de-duplicated, best-of-all. It should incorporate our discovery notes (files verified). Need include actual file paths and behaviors. Use exact names from repo.
+
+  Let's compile plan.
+
+  **Section 1: Restated goal and acceptance criteria**
+  Goal: implement 15 scheduling backend functions in Convex on branch feature/phase-2-worker-onboarding, multi-tenant RBAC, conflict detection, availability advisory, coverage, audit. Acceptance criteria list.
+
+  **Section 2: Discovery notes**
+  Files checked:
+  - `convex/schema.ts`: tables `shifts`, `tenantMembers`, `clients`, `auditEvents`, `coverageRequests`, `availabilityWindows` exist. `shifts` indexed by `by_tenant_caregiver_status` and `by_tenant_status_start`. `availabilityWindows` currently uses `employeeProfileId`/`weekday`/`effectiveStart`/`effectiveEnd`/`status`; no runtime code references it. `coverageRequests` has `requesterId`, optional `reason`, `status` string, `resolvedAt`; no runtime references. `auditEvents` has `action` string, no `kind`.
+  - `convex/authHelpers.ts`: exports `requireTenant`, `requireTenantRole(allowedRoles[])`, `assertTenantDoc`, `ensureTenantMember`. Role check takes array.
+  - `convex/audit.ts`: exports internal `record` mutation taking `action`, optional `shiftId`, statuses, metadata; and `list` query.
+  - `convex/shifts.ts` and `convex/shiftQueries.ts`: existing shift lifecycle functions; will be left untouched to avoid regression. New functions will live in `convex/scheduling.ts`.
+  - `package.json`: scripts `lint`, `typecheck`, `test` use vitest; `convex-test` dev dependency present.
+  - No existing `convex/scheduling.ts`.
+
+  **Section 3: Alternatives considered**
+  - Single scheduling.ts vs subdirectory: choose single `convex/scheduling.ts` to match task name and minimize generated API churn; can split later if file grows.
+  - Reuse existing `availabilityWindows` schema vs rewrite: rewrite to match task API because current schema uses employeeProfileId and no runtime references; avoids indirection through employeeProfiles.
+  - Add `kind` to auditEvents vs reuse `action`: add optional `kind` field and update `audit.record` to accept it, populating `action` as fallback. Satisfies literal requirement while keeping existing callers working.
+  - Hard block vs advisory availability: advisory warning only as specified.
+  - ISO strings vs epoch ms for shift times: keep existing ISO string schema and use lexicographic compare.
+  - HH:mm strings vs minutes for window times: store window times as `HH:mm` strings and compare lexicographically within a day; keep API simple.
+
+  **Section 4: Exact files to create/edit**
+  List:
+  - `convex/schema.ts`: modify `availabilityWindows`, `coverageRequests`, add optional `kind` to `auditEvents`, add `by_tenant_caregiver_status_start` to `shifts`, add indexes for availabilityWindows.
+  - `convex/audit.ts`: add `kind` optional arg to record internalMutation; populate action fallback.
+  - `convex/scheduling.ts` new: all functions and helpers.
+  - `convex/scheduling.test.ts` new.
+  - `convex/_generated`: regenerate via `npx convex codegen`.
+
+  Need detail schema changes precisely.
+
+  Audit changes:
+  ```
+  args: {
+    clerkOrgId: v.string(),
+    action: v.optional(v.string()), // was required
+    kind: v.optional(v.string()),
+    ...
+  }
+  handler:
+  if (!args.action && !args.kind) throw new ConvexError('action or kind required')
+  const action = args.action ?? args.kind!
+  ...
+  return ctx.db.insert('auditEvents', { ..., action, kind: args.kind, ... })
+  ```
+  But if action was required, changing to optional may affect existing callers? They pass action; fine. But generated validators will allow missing action. That's okay. To be more type-safe, we could keep action required and add kind optional, and always pass both from scheduling. Then existing callers unaffected. That's simpler: keep `action: v.string()` required, add `kind: v.optional(v.string())`. In scheduling, pass `action: 'shift.created', kind: 'shift.created'`. Existing callers pass action only. This is backward-compatible and literal. Yes! That is best. No need to make action optional. So audit.ts: add optional `kind` field to schema and to record args. In scheduling, pass both. Existing callers unaffected. Good.
+
+  So schema auditEvents add `kind: v.optional(v.string())`. audit.ts record add `kind: v.optional(v.string())` arg, insert `kind: args.kind`. Existing calls in shifts.ts pass action only, kind undefined. Good. This is minimal and precise.
+
+  Schema availabilityWindows rewrite:
+  ```
+  availabilityWindows: defineTable({
+    tenantId: v.id('tenants'),
+    caregiverId: v.string(), // clerkUserId
+    kind: v.union(v.literal('recurring'), v.literal('one_off')),
+    dayOfWeek: v.optional(v.number()), // 0-6
+    date: v.optional(v.string()), // YYYY-MM-DD
+    startTime: v.string(), // HH:mm
+    endTime: v.string(), // HH:mm
+    available: v.boolean(),
+    note: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+  .index('by_tenant_caregiver', ['tenantId', 'caregiverId'])
+  ```
+  Optionally index by date.
+
+  CoverageRequests update:
+  ```
+  coverageRequests: defineTable({
+    tenantId: v.id('tenants'),
+    shiftId: v.id('shifts'),
+    requesterId: v.string(),
+    reason: v.optional(v.string()), // task says reason required? Signature requestCoverage({ shiftId, reason }) reason likely required. But existing schema optional. We'll keep optional? Hmm. To align with task, we could make reason required. Since no existing data, safe. But maybe requestCoverage could allow empty? Task says reason. I'll make `reason: v.string()` required. But existing coverageRequests currently has reason optional. Changing to required won't break existing because none. Good.
+    status: v.union(v.literal('open'), v.literal('filled'), v.literal('cancelled')),
+    reassignedTo: v.optional(v.string()),
+    resolvedBy: v.optional(v.string()),
+    resolvedAt: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+  .index('by_tenant_shift', ['tenantId', 'shiftId'])
+  .index('by_tenant_status', ['tenantId', 'status'])
+  ```
+  Note: candidate kimi27 has `requesterId`, but task calls it `requestedBy`. Existing uses `requesterId`. We'll keep `requesterId` to minimize change, but maybe rename to `requestedBy` to match task? Since no references, rename is safe. Task says "Insert coverageRequests row status='open'." It doesn't specify field names beyond reassignedTo, resolvedBy, resolvedAt. Existing `requesterId` is fine. But to be consistent with task's `requestedBy`? The schema can use `requesterId`. Plan to keep existing `requesterId` and add `reassignedTo`, `resolvedBy`, `resolvedAt`. Good.
+
+  Shifts index: add `by_tenant_caregiver_status_start: ['tenantId', 'caregiverId', 'status', 'scheduledStart']`.
+
+  `convex/scheduling.ts` functions:
+  Need detail each with exact behavior.
+
+  Helper functions:
+  - `assertCaregiverMember(ctx, tenantId, caregiverId)`: query tenantMembers by_tenant_user, require role org:caregiver, else throw ConvexError.
+  - `checkShiftConflict(ctx, tenantId, caregiverId, start, end, excludeShiftId?)`: query shifts by_tenant_caregiver_status for caregiver, filter statuses in ['scheduled','in_progress','submitted','approved'], overlap, exclude. Return conflicting shift or null.
+  - `checkAvailabilityWarning(ctx, tenantId, caregiverId, scheduledStart, scheduledEnd)`: derive date and dayOfWeek, query windows, union available windows, if any windows for day and slot not fully covered return warning string else null.
+  - `buildShiftWithNames(ctx, shift)`: fetch client and caregiver tenantMember, return object with shift fields plus clientDisplayName and caregiverDisplayName.
+
+  Functions:
+  - createShift
+  - updateShift
+  - deleteShift
+  - assignShift
+  - listShifts
+  - listCaregiverShifts
+  - addAvailabilityWindow
+  - updateAvailabilityWindow
+  - deleteAvailabilityWindow
+  - listMyAvailability
+  - listAvailabilityForScheduling
+  - requestCoverage
+  - resolveCoverage
+  - listCoverageRequests
+
+  Need define args/handler behavior.
+
+  Potential nuance: updateShift "fieldsToUpdate" includes clientId, caregiverId, scheduledStart, scheduledEnd, serviceType, rate, serviceLocationOverride. We should validate and run conflict check if times/caregiver changed. Also if clientId changed assertTenantDoc. If caregiver changed verify caregiver. Validate start<end. Status block. Write audit.
+
+  deleteShift: admin only. Status must be scheduled. Delete coverageRequests with shiftId first. Hard delete shift. Audit.
+
+  assignShift: update caregiverId. verify caregiver. checkShiftConflict exclude shift. Audit 'shift.reassigned'. It doesn't update other fields. It could be redundant with updateShift but implement separately per task.
+
+  listShifts: filter status, startDate, endDate, caregiverId. Return paginated with names. Use pagination. Need define date filter: startDate/endDate are date strings (YYYY-MM-DD). Filter scheduledStart >= `${startDate}T00:00:00.000Z` and <= `${endDate}T23:59:59.999Z` or similar. Use lexicographic string compare.
+
+  listCaregiverShifts: own shifts. Use by_tenant_caregiver_status with eq caregiverId = identity.subject. Order desc by scheduledStart. Take 100. Include client name.
+
+  Availability CRUD: as spec.
+
+  Coverage: as spec.
+
+  **Section 5: Edge cases**
+  Multi-tenancy, role checks, status guards, conflict on adjacent, availability advisory, cascade coverageRequests on shift delete, no cascade of progressNotes (note), timezone/ISO compare, PHI, idempotency (no keys; duplicate requestCoverage creates multiple open rows, acceptable), concurrency via Convex transactions.
+
+  **Section 6: Test strategy**
+  `convex/scheduling.test.ts` using `convexTest` harness. Helper tests and integration tests. List cases. Gates: npx convex codegen, npm run lint, typecheck, test. Skip e2e.
+
+  **Section 7: Rollback/verification**
+  Git revert/stash, codegen, dashboard verification.
+
+  Need make sure the plan is not too verbose but comprehensive. Use markdown.
+
+  Now, before final, we might also read `convex/tenantSettings.ts`? Not needed. Need check eslint config? Not necessary.
+
+  Potential issue: `convex/scheduling.ts` exporting both queries/mutations and pure helpers. In Convex, any exported `mutation`/`query`/`internalMutation` from a file under convex becomes an endpoint. Pure helper functions can also be exported; they won't be registered as endpoints because they're not wrapped. That's fine. `checkShiftConflict` can be exported for tests, but if it's not wrapped it's not callable as endpoint. Fine.
+
+  Need decide if `checkShiftConflict` should be a pure function taking array of shifts, or DB query. Task says "Pure helper function checkShiftConflict(ctx, tenantId, caregiverId, start, end, excludeShiftId?): queries shifts... returns first conflicting shift or null." So it takes ctx and queries. It is not a Convex action; just a TS helper. We can export it. For tests, we can also test the overlap logic directly or via integration. Plan to test via integration and maybe pure.
+
+  Need decide names of audit events: 'shift.created', 'shift.updated', 'shift.deleted', 'shift.reassigned', 'coverage.resolved'. The task says kind='shift.created' etc. We'll pass both action and kind with these strings.
+
+  Need decide error messages. For conflict, include id and times. Example: `Shift conflicts with ${conflict._id} (${conflict.scheduledStart} - ${conflict.scheduledEnd})`. Use ConvexError.
+
+  Need decide `serviceLocationOverride` in createShift: optional. But existing schema has object with label/addressLine/lat/long/radiusMeters. We'll accept `v.optional(...)` matching schema. For updateShift, optional. However, the task signature lists `serviceLocationOverride?` generically. Good.
+
+  Need decide `rate` validation: maybe >0. Existing validateRate. We'll include.
+
+  Need decide `scheduledStart`/`scheduledEnd` type: string ISO. Validate end > start.
+
+  Need decide `dayOfWeek` validation: if kind recurring, require dayOfWeek 0-6; if one_off, require date. Validate endTime > startTime.
+
+  Need decide `startDate`/`endDate` in listShifts: optional strings. If startDate provided, filter scheduledStart >= `${startDate}T00:00:00.000Z`. If endDate, scheduledStart <= `${endDate}T23:59:59.999Z`.
+
+  Need decide pagination return shape. Use Convex `paginate` which requires `cursor` arg and returns `page`, `continueCursor`, `isDone`. We can expose `{ items, nextCursor, hasMore }`. If no cursor arg, first page. This is a query arg. Since task didn't specify cursor, we can include optional `cursor`. Good.
+
+  Potential issue: `paginate` with index `by_tenant_caregiver_status_start` when filtering by status and caregiver. If status not provided but caregiver provided, we can use index by_tenant_caregiver_status (status as wildcard) but not with start order. Maybe use `by_tenant_caregiver_status_start` with q.eq('tenantId', tenantId).eq('caregiverId', caregiverId)` and optionally eq status if provided. This orders by status then start. Since status union order? It orders by status value then scheduledStart. If status not specified, results grouped by status alphabetical, not ideal for date range but acceptable. If startDate range specified, we cannot use range on start when status is wildcard because status is before start in index. We can filter by date in JS after paginating? That breaks pagination correctness. Maybe simpler: don't use paginate; use `.order('desc').take(100)` and filter in JS, returning items and hasMore (but may miss if >100 filtered). For home-care scheduling, shift volume moderate. But task says "Return paginated shifts... Max 100 results per page." It doesn't necessarily require cursor-based pagination. We can implement simple `.take(100)` after applying filters via index + JS. To support next page, we can add `cursor` as a timestamp offset? Hmm.
+
+  Simpler robust approach: use `paginate` on `by_tenant_status_start` if status provided, or `by_tenant_caregiver_status_start` if caregiver+status provided, or `by_tenant_start` if no status/caregiver but date range. But we don't have `by_tenant_start`. We can add it. Then date range can use `.gte('scheduledStart', start).lte('scheduledStart', end)`. If caregiver filter also present, after fetching page filter by caregiver in JS; this could return fewer than 100 but pagination still correct (cursor based on start). However if a page has no items after filtering, we'd need to continue. This gets complex.
+
+  Given task scope, I think a simple `.take(100)` with filters is acceptable. The plan can note that pagination uses Convex `paginate` when an index supports the exact filter combination, otherwise falls back to indexed scan + `.take(100)`. But to avoid over-engineering in plan, we can say: implement cursor pagination with `by_tenant_caregiver_status_start` when both caregiverId and status are provided; for other filter combinations use `.take(100)` with JS filtering and return `{ items, hasMore }`. Hmm.
+
+  Maybe better: implement one flexible query: use `by_tenant_status_start` if status given (no caregiver), else `by_tenant_caregiver_status_start` if caregiver given (status optional), else `by_tenant_status_start` with no status eq? Actually `by_tenant_status_start` requires status. Without status, we could use `by_tenant_caregiver_status_start` without caregiver? No, leading field caregiver required. Without status or caregiver, we'd need `by_tenant_start` (add it). Then apply date filter as range on start. Then if caregiverId filter also present, JS filter after pagination. This is manageable.
+
+  But the plan doesn't need to specify every implementation detail; just enough for implementer. We can say: add `by_tenant_start` and `by_tenant_caregiver_status_start` indexes; choose the narrowest index; use `.paginate({ numItems: 100, cursor })`; apply JS filters for unsupported combos; join names after pagination.
+
+  Need also mention tests. Good.
+
+  Now, should we also plan to update `convex/shifts.ts`? No. Leave untouched. But there is overlap: `shifts.ts` `create` doesn't conflict with scheduling createShift because different export path. However, tests may use `api.shifts.create` and `api.scheduling.createShift`. Fine.
+
+  Need ensure `convex/scheduling.ts` imports `internal` for audit record. `ctx.runMutation(internal.audit.record, {...})`. Good.
+
+  Need ensure `convex/scheduling.test.ts` uses `convexTest({ schema, modules: import.meta.glob('./**/*.*s') })`. Since scheduling.ts new, the glob picks it up.
+
+  Now, final plan. We should also maybe include a note on how to run codegen and gates.
+
+  Let's also double-check the `convex/_generated/api` will expose `scheduling` namespace if file is `convex/scheduling.ts`. Yes, Convex uses file path as module name. `api.scheduling.createShift`. Good.
+
+  Potential issue: If we use subdirectory `convex/scheduling/shifts.ts`, api path would be `api.scheduling.shifts.createShift`. Single file simpler.
+
+  Let's also consider `serviceLocationOverride` schema object. In createShift args, we can accept optional object exactly as schema. But the task signature lists it as optional. We'll include.
+
+  Potential issue: `updateShift` args: `shiftId` plus optional fields. We need a validator with optional fields. Use `v.object({ shiftId: v.id('shifts'), clientId: v.optional(v.id('clients')), ... })`.
+
+  Potential issue: `assignShift` args: shiftId, caregiverId. Should it also accept clerkOrgId? Yes.
+
+  Potential issue: `listShifts` args: status optional, startDate optional, endDate optional, caregiverId optional, cursor optional. Use `v.optional(v.string())` etc. status must match union.
+
+  Potential issue: `addAvailabilityWindow` kind type: use `v.union(v.literal('recurring'), v.literal('one_off'))`. Task says `kind`, likely values 'recurring' and 'one-off' (with hyphen). But in code, hyphen not valid identifier in literal string? It is valid string literal `'one-off'`. We can use `v.literal('one-off')`. Or `'one_off'`. The task says "one-off" in kimi27 plan. It doesn't specify in task. Use `'one-off'`? In code identifiers can't have hyphen, but string literal can: `v.literal('one-off')` is fine. However, in TypeScript union literal type `'one-off'` works. Good. But to avoid hyphen issues in filenames? No. Use `'one-off'`. Or `'one_off'` simpler. The task doesn't specify. I'll use `'one-off'` because it's common English. But maybe use `'one_off'` to avoid hyphen in JSON? Not an issue. Let's choose `'one-off'`. Actually, candidate kimi27 used `'one-off'`. c_plan_agentic used `'one_off'`. The task spec didn't specify value. We can define enum as `'recurring' | 'one-off'`. Plan will state that.
+
+  Need decide `dayOfWeek` optional number; validate range. `date` optional string; validate format loosely (YYYY-MM-DD). For recurring, dayOfWeek required; for one-off, date required.
+
+  Need decide availability warning logic: if `available === false` window? The schema has available boolean. Should we consider only windows where available=true? Yes, only available windows cover slots. If a window is unavailable (blocked), it doesn't cover. The task says "if caregiver has any windows for the day and the slot is not covered". We consider windows with available=true. But if a window exists with available=false, that's a blocked time; maybe should warn? The task says availability is advisory; blocked windows might indicate not available. But "covered" means within available windows. We'll only union available=true windows. If available=false, ignore for coverage (it's not an available window). Good.
+
+  Need decide `checkShiftConflict` non-terminal statuses exactly as task: scheduled, in_progress, submitted, approved. Excludes needs_correction and billing_ready. Good.
+
+  Now, write final plan. Need ensure it's not too long but covers all. Maybe around 200-300 lines. Use headings and bullet lists.
+
+  Let's write to a file and then output. But final answer should be markdown. We can use Write tool to save plan, then final message with file path and a brief note. However, the prompt says "output only the final plan as markdown". If we output only file path, not the plan, that may violate. But the user said "Output your final answer/verdict as requested." In Conclave, the final answer might be the plan text. I'll output the plan text directly. To also persist, I can write it to file then include in final answer. That's fine.
+
+  Given the final answer may be very long, it's okay. But I must not include internal chain-of-thought. Use concise plan.
+
+  Before final, maybe update TodoList? The system reminder says update if relevant. We didn't create a todo list. We can ignore.
+
+  Let's write the plan. We'll write to `.conclave-runs/20260704_170533/plan_final.implementation_plan.md` and then output it. Actually, if we write and then final answer references path, the user sees only path. But the instruction "output only the final plan as markdown" suggests final answer content. We can write and then output the same content. Let's do both.
+
+  Need use Write tool.Now produce final answer. Since the plan is long, I can include it in final answer or summarize with file path. The prompt says output only final plan as markdown. I'll include the plan content in final answer. But it's already written to file. To avoid duplication maybe output the plan content. The user asked "Output your final answer/verdict as requested." The final answer should be the plan. I'll output the markdown plan. It will be long, but okay.
+
+  However, there is a risk: final answer too long? It can be up to context. 21KB is okay. I will include it.
+
+To resume this session: kimi -r session_4e01355c-497e-4090-bda1-ce72e64abe57

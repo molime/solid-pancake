@@ -3,11 +3,12 @@ import {
   useOrganization,
   useOrganizationList,
   useUser,
+  useClerk,
 } from '@clerk/react'
 import { useConvexAuth } from 'convex/react'
 import { useNavigate } from 'react-router-dom'
-import { useEffect, useRef, useState } from 'react'
-import { Building2, Plus, AlertCircle } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Building2, AlertCircle } from 'lucide-react'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { Badge } from '@/shared/ui/Badge'
@@ -31,11 +32,31 @@ export function SelectAgencyPage() {
   const convexAuth = useConvexAuth()
   const navigate = useNavigate()
   const ensureAgency = useMutation(api.tenants.ensureSelectedAgency)
+  const { signOut } = useClerk()
 
   const [pendingOrg, setPendingOrg] = useState<PendingOrg | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isBootstrapping, setIsBootstrapping] = useState(false)
   const bootstrappingOrgIdRef = useRef<string | null>(null)
+
+  const handleSelect = useCallback(
+    async (org: PendingOrg) => {
+      setError(null)
+      setIsBootstrapping(true)
+      try {
+        await setActive?.({ organization: org.id })
+        setPendingOrg(org)
+      } catch (err: unknown) {
+        bootstrappingOrgIdRef.current = null
+        setIsBootstrapping(false)
+        setPendingOrg(null)
+        setError(
+          err instanceof Error ? err.message : 'Failed to switch organization.',
+        )
+      }
+    },
+    [setActive],
+  )
 
   // Detect permanent auth failure (not loading and not authenticated).
   useEffect(() => {
@@ -53,6 +74,30 @@ export function SelectAgencyPage() {
     }, 0)
     return () => clearTimeout(timer)
   }, [pendingOrg, convexAuth.isLoading, convexAuth.isAuthenticated])
+
+  // Auto-select the only membership so users aren't forced to click.
+  useEffect(() => {
+    if (!isLoaded || isBootstrapping || pendingOrg) return
+    if (organization || orgId) return
+    const memberships = userMemberships.data ?? []
+    if (memberships.length === 1) {
+      const mem = memberships[0]
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void handleSelect({
+        id: mem.organization.id,
+        name: mem.organization.name,
+        slug: mem.organization.slug ?? null,
+      })
+    }
+  }, [
+    isLoaded,
+    isBootstrapping,
+    pendingOrg,
+    userMemberships.data,
+    handleSelect,
+    organization,
+    orgId,
+  ])
 
   const isTokenError = (err: unknown): boolean => {
     const message = err instanceof Error ? err.message : ''
@@ -126,22 +171,6 @@ export function SelectAgencyPage() {
     navigate,
   ])
 
-  const handleSelect = async (org: PendingOrg) => {
-    setError(null)
-    setIsBootstrapping(true)
-    try {
-      await setActive?.({ organization: org.id })
-      setPendingOrg(org)
-    } catch (err: unknown) {
-      bootstrappingOrgIdRef.current = null
-      setIsBootstrapping(false)
-      setPendingOrg(null)
-      setError(
-        err instanceof Error ? err.message : 'Failed to switch organization.',
-      )
-    }
-  }
-
   if (!isLoaded) {
     return <AppLoader fullScreen label="Finding your agencies" />
   }
@@ -169,61 +198,75 @@ export function SelectAgencyPage() {
         )}
 
         <div className="space-y-2">
-          {userMemberships.data?.map((mem) => {
-            const isLoading = pendingOrg?.id === mem.organization.id
-            return (
-              <Card
-                key={mem.organization.id}
-                className={`transition-colors ${
-                  isLoading
-                    ? 'opacity-60 cursor-wait'
-                    : 'cursor-pointer hover:border-atria-accent'
-                }`}
-              >
-                <CardContent className="p-4">
-                  <button
-                    className="w-full flex items-center justify-between text-left disabled:cursor-wait"
-                    disabled={isBootstrapping}
-                    onClick={() =>
-                      handleSelect({
-                        id: mem.organization.id,
-                        name: mem.organization.name,
-                        slug: mem.organization.slug ?? null,
-                      })
-                    }
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-atria-ink">
-                        {mem.organization.name}
-                      </p>
-                      <p className="text-xs text-atria-muted mt-0.5">
-                        Role: {mem.role?.replace('org:', '') ?? 'member'}
-                      </p>
-                    </div>
-                    {isLoading ? (
-                      <Badge variant="default">Opening…</Badge>
-                    ) : (
-                      <Building2 className="h-4 w-4 text-atria-muted" />
-                    )}
-                  </button>
-                </CardContent>
-              </Card>
-            )
-          })}
+          {userMemberships.data?.length === 0 ? (
+            <Card>
+              <CardContent className="p-6 text-center space-y-4">
+                <AlertCircle className="h-6 w-6 text-atria-danger mx-auto" />
+                <p className="text-sm text-atria-ink">
+                  You don't belong to any agency yet.
+                </p>
+                <p className="text-xs text-atria-muted">
+                  Ask your HR team to invite you, or sign out and try a different account.
+                </p>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void signOut?.()}
+                >
+                  Sign out
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            userMemberships.data?.map((mem: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+              const isLoading = pendingOrg?.id === mem.organization.id
+              return (
+                <Card
+                  key={mem.organization.id}
+                  className={`transition-colors ${
+                    isLoading
+                      ? 'opacity-60 cursor-wait'
+                      : 'cursor-pointer hover:border-atria-accent'
+                  }`}
+                >
+                  <CardContent className="p-4">
+                    <button
+                      className="w-full flex items-center justify-between text-left disabled:cursor-wait"
+                      disabled={isBootstrapping}
+                      onClick={() =>
+                        handleSelect({
+                          id: mem.organization.id,
+                          name: mem.organization.name,
+                          slug: mem.organization.slug ?? null,
+                        })
+                      }
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-atria-ink">
+                          {mem.organization.name}
+                        </p>
+                        <p className="text-xs text-atria-muted mt-0.5">
+                          Role:{' '}
+                          {(mem.publicMetadata as { atriaRole?: string } | undefined)
+                            ?.atriaRole?.replace('org:', '') ??
+                            mem.role?.replace('org:', '') ??
+                            'member'}
+                        </p>
+                      </div>
+                      {isLoading ? (
+                        <Badge variant="default">Opening…</Badge>
+                      ) : (
+                        <Building2 className="h-4 w-4 text-atria-muted" />
+                      )}
+                    </button>
+                  </CardContent>
+                </Card>
+              )
+            })
+          )}
         </div>
 
-        <div className="flex justify-center">
-          <Button
-            variant="secondary"
-            disabled={isBootstrapping}
-            onClick={() => {
-              window.location.href = '/create-agency'
-            }}
-          >
-            <Plus className="h-4 w-4" />
-            Create New Agency
-          </Button>
-        </div>
+
       </div>
     </div>
   )

@@ -8,12 +8,32 @@ const roleValidator = v.union(
   v.literal('org:admin'),
   v.literal('org:coordinator'),
   v.literal('org:caregiver'),
+  v.literal('org:hr'),
+  v.literal('org:candidate'),
 )
 
-type InviteRole = 'org:admin' | 'org:coordinator' | 'org:caregiver'
+type InviteRole =
+  | 'org:admin'
+  | 'org:coordinator'
+  | 'org:caregiver'
+  | 'org:hr'
+  | 'org:candidate'
 
-function toClerkRole(role: InviteRole) {
+export function toClerkRole(role: InviteRole) {
   return role === 'org:admin' ? 'org:admin' : 'org:member'
+}
+
+export function isAllowListError(error: unknown): boolean {
+  const candidates = [
+    error instanceof ConvexError ? String(error.data ?? '') : '',
+    error instanceof ConvexError ? String(error.message ?? '') : '',
+    error instanceof Error ? error.message : '',
+    String(error ?? ''),
+  ]
+  const combined = candidates.join(' ')
+  return /not allowed to access this application|is not allowed to access|invalid email|email_address is blocked|not on the allowlist|allow.?list/i.test(
+    combined,
+  )
 }
 
 function invitationRedirectUrl(appBaseUrl: string) {
