@@ -547,7 +547,7 @@ describe('clock-out behavior', () => {
     const { shiftId, tenantId } = await seedAgency(t, {
       clerkOrgId,
       caregiverId,
-      shiftStatus: 'needs_correction',
+      shiftStatus: 'needs_correction' as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       note: {
         startTime: '08:00',
         endTime: '16:00',
@@ -622,8 +622,8 @@ describe('clock-out behavior', () => {
     )
 
     expect(shift.shift.status).toBe('submitted')
-    expect(shift.note.narrative).toBe('Updated narrative')
-    expect(shift.note.servicesProvided).toBe('Updated services')
+    expect(shift.note!.narrative).toBe('Updated narrative')
+    expect(shift.note!.servicesProvided).toBe('Updated services')
     expect(shift.tasks[0].proofName).toBe('updated-proof.pdf')
 
     const punches = await t.run(async (ctx) => {

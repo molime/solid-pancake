@@ -1,10 +1,9 @@
 import { useOrganization, useUser, useClerk } from '@clerk/react'
-import { OrganizationSwitcher } from '@clerk/react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { cn } from '@/shared/lib/cn'
-import { Menu, LogOut } from 'lucide-react'
+import { Menu, LogOut, Building2 } from 'lucide-react'
 
 function breadcrumbFromPath(path: string): string {
   if (path === '/') return 'Dashboard'
@@ -42,16 +41,13 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
       </div>
 
       <div className="flex items-center gap-4">
-        <OrganizationSwitcher
-          hidePersonal
-          afterSelectOrganizationUrl="/"
-          appearance={{
-            elements: {
-              organizationSwitcherTrigger:
-                'px-3 py-1.5 text-sm border border-atria-border rounded-md hover:bg-atria-bg transition-colors',
-            },
-          }}
-        />
+        <button
+          onClick={() => navigate('/select-agency')}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm border border-atria-border rounded-md hover:bg-atria-bg transition-colors text-atria-ink"
+        >
+          <Building2 className="h-4 w-4 text-atria-muted" />
+          <span className="max-w-[160px] truncate">{organization?.name ?? 'Select agency'}</span>
+        </button>
         <span
           className={cn(
             'hidden sm:inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',

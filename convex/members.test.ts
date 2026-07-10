@@ -160,3 +160,55 @@ describe('members.firstOrgAdmin', () => {
     ).rejects.toThrow('Unauthorized: authentication required')
   })
 })
+
+
+describe('members.listManagers', () => {
+  it('returns only admin, coordinator, and hr members', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_list_managers'
+
+    await t.run(async (ctx) => {
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId,
+        name: 'Managers Agency',
+        slug: 'managers-agency',
+        createdAt: new Date().toISOString(),
+      })
+      const members: Array<{ clerkUserId: string; role: 'org:caregiver' | 'org:coordinator' | 'org:admin' | 'org:hr'; displayName: string }> = [
+        { clerkUserId: 'u_caregiver', role: 'org:caregiver', displayName: 'Caregiver A' },
+        { clerkUserId: 'u_coordinator', role: 'org:coordinator', displayName: 'Coordinator B' },
+        { clerkUserId: 'u_admin', role: 'org:admin', displayName: 'Admin C' },
+        { clerkUserId: 'u_hr', role: 'org:hr', displayName: 'Hr D' },
+      ]
+      for (const m of members) {
+        await ctx.db.insert('tenantMembers', {
+          tenantId,
+          clerkUserId: m.clerkUserId,
+          role: m.role,
+          displayName: m.displayName,
+          email: `${m.clerkUserId}@example.com`,
+        })
+      }
+    })
+
+    const managers = await t
+      .withIdentity({
+        subject: 'u_hr',
+        org_id: clerkOrgId,
+        org_role: 'org:hr',
+      })
+      .run(async (ctx) => {
+        return ctx.runQuery(api.members.listManagers, { clerkOrgId })
+      })
+
+    expect(managers.map((m) => ({ clerkUserId: m.clerkUserId, role: m.role }))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ clerkUserId: 'u_coordinator', role: 'org:coordinator' }),
+        expect.objectContaining({ clerkUserId: 'u_admin', role: 'org:admin' }),
+        expect.objectContaining({ clerkUserId: 'u_hr', role: 'org:hr' }),
+      ]),
+    )
+    expect(managers.some((m) => m.clerkUserId === 'u_caregiver')).toBe(false)
+    expect(managers).toHaveLength(3)
+  })
+})

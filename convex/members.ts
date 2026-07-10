@@ -135,6 +135,26 @@ export const listCaregivers = query({
   },
 })
 
+const MANAGER_ROLES = ['org:admin', 'org:coordinator', 'org:hr']
+
+export const listManagers = query({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, { clerkOrgId }) => {
+    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
+      'org:admin',
+      'org:coordinator',
+      'org:hr',
+    ])
+
+    const members = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_tenant_role', (q) => q.eq('tenantId', tenantId))
+      .collect()
+
+    return members.filter((m) => MANAGER_ROLES.includes(m.role))
+  },
+})
+
 export const sync = mutation({
   args: {
     clerkOrgId: v.string(),
@@ -292,7 +312,7 @@ export const updateRole = mutation({
   },
 })
 
-export const createBypassMember = internalMutation({
+export const createManualMember = internalMutation({
   args: {
     clerkOrgId: v.string(),
     clerkUserId: v.string(),
@@ -312,7 +332,7 @@ export const createBypassMember = internalMutation({
       .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', args.clerkOrgId))
       .unique()
     if (!tenant) {
-      throw new ConvexError('Tenant not found for bypass member creation.')
+      throw new ConvexError('Tenant not found for manual member creation.')
     }
 
     const existing = await ctx.db

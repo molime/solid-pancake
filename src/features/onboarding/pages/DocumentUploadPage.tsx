@@ -102,7 +102,7 @@ export function DocumentUploadPage() {
         label: meta.title,
         expiresAt: meta.expiry ? expiresAt : undefined,
       })
-      navigate('/onboarding/checklist', { replace: true })
+      navigate('/onboarding', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
       setIsUploading(false)

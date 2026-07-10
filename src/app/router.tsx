@@ -1,10 +1,10 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { CreateOrganization, SignIn, SignUp } from '@clerk/react'
+import { SignIn, SignUp } from '@clerk/react'
 import { Suspense, lazy, type ReactNode } from 'react'
 import { AppShell } from './shell/AppShell'
 import { PlatformShell } from './shell/PlatformShell'
 import { SelectAgencyPage } from './auth/SelectAgencyPage'
-import { SignedInRouteGuard, TenantRoleRouteGuard } from './shell/RouteGuard'
+import { SignedInRouteGuard, TenantRoleRouteGuard, TrainingRouteGuard } from './shell/RouteGuard'
 import { AppLoader } from '@/shared/ui/AppLoader'
 
 const DashboardPage = lazy(() =>
@@ -219,20 +219,7 @@ export function AppRouter() {
           </div>
         }
       />
-      <Route
-        path="/create-agency"
-        element={
-          <SignedInRouteGuard>
-            <div className="flex min-h-screen items-center justify-center bg-atria-bg p-4">
-              <CreateOrganization
-                routing="path"
-                path="/create-agency"
-                afterCreateOrganizationUrl="/select-agency"
-              />
-            </div>
-          </SignedInRouteGuard>
-        }
-      />
+
       <Route
         path="/select-agency"
         element={
@@ -268,9 +255,11 @@ export function AppRouter() {
           path="caregiver/today"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:caregiver']}>
-              <RouteSuspense>
-                <CaregiverTodayPage />
-              </RouteSuspense>
+              <TrainingRouteGuard>
+                <RouteSuspense>
+                  <CaregiverTodayPage />
+                </RouteSuspense>
+              </TrainingRouteGuard>
             </TenantRoleRouteGuard>
           }
         />
@@ -426,9 +415,11 @@ export function AppRouter() {
           path="caregiver/schedule"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:caregiver']}>
-              <RouteSuspense>
-                <CaregiverSchedulePage />
-              </RouteSuspense>
+              <TrainingRouteGuard>
+                <RouteSuspense>
+                  <CaregiverSchedulePage />
+                </RouteSuspense>
+              </TrainingRouteGuard>
             </TenantRoleRouteGuard>
           }
         />

@@ -8,33 +8,40 @@ import { Button } from '@/shared/ui/Button'
 import { cn } from '@/shared/lib/cn'
 import type { Doc } from '../../../../convex/_generated/dataModel'
 
-const TASK_META: Record<string, { label: string; shortLabel: string; due: string }> = {
+const TASK_META: Record<string, { label: string; shortLabel: string; actionLabel: string; due: string }> = {
   form_submission: {
     label: 'Submit your application',
     shortLabel: 'Application',
+    actionLabel: 'Fill out application',
     due: 'Due today',
   },
   photo_id: {
     label: 'Upload photo ID',
     shortLabel: 'Photo ID',
+    actionLabel: 'Upload Photo ID',
     due: 'Due in 2 days',
   },
   cpr_certificate: {
     label: 'Upload CPR certificate',
     shortLabel: 'CPR certificate',
+    actionLabel: 'Upload CPR certificate',
     due: 'Due in 2 days',
   },
   background_check: {
     label: 'Consent to background check',
     shortLabel: 'Background check',
+    actionLabel: 'Consent to background check',
     due: 'Due in 3 days',
   },
   employment_agreement: {
     label: 'Sign employment agreement',
     shortLabel: 'Employment agreement',
+    actionLabel: 'Review and sign agreement',
     due: 'Due in 3 days',
   },
 }
+
+const UPLOAD_TYPES = new Set(['photo_id', 'cpr_certificate'])
 
 function getTaskRoute(task: Doc<'candidateTasks'>) {
   if (task.type === 'form_submission') return '/onboarding/application'
@@ -67,6 +74,15 @@ export function CandidateOnboardingPage() {
     return tasks.find((t) => t.status !== 'complete') ?? null
   }, [tasks])
 
+  const nextMeta = nextPending ? TASK_META[nextPending.type] ?? {
+    label: nextPending.type,
+    shortLabel: nextPending.type,
+    actionLabel: `Complete ${nextPending.type}`,
+    due: 'Pending',
+  } : null
+
+  const isUploadNext = nextPending ? UPLOAD_TYPES.has(nextPending.type) : false
+
   if (!isLoaded || !clerkOrgId) return null
 
   const handleNext = () => {
@@ -82,10 +98,12 @@ export function CandidateOnboardingPage() {
   }
 
   const nextLabel = nextPending
-    ? `Next: ${TASK_META[nextPending.type]?.shortLabel ?? nextPending.type} →`
+    ? `${nextMeta?.actionLabel ?? 'Next'} →`
     : candidate?.status === 'offer_sent'
       ? 'View your offer →'
-      : 'Check application status →'
+      : candidate?.status === 'hired'
+        ? 'Complete platform training →'
+        : 'Check application status →'
 
   return (
     <div className='flex min-h-screen flex-col items-center justify-center bg-atria-bg px-4 py-8'>
@@ -106,6 +124,18 @@ export function CandidateOnboardingPage() {
             Complete these before your first shift.
           </p>
 
+          {isUploadNext && nextPending && (
+            <div className='mb-6 rounded-[var(--radius-atria-md)] border border-atria-warning/40 bg-atria-warning-bg p-5'>
+              <div className='mb-2 flex items-center gap-2'>
+                <span className='text-lg'>⚠️</span>
+                <p className='text-base font-semibold text-atria-warning'>Required next step</p>
+              </div>
+              <p className='text-sm text-atria-ink'>
+                You must <strong>{nextMeta?.label.toLowerCase() ?? 'upload this document'}</strong> before we can review your application. Tap the button below to upload now.
+              </p>
+            </div>
+          )}
+
           <div className='mb-6'>
             <div className='mb-2 flex items-center justify-between text-sm'>
               <span className='font-medium text-atria-ink'>{completedCount} of {totalCount} complete</span>
@@ -124,10 +154,12 @@ export function CandidateOnboardingPage() {
               const meta = TASK_META[task.type] ?? {
                 label: task.type,
                 shortLabel: task.type,
+                actionLabel: `Complete ${task.type}`,
                 due: 'Pending',
               }
               const isComplete = task.status === 'complete'
               const isNext = nextPending?._id === task._id
+              const isUpload = UPLOAD_TYPES.has(task.type)
               return (
                 <button
                   key={task._id}
@@ -175,6 +207,11 @@ export function CandidateOnboardingPage() {
                   {isNext && (
                     <span className='rounded-full bg-atria-accent px-3 py-1 text-xs font-medium text-atria-on-accent'>
                       Next
+                    </span>
+                  )}
+                  {!isComplete && isUpload && !isNext && (
+                    <span className='rounded-full border border-atria-warning/40 bg-atria-warning-bg px-3 py-1 text-xs font-medium text-atria-warning'>
+                      Required
                     </span>
                   )}
                 </button>

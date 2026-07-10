@@ -11,7 +11,7 @@ import { HrToast } from '../components/HrToast'
 import { useHrToast } from '../hooks/useHrToast'
 import { candidateStatusPill, candidateStatusAccentClass } from '../lib/candidateStatus'
 import { formatWeekdayDate } from '@/shared/format'
-import { ArrowLeft, CheckCircle2, RotateCcw, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Download, RotateCcw, XCircle } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import type { Id } from '../../../../convex/_generated/dataModel'
@@ -35,6 +35,41 @@ function ApplicationField({ label, value }: { label: string; value: string }) {
     </div>
   )
 }
+
+function DownloadButton({
+  clerkOrgId,
+  storageId,
+  fileName,
+}: {
+  clerkOrgId: string
+  storageId?: string
+  fileName: string
+}) {
+  const url = useQuery(
+    api.files.getDownloadUrl,
+    storageId ? { clerkOrgId, storageId } : 'skip',
+  )
+
+  if (!storageId) return null
+
+  return (
+    <a
+      href={url ?? '#'}
+      download={fileName}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex h-8 items-center gap-1 rounded-md border border-atria-border bg-atria-surface px-2.5 text-xs font-medium text-atria-ink hover:bg-atria-surface-2 disabled:pointer-events-none disabled:opacity-50"
+      aria-disabled={!url}
+      onClick={(e) => {
+        if (!url) e.preventDefault()
+      }}
+    >
+      <Download className="h-3.5 w-3.5" />
+      Download
+    </a>
+  )
+}
+
 
 function ConfirmDialog({
   open,
@@ -309,28 +344,44 @@ export function ApplicationReviewPage() {
                   detail.documents!.map((doc) => (
                     <div
                       key={doc._id}
-                      className="flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3"
+                      className="flex items-center justify-between gap-3 rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3"
                     >
-                      <span className="text-sm text-atria-ink">
-                        {doc.category}
-                      </span>
-                      <StatusBadge
-                        variant={
-                          doc.status === 'active' || doc.status === 'verified'
-                            ? 'success'
-                            : doc.status === 'rejected'
-                              ? 'danger'
-                              : 'warning'
-                        }
-                      >
-                        {doc.status === 'active'
-                          ? 'Received'
-                          : doc.status === 'verified'
-                            ? 'Verified'
-                            : doc.status === 'rejected'
-                              ? 'Missing'
-                              : 'Under review'}
-                      </StatusBadge>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-atria-ink">
+                          {doc.category}
+                        </p>
+                        {(doc.fileName || doc.expiresAt) && (
+                          <p className="truncate text-xs text-atria-text-secondary">
+                            {doc.fileName ? doc.fileName : ''}
+                            {doc.fileName && doc.expiresAt ? ' · ' : ''}
+                            {doc.expiresAt ? `Expires ${new Date(doc.expiresAt).toLocaleDateString()}` : ''}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <StatusBadge
+                          variant={
+                            doc.status === 'active' || doc.status === 'verified'
+                              ? 'success'
+                              : doc.status === 'rejected'
+                                ? 'danger'
+                                : 'warning'
+                          }
+                        >
+                          {doc.status === 'active'
+                            ? 'Received'
+                            : doc.status === 'verified'
+                              ? 'Verified'
+                              : doc.status === 'rejected'
+                                ? 'Missing'
+                                : 'Under review'}
+                        </StatusBadge>
+                        <DownloadButton
+                          clerkOrgId={clerkOrgId!}
+                          storageId={doc.storageId}
+                          fileName={doc.fileName ?? `${doc.category}.pdf`}
+                        />
+                      </div>
                     </div>
                   ))
                 )}

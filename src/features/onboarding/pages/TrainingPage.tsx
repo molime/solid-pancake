@@ -7,6 +7,11 @@ import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { Checkbox } from '@/shared/ui/Checkbox'
 import { cn } from '@/shared/lib/cn'
+import {
+  isPlatformTrainingComplete,
+  COMPLETE_STATUSES,
+  markTrainingCompletedInSession,
+} from '@/features/onboarding/model/trainingCompletion'
 
 const TRAINING_STEPS = [
   {
@@ -97,7 +102,7 @@ function StepView({
       setSecondsRemaining((s) => (s <= 1 ? 0 : s - 1))
     }, 1000)
     return () => clearInterval(timer)
-  }, [])
+  }, [step])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -109,7 +114,7 @@ function StepView({
     el.addEventListener('scroll', onScroll)
     onScroll()
     return () => el.removeEventListener('scroll', onScroll)
-  }, [])
+  }, [step])
 
   return (
     <>
@@ -174,11 +179,15 @@ export function TrainingPage() {
   const completions = useQuery(api.platformTrainingCompletions.listMyCompletions, clerkOrgId ? { clerkOrgId } : 'skip')
   const completeTraining = useMutation(api.platformTrainingCompletions.completeForCandidate)
 
-  const completionsList = completions as { trainingId: string }[] | undefined
-  const completedIds = useMemo(
-    () => new Set(completionsList?.map((c) => c.trainingId) ?? []),
-    [completionsList],
-  )
+  const completedIds = useMemo(() => {
+    const ids = new Set<string>()
+    completions?.forEach((c) => {
+      if (isPlatformTrainingComplete([c]) || COMPLETE_STATUSES.includes(c.status)) {
+        ids.add(c.trainingId)
+      }
+    })
+    return ids
+  }, [completions])
 
   const initialIndex = useMemo(() => {
     for (let i = 0; i < TRAINING_STEPS.length; i++) {
@@ -192,6 +201,13 @@ export function TrainingPage() {
 
   const step = TRAINING_STEPS[currentIndex]
   const isLast = currentIndex === TRAINING_STEPS.length - 1
+  const allTrainingComplete =
+    completions !== undefined &&
+    TRAINING_STEPS.every((s) => completedIds.has(s.id))
+
+  if (allTrainingComplete) {
+    markTrainingCompletedInSession()
+  }
 
   if (!isLoaded || !clerkOrgId) return null
 
@@ -204,7 +220,7 @@ export function TrainingPage() {
       status: 'complete',
     })
     if (isLast) {
-      navigate('/caregiver/today', { replace: true })
+      setIsSubmitting(false)
     } else {
       setCurrentIndex((i) => i + 1)
       setIsSubmitting(false)
@@ -215,12 +231,21 @@ export function TrainingPage() {
     <div className='flex min-h-screen flex-col items-center justify-center bg-atria-bg px-4 py-8'>
       <Card className='w-full max-w-[640px]'>
         <CardContent className='p-8'>
-          <button
-            className='mb-4 text-sm text-atria-text-secondary hover:text-atria-ink'
-            onClick={() => navigate('/onboarding/checklist')}
-          >
-            {String.fromCharCode(8592)} Back to checklist
-          </button>
+          {allTrainingComplete ? (
+            <button
+              className='mb-4 text-sm text-atria-text-secondary hover:text-atria-ink'
+              onClick={() => navigate('/onboarding')}
+            >
+              {String.fromCharCode(8592)} Back to dashboard
+            </button>
+          ) : (
+            <div className='mb-6 rounded-[var(--radius-atria-md)] border border-atria-warning/40 bg-atria-warning-bg p-4'>
+              <div className='flex items-center gap-2'>
+                <span className='text-lg'>⚠️</span>
+                <p className='text-sm font-semibold text-atria-warning'>Complete required training to access your dashboard</p>
+              </div>
+            </div>
+          )}
 
           <div className='mb-6 flex items-center gap-3'>
             <div className='flex h-10 w-10 items-center justify-center rounded-[var(--radius-atria-md)] bg-atria-accent text-atria-on-accent'>
@@ -253,13 +278,37 @@ export function TrainingPage() {
             ))}
           </div>
 
-          <StepView
-            key={step.id}
-            step={step}
-            isLast={isLast}
-            isSubmitting={isSubmitting}
-            onComplete={handleComplete}
-          />
+          {allTrainingComplete ? (
+            <div className='text-center'>
+              <div className='mb-4 flex justify-center'>
+                <div className='flex h-16 w-16 items-center justify-center rounded-full bg-atria-success text-white'>
+                  <svg className='h-8 w-8' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2}>
+                    <path strokeLinecap='round' strokeLinejoin='round' d='M5 13l4 4L19 7' />
+                  </svg>
+                </div>
+              </div>
+              <h2 className='mb-2 text-xl font-semibold text-atria-ink'>Training complete!</h2>
+              <p className='mb-6 text-sm text-atria-text-secondary'>
+                You have finished all required training modules. You can now access your caregiver dashboard.
+              </p>
+              <Button
+                variant='primary'
+                size='lg'
+                className='w-full'
+                onClick={() => navigate('/onboarding', { replace: true })}
+              >
+                Go to dashboard
+              </Button>
+            </div>
+          ) : (
+            <StepView
+              key={step.id}
+              step={step}
+              isLast={isLast}
+              isSubmitting={isSubmitting}
+              onComplete={handleComplete}
+            />
+          )}
 
           <p className='mt-4 text-center text-xs text-atria-text-muted'>
             Training completion is recorded securely and tied to your profile.

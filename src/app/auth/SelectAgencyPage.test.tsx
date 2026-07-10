@@ -335,6 +335,6 @@ describe('SelectAgencyPage', () => {
     render(<SelectAgencyPage />)
     expect(screen.getByText(/You don't belong to any agency yet/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Sign out/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Create New Agency/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Create New Agency/i })).not.toBeInTheDocument()
   })
 })

@@ -82,6 +82,8 @@ const STEPS = [
   { key: 'decision', label: 'Decision' },
 ]
 
+const UPLOAD_TYPES = new Set(['photo_id', 'cpr_certificate'])
+
 function formatDate(value?: string) {
   if (!value) return ''
   return new Date(value).toLocaleDateString()
@@ -108,8 +110,14 @@ export function ApplicationStatusPage() {
   }, [status, tasks])
 
   const submittedDate = formatDate(application?.submittedAt)
-  const documentsComplete = tasks?.filter((t) => ['photo_id', 'cpr_certificate'].includes(t.type)).every((t) => t.status === 'complete') ?? false
-  const documentsDate = tasks?.find((t) => ['photo_id', 'cpr_certificate'].includes(t.type) && t.completedAt)?.completedAt
+  const documentTasks = tasks?.filter((t) => UPLOAD_TYPES.has(t.type)) ?? []
+  const documentsComplete = documentTasks.length > 0 && documentTasks.every((t) => t.status === 'complete')
+  const documentsDate = tasks?.find((t) => UPLOAD_TYPES.has(t.type) && t.completedAt)?.completedAt
+
+  const firstPendingDocumentTask = useMemo(() => {
+    if (!tasks) return null
+    return tasks.find((t) => UPLOAD_TYPES.has(t.type) && t.status !== 'complete') ?? null
+  }, [tasks])
 
   if (!isLoaded || !clerkOrgId) return null
 
@@ -141,6 +149,30 @@ export function ApplicationStatusPage() {
             <p className='text-sm text-atria-text-secondary'>{config.description}</p>
           </div>
 
+          {['applied', 'hr_review', 'application_draft'].includes(status) && !documentsComplete && firstPendingDocumentTask && (
+            <div className='mb-8 rounded-[var(--radius-atria-md)] border border-atria-warning/40 bg-atria-warning-bg p-5'>
+              <div className='mb-2 flex items-center gap-2'>
+                <span className='text-lg'>⚠️</span>
+                <p className='text-base font-semibold text-atria-warning'>Your application is waiting on documents</p>
+              </div>
+              <p className='mb-4 text-sm text-atria-ink'>
+                We cannot review your application until you upload the required documents. Tap below to upload now.
+              </p>
+              <Button
+                variant='primary'
+                size='lg'
+                className='w-full'
+                onClick={() =>
+                  firstPendingDocumentTask
+                    ? navigate(`/onboarding/upload/${firstPendingDocumentTask._id}`)
+                    : navigate('/onboarding/checklist')
+                }
+              >
+                Upload required document →
+              </Button>
+            </div>
+          )}
+
           <h3 className='mb-4 text-base font-semibold text-atria-ink'>Your progress</h3>
 
           <div className='relative mb-8 pl-2'>
@@ -152,9 +184,11 @@ export function ApplicationStatusPage() {
                   ? `Submitted on ${submittedDate}`
                   : step.key === 'documents' && documentsComplete && documentsDate
                     ? `Completed on ${formatDate(documentsDate)}`
-                    : isCurrent
-                      ? 'In progress'
-                      : ''
+                    : step.key === 'documents' && !documentsComplete
+                      ? 'Photo ID and CPR certificate required'
+                      : isCurrent
+                        ? 'In progress'
+                        : ''
               return (
                 <div key={step.key} className='relative flex gap-4 pb-6 last:pb-0'>
                   {idx !== STEPS.length - 1 && (
@@ -192,7 +226,7 @@ export function ApplicationStatusPage() {
                       {step.label}
                     </p>
                     {subtext && (
-                      <p className='text-sm text-atria-text-secondary'>{subtext}</p>
+                      <p className={cn('text-sm', step.key === 'documents' && !documentsComplete ? 'text-atria-warning font-medium' : 'text-atria-text-secondary')}>{subtext}</p>
                     )}
                   </div>
                 </div>
@@ -212,12 +246,12 @@ export function ApplicationStatusPage() {
               </Button>
             )}
             {['applied', 'hr_review'].includes(status) && (
-              <Button variant='primary' size='lg' className='w-full' onClick={() => navigate('/onboarding/checklist')}>
-                View my documents {String.fromCharCode(8594)}
+              <Button variant='primary' size='lg' className='w-full' onClick={() => navigate('/onboarding')}>
+                View my onboarding tasks {String.fromCharCode(8594)}
               </Button>
             )}
             {status === 'accepted' && (
-              <Button variant='secondary' size='lg' className='w-full' onClick={() => navigate('/onboarding/checklist')}>
+              <Button variant='secondary' size='lg' className='w-full' onClick={() => navigate('/onboarding')}>
                 Back to onboarding checklist {String.fromCharCode(8594)}
               </Button>
             )}
@@ -227,7 +261,7 @@ export function ApplicationStatusPage() {
               </Button>
             )}
             {['rejected', 'withdrawn'].includes(status) && (
-              <Button variant='secondary' size='lg' className='w-full' onClick={() => navigate('/onboarding/checklist')}>
+              <Button variant='secondary' size='lg' className='w-full' onClick={() => navigate('/onboarding')}>
                 Back to onboarding checklist {String.fromCharCode(8594)}
               </Button>
             )}

@@ -1,4 +1,6 @@
 import { useEffect } from 'react'
+import { AppLoader } from '@/shared/ui/AppLoader'
+import { isPlatformTrainingComplete } from '@/features/onboarding/model/trainingCompletion'
 import { useNavigate } from 'react-router-dom'
 import { useOrganization } from '@clerk/react'
 import { useQuery } from 'convex/react'
@@ -9,6 +11,7 @@ export function CandidateOnboardingIndex() {
   const { organization, isLoaded } = useOrganization()
   const clerkOrgId = organization?.id
   const data = useQuery(api.candidates.getMyApplication, clerkOrgId ? { clerkOrgId } : 'skip')
+  const candidate = useQuery(api.candidates.getCandidateProfile, clerkOrgId ? { clerkOrgId } : 'skip')
   const completions = useQuery(
     api.platformTrainingCompletions.listMyCompletions,
     clerkOrgId ? { clerkOrgId } : 'skip',
@@ -16,6 +19,12 @@ export function CandidateOnboardingIndex() {
 
   useEffect(() => {
     if (!data || !clerkOrgId) return
+
+    if (candidate?.requiresPasswordChange) {
+      navigate('/onboarding/profile?forcePasswordChange=true', { replace: true })
+      return
+    }
+
     const status = data.candidate?.status ?? 'invited'
 
     if (status === 'invited' || status === 'new' || status === 'application_draft') {
@@ -29,11 +38,7 @@ export function CandidateOnboardingIndex() {
     }
 
     if (status === 'hired') {
-      const allComplete =
-        completions !== undefined &&
-        completions.length > 0 &&
-        completions.every((c) => c.status === 'complete')
-      if (allComplete) {
+      if (isPlatformTrainingComplete(completions)) {
         navigate('/caregiver/today', { replace: true })
       } else {
         navigate('/onboarding/training', { replace: true })
@@ -41,10 +46,10 @@ export function CandidateOnboardingIndex() {
       return
     }
 
-    // applied, hr_review, accepted, rejected, withdrawn -> show checklist
+    // applied, hr_review, accepted, rejected, withdrawn -> show onboarding checklist page
     navigate('/onboarding/checklist', { replace: true })
-  }, [data, clerkOrgId, navigate, completions])
+  }, [data, clerkOrgId, navigate, completions, candidate])
 
-  if (!isLoaded || !clerkOrgId) return null
-  return null
+  if (!isLoaded || !clerkOrgId) return <AppLoader fullScreen />
+  return <AppLoader fullScreen />
 }

@@ -1,13 +1,13 @@
 import {
   useOrganization,
   useAuth,
-  useOrganizationList,
 } from '@clerk/react'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import type { PropsWithChildren } from 'react'
 import { AppLoader } from '@/shared/ui/AppLoader'
+import { isPlatformTrainingComplete } from '@/features/onboarding/model/trainingCompletion'
 
 type TenantRole =
   | 'org:admin'
@@ -59,26 +59,13 @@ function TenantMembershipGuard({ children }: PropsWithChildren) {
 
 export function SignedInRouteGuard({ children }: PropsWithChildren) {
   const { isLoaded, isSignedIn } = useAuth()
-  const location = useLocation()
-  const { isLoaded: orgsLoaded, userMemberships } = useOrganizationList({
-    userMemberships: { infinite: true },
-  })
 
-  if (!isLoaded || !orgsLoaded) {
+  if (!isLoaded) {
     return <AppLoader fullScreen />
   }
 
   if (!isSignedIn) {
     return <Navigate to="/sign-in" replace />
-  }
-
-  // If Clerk drops the user on /create-agency but they already have
-  // memberships, send them to the agency picker instead.
-  if (
-    location.pathname === '/create-agency' &&
-    (userMemberships.data?.length ?? 0) > 0
-  ) {
-    return <Navigate to="/select-agency" replace />
   }
 
   return <>{children}</>
@@ -114,3 +101,31 @@ export function TenantRoleRouteGuard({
 
   return <>{children}</>
 }
+export function TrainingRouteGuard({ children }: PropsWithChildren) {
+  const { organization } = useOrganization()
+  const member = useQuery(
+    api.members.me,
+    organization?.id ? { clerkOrgId: organization.id } : 'skip',
+  )
+  const completions = useQuery(
+    api.platformTrainingCompletions.listMyCompletions,
+    organization?.id ? { clerkOrgId: organization.id } : 'skip',
+  )
+
+  if (!organization || member === undefined || completions === undefined) {
+    return <AppLoader fullScreen label="Checking training status" />
+  }
+
+  if (!member) {
+    return <Navigate to="/select-agency" replace />
+  }
+
+  if (member.role === 'org:caregiver') {
+    if (!isPlatformTrainingComplete(completions)) {
+      return <Navigate to="/onboarding/training" replace />
+    }
+  }
+
+  return <>{children}</>
+}
+

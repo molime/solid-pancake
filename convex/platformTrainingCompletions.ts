@@ -37,6 +37,8 @@ export const create = mutation({
   },
 })
 
+export const COMPLETE_STATUSES = ['complete', 'completed']
+
 export const completeForCandidate = mutation({
   args: {
     clerkOrgId: v.string(),
@@ -51,6 +53,18 @@ export const completeForCandidate = mutation({
       'org:caregiver',
     ])
     const clerkUserId = identity.subject
+
+    const existing = await ctx.db
+      .query('platformTrainingCompletions')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', tenantId).eq('clerkUserId', clerkUserId),
+      )
+      .filter((q) => q.eq(q.field('trainingId'), args.trainingId))
+      .first()
+
+    if (existing) {
+      return existing._id
+    }
 
     const candidate = await ctx.db
       .query('candidates')

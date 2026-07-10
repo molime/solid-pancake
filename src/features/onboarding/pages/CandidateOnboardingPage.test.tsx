@@ -40,9 +40,20 @@ describe('CandidateOnboardingPage', () => {
     expect(screen.getByText('1 of 5 complete')).toBeInTheDocument()
     expect(screen.getByText('Upload photo ID')).toBeInTheDocument()
     expect(screen.getByText('Upload CPR certificate')).toBeInTheDocument()
+    expect(screen.getByText('Required next step')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /Next: Photo ID/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Upload Photo ID →' }))
 
     expect(navigateMock).toHaveBeenCalledWith('/onboarding/upload/task_photo')
+  })
+
+  it('shows a required badge on pending upload tasks that are not next', () => {
+    render(
+      <MemoryRouter>
+        <CandidateOnboardingPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Required')).toBeInTheDocument()
   })
 })

@@ -35,7 +35,7 @@ export function OfferAcceptancePage() {
   const handleAccept = async () => {
     setIsSubmitting(true)
     await accept({ clerkOrgId })
-    navigate('/onboarding/checklist', { replace: true })
+    navigate('/onboarding', { replace: true })
   }
 
   const handleReject = async () => {

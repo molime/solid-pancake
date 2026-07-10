@@ -505,6 +505,7 @@ describe('claimIntegrationEvent', () => {
       maxAttempts: 5,
     })
     expect(first.type).toBe('claimed')
+    if (first.type !== 'claimed') throw new Error('expected claimed')
 
     const second = await t.mutation(internal.adpSync.claimIntegrationEvent, {
       tenantId,

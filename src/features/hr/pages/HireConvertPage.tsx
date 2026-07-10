@@ -36,8 +36,8 @@ export function HireConvertPage() {
       ? { clerkOrgId, candidateId: candidateId as Id<'candidates'> }
       : 'skip',
   )
-  const caregivers = useQuery(
-    api.members.listCaregivers,
+  const managers = useQuery(
+    api.members.listManagers,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
   const hireCandidate = useMutation(api.candidates.hireCandidate)
@@ -177,16 +177,16 @@ export function HireConvertPage() {
               />
             </FieldGroup>
 
-            <FieldGroup label="Supervisor" htmlFor="supervisor">
+            <FieldGroup label="Supervisor / Coordinator" htmlFor="supervisor">
               <Select
                 id="supervisor"
                 value={supervisor}
                 onChange={(e) => setSupervisor(e.target.value)}
               >
-                <option value="">Select supervisor</option>
-                {caregivers?.map((cg) => (
-                  <option key={cg.clerkUserId} value={cg.clerkUserId}>
-                    {cg.displayName}
+                <option value="">Select supervisor / coordinator</option>
+                {managers?.map((m) => (
+                  <option key={m.clerkUserId} value={m.clerkUserId}>
+                    {m.displayName}
                   </option>
                 ))}
               </Select>

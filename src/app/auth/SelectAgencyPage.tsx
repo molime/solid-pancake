@@ -8,7 +8,7 @@ import {
 import { useConvexAuth } from 'convex/react'
 import { useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Building2, Plus, AlertCircle } from 'lucide-react'
+import { Building2, AlertCircle } from 'lucide-react'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { Badge } from '@/shared/ui/Badge'
@@ -218,7 +218,7 @@ export function SelectAgencyPage() {
               </CardContent>
             </Card>
           ) : (
-            userMemberships.data?.map((mem) => {
+            userMemberships.data?.map((mem: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
               const isLoading = pendingOrg?.id === mem.organization.id
               return (
                 <Card
@@ -266,20 +266,7 @@ export function SelectAgencyPage() {
           )}
         </div>
 
-        {(userMemberships.data?.length ?? 0) === 0 && (
-          <div className="flex justify-center">
-            <Button
-              variant="secondary"
-              disabled={isBootstrapping}
-              onClick={() => {
-                window.location.href = '/create-agency'
-              }}
-            >
-              <Plus className="h-4 w-4" />
-              Create New Agency
-            </Button>
-          </div>
-        )}
+
       </div>
     </div>
   )

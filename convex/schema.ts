@@ -332,6 +332,10 @@ export default defineSchema({
     invitationId: v.optional(v.string()),
     invitationFailed: v.optional(v.boolean()),
     invitationError: v.optional(v.string()),
+    manualSetup: v.optional(v.boolean()),
+    requiresPasswordChange: v.optional(v.boolean()),
+    magicLink: v.optional(v.string()),
+    manualSetupTicketExpiresAt: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index('by_tenant_email', ['tenantId', 'email'])

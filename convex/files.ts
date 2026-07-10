@@ -63,7 +63,7 @@ export const attachProof = mutation({
     const { tenantId, identity, role } = await requireTenantRole(
       ctx,
       args.clerkOrgId,
-      ['org:admin', 'org:coordinator', 'org:caregiver'],
+      ['org:admin', 'org:coordinator', 'org:caregiver', 'org:hr'],
     )
 
     const task = await ctx.db.get(args.shiftTaskId)
@@ -115,7 +115,7 @@ export const removeProof = mutation({
     const { tenantId, identity, role } = await requireTenantRole(
       ctx,
       args.clerkOrgId,
-      ['org:admin', 'org:coordinator', 'org:caregiver'],
+      ['org:admin', 'org:coordinator', 'org:caregiver', 'org:hr'],
     )
 
     const task = await ctx.db.get(args.shiftTaskId)
@@ -165,7 +165,7 @@ export const getDownloadUrl = query({
     const { tenantId, identity, role } = await requireTenantRole(
       ctx,
       args.clerkOrgId,
-      ['org:admin', 'org:coordinator', 'org:caregiver'],
+      ['org:admin', 'org:coordinator', 'org:caregiver', 'org:hr'],
     )
 
     const file = await ctx.db

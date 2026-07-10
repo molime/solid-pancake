@@ -60,7 +60,7 @@ export function CandidatePipelinePage() {
     api.candidates.listCandidates,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
-  const regenerateTicket = useAction(api.candidates.regenerateBypassSignInTicket)
+  const regenerateTicket = useAction(api.candidates.regenerateCandidateMagicLink)
 
   const [activeTab, setActiveTab] = useState<TabValue>('all')
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -78,7 +78,7 @@ export function CandidatePipelinePage() {
         candidateId: candidateId as Id<'candidates'>,
       })
       await navigator.clipboard.writeText(magicLink)
-      show('success', 'Sign-in link copied', 'The bypass sign-in link is on the clipboard.')
+      show('success', 'Sign-in link copied', 'A fresh sign-in link is on the clipboard.')
     } catch (err) {
       show(
         'danger',
@@ -178,12 +178,12 @@ export function CandidatePipelinePage() {
                               Failed
                             </span>
                           )}
-                          {candidate.invitationId?.startsWith('bypass:') && (
+                          {candidate.manualSetup && (
                             <span className="inline-flex items-center rounded-[var(--radius-atria-sm)] border border-atria-info/30 bg-atria-info-bg px-2 py-1 text-xs font-semibold text-atria-info">
-                              Dev bypass
+                              Manual setup
                             </span>
                           )}
-                          {candidate.invitationId?.startsWith('bypass:') && (
+                          {candidate.manualSetup && (
                             <Button
                               variant="secondary"
                               size="sm"

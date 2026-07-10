@@ -151,6 +151,10 @@ async function seedHR(
   })
 }
 
+beforeEach(() => {
+  vi.stubEnv('EMAIL_ENABLED', 'false')
+})
+
 describe('inviteCandidate', () => {
   it('seeds 5 tasks in order', async () => {
     stubClerkInvitation()
@@ -351,7 +355,6 @@ describe('inviteCandidate', () => {
   it('bypasses Clerk allow-list errors in local dev and links the candidate', async () => {
     vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
     vi.stubEnv('APP_URL', 'http://localhost:5173')
-    vi.stubEnv('ATRIA_X_DEV_INVITE_BYPASS', '')
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string, init: RequestInit | undefined) => {
@@ -429,8 +432,8 @@ describe('inviteCandidate', () => {
       },
     )
 
-    expect(result.invitationId).toMatch(/^bypass:/)
-    expect(result.manualPassword).toMatch(/^dev-/)
+    expect(result.invitationId).toMatch(/^manual:/)
+    expect(result.magicLink).toBeDefined()
     expect(result.magicLink).toMatch(/__clerk_ticket=sint_bypass_candidate$/)
 
     const candidate = await t.run(async (ctx) => {
@@ -438,7 +441,7 @@ describe('inviteCandidate', () => {
     })
 
     expect(candidate?.clerkUserId).toBe('user_bypass_candidate')
-    expect(candidate?.invitationId).toMatch(/^bypass:/)
+    expect(candidate?.invitationId).toMatch(/^manual:/)
     expect(candidate?.invitationFailed).toBeUndefined()
     expect(candidate?.invitationError).toBeUndefined()
   })
@@ -446,7 +449,6 @@ describe('inviteCandidate', () => {
   it('preserves the candidate record when bypass fails', async () => {
     vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
     vi.stubEnv('APP_URL', 'http://localhost:5173')
-    vi.stubEnv('ATRIA_X_DEV_INVITE_BYPASS', '')
     vi.stubGlobal(
       'fetch',
       vi.fn(() =>
@@ -501,29 +503,65 @@ describe('inviteCandidate', () => {
     expect(candidate?.invitationError).toContain('not allowed to access this application')
   })
 
-  it('does not bypass on a production URL without the explicit flag', async () => {
-    vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
+  it('falls back to manual setup when the Clerk invitation allow-list rejects the email', async () => {
+    vi.stubEnv('CLERK_SECRET_KEY', '***')
     vi.stubEnv('APP_URL', 'https://app.example.com')
-    vi.stubEnv('ATRIA_X_DEV_INVITE_BYPASS', '')
     vi.stubGlobal(
       'fetch',
-      vi.fn(() =>
-        Promise.resolve({
+      vi.fn((url: string) => {
+        if (url.includes('/organizations/') && url.includes('/invitations')) {
+          return Promise.resolve({
+            ok: false,
+            status: 422,
+            json: () =>
+              Promise.resolve({
+                errors: [
+                  {
+                    message: 'not allowed to access this application',
+                    long_message:
+                      'candidate@gmail.com is not allowed to access this application',
+                    code: 'form_param_format_invalid',
+                  },
+                ],
+              }),
+          })
+        }
+        if (url === 'https://api.clerk.com/v1/users') {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                id: 'user_manual_fallback',
+                email_addresses: [{ email_address: 'candidate@gmail.com' }],
+              }),
+          })
+        }
+        if (url.includes('/memberships')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ id: 'mem_manual_fallback' }),
+          })
+        }
+        if (url.includes('/sign_in_tokens')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                id: 'sit_manual_fallback',
+                token: 'sint_manual_fallback',
+                user_id: 'user_manual_fallback',
+              }),
+          })
+        }
+        return Promise.resolve({
           ok: false,
-          status: 422,
-          json: () =>
-            Promise.resolve({
-              errors: [
-                {
-                  message: 'not allowed to access this application',
-                  long_message:
-                    'candidate@gmail.com is not allowed to access this application',
-                  code: 'form_param_format_invalid',
-                },
-              ],
-            }),
-        }),
-      ) as unknown as typeof fetch,
+          status: 404,
+          json: () => Promise.resolve({ errors: [{ message: 'Not found' }] }),
+        })
+      }) as unknown as typeof fetch,
     )
 
     const t = createTestConvex()
@@ -532,21 +570,16 @@ describe('inviteCandidate', () => {
 
     await seedTenant(t, clerkOrgId, adminId)
 
-    await expect(
-      asAdmin(t, adminId, clerkOrgId).action(api.candidates.inviteCandidate, {
+    const result = await asAdmin(t, adminId, clerkOrgId).action(
+      api.candidates.inviteCandidate,
+      {
         clerkOrgId,
         displayName: 'Production Guard Candidate',
         email: 'candidate@gmail.com',
-      }),
-    ).rejects.toThrow('not allowed to access this application')
-
-    const calls = vi.mocked(fetch).mock.calls
-    const bypassCalls = calls.filter(
-      (call) =>
-        typeof call[0] === 'string' &&
-        (call[0].includes('/users') || call[0].includes('/sign_in_tokens')),
+      },
     )
-    expect(bypassCalls).toHaveLength(0)
+
+    expect(result.magicLink).toContain('__clerk_ticket=sint_manual_fallback')
 
     const candidate = await t.run(async (ctx) => {
       const tenant = await ctx.db
@@ -561,13 +594,14 @@ describe('inviteCandidate', () => {
         .unique()
     })
 
-    expect(candidate?.invitationFailed).toBe(true)
+    expect(candidate?.manualSetup).toBe(true)
+    expect(candidate?.requiresPasswordChange).toBe(true)
+    expect(candidate?.invitationFailed).toBeUndefined()
   })
 
-  it('bypasses via explicit flag on a production URL', async () => {
+it('bypasses via explicit flag on a production URL', async () => {
     vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
     vi.stubEnv('APP_URL', 'https://app.example.com')
-    vi.stubEnv('ATRIA_X_DEV_INVITE_BYPASS', 'true')
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string, init: RequestInit | undefined) => {
@@ -622,6 +656,7 @@ describe('inviteCandidate', () => {
           })
         }
 
+
         return Promise.resolve({
           ok: false,
           status: 404,
@@ -645,9 +680,12 @@ describe('inviteCandidate', () => {
       },
     )
 
-    expect(result.invitationId).toMatch(/^bypass:/)
-    expect(result.manualPassword).toMatch(/^dev-/)
+    expect(result.invitationId).toMatch(/^manual:/)
+    expect(result.magicLink).toBeDefined()
     expect(result.magicLink).toMatch(/__clerk_ticket=sint_flag_bypass_candidate$/)
+    expect(result.initialPassword).toBeDefined()
+    expect(result.initialPassword).toBeTruthy()
+    expect(result.initialPassword!.length).toBeGreaterThanOrEqual(8)
 
     const candidate = await t.run(async (ctx) => {
       return ctx.db.get(result.candidateId as Id<'candidates'>)
@@ -703,7 +741,7 @@ describe('inviteCandidate', () => {
   })
 })
 
-describe('regenerateBypassSignInTicket', () => {
+describe('regenerateCandidateMagicLink', () => {
   function stubSignInTicket() {
     vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
     vi.stubEnv('APP_URL', 'http://localhost:5173')
@@ -750,13 +788,14 @@ describe('regenerateBypassSignInTicket', () => {
         email: 'regenerate@gmail.com',
         displayName: 'Regenerate Candidate',
         status: 'invited',
-        invitationId: 'bypass:test',
+        invitationId: 'manual:test',
+        manualSetup: true,
         createdAt: new Date().toISOString(),
       })
     })
 
     const result = await asAdmin(t, adminId, clerkOrgId).action(
-      api.candidates.regenerateBypassSignInTicket,
+      api.candidates.regenerateCandidateMagicLink,
       {
         clerkOrgId,
         candidateId,
@@ -764,40 +803,6 @@ describe('regenerateBypassSignInTicket', () => {
     )
 
     expect(result.magicLink).toBe('http://localhost:5173/sign-in?__clerk_ticket=sint_regenerate')
-  })
-
-  it('throws when dev bypass is disabled', async () => {
-    vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
-    vi.stubEnv('APP_URL', 'https://app.example.com')
-    vi.stubEnv('ATRIA_X_DEV_INVITE_BYPASS', '')
-    const t = createTestConvex()
-    const clerkOrgId = 'org_regenerate_disabled'
-    const adminId = 'user_admin_regenerate_disabled'
-
-    await seedTenant(t, clerkOrgId, adminId)
-    const candidateId = await t.run(async (ctx) => {
-      const tenant = await ctx.db
-        .query('tenants')
-        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
-        .unique()
-      if (!tenant) throw new Error('Tenant not found.')
-      return ctx.db.insert('candidates', {
-        tenantId: tenant._id,
-        clerkUserId: 'user_bypass_disabled',
-        email: 'disabled@gmail.com',
-        displayName: 'Disabled Candidate',
-        status: 'invited',
-        invitationId: 'bypass:test',
-        createdAt: new Date().toISOString(),
-      })
-    })
-
-    await expect(
-      asAdmin(t, adminId, clerkOrgId).action(api.candidates.regenerateBypassSignInTicket, {
-        clerkOrgId,
-        candidateId,
-      }),
-    ).rejects.toThrow('Dev invitation bypass is not enabled')
   })
 
   it('throws for a candidate not created via bypass', async () => {
@@ -825,11 +830,11 @@ describe('regenerateBypassSignInTicket', () => {
     })
 
     await expect(
-      asAdmin(t, adminId, clerkOrgId).action(api.candidates.regenerateBypassSignInTicket, {
+      asAdmin(t, adminId, clerkOrgId).action(api.candidates.regenerateCandidateMagicLink, {
         clerkOrgId,
         candidateId,
       }),
-    ).rejects.toThrow('Candidate was not created via dev bypass')
+    ).rejects.toThrow('Candidate was not created via manual account setup.')
   })
 
   it('blocks org:candidate callers', async () => {
@@ -866,14 +871,15 @@ describe('regenerateBypassSignInTicket', () => {
         email: 'candidate@example.com',
         displayName: 'Candidate',
         status: 'invited',
-        invitationId: 'bypass:test',
+        invitationId: 'manual:test',
+        manualSetup: true,
         createdAt: new Date().toISOString(),
       })
     })
 
     await expect(
       asCandidate(t, candidateUserId, clerkOrgId).action(
-        api.candidates.regenerateBypassSignInTicket,
+        api.candidates.regenerateCandidateMagicLink,
         {
           clerkOrgId,
           candidateId,
@@ -972,7 +978,7 @@ describe('submitApplication', () => {
     const candidateUserId = 'user_candidate_submit'
 
     await seedTenant(t, clerkOrgId, adminId)
-    let candidateId: Id<'candidates'>
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
     let tenantId: Id<'tenants'>
     await t.run(async (ctx) => {
       const tenant = await ctx.db
@@ -1045,7 +1051,7 @@ describe('submitApplication', () => {
     const candidateUserId = 'user_candidate_submit_upsert'
 
     await seedTenant(t, clerkOrgId, adminId)
-    let candidateId: Id<'candidates'>
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
     let tenantId: Id<'tenants'>
     let olderAppId: Id<'applications'>
     let newerAppId: Id<'applications'>
@@ -1127,7 +1133,7 @@ describe('reviewApplication and offer lifecycle', () => {
     vi.useFakeTimers()
 
     let tenantId: Id<'tenants'>
-    let candidateId: Id<'candidates'>
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
 
     await t.run(async (ctx) => {
       const tenant = await ctx.db
@@ -1220,7 +1226,7 @@ describe('reviewApplication and offer lifecycle', () => {
     const candidateUserId = 'user_candidate_correction'
 
     await seedTenant(t, clerkOrgId, adminId)
-    let candidateId: Id<'candidates'>
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
 
     await t.run(async (ctx) => {
       const tenant = await ctx.db
@@ -1274,7 +1280,7 @@ describe('reviewApplication and offer lifecycle', () => {
     const candidateUserId = 'user_candidate_reject'
 
     await seedTenant(t, clerkOrgId, adminId)
-    let candidateId: Id<'candidates'>
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
 
     await t.run(async (ctx) => {
       const tenant = await ctx.db
@@ -1401,7 +1407,7 @@ describe('listCandidates and getCandidateDetail', () => {
     const adminId = 'user_admin_detail'
 
     await seedTenant(t, clerkOrgId, adminId)
-    let candidateId: Id<'candidates'>
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
     let tenantId: Id<'tenants'>
 
     await t.run(async (ctx) => {
@@ -1454,9 +1460,9 @@ describe('addCandidateDocument', () => {
     const candidateUserId = 'user_candidate_doc'
 
     await seedTenant(t, clerkOrgId, adminId)
-    let candidateId: Id<'candidates'>
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
     let tenantId: Id<'tenants'>
-    let fileId: Id<'files'>
+    let fileId: Id<'files'> = 'file_placeholder' as Id<'files'>
 
     await t.run(async (ctx) => {
       const tenant = await ctx.db
@@ -1552,7 +1558,7 @@ describe('attachCandidateDocument', () => {
     const candidateUserId = 'user_candidate_attach_doc'
 
     await seedTenant(t, clerkOrgId, adminId)
-    let candidateId: Id<'candidates'>
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
     let tenantId: Id<'tenants'>
     await t.run(async (ctx) => {
       const tenant = await ctx.db
@@ -1649,7 +1655,7 @@ describe('listCandidateTasks', () => {
     const candidateUserId = 'user_candidate_tasks'
 
     await seedTenant(t, clerkOrgId, adminId)
-    let candidateId: Id<'candidates'>
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
     let tenantId: Id<'tenants'>
 
     await t.run(async (ctx) => {
@@ -1706,7 +1712,7 @@ describe('listCandidateTasks', () => {
 
     await seedTenant(t, clerkOrgId, adminId)
     await seedHR(t, clerkOrgId, hrId)
-    let candidateId: Id<'candidates'>
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
     let tenantId: Id<'tenants'>
 
     await t.run(async (ctx) => {
@@ -1770,5 +1776,98 @@ describe('role guard regression', () => {
         clerkOrgId,
       }),
     ).rejects.toThrow()
+  })
+})
+
+
+describe('candidate self-service queries after hire', () => {
+  it('getCandidateProfile allows org:caregiver callers', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_hired_cg_read'
+
+    await t.run(async (ctx) => {
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId,
+        name: 'Hired Agency',
+        slug: 'hired-agency',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: 'user_hired',
+        role: 'org:caregiver',
+        displayName: 'Hired',
+        email: 'hired@example.com',
+      })
+      await ctx.db.insert('candidates', {
+        tenantId,
+        clerkUserId: 'user_hired',
+        displayName: 'Hired',
+        email: 'hired@example.com',
+        status: 'hired',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    const result = await t
+      .withIdentity({
+        subject: 'user_hired',
+        org_id: clerkOrgId,
+        org_role: 'org:caregiver',
+      })
+      .run(async (ctx) => {
+        return ctx.runQuery(api.candidates.getCandidateProfile, { clerkOrgId })
+      })
+
+    expect(result).toMatchObject({ clerkUserId: 'user_hired', status: 'hired' })
+  })
+
+  it('listCandidateTasks allows org:caregiver callers', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_hired_cg_tasks'
+
+    await t.run(async (ctx) => {
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId,
+        name: 'Hired Agency',
+        slug: 'hired-agency',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: 'user_hired',
+        role: 'org:caregiver',
+        displayName: 'Hired',
+        email: 'hired@example.com',
+      })
+      const candidateId = await ctx.db.insert('candidates', {
+        tenantId,
+        clerkUserId: 'user_hired',
+        displayName: 'Hired',
+        email: 'hired@example.com',
+        status: 'hired',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
+        type: 'platform_training',
+        order: 1,
+        status: 'complete',
+        dueAt: new Date().toISOString(),
+      })
+    })
+
+    const tasks = await t
+      .withIdentity({
+        subject: 'user_hired',
+        org_id: clerkOrgId,
+        org_role: 'org:caregiver',
+      })
+      .run(async (ctx) => {
+        return ctx.runQuery(api.candidates.listCandidateTasks, { clerkOrgId })
+      })
+
+    expect(tasks).toHaveLength(1)
   })
 })

@@ -1,11 +1,12 @@
 import { useOrganization } from '@clerk/react'
 import { useQuery } from 'convex/react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { candidateStatusPill } from '@/features/hr/lib/candidateStatus'
+import { ChangePasswordSection } from '../components/ChangePasswordSection'
 
 function initials(name: string) {
   return name
@@ -18,10 +19,14 @@ function initials(name: string) {
 
 export function CandidateProfilePage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { organization, isLoaded } = useOrganization()
   const clerkOrgId = organization?.id
   const candidate = useQuery(api.candidates.getCandidateProfile, clerkOrgId ? { clerkOrgId } : 'skip')
   const application = useQuery(api.candidates.getMyApplication, clerkOrgId ? { clerkOrgId } : 'skip')
+
+  const forcePasswordChange =
+    searchParams.get('forcePasswordChange') === 'true' || candidate?.requiresPasswordChange === true
 
   if (!isLoaded || !clerkOrgId) return null
 
@@ -97,6 +102,21 @@ export function CandidateProfilePage() {
           >
             Back to checklist {String.fromCharCode(8594)}
           </Button>
+
+          <div className="mt-8 border-t border-atria-border pt-6">
+            <h2 className="mb-4 text-lg font-semibold text-atria-ink">Security</h2>
+            <ChangePasswordSection
+              onSuccess={() => {
+                if (searchParams.get('forcePasswordChange')) {
+                  const next = new URLSearchParams(searchParams)
+                  next.delete('forcePasswordChange')
+                  setSearchParams(next, { replace: true })
+                }
+                navigate('/onboarding/checklist', { replace: true })
+              }}
+              forced={forcePasswordChange}
+            />
+          </div>
         </CardContent>
       </Card>
     </div>

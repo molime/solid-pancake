@@ -63,6 +63,12 @@ vi.mock('@/features/scheduling/pages/CaregiverSchedulePage', () => ({
   ),
 }))
 
+vi.mock('@/features/caregiver/pages/CaregiverTodayPage', () => ({
+  CaregiverTodayPage: () => (
+    <div data-testid='caregiver-today-page'>CaregiverTodayPage</div>
+  ),
+}))
+
 vi.mock('@/features/scheduling/pages/AvailabilityPage', () => ({
   AvailabilityPage: () => (
     <div data-testid="availability-page">AvailabilityPage</div>
@@ -142,7 +148,47 @@ function mockSignedInWithRole(role: string) {
       )
       if (name === 'members:me') return { role }
       if (name === 'members:checkMembership') return true
+      if (name === 'platformTrainingCompletions:listMyCompletions') {
+        return role === 'org:caregiver' || role === 'org:candidate'
+          ? [{ trainingId: 'platform_training', status: 'complete' }]
+          : []
+      }
       if (name === 'onboarding:hasPlatformTrainingCompleted') return role === 'org:caregiver' || role === 'org:candidate'
+      return undefined
+    }) as unknown as typeof useQuery,
+  )
+}
+
+function mockSignedInWithRoleAndTraining(role: string, trainingComplete: boolean) {
+  vi.mocked(useAuth).mockReturnValue({
+    isLoaded: true,
+    isSignedIn: true,
+  } as unknown as ReturnType<typeof useAuth>)
+
+  vi.mocked(useOrganization).mockReturnValue({
+    isLoaded: true,
+    organization: { id: 'org_123', name: 'Agency' },
+  } as unknown as ReturnType<typeof useOrganization>)
+
+  vi.mocked(useUser).mockReturnValue({
+    isLoaded: true,
+    user: { id: 'user_123', firstName: 'Test' },
+  } as unknown as ReturnType<typeof useUser>)
+
+  vi.mocked(useQuery).mockImplementation(
+    ((queryRef: unknown) => {
+      const name = getFunctionName(
+        queryRef as Parameters<typeof getFunctionName>[0],
+      )
+      if (name === 'members:me') return { role }
+      if (name === 'members:checkMembership') return true
+      if (name === 'platformTrainingCompletions:listMyCompletions') {
+        if (role !== 'org:caregiver' && role !== 'org:candidate') return []
+        return trainingComplete
+          ? [{ trainingId: 'platform_training', status: 'completed' }]
+          : []
+      }
+      if (name === 'onboarding:hasPlatformTrainingCompleted') return trainingComplete
       return undefined
     }) as unknown as typeof useQuery,
   )
@@ -201,6 +247,28 @@ describe('AppRouter scheduling routes', () => {
     await waitFor(() => {
       expect(
         screen.queryByTestId('scheduling-page'),
+      ).not.toBeInTheDocument()
+    })
+  })
+
+  it('allows caregiver to /caregiver/today when training is complete (legacy completed status)', async () => {
+    mockSignedInWithRoleAndTraining('org:caregiver', true)
+
+    render(<TestRouter initialEntries={['/caregiver/today']} />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('caregiver-today-page')).toBeInTheDocument()
+    })
+  })
+
+  it('redirects caregiver from /caregiver/today to training when incomplete', async () => {
+    mockSignedInWithRoleAndTraining('org:caregiver', false)
+
+    render(<TestRouter initialEntries={['/caregiver/today']} />)
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId('caregiver-today-page'),
       ).not.toBeInTheDocument()
     })
   })

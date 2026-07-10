@@ -18,9 +18,9 @@ import {
 } from './authHelpers'
 import { sendClerkInvitation, isAllowListError } from './invitations'
 import {
-  isDevInvitationBypassEnabled,
   createClerkUserAndJoinOrg,
   generateClerkSignInTicket,
+  updateClerkUserPassword,
 } from './_utils/invitationBypass'
 import { normalizeEmail } from './adpSync'
 import { requireEnv } from './_utils/env'
@@ -193,6 +193,7 @@ export const getCandidateProfile = query({
   handler: async (ctx, { clerkOrgId }) => {
     const { tenantId, identity } = await requireTenantRole(ctx, clerkOrgId, [
       'org:candidate',
+      'org:caregiver',
     ])
     return getOwnCandidate(ctx, tenantId, {
       subject: identity.subject,
@@ -206,6 +207,7 @@ export const getMyApplication = query({
   handler: async (ctx, { clerkOrgId }) => {
     const { tenantId, identity } = await requireTenantRole(ctx, clerkOrgId, [
       'org:candidate',
+      'org:caregiver',
     ])
     const candidate = await getOwnCandidate(ctx, tenantId, {
       subject: identity.subject,
@@ -287,7 +289,20 @@ export const getCandidateDetail = query({
       )
       .collect()
 
-    return { candidate, applications, tasks, documents }
+    const documentsWithFile = await Promise.all(
+      documents.map(async (doc) => {
+        const file = await ctx.db.get(doc.fileId)
+        return {
+          ...doc,
+          fileName: file?.fileName ?? undefined,
+          storageId: file?.storageId ?? undefined,
+          contentType: file?.contentType ?? undefined,
+          size: file?.size ?? undefined,
+        }
+      }),
+    )
+
+    return { candidate, applications, tasks, documents: documentsWithFile }
   },
 })
 
@@ -296,6 +311,7 @@ export const listCandidateTasks = query({
   handler: async (ctx, { clerkOrgId }) => {
     const { tenantId, identity } = await requireTenantRole(ctx, clerkOrgId, [
       'org:candidate',
+      'org:caregiver',
     ])
     const candidate = await getOwnCandidate(ctx, tenantId, {
       subject: identity.subject,
@@ -345,7 +361,7 @@ export const inviteCandidate = action({
     displayName: v.string(),
     email: v.string(),
     phone: v.optional(v.string()),
-    devBypassEnabled: v.optional(v.boolean()),
+    manualSetup: v.optional(v.boolean()),
   },
   handler: async (
     ctx,
@@ -353,8 +369,8 @@ export const inviteCandidate = action({
   ): Promise<{
     candidateId: Id<'candidates'>
     invitationId: string
-    manualPassword?: string
     magicLink?: string
+    initialPassword?: string
   }> => {
     await requireTenantRoleAction(ctx, args.clerkOrgId, [
       'org:admin',
@@ -378,6 +394,24 @@ export const inviteCandidate = action({
       }
     }
 
+    // Explicit manual setup: HR creates the Clerk account and shares the magic link.
+    if (args.manualSetup) {
+      const manual = await createManualCandidateAccount(ctx, {
+        secretKey,
+        clerkOrgId: args.clerkOrgId,
+        candidateId: result.candidateId,
+        emailAddress: args.email,
+        displayName: args.displayName,
+        appBaseUrl,
+      })
+      return {
+        candidateId: result.candidateId,
+        invitationId: manual.invitationId,
+        magicLink: manual.magicLink,
+        initialPassword: manual.initialPassword,
+      }
+    }
+
     const admin = await ctx.runQuery(api.members.firstOrgAdmin, {
       clerkOrgId: args.clerkOrgId,
     })
@@ -398,48 +432,32 @@ export const inviteCandidate = action({
         appBaseUrl,
       })
     } catch (err) {
-      if (isDevInvitationBypassEnabled({ appBaseUrl, devBypassEnabled: args.devBypassEnabled }) && isAllowListError(err)) {
+      if (isAllowListError(err)) {
         try {
-          const bypass = await createClerkUserAndJoinOrg({
+          const manual = await createManualCandidateAccount(ctx, {
             secretKey,
             clerkOrgId: args.clerkOrgId,
+            candidateId: result.candidateId,
             emailAddress: args.email,
             displayName: args.displayName,
-            role: 'org:candidate',
             appBaseUrl,
           })
-
-          await ctx.runMutation(internal.candidates.patchCandidateClerkUser, {
-            clerkOrgId: args.clerkOrgId,
-            candidateId: result.candidateId,
-            clerkUserId: bypass.clerkUserId,
-            invitationId: bypass.invitationId,
-          })
-
-          await ctx.runMutation(internal.members.createBypassMember, {
-            clerkOrgId: args.clerkOrgId,
-            clerkUserId: bypass.clerkUserId,
-            role: 'org:candidate',
-            displayName: args.displayName,
-            email: args.email,
-          })
-
           return {
             candidateId: result.candidateId,
-            invitationId: bypass.invitationId,
-            manualPassword: bypass.manualPassword,
-            magicLink: bypass.magicLink,
+            invitationId: manual.invitationId,
+            magicLink: manual.magicLink,
+            initialPassword: manual.initialPassword,
           }
-        } catch (bypassErr) {
-          const bypassMessage =
-            bypassErr instanceof Error ? bypassErr.message : 'Dev bypass failed.'
+        } catch (manualErr) {
+          const manualMessage =
+            manualErr instanceof Error ? manualErr.message : 'Manual account setup failed.'
           await ctx.runMutation(internal.candidates.patchCandidateInvitationError, {
             clerkOrgId: args.clerkOrgId,
             candidateId: result.candidateId,
-            invitationError: bypassMessage,
+            invitationError: manualMessage,
           })
           throw new ConvexError(
-            `Dev invitation bypass failed for ${args.email}: ${bypassMessage}`,
+            `Manual account setup failed for ${args.email}: ${manualMessage}`,
           )
         }
       }
@@ -471,7 +489,6 @@ export const insertInvitedCandidate = internalMutation({
     displayName: v.string(),
     email: v.string(),
     phone: v.optional(v.string()),
-    devBypassEnabled: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
@@ -605,12 +622,103 @@ export const patchCandidateInvitationError = internalMutation({
   },
 })
 
+
+async function createManualCandidateAccount(
+  ctx: ActionCtx,
+  {
+    secretKey,
+    clerkOrgId,
+    candidateId,
+    emailAddress,
+    displayName,
+    appBaseUrl,
+  }: {
+    secretKey: string
+    clerkOrgId: string
+    candidateId: Id<'candidates'>
+    emailAddress: string
+    displayName: string
+    appBaseUrl: string
+  },
+): Promise<{ clerkUserId: string; invitationId: string; magicLink: string; initialPassword: string }> {
+  const manual = await createClerkUserAndJoinOrg({
+    ctx,
+    secretKey,
+    clerkOrgId,
+    emailAddress,
+    displayName,
+    role: 'org:candidate',
+    appBaseUrl,
+  })
+
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+
+  await ctx.runMutation(internal.candidates.patchCandidateClerkUser, {
+    clerkOrgId,
+    candidateId,
+    clerkUserId: manual.clerkUserId,
+    invitationId: manual.invitationId,
+    magicLink: manual.magicLink,
+    manualSetup: true,
+    requiresPasswordChange: true,
+    manualSetupTicketExpiresAt: expiresAt,
+  })
+
+  await ctx.runMutation(internal.members.createManualMember, {
+    clerkOrgId,
+    clerkUserId: manual.clerkUserId,
+    role: 'org:candidate',
+    displayName,
+    email: emailAddress,
+  })
+
+  return manual
+}
+
 export const patchCandidateClerkUser = internalMutation({
   args: {
     clerkOrgId: v.string(),
     candidateId: v.id('candidates'),
     clerkUserId: v.string(),
     invitationId: v.string(),
+    magicLink: v.optional(v.string()),
+    manualSetup: v.optional(v.boolean()),
+    requiresPasswordChange: v.optional(v.boolean()),
+    manualSetupTicketExpiresAt: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const candidate = await ctx.db.get(args.candidateId)
+    if (!candidate) {
+      throw new ConvexError('Candidate not found.')
+    }
+
+    const tenant = await ctx.db.get(candidate.tenantId)
+    if (!tenant || tenant.clerkOrgId !== args.clerkOrgId) {
+      throw new ConvexError('Forbidden: cross-tenant access denied.')
+    }
+
+    const patch: Record<string, unknown> = {
+      clerkUserId: args.clerkUserId,
+      invitationId: args.invitationId,
+      invitationFailed: undefined,
+      invitationError: undefined,
+    }
+    if (args.magicLink !== undefined) patch.magicLink = args.magicLink
+    if (args.manualSetup !== undefined) patch.manualSetup = args.manualSetup
+    if (args.requiresPasswordChange !== undefined) patch.requiresPasswordChange = args.requiresPasswordChange
+    if (args.manualSetupTicketExpiresAt !== undefined) patch.manualSetupTicketExpiresAt = args.manualSetupTicketExpiresAt
+
+    await ctx.db.patch(args.candidateId, patch)
+    return args.candidateId
+  },
+})
+
+
+export const clearRequiresPasswordChange = internalMutation({
+  args: {
+    clerkOrgId: v.string(),
+    candidateId: v.id('candidates'),
   },
   handler: async (ctx, args) => {
     const candidate = await ctx.db.get(args.candidateId)
@@ -624,26 +732,19 @@ export const patchCandidateClerkUser = internalMutation({
     }
 
     await ctx.db.patch(args.candidateId, {
-      clerkUserId: args.clerkUserId,
-      invitationId: args.invitationId,
-      invitationFailed: undefined,
-      invitationError: undefined,
+      requiresPasswordChange: false,
     })
     return args.candidateId
   },
 })
 
-export const regenerateBypassSignInTicket = action({
+export const regenerateCandidateMagicLink = action({
   args: {
     clerkOrgId: v.string(),
     candidateId: v.id('candidates'),
   },
   handler: async (ctx, args): Promise<{ magicLink: string }> => {
     await requireTenantRoleAction(ctx, args.clerkOrgId, ['org:admin', 'org:hr'])
-
-    if (!isDevInvitationBypassEnabled()) {
-      throw new ConvexError('Dev invitation bypass is not enabled.')
-    }
 
     const detail = await ctx.runQuery(api.candidates.getCandidateDetail, {
       clerkOrgId: args.clerkOrgId,
@@ -654,8 +755,8 @@ export const regenerateBypassSignInTicket = action({
     }
 
     const candidate = detail.candidate
-    if (!candidate.clerkUserId || !candidate.invitationId?.startsWith('bypass:')) {
-      throw new ConvexError('Candidate was not created via dev bypass.')
+    if (!candidate.clerkUserId || !candidate.manualSetup) {
+      throw new ConvexError('Candidate was not created via manual account setup.')
     }
 
     const secretKey = requireEnv('CLERK_SECRET_KEY')
@@ -666,10 +767,54 @@ export const regenerateBypassSignInTicket = action({
       clerkUserId: candidate.clerkUserId,
     })
 
-    const url = new URL(appBaseUrl)
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+
+    await ctx.runMutation(internal.candidates.patchCandidateClerkUser, {
+      clerkOrgId: args.clerkOrgId,
+      candidateId: args.candidateId,
+      clerkUserId: candidate.clerkUserId,
+      invitationId: candidate.invitationId ?? `manual:${candidate.clerkUserId}`,
+      magicLink: `${new URL(appBaseUrl).origin}/sign-in?__clerk_ticket=${ticket}`,
+      manualSetup: true,
+      requiresPasswordChange: true,
+      manualSetupTicketExpiresAt: expiresAt,
+    })
+
     return {
-      magicLink: `${url.origin}/sign-in?__clerk_ticket=${ticket}`,
+      magicLink: `${new URL(appBaseUrl).origin}/sign-in?__clerk_ticket=${ticket}`,
     }
+  },
+})
+
+export const updateMyPassword = action({
+  args: {
+    clerkOrgId: v.string(),
+    newPassword: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireTenantRoleAction(ctx, args.clerkOrgId, ['org:candidate'])
+
+    const candidate = await ctx.runQuery(api.candidates.getCandidateProfile, {
+      clerkOrgId: args.clerkOrgId,
+    })
+    if (!candidate || !candidate.clerkUserId) {
+      throw new ConvexError('Candidate profile not found.')
+    }
+
+    const secretKey = requireEnv('CLERK_SECRET_KEY')
+    await updateClerkUserPassword({
+      secretKey,
+      clerkUserId: candidate.clerkUserId,
+      password: args.newPassword,
+    })
+
+    await ctx.runMutation(internal.candidates.clearRequiresPasswordChange, {
+      clerkOrgId: args.clerkOrgId,
+      candidateId: candidate._id,
+    })
+
+    return { success: true }
   },
 })
 

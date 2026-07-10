@@ -68,7 +68,7 @@ describe('DocumentUploadPage', () => {
     })
 
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/onboarding/checklist', { replace: true })
+      expect(navigateMock).toHaveBeenCalledWith('/onboarding', { replace: true })
     })
   })
 })

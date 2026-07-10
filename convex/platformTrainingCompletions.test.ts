@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { convexTest } from 'convex-test'
 import schema from './schema'
 import { api } from './_generated/api'
@@ -9,83 +9,49 @@ function createTestConvex() {
   return convexTest({ schema, modules })
 }
 
-function stubClerkMembershipUpdate() {
-  vi.stubEnv('CLERK_SECRET_KEY', '***')
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            id: 'mem_test',
-            role: 'org:member',
-            public_metadata: { atriaRole: 'org:caregiver' },
-          }),
-      }),
-    ) as unknown as typeof fetch,
-  )
-}
-
-function asCaregiver(
-  t: ReturnType<typeof createTestConvex>,
-  userId: string,
-  clerkOrgId: string,
-) {
-  return t.withIdentity({
-    subject: userId,
-    org_id: clerkOrgId,
-    org_role: 'org:caregiver',
-  })
-}
-
-async function seedTenant(
-  t: ReturnType<typeof createTestConvex>,
-  clerkOrgId: string,
-) {
-  return t.run(async (ctx) => {
-    const tenantId = await ctx.db.insert('tenants', {
-      clerkOrgId,
-      name: 'Test Agency',
-      slug: 'test-agency',
-      createdAt: new Date().toISOString(),
-    })
-    await ctx.db.insert('tenantMembers', {
-      tenantId,
-      clerkUserId: 'cg_123',
-      role: 'org:caregiver',
-      displayName: 'Caregiver',
-      email: 'cg@example.com',
-    })
-    return tenantId
-  })
-}
-
-describe('platformTrainingCompletions', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs()
-    vi.unstubAllGlobals()
-  })
-
-  it('allows caregivers to complete training and list their completions', async () => {
-    stubClerkMembershipUpdate()
+describe('platformTrainingCompletions.completeForCandidate', () => {
+  it('is idempotent and does not create duplicate rows', async () => {
     const t = createTestConvex()
-    const clerkOrgId = 'org_test'
-    await seedTenant(t, clerkOrgId)
-    const asCg = asCaregiver(t, 'cg_123', clerkOrgId)
+    const clerkOrgId = 'org_training_idempotent'
 
-    const result = await asCg.mutation(api.platformTrainingCompletions.completeForCandidate, {
-      clerkOrgId,
-      trainingId: 'welcome',
-      completedAt: new Date().toISOString(),
-      status: 'complete',
+    await t.run(async (ctx) => {
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId,
+        name: 'Training Agency',
+        slug: 'training-agency',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: 'user_cg',
+        role: 'org:caregiver',
+        displayName: 'Caregiver',
+        email: 'cg@example.com',
+      })
     })
-    expect(result).toBeDefined()
 
-    const completions = await asCg.query(api.platformTrainingCompletions.listMyCompletions, {
-      clerkOrgId,
-    })
-    expect(completions).toHaveLength(1)
-    expect(completions[0].trainingId).toBe('welcome')
+    const run = () =>
+      t
+        .withIdentity({
+          subject: 'user_cg',
+          org_id: clerkOrgId,
+          org_role: 'org:caregiver',
+        })
+        .run(async (ctx) => {
+          return ctx.runMutation(api.platformTrainingCompletions.completeForCandidate, {
+            clerkOrgId,
+            trainingId: 'platform_training',
+            completedAt: new Date().toISOString(),
+            status: 'complete',
+          })
+        })
+
+    const id1 = await run()
+    const id2 = await run()
+    expect(id1).toBe(id2)
+
+    const all = await t.run(async (ctx) => ctx.db.query('platformTrainingCompletions').collect())
+    const userRows = all.filter((r) => r.clerkUserId === 'user_cg' && r.trainingId === 'platform_training')
+    expect(userRows).toHaveLength(1)
   })
 })
