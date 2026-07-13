@@ -11,6 +11,15 @@ dist-ssr/
 !.env.example
 !.env.e2e.example
 
+# QA temp secrets and local debug scripts
+.hrqa-password.tmp
+scripts/createHrUser.mjs
+scripts/debugClerkUsers.mjs
+scripts/debugMfaDelete.mjs
+scripts/debugMfaEndpoint.mjs
+scripts/listOrgs.mjs
+scripts/set-convex-env-preview.cjs
+
 # Local documentation and planning notes
 docs/
 

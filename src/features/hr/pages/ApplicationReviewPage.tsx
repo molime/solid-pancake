@@ -10,7 +10,7 @@ import { Input } from '@/shared/ui/Input'
 import { HrToast } from '../components/HrToast'
 import { useHrToast } from '../hooks/useHrToast'
 import { candidateStatusPill, candidateStatusAccentClass } from '../lib/candidateStatus'
-import { formatWeekdayDate } from '@/shared/format'
+import { formatWeekdayDate, formatDocumentCategoryLabel } from '@/shared/format'
 import { ArrowLeft, CheckCircle2, Download, RotateCcw, XCircle } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
@@ -175,27 +175,6 @@ export function ApplicationReviewPage() {
 
   const pill = candidateStatusPill(candidate.status)
 
-  const handleApprove = async () => {
-    if (!clerkOrgId || !candidateId) return
-    setSubmitting(true)
-    try {
-      await reviewApplication({
-        clerkOrgId,
-        candidateId: candidateId as Id<'candidates'>,
-        decision: 'approved',
-      })
-      show('success', 'Application approved', 'You can now send an offer.')
-    } catch (err) {
-      show(
-        'danger',
-        'Approval failed',
-        err instanceof Error ? err.message : 'Unknown error.',
-      )
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   const handleAdvance = async () => {
     if (!clerkOrgId || !candidateId) return
     setSubmitting(true)
@@ -214,6 +193,36 @@ export function ApplicationReviewPage() {
       show(
         'danger',
         'Could not advance candidate',
+        err instanceof Error ? err.message : 'Unknown error.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleApproveAndSendOffer = async () => {
+    if (!clerkOrgId || !candidateId) return
+    setSubmitting(true)
+    try {
+      await reviewApplication({
+        clerkOrgId,
+        candidateId: candidateId as Id<'candidates'>,
+        decision: 'approved',
+      })
+      await sendOffer({
+        clerkOrgId,
+        candidateId: candidateId as Id<'candidates'>,
+        payRate,
+        startDate,
+        schedule,
+        supervisor,
+        expiresAt,
+      })
+      show('success', 'Approved and offer sent', 'The candidate can now accept the offer.')
+    } catch (err) {
+      show(
+        'danger',
+        'Could not approve and send offer',
         err instanceof Error ? err.message : 'Unknown error.',
       )
     } finally {
@@ -348,7 +357,7 @@ export function ApplicationReviewPage() {
                     >
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-atria-ink">
-                          {doc.category}
+                          {formatDocumentCategoryLabel(doc.category)}
                         </p>
                         {(doc.fileName || doc.expiresAt) && (
                           <p className="truncate text-xs text-atria-text-secondary">
@@ -379,7 +388,7 @@ export function ApplicationReviewPage() {
                         <DownloadButton
                           clerkOrgId={clerkOrgId!}
                           storageId={doc.storageId}
-                          fileName={doc.fileName ?? `${doc.category}.pdf`}
+                          fileName={doc.fileName ?? `${formatDocumentCategoryLabel(doc.category)}.pdf`}
                         />
                       </div>
                     </div>
@@ -462,12 +471,12 @@ export function ApplicationReviewPage() {
                 variant="primary"
                 size="lg"
                 className="w-full"
-                data-testid="approve-button"
+                data-testid="approve-and-send-offer-button"
                 disabled={submitting || !allTasksComplete}
-                onClick={handleApprove}
+                onClick={handleApproveAndSendOffer}
               >
                 <CheckCircle2 className="h-4 w-4" />
-                Approve application
+                Approve application & send offer
               </Button>
             )}
 

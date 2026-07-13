@@ -13,6 +13,16 @@ import { Button } from '@/shared/ui/Button'
 import { Input } from '@/shared/ui/Input'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+}
+
+function isValidPhone(value: string): boolean {
+  if (!value.trim()) return true
+  const digits = value.replace(/\D/g, '')
+  return digits.length >= 10
+}
+
 export function InviteCandidateModal({
   open,
   onClose,
@@ -31,6 +41,11 @@ export function InviteCandidateModal({
   const [phone, setPhone] = useState('')
   const [manualSetup, setManualSetup] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [touched, setTouched] = useState({
+    displayName: false,
+    email: false,
+    phone: false,
+  })
   const [error, setError] = useState<string | null>(null)
   const [manualResult, setManualResult] = useState<{
     magicLink: string
@@ -44,6 +59,7 @@ export function InviteCandidateModal({
     setEmail('')
     setPhone('')
     setManualSetup(false)
+    setTouched({ displayName: false, email: false, phone: false })
     setError(null)
     setManualResult(null)
     setCopiedLink(false)
@@ -81,7 +97,13 @@ export function InviteCandidateModal({
     if (!clerkOrgId) return
     const trimmedName = displayName.trim()
     const trimmedEmail = email.trim()
-    if (!trimmedName || !trimmedEmail) return
+    const trimmedPhone = phone.trim()
+
+    setTouched({ displayName: true, email: true, phone: true })
+
+    if (!trimmedName || !trimmedEmail || !isValidEmail(trimmedEmail) || !isValidPhone(trimmedPhone)) {
+      return
+    }
 
     setSubmitting(true)
     setError(null)
@@ -172,32 +194,59 @@ export function InviteCandidateModal({
         )}
         {!manualResult && (
           <>
-            <FieldGroup label="Full name" required htmlFor="candidate-name">
+            <FieldGroup
+              label="Full name"
+              required
+              htmlFor="candidate-name"
+              error={touched.displayName && !displayName.trim() ? 'Name is required.' : undefined}
+            >
               <Input
                 id="candidate-name"
                 data-testid="candidate-name-input"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
+                onBlur={() => setTouched((t) => ({ ...t, displayName: true }))}
                 placeholder="Sofia Herrera"
               />
             </FieldGroup>
-            <FieldGroup label="Email" required htmlFor="candidate-email">
+            <FieldGroup
+              label="Email"
+              required
+              htmlFor="candidate-email"
+              error={
+                touched.email && !email.trim()
+                  ? 'Email is required.'
+                  : touched.email && !isValidEmail(email.trim())
+                    ? 'Please enter a valid email address.'
+                    : undefined
+              }
+            >
               <Input
                 id="candidate-email"
                 data-testid="candidate-email-input"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => setTouched((t) => ({ ...t, email: true }))}
                 placeholder="sofia@example.com"
               />
             </FieldGroup>
-            <FieldGroup label="Phone" htmlFor="candidate-phone">
+            <FieldGroup
+              label="Phone"
+              htmlFor="candidate-phone"
+              error={
+                touched.phone && !isValidPhone(phone)
+                  ? 'Please enter a valid phone number with at least 10 digits.'
+                  : undefined
+              }
+            >
               <Input
                 id="candidate-phone"
                 data-testid="candidate-phone-input"
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
+                onBlur={() => setTouched((t) => ({ ...t, phone: true }))}
                 placeholder="+1 (555) 000-0000"
               />
             </FieldGroup>
@@ -222,7 +271,13 @@ export function InviteCandidateModal({
             variant="primary"
             size="sm"
             data-testid="send-invitation-button"
-            disabled={submitting || !displayName.trim() || !email.trim()}
+            disabled={
+              submitting ||
+              !displayName.trim() ||
+              !email.trim() ||
+              !isValidEmail(email.trim()) ||
+              !isValidPhone(phone.trim())
+            }
             onClick={handleSubmit}
           >
             {submitting ? 'Sending…' : manualSetup ? 'Create account' : 'Send invitation'}
