@@ -17,6 +17,17 @@ export function formatStatusLabel(value: string): string {
     .join(' ')
 }
 
+export function formatDocumentCategoryLabel(category: string): string {
+  const labels: Record<string, string> = {
+    photo_id: 'Photo identification',
+    cpr_certificate: 'CPR certificate',
+    background_check: 'Background check',
+    employment_agreement: 'Employment agreement',
+    form_submission: 'Application form',
+  }
+  return labels[category] ?? formatStatusLabel(category)
+}
+
 export function formatTimeRange(scheduledStart: string, scheduledEnd: string): string {
   const start = scheduledStart.slice(11, 16)
   const end = scheduledEnd.slice(11, 16)
