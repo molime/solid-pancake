@@ -17,6 +17,14 @@ vi.mock('@clerk/react', () => ({
   useOrganization: () => ({ organization: { id: 'org_123' }, isLoaded: true }),
 }))
 
+vi.mock('@/app/useTenant', () => ({
+  useTenant: () => ({
+    clerkOrgId: 'org_123',
+    tenantName: 'Test Agency',
+    isLoading: false,
+  }),
+}))
+
 vi.mock('convex/react', () => ({
   useQuery: () => ({
     candidate: { status: 'applied', displayName: 'Jane Doe' },

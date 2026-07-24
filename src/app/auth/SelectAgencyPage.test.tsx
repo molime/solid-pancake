@@ -9,6 +9,10 @@ const mocks = {
   navigate: vi.fn(),
 }
 
+// Controls what the mocked useQuery(api.candidates.getMyTenant) returns.
+// undefined = loading, [] = no tenantMembers record, array = resolved tenants.
+let dbTenantResult: unknown = undefined
+
 vi.mock('@clerk/react', async () => {
   const actual = await vi.importActual<typeof import('@clerk/react')>(
     '@clerk/react',
@@ -31,6 +35,7 @@ vi.mock('convex/react', async () => {
     ...actual,
     useConvexAuth: vi.fn(),
     useMutation: vi.fn(() => mocks.ensureAgency),
+    useQuery: vi.fn(() => dbTenantResult),
   }
 })
 
@@ -100,6 +105,8 @@ function mockConvexAuth(auth: { isLoading: boolean; isAuthenticated: boolean }) 
 describe('SelectAgencyPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    dbTenantResult = undefined
+    window.localStorage.clear()
   })
 
   it('shows ATRIA role from publicMetadata when Clerk role is generic org:member', async () => {
@@ -370,6 +377,7 @@ describe('SelectAgencyPage', () => {
   })
 
   it('shows a helpful empty state when the user has no agency memberships', async () => {
+    dbTenantResult = []
     mockClerkState({
       orgs: [],
       activeOrgId: null,
@@ -381,5 +389,90 @@ describe('SelectAgencyPage', () => {
     expect(screen.getByText(/You don't belong to any agency yet/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Sign out/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Create New Agency/i })).not.toBeInTheDocument()
+  })
+
+  it('redirects caregivers with no Clerk org membership straight into the app', async () => {
+    dbTenantResult = [
+      {
+        clerkOrgId: 'org_123',
+        tenantName: 'Test Agency',
+        role: 'org:caregiver',
+      },
+    ]
+    mockClerkState({
+      orgs: [],
+      activeOrgId: null,
+      user: { fullName: 'Cara', primaryEmailAddress: { emailAddress: 'c@x.com' } },
+    })
+    mockConvexAuth({ isLoading: false, isAuthenticated: true })
+
+    render(<SelectAgencyPage />)
+
+    await waitFor(() => {
+      expect(mocks.navigate).toHaveBeenCalledWith('/', { replace: true })
+    })
+    // Never shows the "no agency" empty state or an org bootstrap.
+    expect(
+      screen.queryByText(/You don't belong to any agency yet/i),
+    ).not.toBeInTheDocument()
+    expect(mocks.ensureAgency).not.toHaveBeenCalled()
+    // The single tenant is persisted so useTenant resolves it in the app.
+    expect(window.localStorage.getItem('atria.selectedClerkOrgId')).toBe(
+      'org_123',
+    )
+  })
+
+  it('lets a caregiver with multiple tenant memberships pick their agency', async () => {
+    dbTenantResult = [
+      {
+        clerkOrgId: 'org_home_a',
+        tenantName: 'Agency A',
+        role: 'org:caregiver',
+      },
+      {
+        clerkOrgId: 'org_home_b',
+        tenantName: 'Agency B',
+        role: 'org:caregiver',
+      },
+    ]
+    mockClerkState({
+      orgs: [],
+      activeOrgId: null,
+      user: { fullName: 'Cara', primaryEmailAddress: { emailAddress: 'c@x.com' } },
+    })
+    mockConvexAuth({ isLoading: false, isAuthenticated: true })
+
+    render(<SelectAgencyPage />)
+
+    // No auto-redirect: the user must choose between their agencies.
+    expect(screen.getByText('Agency A')).toBeInTheDocument()
+    expect(screen.getByText('Agency B')).toBeInTheDocument()
+    expect(mocks.navigate).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByText('Agency B'))
+
+    expect(window.localStorage.getItem('atria.selectedClerkOrgId')).toBe(
+      'org_home_b',
+    )
+    expect(mocks.navigate).toHaveBeenCalledWith('/', { replace: true })
+    expect(mocks.ensureAgency).not.toHaveBeenCalled()
+  })
+
+  it('waits for the tenantMembers resolution instead of flashing the empty state', () => {
+    dbTenantResult = undefined
+    mockClerkState({
+      orgs: [],
+      activeOrgId: null,
+      user: { fullName: 'Cara', primaryEmailAddress: { emailAddress: 'c@x.com' } },
+    })
+    mockConvexAuth({ isLoading: false, isAuthenticated: true })
+
+    render(<SelectAgencyPage />)
+    expect(
+      screen.getByText(/Opening your agency workspace/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(/You don't belong to any agency yet/i),
+    ).not.toBeInTheDocument()
   })
 })

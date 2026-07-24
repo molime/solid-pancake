@@ -211,6 +211,7 @@ export const createCaregiver = action({
         emailAddress: args.email,
         role: 'org:caregiver',
         appBaseUrl: args.appBaseUrl,
+        allowedEmailDomains: tenant.allowedEmailDomains,
       })
     } catch (err) {
       // Avoid leaving an orphaned employee profile / queued ADP worker for a

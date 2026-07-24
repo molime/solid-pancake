@@ -138,6 +138,10 @@ async function waitForWorkspaceReady(page: Page) {
     state: 'detached',
     timeout: 20000,
   }).catch(() => {})
+  await page.getByText('Opening your agency workspace').waitFor({
+    state: 'detached',
+    timeout: 20000,
+  }).catch(() => {})
   await page.getByText('Preparing workspace').waitFor({
     state: 'detached',
     timeout: 20000,
@@ -160,6 +164,30 @@ async function selectOrgIfAsked(page: Page, orgId: string, role?: string) {
   // same org see one card per role, so select the card matching the requested
   // role (or the first one when no role is supplied).
   if (!page.url().includes('/select-agency')) return
+
+  // No-org users (caregivers/candidates) sit on the "Opening your agency
+  // workspace" loader while SelectAgencyPage resolves their tenants from
+  // tenantMembers via getMyTenant. A single resolved tenant auto-redirects,
+  // so wait for the loader to detach before looking for picker cards.
+  await page
+    .getByText('Opening your agency workspace')
+    .waitFor({ state: 'detached', timeout: 30000 })
+    .catch(() => {})
+  if (!page.url().includes('/select-agency')) return
+
+  // Multi-tenant no-org case: DB-resolved tenant cards carry "Role:" text
+  // with a tenant name other than the org-member fixture agency. Click the
+  // first one — a single tenant would have auto-redirected above.
+  const dbTenantButton = page
+    .locator('button', { hasText: /Role:/ })
+    .filter({ hasNotText: "Diego's Agency" })
+    .first()
+  if (await dbTenantButton.isVisible().catch(() => false)) {
+    await dbTenantButton.click()
+    await page.waitForLoadState('networkidle')
+    await expect(page).not.toHaveURL(/select-agency/, { timeout: 30000 })
+    return
+  }
 
   const expectedLabel = roleLabel(role)
   const agencyButton = expectedLabel

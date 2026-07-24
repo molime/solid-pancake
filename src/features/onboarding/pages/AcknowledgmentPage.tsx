@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
@@ -25,8 +25,7 @@ const POLICY_SECTIONS = [
 
 export function AcknowledgmentPage() {
   const navigate = useNavigate()
-  const { organization, isLoaded } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId, isLoading } = useTenant()
   const acknowledge = useMutation(api.candidates.acknowledgeBackgroundCheck)
   const bgCheck = useQuery(
     api.backgroundChecks.getBackgroundCheck,
@@ -51,7 +50,7 @@ export function AcknowledgmentPage() {
     return () => el.removeEventListener('scroll', onScroll)
   }, [])
 
-  if (!isLoaded || !clerkOrgId) return null
+  if (isLoading || !clerkOrgId) return null
 
   const handleSubmit = async () => {
     setIsSubmitting(true)

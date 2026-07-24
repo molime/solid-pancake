@@ -62,16 +62,22 @@ function mockClerkState(options: {
   } as unknown as ReturnType<typeof useOrganization>)
 }
 
+// useTenant issues useQuery(api.candidates.getMyTenant, 'skip') when a Clerk
+// org is active — the mock must honor the 'skip' argument and return
+// undefined for skipped queries, like the real hook does.
+function mockUseQueryResult(result: unknown) {
+  vi.mocked(useQuery).mockImplementation(((
+    _query: unknown,
+    args: unknown,
+  ) => (args === 'skip' ? undefined : result)) as unknown as typeof useQuery)
+}
+
 function mockMembership(result: boolean | undefined | null) {
-  vi.mocked(useQuery).mockReturnValue(
-    result as unknown as ReturnType<typeof useQuery>,
-  )
+  mockUseQueryResult(result)
 }
 
 function mockMember(result: { role: string } | undefined | null) {
-  vi.mocked(useQuery).mockReturnValue(
-    result as unknown as ReturnType<typeof useQuery>,
-  )
+  mockUseQueryResult(result)
 }
 
 describe('TenantRouteGuard', () => {

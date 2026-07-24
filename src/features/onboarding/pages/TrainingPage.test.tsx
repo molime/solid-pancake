@@ -17,6 +17,14 @@ vi.mock('@clerk/react', () => ({
   useOrganization: () => ({ organization: { id: 'org_123' }, isLoaded: true }),
 }))
 
+vi.mock('@/app/useTenant', () => ({
+  useTenant: () => ({
+    clerkOrgId: 'org_123',
+    tenantName: 'Test Agency',
+    isLoading: false,
+  }),
+}))
+
 // Match the new default training step IDs (8 steps from handbook)
 const completions = [
   { trainingId: 'welcome', status: 'complete' },

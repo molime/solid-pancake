@@ -31,6 +31,9 @@ export default defineSchema({
     name: v.string(),
     slug: v.string(),
     ein: v.optional(v.string()),
+    // Optional per-tenant email domain allowlist for invitations. When
+    // undefined or empty, all domains are allowed (open enrollment).
+    allowedEmailDomains: v.optional(v.array(v.string())),
     billingSettings: v.optional(
       v.object({
         defaultRate: v.number(),

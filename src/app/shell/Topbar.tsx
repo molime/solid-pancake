@@ -1,9 +1,10 @@
-import { useOrganization, useUser, useClerk } from '@clerk/react'
+import { useUser, useClerk } from '@clerk/react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { cn } from '@/shared/lib/cn'
 import { Menu, LogOut, Building2 } from 'lucide-react'
+import { useTenant } from '@/app/useTenant'
 
 function breadcrumbFromPath(path: string): string {
   if (path === '/') return 'Dashboard'
@@ -14,14 +15,14 @@ function breadcrumbFromPath(path: string): string {
 }
 
 export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
-  const { organization } = useOrganization()
+  const { clerkOrgId, tenantName } = useTenant()
   const { user } = useUser()
   const { signOut } = useClerk()
   const navigate = useNavigate()
   const location = useLocation()
   const member = useQuery(
     api.members.me,
-    organization?.id ? { clerkOrgId: organization.id } : 'skip',
+    clerkOrgId ? { clerkOrgId } : 'skip',
   )
   const role = member?.role ?? 'org:caregiver'
 
@@ -46,7 +47,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           className="flex items-center gap-2 px-3 py-1.5 text-sm border border-atria-border rounded-md hover:bg-atria-bg transition-colors text-atria-ink"
         >
           <Building2 className="h-4 w-4 text-atria-muted" />
-          <span className="max-w-[160px] truncate">{organization?.name ?? 'Select agency'}</span>
+          <span className="max-w-[160px] truncate">{tenantName ?? 'Select agency'}</span>
         </button>
         <span
           className={cn(

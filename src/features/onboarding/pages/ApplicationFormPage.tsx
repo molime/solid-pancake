@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useOrganization, useUser } from '@clerk/react'
+import { useUser } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
@@ -269,9 +270,8 @@ function ReviewSection({ data }: { data: ApplicationFormData }) {
 
 export function ApplicationFormPage() {
   const navigate = useNavigate()
-  const { organization, isLoaded: orgLoaded } = useOrganization()
+  const { clerkOrgId, tenantName, isLoading } = useTenant()
   const { user, isLoaded: userLoaded } = useUser()
-  const clerkOrgId = organization?.id
   const candidate = useQuery(
     api.candidates.getCandidateProfile,
     clerkOrgId ? { clerkOrgId } : 'skip',
@@ -331,7 +331,7 @@ export function ApplicationFormPage() {
   // correction), fall back to the last submitted application so every section
   // — including the criminal record — stays editable with its previous data.
   useEffect(() => {
-    if (!orgLoaded || !userLoaded || candidate === undefined || draft === undefined) return
+    if (isLoading || !userLoaded || candidate === undefined || draft === undefined) return
     if (myApplication === undefined || branches === undefined) return
     if (hasInitialized) return
 
@@ -340,7 +340,7 @@ export function ApplicationFormPage() {
     )
     const email = candidate?.email || user?.primaryEmailAddress?.emailAddress || ''
     const phone = candidate?.phone || ''
-    const agencyName = organization?.name || ''
+    const agencyName = tenantName || ''
 
     const base = createDefaultApplicationFormData({
       firstName,
@@ -374,7 +374,7 @@ export function ApplicationFormPage() {
       branchType: branchType || merged.branchType,
     })
     setHasInitialized(true)
-  }, [orgLoaded, userLoaded, candidate, draft, myApplication, branches, branchType, user, organization, hasInitialized])
+  }, [isLoading, userLoaded, candidate, draft, myApplication, branches, branchType, user, tenantName, hasInitialized])
 
   // Auto-save draft on changes (debounced)
   useEffect(() => {
@@ -386,7 +386,7 @@ export function ApplicationFormPage() {
     return () => clearTimeout(timeout)
   }, [data, clerkOrgId, hasInitialized, saveDraft])
 
-  if (!orgLoaded || !userLoaded || !clerkOrgId) return null
+  if (isLoading || !userLoaded || !clerkOrgId) return null
 
   const handleContinue = () => {
     setShowErrors(true)
@@ -767,7 +767,7 @@ export function ApplicationFormPage() {
             <AcknowledgmentsSection
               value={data.acknowledgments}
               onChange={(acknowledgments) => setData((prev) => ({ ...prev, acknowledgments }))}
-              agencyName={data.agencyName || organization?.name || 'Your agency'}
+              agencyName={data.agencyName || tenantName || 'Your agency'}
               branchType={branchType}
               showErrors={showErrors}
             />

@@ -212,3 +212,99 @@ describe('members.listManagers', () => {
     expect(managers).toHaveLength(3)
   })
 })
+
+describe('members.checkMembership without Clerk org membership', () => {
+  async function seedTenantWithMember(
+    t: ReturnType<typeof createTestConvex>,
+    clerkOrgId: string,
+    clerkUserId: string,
+    role: 'org:admin' | 'org:caregiver',
+  ) {
+    return t.run(async (ctx) => {
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId,
+        name: 'Check Membership Agency',
+        slug: `slug-${clerkOrgId}`,
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId,
+        role,
+        displayName: 'Member',
+        email: 'member@example.com',
+      })
+      return tenantId
+    })
+  }
+
+  it('returns true for a caregiver with no org_id but a tenantMembers record', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_check_no_org'
+    const caregiverId = 'user_cg_check_no_org'
+    await seedTenantWithMember(t, clerkOrgId, caregiverId, 'org:caregiver')
+
+    const result = await t
+      .withIdentity({ subject: caregiverId })
+      .query(api.members.checkMembership, { clerkOrgId })
+
+    expect(result).toBe(true)
+  })
+
+  it('returns false with no org_id when clerkOrgId does not match the member record', async () => {
+    const t = createTestConvex()
+    const caregiverId = 'user_cg_check_cross'
+    await seedTenantWithMember(t, 'org_check_home', caregiverId, 'org:caregiver')
+    await seedTenantWithMember(t, 'org_check_other', 'user_check_admin', 'org:admin')
+
+    const result = await t
+      .withIdentity({ subject: caregiverId })
+      .query(api.members.checkMembership, { clerkOrgId: 'org_check_other' })
+
+    expect(result).toBe(false)
+  })
+
+  it('returns true for the matching tenant when the user belongs to multiple tenants', async () => {
+    const t = createTestConvex()
+    const caregiverId = 'user_cg_check_multi'
+    await seedTenantWithMember(t, 'org_check_multi_a', caregiverId, 'org:caregiver')
+    await seedTenantWithMember(t, 'org_check_multi_b', caregiverId, 'org:caregiver')
+
+    // The second tenant must match even if the by_clerk_user_id index would
+    // return the first membership record.
+    const result = await t
+      .withIdentity({ subject: caregiverId })
+      .query(api.members.checkMembership, { clerkOrgId: 'org_check_multi_b' })
+
+    expect(result).toBe(true)
+  })
+
+  it('returns false with no org_id and no tenantMembers record', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_check_stranger'
+    await seedTenantWithMember(t, clerkOrgId, 'user_check_admin2', 'org:admin')
+
+    const result = await t
+      .withIdentity({ subject: 'user_check_stranger' })
+      .query(api.members.checkMembership, { clerkOrgId })
+
+    expect(result).toBe(false)
+  })
+
+  it('keeps org-based behavior unchanged when org_id is present', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_check_with_org'
+    const adminId = 'user_check_with_org'
+    await seedTenantWithMember(t, clerkOrgId, adminId, 'org:admin')
+
+    const matching = await t
+      .withIdentity({ subject: adminId, org_id: clerkOrgId, org_role: 'org:admin' })
+      .query(api.members.checkMembership, { clerkOrgId })
+    expect(matching).toBe(true)
+
+    const mismatched = await t
+      .withIdentity({ subject: adminId, org_id: 'org_check_elsewhere', org_role: 'org:admin' })
+      .query(api.members.checkMembership, { clerkOrgId })
+    expect(mismatched).toBe(false)
+  })
+})

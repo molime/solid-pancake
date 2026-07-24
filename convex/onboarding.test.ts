@@ -650,7 +650,7 @@ describe('candidate-to-caregiver lifecycle', () => {
     expect(candidate?.status).toBe('accepted')
   })
 
-  it('hireCandidate creates employeeProfile with adpSyncStatus pending_credentials and schedules ADP/Clerk updates', async () => {
+  it('hireCandidate creates employeeProfile with adpSyncStatus pending_credentials without adding the caregiver to the Clerk org', async () => {
     stubClerkMembershipUpdate()
     const t = createTestConvex()
     const clerkOrgId = 'org_lifecycle_hire'
@@ -740,15 +740,43 @@ describe('candidate-to-caregiver lifecycle', () => {
     expect(profile?.adpSyncStatus).toBe('pending_credentials')
     expect(profile?.email).toBe('hire@example.com')
 
+    // Caregivers are NOT added to the Clerk org on hire (Clerk Standard plan
+    // 20-member limit); the tenantMembers role flip authorizes them instead.
+    // Candidates who still hold an org membership (invited before the no-org
+    // flow) are removed from the Clerk org so their JWT carries no org claim.
     const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
-    const membershipCall = calls.find(
+    const membershipCalls = calls.filter(
       (call: unknown[]) =>
         typeof call[0] === 'string' &&
         call[0].includes(
           `/organizations/${clerkOrgId}/memberships/${candidateUserId}`,
         ),
     )
-    expect(membershipCall).toBeDefined()
+    const patchCall = membershipCalls.find(
+      (call: unknown[]) =>
+        (call[1] as { method?: string } | undefined)?.method === 'PATCH',
+    )
+    expect(patchCall).toBeUndefined()
+    const deleteCall = membershipCalls.find(
+      (call: unknown[]) =>
+        (call[1] as { method?: string } | undefined)?.method === 'DELETE',
+    )
+    expect(deleteCall).toBeDefined()
+
+    const member = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      return ctx.db
+        .query('tenantMembers')
+        .withIndex('by_tenant_user', (q) =>
+          q.eq('tenantId', tenant._id).eq('clerkUserId', candidateUserId),
+        )
+        .unique()
+    })
+    expect(member?.role).toBe('org:caregiver')
     vi.useRealTimers()
   })
 

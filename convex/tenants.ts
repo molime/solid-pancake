@@ -1,5 +1,5 @@
 import { v } from 'convex/values'
-import { query, mutation } from './_generated/server'
+import { query, mutation, internalQuery } from './_generated/server'
 import { internal } from './_generated/api'
 import {
   getClerkOrganizationRole,
@@ -207,5 +207,39 @@ export const updateAgencyInfo = mutation({
     await ctx.db.patch(tenantId, {
       ...(args.ein !== undefined ? { ein: args.ein } : {}),
     })
+  },
+})
+
+export const setAllowedEmailDomains = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    domains: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+    ])
+    const normalized = [
+      ...new Set(
+        args.domains
+          .map((domain) => domain.trim().toLowerCase())
+          .filter((domain) => domain.length > 0),
+      ),
+    ]
+    await ctx.db.patch(tenantId, { allowedEmailDomains: normalized })
+    return normalized
+  },
+})
+
+// Used by server-side actions before calling the Clerk API so the domain
+// allowlist is enforced without burning a Clerk API call.
+export const getAllowedEmailDomainsInternal = internalQuery({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, { clerkOrgId }) => {
+    const tenant = await ctx.db
+      .query('tenants')
+      .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+      .unique()
+    return tenant?.allowedEmailDomains ?? null
   },
 })

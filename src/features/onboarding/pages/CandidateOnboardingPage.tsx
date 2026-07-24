@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
@@ -77,8 +77,7 @@ function getTaskRoute(task: Doc<'candidateTasks'>) {
 
 export function CandidateOnboardingPage() {
   const navigate = useNavigate()
-  const { organization, isLoaded } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId, isLoading } = useTenant()
   const tasks = useQuery(
     api.candidates.listCandidateTasks,
     clerkOrgId ? { clerkOrgId } : 'skip',
@@ -116,7 +115,7 @@ export function CandidateOnboardingPage() {
 
   const isUploadNext = nextPending ? UPLOAD_TYPES.has(nextPending.type) : false
 
-  if (!isLoaded || !clerkOrgId) return null
+  if (isLoading || !clerkOrgId) return null
 
   const handleNext = () => {
     if (nextPending) {

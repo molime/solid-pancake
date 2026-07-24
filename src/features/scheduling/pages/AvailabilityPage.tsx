@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
@@ -43,8 +43,7 @@ function formatWindowTime(startTime: string, endTime: string): string {
 }
 
 export function AvailabilityPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
 
   const windows = useQuery(
     api.scheduling.listMyAvailability,

@@ -1,13 +1,11 @@
-import {
-  useOrganization,
-  useAuth,
-} from '@clerk/react'
+import { useAuth } from '@clerk/react'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { Navigate } from 'react-router-dom'
 import type { PropsWithChildren } from 'react'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { isPlatformTrainingComplete } from '@/features/onboarding/model/trainingCompletion'
+import { useTenant } from '@/app/useTenant'
 
 type TenantRole =
   | 'org:admin'
@@ -31,18 +29,18 @@ export function TenantRouteGuard({ children }: PropsWithChildren) {
 }
 
 function TenantMembershipGuard({ children }: PropsWithChildren) {
-  const { isLoaded, organization } = useOrganization()
+  const { clerkOrgId, isLoading } = useTenant()
 
   const membership = useQuery(
     api.members.checkMembership,
-    isLoaded && organization ? { clerkOrgId: organization.id } : 'skip',
+    clerkOrgId ? { clerkOrgId } : 'skip',
   )
 
-  if (!isLoaded) {
+  if (isLoading) {
     return <AppLoader fullScreen />
   }
 
-  if (!organization) {
+  if (!clerkOrgId) {
     return <Navigate to="/select-agency" replace />
   }
 
@@ -75,13 +73,13 @@ export function TenantRoleRouteGuard({
   allowedRoles,
   children,
 }: PropsWithChildren<{ allowedRoles: TenantRole[] }>) {
-  const { organization } = useOrganization()
+  const { clerkOrgId, isLoading } = useTenant()
   const member = useQuery(
     api.members.me,
-    organization?.id ? { clerkOrgId: organization.id } : 'skip',
+    clerkOrgId ? { clerkOrgId } : 'skip',
   )
 
-  if (!organization || member === undefined) {
+  if (isLoading || !clerkOrgId || member === undefined) {
     return <AppLoader fullScreen label="Checking access" />
   }
 
@@ -102,17 +100,17 @@ export function TenantRoleRouteGuard({
   return <>{children}</>
 }
 export function TrainingRouteGuard({ children }: PropsWithChildren) {
-  const { organization } = useOrganization()
+  const { clerkOrgId, isLoading } = useTenant()
   const member = useQuery(
     api.members.me,
-    organization?.id ? { clerkOrgId: organization.id } : 'skip',
+    clerkOrgId ? { clerkOrgId } : 'skip',
   )
   const completions = useQuery(
     api.platformTrainingCompletions.listMyCompletions,
-    organization?.id ? { clerkOrgId: organization.id } : 'skip',
+    clerkOrgId ? { clerkOrgId } : 'skip',
   )
 
-  if (!organization || member === undefined || completions === undefined) {
+  if (isLoading || !clerkOrgId || member === undefined || completions === undefined) {
     return <AppLoader fullScreen label="Checking training status" />
   }
 

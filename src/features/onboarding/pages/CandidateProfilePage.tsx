@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../../../convex/_generated/api'
@@ -19,15 +19,14 @@ function initials(name: string) {
 export function CandidateProfilePage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { organization, isLoaded } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId, isLoading } = useTenant()
   const candidate = useQuery(api.candidates.getCandidateProfile, clerkOrgId ? { clerkOrgId } : 'skip')
   const application = useQuery(api.candidates.getMyApplication, clerkOrgId ? { clerkOrgId } : 'skip')
 
   const forcePasswordChange =
     searchParams.get('forcePasswordChange') === 'true' || candidate?.requiresPasswordChange === true
 
-  if (!isLoaded || !clerkOrgId) return null
+  if (isLoading || !clerkOrgId) return null
 
   const appFields = application?.application?.fields ?? {}
   const status = candidate?.status ?? 'invited'

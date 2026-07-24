@@ -1,4 +1,4 @@
-import { useOrganization, useUser } from '@clerk/react'
+import { useUser } from '@clerk/react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -11,11 +11,13 @@ import {
   X,
   Globe,
   MapPin,
+  Mail,
   Clock,
 } from 'lucide-react'
 import { cn } from '@/shared/lib/cn'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
+import { useTenant } from '@/app/useTenant'
 
 interface NavItem {
   label: string
@@ -110,6 +112,12 @@ const navItems: NavItem[] = [
     roles: ['org:admin', 'org:coordinator'],
   },
   {
+    label: 'Email Domains',
+    path: '/settings/allowed-domains',
+    icon: <Mail className="h-4 w-4" />,
+    roles: ['org:admin'],
+  },
+  {
     label: 'Onboarding',
     path: '/onboarding',
     icon: <ClipboardCheck className="h-4 w-4" />,
@@ -142,11 +150,10 @@ interface SidebarProps {
 }
 
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
-  const { organization } = useOrganization()
+  const { clerkOrgId } = useTenant()
   const { user } = useUser()
   const location = useLocation()
 
-  const clerkOrgId = organization?.id
   const member = useQuery(api.members.me, clerkOrgId ? { clerkOrgId } : 'skip')
 
   const role = member?.role ?? 'org:caregiver'

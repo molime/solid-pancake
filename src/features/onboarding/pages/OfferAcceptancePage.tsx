@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
@@ -9,15 +9,14 @@ import { formatDateUS } from '@/shared/format'
 
 export function OfferAcceptancePage() {
   const navigate = useNavigate()
-  const { organization, isLoaded } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId, tenantName, isLoading } = useTenant()
   const data = useQuery(api.candidates.getMyApplication, clerkOrgId ? { clerkOrgId } : 'skip')
   const accept = useMutation(api.candidates.acceptOffer)
   const reject = useMutation(api.candidates.rejectOffer)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  if (!isLoaded || !clerkOrgId) return null
+  if (isLoading || !clerkOrgId) return null
 
   const candidate = data?.candidate
   const application = data?.application
@@ -31,7 +30,7 @@ export function OfferAcceptancePage() {
   const schedule = (fields.schedule as string) ?? 'Flexible, based on availability'
   const supervisor = (fields.supervisor as string) ?? 'Your assigned coordinator'
   const clientName = (fields.clientName as string) ?? undefined
-  const agencyName = organization?.name ?? 'ATRIA-X'
+  const agencyName = tenantName ?? 'ATRIA-X'
   const offerExpiresAt = (fields.offerExpiresAt as string) ?? undefined
 
   const handleAccept = async () => {

@@ -23,6 +23,45 @@ export async function requireTenant(ctx: AuthContext, clerkOrgId: string) {
   const identity = await requireIdentity(ctx)
   requireMatchingClerkOrganization(identity, clerkOrgId)
 
+  // Caregiver/candidate path: the user is a regular Clerk user with NO org
+  // membership, so the JWT carries no org claim. Resolve their memberships via
+  // tenantMembers by Clerk user id and require one record's tenant to match
+  // the requested clerkOrgId. The member record is what authorizes them. A
+  // user may belong to multiple tenants, so match against ALL their records —
+  // taking only .first() could falsely reject a valid membership.
+  if (!getActiveClerkOrganizationId(identity)) {
+    const members = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_clerk_user_id', (q) =>
+        q.eq('clerkUserId', identity.subject),
+      )
+      .collect()
+
+    let member = null
+    let tenant = null
+    for (const candidate of members) {
+      const candidateTenant = await ctx.db.get(candidate.tenantId)
+      if (candidateTenant && candidateTenant.clerkOrgId === clerkOrgId) {
+        member = candidate
+        tenant = candidateTenant
+        break
+      }
+    }
+
+    if (!member || !tenant) {
+      throw new ConvexError('Forbidden: not a member of this tenant.')
+    }
+
+    return {
+      tenantId: tenant._id,
+      tenant,
+      clerkOrgId,
+      identity,
+      member,
+      role: member.role,
+    }
+  }
+
   const tenant = await ctx.db
     .query('tenants')
     .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))

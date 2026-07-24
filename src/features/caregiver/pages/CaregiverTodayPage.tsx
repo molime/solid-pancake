@@ -1,4 +1,5 @@
-import { useOrganization, useUser } from '@clerk/react'
+import { useUser } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
@@ -12,9 +13,8 @@ import { formatTime, formatWeekdayDate, formatDurationHours, formatStreetAddress
 import { cn } from '@/shared/lib/cn'
 
 export function CaregiverTodayPage() {
-  const { organization } = useOrganization()
+  const { clerkOrgId, tenantName } = useTenant()
   const { user } = useUser()
-  const clerkOrgId = organization?.id
   const firstName = user?.firstName ?? ''
 
   const data = useQuery(
@@ -45,7 +45,7 @@ export function CaregiverTodayPage() {
           </div>
           <p className="text-base font-semibold text-atria-ink">No shifts assigned</p>
           <p className="mt-1 text-sm text-atria-text-secondary">
-            You have no shifts for today in {organization?.name}. Check back later or contact your coordinator.
+            You have no shifts for today in {tenantName}. Check back later or contact your coordinator.
           </p>
         </div>
       </div>

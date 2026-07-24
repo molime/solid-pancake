@@ -1,4 +1,5 @@
-import { useOrganization, useUser } from '@clerk/react'
+import { useUser } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { useState } from 'react'
@@ -10,9 +11,8 @@ import { formatTime, formatWeekdayDate } from '@/shared/format'
 import type { EnrichedShift } from '../model/schedulingUtils'
 
 export function CaregiverSchedulePage() {
-  const { organization } = useOrganization()
+  const { clerkOrgId } = useTenant()
   const { user } = useUser()
-  const clerkOrgId = organization?.id
   const firstName = user?.firstName ?? ''
 
   const shifts = useQuery(

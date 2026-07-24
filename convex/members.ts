@@ -39,7 +39,26 @@ export const checkMembership = query({
     if (!identity) return false
 
     const activeOrgId = getActiveClerkOrganizationId(identity)
-    if (!activeOrgId || activeOrgId !== clerkOrgId) return false
+
+    // Caregiver/candidate path: no Clerk org membership, so the JWT carries
+    // no org claim. The tenantMembers record is what authorizes them. A user
+    // may belong to multiple tenants, so match against ALL their records —
+    // taking only .first() could falsely reject a valid membership.
+    if (!activeOrgId) {
+      const noOrgMembers = await ctx.db
+        .query('tenantMembers')
+        .withIndex('by_clerk_user_id', (q) =>
+          q.eq('clerkUserId', identity.subject),
+        )
+        .collect()
+      for (const noOrgMember of noOrgMembers) {
+        const noOrgTenant = await ctx.db.get(noOrgMember.tenantId)
+        if (noOrgTenant && noOrgTenant.clerkOrgId === clerkOrgId) return true
+      }
+      return false
+    }
+
+    if (activeOrgId !== clerkOrgId) return false
 
     const tenant = await ctx.db
       .query('tenants')

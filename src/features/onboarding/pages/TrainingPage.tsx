@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
@@ -695,8 +695,7 @@ const DEFAULT_STEPS: TrainingStep[] = [
 
 export function TrainingPage() {
   const navigate = useNavigate()
-  const { organization, isLoaded } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId, isLoading } = useTenant()
   const completions = useQuery(api.platformTrainingCompletions.listMyCompletions, clerkOrgId ? { clerkOrgId } : 'skip')
   const completeTraining = useMutation(api.platformTrainingCompletions.completeForCandidate)
   const hasFullPlatform = useQuery(
@@ -765,7 +764,7 @@ export function TrainingPage() {
     markTrainingCompletedInSession()
   }
 
-  if (!isLoaded || !clerkOrgId) return null
+  if (isLoading || !clerkOrgId) return null
 
   const handleComplete = async () => {
     setIsSubmitting(true)

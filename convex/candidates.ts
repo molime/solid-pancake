@@ -13,12 +13,17 @@ import { api, internal } from './_generated/api'
 import { notifyCandidate } from './_utils/notifications'
 import { ConvexError } from 'convex/values'
 import {
+  requireIdentity,
   requireTenantRole,
   requireTenantRoleAction,
   assertTenantDoc,
   type AuthContext,
 } from './authHelpers'
-import { sendClerkInvitation, isAllowListError } from './invitations'
+import {
+  sendClerkInvitation,
+  isAllowListError,
+  assertEmailDomainAllowed,
+} from './invitations'
 import {
   createClerkUserAndJoinOrg,
   generateClerkSignInTicket,
@@ -317,6 +322,72 @@ export const updateClerkMembershipRole = internalAction({
   },
 })
 
+export const removeClerkOrgMembership = internalAction({
+  args: {
+    clerkOrgId: v.string(),
+    clerkUserId: v.string(),
+  },
+  handler: async (_ctx: ActionCtx, args) => {
+    const secretKey = process.env.CLERK_SECRET_KEY
+    if (!secretKey) {
+      throw new ConvexError('Server configuration is missing CLERK_SECRET_KEY.')
+    }
+
+    const response = await fetch(
+      `https://api.clerk.com/v1/organizations/${args.clerkOrgId}/memberships/${args.clerkUserId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${secretKey}`,
+        },
+      },
+    )
+
+    // 404 means the user was never an org member (candidates created under
+    // the no-org flow) — nothing to remove.
+    if (response.status === 404) {
+      return { removed: false }
+    }
+
+    if (!response.ok) {
+      const payload = await response.json()
+      throw new ConvexError(clerkErrorMessage(payload))
+    }
+
+    return { removed: true }
+  },
+})
+
+// Returns ALL tenants the signed-in user belongs to via tenantMembers (the
+// no-Clerk-org path for caregivers/candidates). A user may belong to multiple
+// agencies, so callers must not assume a single result — SelectAgencyPage
+// presents a picker when more than one tenant comes back. An empty array
+// means the user has no tenant membership at all.
+export const getMyTenant = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await requireIdentity(ctx)
+    const members = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_clerk_user_id', (q) =>
+        q.eq('clerkUserId', identity.subject),
+      )
+      .collect()
+    const tenants = []
+    for (const member of members) {
+      const tenant = await ctx.db.get(member.tenantId)
+      if (tenant) {
+        tenants.push({
+          clerkOrgId: tenant.clerkOrgId,
+          tenantName: tenant.name,
+          role: member.role,
+        })
+      }
+    }
+    return tenants
+  },
+})
+
 export const getCandidateProfile = query({
   args: { clerkOrgId: v.string() },
   handler: async (ctx, { clerkOrgId }) => {
@@ -594,6 +665,16 @@ export const inviteCandidate = action({
     const secretKey = requireEnv('CLERK_SECRET_KEY')
     const appBaseUrl = requireEnv('APP_URL')
 
+    const allowedEmailDomains = await ctx.runQuery(
+      internal.tenants.getAllowedEmailDomainsInternal,
+      { clerkOrgId: args.clerkOrgId },
+    )
+
+    // Fail fast on the tenant's domain allowlist BEFORE inserting the
+    // candidate record or calling any Clerk API, so a rejected domain never
+    // leaves an orphaned candidate row behind.
+    assertEmailDomainAllowed(args.email, allowedEmailDomains)
+
     const result = await ctx.runMutation(internal.candidates.insertInvitedCandidate, {
       clerkOrgId: args.clerkOrgId,
       displayName: args.displayName,
@@ -617,6 +698,7 @@ export const inviteCandidate = action({
         emailAddress: args.email,
         displayName: args.displayName,
         appBaseUrl,
+        allowedEmailDomains,
       })
       return {
         candidateId: result.candidateId,
@@ -644,6 +726,7 @@ export const inviteCandidate = action({
         emailAddress: args.email,
         role: 'org:candidate',
         appBaseUrl,
+        allowedEmailDomains,
       })
     } catch (err) {
       if (isAllowListError(err)) {
@@ -655,6 +738,7 @@ export const inviteCandidate = action({
             emailAddress: args.email,
             displayName: args.displayName,
             appBaseUrl,
+            allowedEmailDomains,
           })
           return {
             candidateId: result.candidateId,
@@ -847,6 +931,7 @@ async function createManualCandidateAccount(
     emailAddress,
     displayName,
     appBaseUrl,
+    allowedEmailDomains,
   }: {
     secretKey: string
     clerkOrgId: string
@@ -854,6 +939,7 @@ async function createManualCandidateAccount(
     emailAddress: string
     displayName: string
     appBaseUrl: string
+    allowedEmailDomains?: string[] | null
   },
 ): Promise<{ clerkUserId: string; invitationId: string; magicLink: string; initialPassword: string }> {
   const manual = await createClerkUserAndJoinOrg({
@@ -864,6 +950,7 @@ async function createManualCandidateAccount(
     displayName,
     role: 'org:candidate',
     appBaseUrl,
+    allowedEmailDomains,
   })
 
   const now = new Date()
@@ -1396,10 +1483,16 @@ export const hireCandidate = mutation({
       })
     }
 
-    await ctx.scheduler.runAfter(0, internal.candidates.updateClerkMembershipRole, {
+    // Caregivers are NOT kept in the Clerk organization (avoids the
+    // 20-member limit on Clerk's Standard plan). The tenantMembers record
+    // above is what authorizes them; their tenant is resolved via
+    // getMyTenant. Candidates invited before the no-org flow may still hold
+    // an org membership with role org:candidate — remove it so their JWT
+    // carries no org claim and they land on the no-org auth path.
+    // updateClerkMembershipRole is still used for admin/HR/coordinator roles.
+    await ctx.scheduler.runAfter(0, internal.candidates.removeClerkOrgMembership, {
       clerkOrgId: args.clerkOrgId,
       clerkUserId: candidate.clerkUserId as string,
-      role: 'org:caregiver',
     })
 
     let employeeProfileId: Id<'employeeProfiles'>
@@ -2287,6 +2380,7 @@ export const getTenantBySlug = internalQuery({
       clerkOrgId: tenant.clerkOrgId,
       name: tenant.name,
       slug: tenant.slug,
+      allowedEmailDomains: tenant.allowedEmailDomains,
     }
   },
 })
@@ -2409,6 +2503,7 @@ export const applyPublic = action({
       clerkOrgId: tenant.clerkOrgId,
       role: 'org:candidate',
       appBaseUrl: args.appBaseUrl,
+      allowedEmailDomains: tenant.allowedEmailDomains,
     })
 
     await ctx.runMutation(internal.members.createManualMember, {

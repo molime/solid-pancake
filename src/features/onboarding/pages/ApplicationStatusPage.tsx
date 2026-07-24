@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
@@ -92,8 +92,7 @@ function formatDate(value?: string) {
 
 export function ApplicationStatusPage() {
   const navigate = useNavigate()
-  const { organization, isLoaded } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId, isLoading } = useTenant()
   const data = useQuery(api.candidates.getMyApplication, clerkOrgId ? { clerkOrgId } : 'skip')
 
   const candidate = data?.candidate
@@ -120,7 +119,7 @@ export function ApplicationStatusPage() {
     return tasks.find((t) => UPLOAD_TYPES.has(t.type) && t.status !== 'complete') ?? null
   }, [tasks])
 
-  if (!isLoaded || !clerkOrgId) return null
+  if (isLoading || !clerkOrgId) return null
 
   const firstName = candidate?.displayName?.split(' ')[0] ?? 'there'
 

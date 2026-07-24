@@ -1,6 +1,6 @@
 import { ConvexError, v } from 'convex/values'
 import { action } from './_generated/server'
-import { api } from './_generated/api'
+import { api, internal } from './_generated/api'
 
 declare const process: { env: Record<string, string | undefined> }
 
@@ -31,9 +31,36 @@ export function isAllowListError(error: unknown): boolean {
     String(error ?? ''),
   ]
   const combined = candidates.join(' ')
-  return /not allowed to access this application|is not allowed to access|invalid email|email_address is blocked|not on the allowlist|allow.?list/i.test(
+  return /not allowed to access this application|is not allowed to access|invalid email|email_address is blocked|not on the allowlist|allow.?list|email domain is not allowed/i.test(
     combined,
   )
+}
+
+export function extractEmailDomain(email: string): string | null {
+  const parts = email.trim().toLowerCase().split('@')
+  if (parts.length !== 2 || !parts[1]) return null
+  return parts[1]
+}
+
+/**
+ * Fail-fast domain allowlist check. Runs BEFORE any Clerk API call so we do
+ * not waste API calls on invitations that the tenant would reject anyway.
+ * When `allowedEmailDomains` is undefined or empty, all domains are allowed.
+ * The error message intentionally matches the `isAllowListError` regex so
+ * existing error handling treats it like a Clerk allowlist rejection.
+ */
+export function assertEmailDomainAllowed(
+  emailAddress: string,
+  allowedEmailDomains?: string[] | null,
+) {
+  if (!allowedEmailDomains || allowedEmailDomains.length === 0) return
+  const domain = extractEmailDomain(emailAddress)
+  const normalized = allowedEmailDomains.map((d) => d.trim().toLowerCase())
+  if (!domain || !normalized.includes(domain)) {
+    throw new ConvexError(
+      `email domain is not allowed: ${emailAddress.trim()} is not on this agency's allowed email domains list.`,
+    )
+  }
 }
 
 function invitationRedirectUrl(appBaseUrl: string) {
@@ -74,7 +101,10 @@ export async function sendClerkInvitation(args: {
   emailAddress: string
   role: InviteRole
   appBaseUrl: string
+  allowedEmailDomains?: string[] | null
 }) {
+  assertEmailDomainAllowed(args.emailAddress, args.allowedEmailDomains)
+
   const response = await fetch(
     `https://api.clerk.com/v1/organizations/${args.clerkOrgId}/invitations`,
     {
@@ -116,7 +146,14 @@ export const create = action({
     role: roleValidator,
     appBaseUrl: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{
+    id: string
+    emailAddress: string
+    role: string
+    roleName: string
+    status: string
+    createdAt: string
+  }> => {
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) {
       throw new ConvexError('Unauthorized: authentication required.')
@@ -136,6 +173,11 @@ export const create = action({
       )
     }
 
+    const allowedEmailDomains = await ctx.runQuery(
+      internal.tenants.getAllowedEmailDomainsInternal,
+      { clerkOrgId: args.clerkOrgId },
+    )
+
     return sendClerkInvitation({
       secretKey,
       inviterUserId: identity.subject,
@@ -143,6 +185,7 @@ export const create = action({
       emailAddress: args.emailAddress,
       role: args.role,
       appBaseUrl: args.appBaseUrl,
+      allowedEmailDomains,
     })
   },
 })

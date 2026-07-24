@@ -54,6 +54,13 @@ const GeofenceSettingsPage = lazy(() =>
     default: module.GeofenceSettingsPage,
   })),
 )
+const AllowedDomainsSettingsPage = lazy(() =>
+  import('@/features/settings/pages/AllowedDomainsSettingsPage').then(
+    (module) => ({
+      default: module.AllowedDomainsSettingsPage,
+    }),
+  ),
+)
 const SchedulingPage = lazy(() =>
   import('@/features/scheduling/pages/SchedulingPage').then((module) => ({
     default: module.SchedulingPage,
@@ -434,6 +441,16 @@ export function AppRouter() {
             >
               <RouteSuspense>
                 <GeofenceSettingsPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="settings/allowed-domains"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:admin']}>
+              <RouteSuspense>
+                <AllowedDomainsSettingsPage />
               </RouteSuspense>
             </TenantRoleRouteGuard>
           }

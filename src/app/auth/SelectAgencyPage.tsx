@@ -12,9 +12,10 @@ import { Building2, AlertCircle } from 'lucide-react'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { Badge } from '@/shared/ui/Badge'
-import { useMutation } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { AppLoader } from '@/shared/ui/AppLoader'
+import { setSelectedClerkOrgId } from '@/app/useTenant'
 
 type PendingOrg = {
   id: string
@@ -38,6 +39,32 @@ export function SelectAgencyPage() {
   const [error, setError] = useState<string | null>(null)
   const [isBootstrapping, setIsBootstrapping] = useState(false)
   const bootstrappingOrgIdRef = useRef<string | null>(null)
+
+  // Caregivers/candidates are NOT Clerk org members (Clerk Standard plan
+  // 20-member limit). When the user has zero Clerk org memberships, resolve
+  // their tenants from the tenantMembers table and send them into the app.
+  const hasNoClerkMemberships =
+    isLoaded && (userMemberships.data ?? []).length === 0
+  const dbTenants = useQuery(
+    api.candidates.getMyTenant,
+    hasNoClerkMemberships && convexAuth.isAuthenticated ? {} : 'skip',
+  )
+
+  // Exactly one tenant: pick it and go straight in. Multiple tenants fall
+  // through to the picker below so the user can choose their agency.
+  useEffect(() => {
+    if (!hasNoClerkMemberships || !dbTenants || dbTenants.length !== 1) return
+    setSelectedClerkOrgId(dbTenants[0].clerkOrgId)
+    navigate('/', { replace: true })
+  }, [hasNoClerkMemberships, dbTenants, navigate])
+
+  const handleDbTenantSelect = useCallback(
+    (clerkOrgId: string) => {
+      setSelectedClerkOrgId(clerkOrgId)
+      navigate('/', { replace: true })
+    },
+    [navigate],
+  )
 
   const handleSelect = useCallback(
     async (org: PendingOrg) => {
@@ -192,6 +219,14 @@ export function SelectAgencyPage() {
     return <AppLoader fullScreen label="Finding your agencies" />
   }
 
+  // No Clerk org memberships: wait for the tenantMembers resolution. A
+  // single resolved tenant triggers the redirect effect above; multiple
+  // tenants render the picker below; only an empty result (no member record
+  // at all) falls through to the empty state.
+  if (hasNoClerkMemberships && (dbTenants === undefined || dbTenants.length === 1)) {
+    return <AppLoader fullScreen label="Opening your agency workspace" />
+  }
+
   const memberships = userMemberships.data ?? []
 
   // Universal rule: if the user has exactly 1 org membership, always auto-select
@@ -228,24 +263,50 @@ export function SelectAgencyPage() {
 
         <div className="space-y-2">
           {userMemberships.data?.length === 0 ? (
-            <Card>
-              <CardContent className="p-6 text-center space-y-4">
-                <AlertCircle className="h-6 w-6 text-atria-danger mx-auto" />
-                <p className="text-sm text-atria-ink">
-                  You don't belong to any agency yet.
-                </p>
-                <p className="text-xs text-atria-muted">
-                  Ask your HR team to invite you, or sign out and try a different account.
-                </p>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => void signOut?.()}
+            dbTenants && dbTenants.length > 0 ? (
+              dbTenants.map((tenant) => (
+                <Card
+                  key={tenant.clerkOrgId}
+                  className="transition-colors cursor-pointer hover:border-atria-accent"
                 >
-                  Sign out
-                </Button>
-              </CardContent>
-            </Card>
+                  <CardContent className="p-4">
+                    <button
+                      className="w-full flex items-center justify-between text-left"
+                      onClick={() => handleDbTenantSelect(tenant.clerkOrgId)}
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-atria-ink">
+                          {tenant.tenantName}
+                        </p>
+                        <p className="text-xs text-atria-muted mt-0.5">
+                          Role: {tenant.role.replace('org:', '')}
+                        </p>
+                      </div>
+                      <Building2 className="h-4 w-4 text-atria-muted" />
+                    </button>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <Card>
+                <CardContent className="p-6 text-center space-y-4">
+                  <AlertCircle className="h-6 w-6 text-atria-danger mx-auto" />
+                  <p className="text-sm text-atria-ink">
+                    You don't belong to any agency yet.
+                  </p>
+                  <p className="text-xs text-atria-muted">
+                    Ask your HR team to invite you, or sign out and try a different account.
+                  </p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void signOut?.()}
+                  >
+                    Sign out
+                  </Button>
+                </CardContent>
+              </Card>
+            )
           ) : (
             userMemberships.data?.map((mem: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
               const isLoading = pendingOrg?.id === mem.organization.id

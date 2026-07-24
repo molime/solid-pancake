@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Doc } from '../../../../convex/_generated/dataModel'
@@ -63,8 +63,7 @@ const MAX_SIZE = 10 * 1024 * 1024
 export function DocumentUploadPage() {
   const navigate = useNavigate()
   const { taskId = 'required' } = useParams<{ taskId: string }>()
-  const { organization, isLoaded } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId, tenantName, isLoading } = useTenant()
   const tasks = useQuery(
     api.candidates.listCandidateTasks,
     clerkOrgId ? { clerkOrgId } : 'skip',
@@ -114,10 +113,10 @@ export function DocumentUploadPage() {
 
   const candidateId = applicationData?.candidate?._id
   const fields = (applicationData?.application?.fields ?? {}) as Record<string, unknown>
-  const agencyName = organization?.name ?? 'ATRIA-X'
+  const agencyName = tenantName ?? 'ATRIA-X'
   const todayUs = new Date().toLocaleDateString('en-US')
 
-  if (!isLoaded || !clerkOrgId) return null
+  if (isLoading || !clerkOrgId) return null
 
   const handleFileChange = (selected: File | null) => {
     setError('')

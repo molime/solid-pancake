@@ -2,6 +2,7 @@ import { ConvexError } from 'convex/values'
 import type { Scheduler } from 'convex/server'
 import { internal } from '../_generated/api'
 import { disableClerkUserMfa, verifyClerkUserEmail } from './clerkUserManagement'
+import { assertEmailDomainAllowed } from '../invitations'
 
 
 interface CreateClerkUserAndJoinOrgArgs {
@@ -12,6 +13,7 @@ interface CreateClerkUserAndJoinOrgArgs {
   displayName: string
   role: string
   appBaseUrl: string
+  allowedEmailDomains?: string[] | null
 }
 
 interface CreateClerkUserAndJoinOrgResult {
@@ -50,6 +52,8 @@ function parseName(displayName: string) {
 export async function createClerkUserAndJoinOrg(
   args: CreateClerkUserAndJoinOrgArgs,
 ): Promise<CreateClerkUserAndJoinOrgResult> {
+  assertEmailDomainAllowed(args.emailAddress, args.allowedEmailDomains)
+
   const { firstName, lastName } = parseName(args.displayName)
 
   const initialPassword = generateTemporaryPassword()

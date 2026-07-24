@@ -227,4 +227,50 @@ describe('createClerkUserAndJoinOrg', () => {
     )
     expect(mfaDeletes.length).toBeGreaterThanOrEqual(2)
   })
+
+  it('throws before any Clerk API call when the email domain is not allowed', async () => {
+    const fetchSpy = fetch as unknown as ReturnType<typeof vi.fn>
+    fetchSpy.mockClear()
+    const ctx = {
+      scheduler: {
+        runAfter: vi.fn(() => Promise.resolve('sched_1')),
+        runAt: vi.fn(() => Promise.resolve('sched_2')),
+        cancel: vi.fn(() => Promise.resolve()),
+      } as unknown as Scheduler,
+    }
+    await expect(
+      createClerkUserAndJoinOrg({
+        ctx,
+        secretKey: 'sk_test',
+        clerkOrgId: 'org_test',
+        emailAddress: 'blocked@other.com',
+        displayName: 'Blocked User',
+        role: 'org:candidate',
+        appBaseUrl: 'http://localhost:5173',
+        allowedEmailDomains: ['example.com'],
+      }),
+    ).rejects.toThrow(/email domain is not allowed/i)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('creates the user when the email domain is allowed', async () => {
+    const ctx = {
+      scheduler: {
+        runAfter: vi.fn(() => Promise.resolve('sched_1')),
+        runAt: vi.fn(() => Promise.resolve('sched_2')),
+        cancel: vi.fn(() => Promise.resolve()),
+      } as unknown as Scheduler,
+    }
+    const result = await createClerkUserAndJoinOrg({
+      ctx,
+      secretKey: 'sk_test',
+      clerkOrgId: 'org_test',
+      emailAddress: 'new@example.com',
+      displayName: 'New User',
+      role: 'org:candidate',
+      appBaseUrl: 'http://localhost:5173',
+      allowedEmailDomains: ['example.com'],
+    })
+    expect(result.clerkUserId).toBe('user_new')
+  })
 })

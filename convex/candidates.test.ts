@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { convexTest } from 'convex-test'
 import schema from './schema'
-import { api } from './_generated/api'
+import { api, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import { resetSharedMockAdp } from './integrations/adp/mockAdp'
 
@@ -1451,6 +1451,49 @@ describe('submitApplication car insurance task', () => {
   })
 })
 
+describe('removeClerkOrgMembership', () => {
+  it('removes an existing Clerk org membership', async () => {
+    stubClerkMembershipUpdate()
+    const t = createTestConvex()
+
+    const result = await t.action(internal.candidates.removeClerkOrgMembership, {
+      clerkOrgId: 'org_remove_member',
+      clerkUserId: 'user_member',
+    })
+
+    expect(result).toEqual({ removed: true })
+    const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+    expect(calls[0]?.[0]).toContain(
+      '/organizations/org_remove_member/memberships/user_member',
+    )
+    expect((calls[0]?.[1] as { method?: string } | undefined)?.method).toBe(
+      'DELETE',
+    )
+  })
+
+  it('treats a 404 from Clerk as a no-op for users who were never org members', async () => {
+    vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 404,
+          json: () => Promise.resolve({ errors: [{ message: 'not found' }] }),
+        }),
+      ) as unknown as typeof fetch,
+    )
+    const t = createTestConvex()
+
+    const result = await t.action(internal.candidates.removeClerkOrgMembership, {
+      clerkOrgId: 'org_remove_noop',
+      clerkUserId: 'user_never_member',
+    })
+
+    expect(result).toEqual({ removed: false })
+  })
+})
+
 describe('reviewApplication and offer lifecycle', () => {
   it('transitions candidate through approved -> offer -> accepted -> hired', async () => {
     stubAdpEnv()
@@ -1575,13 +1618,36 @@ describe('reviewApplication and offer lifecycle', () => {
     expect(profile?.adpSyncStatus).toBe('pending_credentials')
     expect(profile?.email).toBe('lifecycle@example.com')
 
+    // Caregivers are NOT added to the Clerk org on hire (Clerk Standard plan
+    // 20-member limit); the tenantMembers role flip authorizes them instead.
+    // Candidates who still hold an org membership (invited before the no-org
+    // flow) are removed from the Clerk org so their JWT carries no org claim.
     const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
-    const membershipCall = calls.find(
+    const membershipCalls = calls.filter(
       (call: unknown[]) =>
         typeof call[0] === 'string' &&
         call[0].includes(`/organizations/${clerkOrgId}/memberships/${candidateUserId}`),
     )
-    expect(membershipCall).toBeDefined()
+    const patchCall = membershipCalls.find(
+      (call: unknown[]) =>
+        (call[1] as { method?: string } | undefined)?.method === 'PATCH',
+    )
+    expect(patchCall).toBeUndefined()
+    const deleteCall = membershipCalls.find(
+      (call: unknown[]) =>
+        (call[1] as { method?: string } | undefined)?.method === 'DELETE',
+    )
+    expect(deleteCall).toBeDefined()
+
+    const member = await t.run(async (ctx) =>
+      ctx.db
+        .query('tenantMembers')
+        .withIndex('by_tenant_user', (q) =>
+          q.eq('tenantId', tenantId).eq('clerkUserId', candidateUserId),
+        )
+        .unique(),
+    )
+    expect(member?.role).toBe('org:caregiver')
   })
 
   it('allows sendOffer without completed pre-hire documents', async () => {

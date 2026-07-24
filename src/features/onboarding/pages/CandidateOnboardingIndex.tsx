@@ -2,14 +2,13 @@ import { useEffect } from 'react'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { isPlatformTrainingComplete } from '@/features/onboarding/model/trainingCompletion'
 import { useNavigate } from 'react-router-dom'
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 
 export function CandidateOnboardingIndex() {
   const navigate = useNavigate()
-  const { organization, isLoaded } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId, isLoading } = useTenant()
   const data = useQuery(api.candidates.getMyApplication, clerkOrgId ? { clerkOrgId } : 'skip')
   const candidate = useQuery(api.candidates.getCandidateProfile, clerkOrgId ? { clerkOrgId } : 'skip')
   const completions = useQuery(
@@ -60,6 +59,6 @@ export function CandidateOnboardingIndex() {
     navigate('/onboarding/checklist', { replace: true })
   }, [data, clerkOrgId, navigate, completions, candidate, hasFullPlatform])
 
-  if (!isLoaded || !clerkOrgId) return <AppLoader fullScreen />
+  if (isLoading || !clerkOrgId) return <AppLoader fullScreen />
   return <AppLoader fullScreen />
 }

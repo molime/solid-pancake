@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useAction } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
@@ -13,8 +13,7 @@ export function ChangePasswordSection({
   onSuccess?: () => void
   forced?: boolean
 }) {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
   const updatePassword = useAction(api.candidates.updateMyPassword)
 
   const [newPassword, setNewPassword] = useState('')

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
@@ -46,8 +46,7 @@ const AGREEMENTS: Record<AgreementKey, { title: string; body: string }> = {
 
 export function EmploymentAgreementPage() {
   const navigate = useNavigate()
-  const { organization, isLoaded } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId, isLoading } = useTenant()
   const acknowledge = useMutation(api.candidates.acknowledgeBackgroundCheck)
 
   const today = new Date().toISOString().split('T')[0]
@@ -61,7 +60,7 @@ export function EmploymentAgreementPage() {
   const [error, setError] = useState('')
   const [legalValidityAccepted, setLegalValidityAccepted] = useState(false)
 
-  if (!isLoaded || !clerkOrgId) return null
+  if (isLoading || !clerkOrgId) return null
 
   const updateAgreement = (key: AgreementKey, patch: Partial<AgreementState>) => {
     setAgreements((prev) => ({
