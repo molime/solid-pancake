@@ -5,6 +5,7 @@ import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
+import { formatDateUS } from '@/shared/format'
 
 export function OfferAcceptancePage() {
   const navigate = useNavigate()
@@ -29,6 +30,7 @@ export function OfferAcceptancePage() {
   const startDate = (fields.startDate as string) ?? 'As soon as paperwork is complete'
   const schedule = (fields.schedule as string) ?? 'Flexible, based on availability'
   const supervisor = (fields.supervisor as string) ?? 'Your assigned coordinator'
+  const clientName = (fields.clientName as string) ?? undefined
   const agencyName = organization?.name ?? 'ATRIA-X'
   const offerExpiresAt = (fields.offerExpiresAt as string) ?? undefined
 
@@ -80,7 +82,7 @@ export function OfferAcceptancePage() {
             <h1 className='mb-1 text-2xl font-semibold text-atria-ink'>{position}</h1>
             <p className='text-sm text-atria-text-secondary'>
               {agencyName} {String.fromCharCode(183)} Los Angeles, CA
-              {offerExpiresAt ? ` ${String.fromCharCode(183)} Expires ${new Date(offerExpiresAt).toLocaleDateString()}` : ''}
+              {offerExpiresAt ? ` ${String.fromCharCode(183)} Expires ${formatDateUS(offerExpiresAt)}` : ''}
             </p>
           </div>
 
@@ -95,7 +97,7 @@ export function OfferAcceptancePage() {
             </div>
             <div className='rounded-[var(--radius-atria-sm)] border border-atria-border bg-atria-surface-2 p-4'>
               <p className='mb-1 text-xs font-semibold uppercase tracking-wide text-atria-text-muted'>Start date</p>
-              <p className='text-base font-semibold text-atria-ink'>{startDate}</p>
+              <p className='text-base font-semibold text-atria-ink'>{formatDateUS(startDate)}</p>
             </div>
             <div className='rounded-[var(--radius-atria-sm)] border border-atria-border bg-atria-surface-2 p-4'>
               <p className='mb-1 text-xs font-semibold uppercase tracking-wide text-atria-text-muted'>Schedule</p>
@@ -106,6 +108,13 @@ export function OfferAcceptancePage() {
               <p className='text-base font-semibold text-atria-ink'>{supervisor}</p>
             </div>
           </div>
+
+          {clientName && (
+            <div className='mb-6 rounded-[var(--radius-atria-sm)] border border-atria-border bg-atria-surface-2 p-4'>
+              <p className='mb-1 text-xs font-semibold uppercase tracking-wide text-atria-text-muted'>Client you will be caring for</p>
+              <p className='text-base font-semibold text-atria-ink'>{clientName}</p>
+            </div>
+          )}
 
           <Button
             variant='primary'

@@ -1,28 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useOrganization } from '@clerk/react'
-import { useMutation } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { Checkbox } from '@/shared/ui/Checkbox'
+import { cn } from '@/shared/lib/cn'
 
 const POLICY_SECTIONS = [
   {
     title: '1. Purpose',
-    body: 'This policy explains how we protect the privacy and safety of our clients, their families, and our caregivers. By signing below, you confirm that you understand your responsibilities while using the ATRIA-X platform and while providing care services.',
+    body: 'As a caregiver you may have access to client personal health information (PHI). You agree to keep all such information confidential and use it only to deliver care.',
   },
   {
     title: '2. What you must not do',
-    body: 'You may not share client health information, photos, addresses, or any identifying details outside of ATRIA-X. You may not accept cash payments, schedule shifts off-platform, or ask clients for personal contact information. All communication about shifts must stay inside the app so we can keep everyone safe and compliant.',
+    body: 'Do not share client names, addresses, medical history, or care plans with anyone outside the care team. Do not photograph or record clients without consent.',
   },
   {
     title: '3. Violations',
-    body: 'Violating privacy or safety rules may result in immediate removal from the platform, loss of credentials, and reporting to the appropriate licensing or regulatory body. If you are unsure whether something is allowed, contact your coordinator before acting.',
-  },
-  {
-    title: '4. Background check consent',
-    body: 'You consent to a background check and reference verification as part of onboarding. This is required by our clients and by state regulations. Information collected is used only for employment eligibility and is stored securely.',
+    body: 'Violations may result in immediate termination and may carry legal penalties under HIPAA federal law. Report suspected breaches to your supervisor immediately.',
   },
 ]
 
@@ -31,6 +28,11 @@ export function AcknowledgmentPage() {
   const { organization, isLoaded } = useOrganization()
   const clerkOrgId = organization?.id
   const acknowledge = useMutation(api.candidates.acknowledgeBackgroundCheck)
+  const bgCheck = useQuery(
+    api.backgroundChecks.getBackgroundCheck,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
+  const [hasConsented, setHasConsented] = useState(false)
 
   const [scrolledToBottom, setScrolledToBottom] = useState(false)
   const [agreed, setAgreed] = useState(false)
@@ -54,7 +56,7 @@ export function AcknowledgmentPage() {
   const handleSubmit = async () => {
     setIsSubmitting(true)
     await acknowledge({ clerkOrgId })
-    navigate('/onboarding', { replace: true })
+    setHasConsented(true)
   }
 
   return (
@@ -62,7 +64,7 @@ export function AcknowledgmentPage() {
       <Card className='w-full max-w-[560px]'>
         <CardContent className='p-8'>
           <button
-            className='mb-4 text-sm text-atria-text-secondary hover:text-atria-ink'
+            className='mb-4 text-sm text-atria-accent hover:text-atria-accent-hover'
             onClick={() => navigate('/onboarding')}
           >
             ← Back to checklist
@@ -96,7 +98,7 @@ export function AcknowledgmentPage() {
           </div>
 
           {!scrolledToBottom && (
-            <p className='mb-4 text-sm text-atria-warning'>Scroll to read the full document.</p>
+            <p className='mb-4 text-sm text-atria-warning'>↓ Scroll to read the full document</p>
           )}
 
           <label className='mb-6 flex cursor-pointer items-start gap-3'>
@@ -106,23 +108,92 @@ export function AcknowledgmentPage() {
               className='mt-0.5 shrink-0'
             />
             <span className='text-sm text-atria-text-secondary'>
-              I have read and understood this policy and consent to a background check and reference verification.
+              I have read and understood this policy
             </span>
           </label>
 
-          <Button
-            variant='primary'
-            size='lg'
-            className='w-full'
-            disabled={!scrolledToBottom || !agreed || isSubmitting}
-            onClick={handleSubmit}
-          >
-            {isSubmitting ? 'Confirming...' : 'Confirm & sign →'}
-          </Button>
+          {!hasConsented ? (
+            <>
+              <Button
+                variant='primary'
+                size='lg'
+                className='w-full'
+                disabled={!scrolledToBottom || !agreed || isSubmitting}
+                onClick={handleSubmit}
+              >
+                {isSubmitting ? 'Confirming...' : 'Confirm & sign'}
+              </Button>
 
-          <p className='mt-4 text-center text-xs text-atria-text-muted'>
-            By confirming, you are signing this acknowledgment electronically.
-          </p>
+              <p className='mt-4 text-center text-xs text-atria-text-muted'>
+                Your digital signature and timestamp will be recorded.
+              </p>
+            </>
+          ) : (
+            <div className='space-y-4'>
+              <div className={cn(
+                'rounded-[var(--radius-atria-md)] border p-4',
+                bgCheck?.status === 'clear'
+                  ? 'border-atria-success/30 bg-atria-success/10'
+                  : bgCheck?.status === 'consider'
+                    ? 'border-atria-warning/30 bg-atria-warning/10'
+                    : bgCheck?.status === 'error'
+                      ? 'border-atria-danger/30 bg-atria-danger/10'
+                      : 'border-atria-border bg-atria-surface-2',
+              )}>
+                <div className='flex items-center gap-2'>
+                  {bgCheck?.status === 'pending' && (
+                    <>
+                      <span className='animate-pulse text-lg'>⏳</span>
+                      <p className='text-sm font-medium text-atria-text-secondary'>
+                        Background check in progress...
+                      </p>
+                    </>
+                  )}
+                  {bgCheck?.status === 'clear' && (
+                    <>
+                      <span className='text-lg'>✓</span>
+                      <p className='text-sm font-medium text-atria-success'>
+                        Background check cleared
+                      </p>
+                    </>
+                  )}
+                  {bgCheck?.status === 'consider' && (
+                    <>
+                      <span className='text-lg'>⚠️</span>
+                      <p className='text-sm font-medium text-atria-warning'>
+                        Background check requires review
+                      </p>
+                    </>
+                  )}
+                  {bgCheck?.status === 'error' && (
+                    <>
+                      <span className='text-lg'>✗</span>
+                      <p className='text-sm font-medium text-atria-danger'>
+                        Background check failed — please contact HR
+                      </p>
+                    </>
+                  )}
+                  {!bgCheck && (
+                    <>
+                      <span className='animate-pulse text-lg'>⏳</span>
+                      <p className='text-sm font-medium text-atria-text-secondary'>
+                        Initiating background check...
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <Button
+                variant='secondary'
+                size='lg'
+                className='w-full'
+                onClick={() => navigate('/onboarding', { replace: true })}
+              >
+                Back to checklist →
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -40,6 +40,16 @@ const mockCaregiver: User = {
   imageUrl: '',
 }
 
+const mockCandidate: User = {
+  id: 'user_screenshot_candidate',
+  firstName: 'Sofia',
+  lastName: 'Herrera',
+  fullName: 'Sofia Herrera',
+  emailAddresses: [{ emailAddress: 'sofia.herrera@gmail.com' }],
+  primaryEmailAddress: { emailAddress: 'sofia.herrera@gmail.com' },
+  imageUrl: '',
+}
+
 const mockOrganization = {
   id: clerkOrgId,
   name: 'ATRIA-X Demo Agency',
@@ -52,18 +62,25 @@ const ClerkContext = createContext<{
   organization: typeof mockOrganization | null
 }>({ user: null, organization: null })
 
-function getRoleFromView(): 'org:admin' | 'org:coordinator' | 'org:caregiver' {
+function getRoleFromView(): 'org:admin' | 'org:coordinator' | 'org:caregiver' | 'org:candidate' {
   if (typeof window === 'undefined') return 'org:coordinator'
   const view = new URLSearchParams(window.location.search).get('view')
   if (view === 'caregiver-schedule' || view === 'availability') {
     return 'org:caregiver'
+  }
+  if (view && view.startsWith('candidate')) {
+    return 'org:candidate'
   }
   return 'org:coordinator'
 }
 
 export function ClerkProvider({ children }: PropsWithChildren) {
   const role = getRoleFromView()
-  const user = role === 'org:caregiver' ? mockCaregiver : mockCoordinator
+  const user = role === 'org:caregiver'
+    ? mockCaregiver
+    : role === 'org:candidate'
+      ? mockCandidate
+      : mockCoordinator
   return (
     <ClerkContext.Provider value={{ user, organization: mockOrganization }}>
       {children}

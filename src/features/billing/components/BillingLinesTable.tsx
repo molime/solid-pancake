@@ -7,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/ui/Table'
+import { formatDateUS } from '@/shared/format'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import type { BillingLineRow } from '../model/invoiceUtils'
 
@@ -85,7 +86,7 @@ export function BillingLinesTable({
             </TableCell>
             <TableCell>
               {line.scheduledStart
-                ? new Date(line.scheduledStart).toLocaleDateString()
+                ? formatDateUS(line.scheduledStart)
                 : '-'}
             </TableCell>
             <TableCell>{line.hours}</TableCell>

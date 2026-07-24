@@ -19,7 +19,7 @@ import { useState } from 'react'
 import { NewCaseModal } from '../components/NewCaseModal'
 import { HrToast } from '../components/HrToast'
 import { useHrToast } from '../hooks/useHrToast'
-import { formatWeekdayDate } from '@/shared/format'
+import { formatDateUS } from '@/shared/format'
 import type { Id } from '../../../../convex/_generated/dataModel'
 
 const STATUS_OPTIONS = [
@@ -121,7 +121,7 @@ export function HRCasesPage() {
                       </StatusBadge>
                     </TableCell>
                     <TableCell>{c.ownerName}</TableCell>
-                    <TableCell>{formatWeekdayDate(c.createdAt)}</TableCell>
+                    <TableCell>{formatDateUS(c.createdAt)}</TableCell>
                     <TableCell>
                       <Select
                         value={c.status}

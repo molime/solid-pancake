@@ -9,19 +9,25 @@
  */
 
 import type * as _utils_clerkUserManagement from "../_utils/clerkUserManagement.js";
+import type * as _utils_documentSecurity from "../_utils/documentSecurity.js";
 import type * as _utils_env from "../_utils/env.js";
 import type * as _utils_invitationBypass from "../_utils/invitationBypass.js";
+import type * as _utils_notifications from "../_utils/notifications.js";
 import type * as _utils_resend from "../_utils/resend.js";
+import type * as _utils_twilio from "../_utils/twilio.js";
 import type * as adpOutbound from "../adpOutbound.js";
 import type * as adpSync from "../adpSync.js";
+import type * as agencyConfig from "../agencyConfig.js";
 import type * as audit from "../audit.js";
 import type * as authHelpers from "../authHelpers.js";
+import type * as backgroundChecks from "../backgroundChecks.js";
 import type * as billing from "../billing.js";
 import type * as billingHelpers from "../billingHelpers.js";
 import type * as candidates from "../candidates.js";
 import type * as clients from "../clients.js";
 import type * as disableUserMfa from "../disableUserMfa.js";
 import type * as documentArchive from "../documentArchive.js";
+import type * as drafts from "../drafts.js";
 import type * as embedding from "../embedding.js";
 import type * as employeeProfiles from "../employeeProfiles.js";
 import type * as files from "../files.js";
@@ -58,19 +64,25 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "_utils/clerkUserManagement": typeof _utils_clerkUserManagement;
+  "_utils/documentSecurity": typeof _utils_documentSecurity;
   "_utils/env": typeof _utils_env;
   "_utils/invitationBypass": typeof _utils_invitationBypass;
+  "_utils/notifications": typeof _utils_notifications;
   "_utils/resend": typeof _utils_resend;
+  "_utils/twilio": typeof _utils_twilio;
   adpOutbound: typeof adpOutbound;
   adpSync: typeof adpSync;
+  agencyConfig: typeof agencyConfig;
   audit: typeof audit;
   authHelpers: typeof authHelpers;
+  backgroundChecks: typeof backgroundChecks;
   billing: typeof billing;
   billingHelpers: typeof billingHelpers;
   candidates: typeof candidates;
   clients: typeof clients;
   disableUserMfa: typeof disableUserMfa;
   documentArchive: typeof documentArchive;
+  drafts: typeof drafts;
   embedding: typeof embedding;
   employeeProfiles: typeof employeeProfiles;
   files: typeof files;

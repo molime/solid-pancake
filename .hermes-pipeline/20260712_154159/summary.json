@@ -1,0 +1,53 @@
+{
+  "project": "atriax",
+  "task": "ATRIA-X Phase 2 \u2014 HR invite / review / documents polish\n\nMake three conservative UX improvements to the existing candidate onboarding flow:\n\n1. Invite candidate form validation (src/features/hr/components/InviteCandidateModal.tsx)\n   - Validate that email looks like an email.\n   - Validate that required fields (display name, email) are filled.\n   - If phone is provided, validate it has at least 10 digits.\n   - Show inline field-level errors; disable submit while invalid or submitting.\n   - Use simple regex helpers; do not add dependencies.\n\n2. Single-click approve + send offer (src/features/hr/pages/ApplicationReviewPage.tsx)\n   - For candidates in `applied` or `application_draft` status, replace the current \"Approve application\" primary CTA with \"Approve application & send offer\".\n   - The handler calls `candidates:reviewApplication({ decision: 'approved' })` then immediately `candidates:sendOffer(...)` with the offer fields.\n   - Keep the existing `hr_review` status CTA as \"Send offer\" for edge cases, and keep the rest of the decision card unchanged.\n   - Keep the `allTasksComplete` guard.\n\n3. Human-readable document category labels (src/shared/format.ts + ApplicationReviewPage.tsx)\n   - Add `formatDocumentCategoryLabel(category)` mapping:\n     photo_id -> \"Photo identification\"\n     cpr_certificate -> \"CPR certificate\"\n     background_check -> \"Background check\"\n     employment_agreement -> \"Employment agreement\"\n     form_submission -> \"Application form\"\n     fallback to formatStatusLabel(category) for unknown values.\n   - Use this label when rendering each document in ApplicationReviewPage, including the fallback download file name.\n\nAdditional requirements:\n- Style: single quotes, no semicolons, 2-space indent, Tailwind v4 tokens.\n- Keep changes minimal; do not change convex schema, backend state machine, or document upload labels.\n- Add regression tests:\n  - New src/features/hr/components/InviteCandidateModal.test.tsx covering email/phone validation and valid submission.\n  - Update src/features/hr/pages/ApplicationReviewPage.test.tsx to assert the combined approve+offer CTA and label mapping.\n  - Add src/shared/format.test.ts (or extend existing) for formatDocumentCategoryLabel.\n- Run and keep green: npm run lint, npm run typecheck, npm run test, npm run build. Report e2e results honestly; @auth specs need live Clerk credentials.\n- Use branch feature/phase-2-worker-onboarding.\n\nDetailed design doc: C:\\\\Users\\\\pinol\\\\AppData\\\\Local\\\\Temp\\\\atriax-hr-invite-review-doc-polish-design.md",
+  "plan_mode": "codex",
+  "reviewers": "codex",
+  "dry_run": false,
+  "stages": [
+    {
+      "stage": "plan_codex",
+      "backend": "codex",
+      "model": "gpt-5.5 (default)",
+      "rc": 0
+    },
+    {
+      "stage": "implement",
+      "backend": "kimi",
+      "model": "Kimi-k2.6 (default)",
+      "rc": 0
+    },
+    {
+      "stage": "gate_postimpl",
+      "passed": true
+    },
+    {
+      "stage": "review_codex_iter1",
+      "backend": "codex",
+      "model": "gpt-5.5 (default)",
+      "verdict": "CHANGES_REQUESTED"
+    },
+    {
+      "stage": "fix_iter1",
+      "backend": "kimi",
+      "model": "Kimi-k2.6 (default)",
+      "rc": 0
+    },
+    {
+      "stage": "gate_postfix1",
+      "passed": true
+    },
+    {
+      "stage": "review_codex_iter2",
+      "backend": "codex",
+      "model": "gpt-5.5 (default)",
+      "verdict": "APPROVED"
+    },
+    {
+      "stage": "gate_final",
+      "passed": false
+    }
+  ],
+  "result": "FINAL_GATE_FAILED",
+  "offline_reviewers": {}
+}

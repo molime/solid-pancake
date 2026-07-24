@@ -30,6 +30,7 @@ export default defineSchema({
     clerkOrgId: v.string(),
     name: v.string(),
     slug: v.string(),
+    ein: v.optional(v.string()),
     billingSettings: v.optional(
       v.object({
         defaultRate: v.number(),
@@ -329,6 +330,7 @@ export default defineSchema({
     displayName: v.string(),
     status: v.string(),
     source: v.optional(v.string()),
+    branchId: v.optional(v.id('agencyBranches')),
     invitationId: v.optional(v.string()),
     invitationFailed: v.optional(v.boolean()),
     invitationError: v.optional(v.string()),
@@ -461,6 +463,7 @@ export default defineSchema({
     verifiedBy: v.optional(v.string()),
     verifiedAt: v.optional(v.string()),
     rejectionReason: v.optional(v.string()),
+    photoIdType: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index('by_tenant_subject', ['tenantId', 'subjectType', 'subjectId'])
@@ -476,4 +479,97 @@ export default defineSchema({
     status: v.string(),
     expiresAt: v.optional(v.string()),
   }).index('by_tenant_user', ['tenantId', 'clerkUserId']),
+
+  // Agency branches — each agency configures which branches they have
+  // (ILS, SLS, Daycare, and/or custom branches)
+  agencyBranches: defineTable({
+    tenantId: v.id('tenants'),
+    branchType: v.string(),
+    label: v.string(),
+    isPredefined: v.boolean(),
+    order: v.number(),
+    active: v.boolean(),
+  }).index('by_tenant', ['tenantId']),
+
+  // Products — platform products/flows that agencies can subscribe to
+  products: defineTable({
+    key: v.string(),
+    label: v.string(),
+    description: v.string(),
+    active: v.boolean(),
+  }).index('by_key', ['key']),
+
+  // Agency product subscriptions — which products each agency has hired
+  agencyProducts: defineTable({
+    tenantId: v.id('tenants'),
+    productKey: v.string(),
+    active: v.boolean(),
+  })
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_product', ['tenantId', 'productKey']),
+
+  // Background checks — initiated after candidate consent
+  backgroundChecks: defineTable({
+    tenantId: v.id('tenants'),
+    candidateId: v.id('candidates'),
+    provider: v.string(),          // 'mock' | 'backgroundchecks_dot_com' | 'checkr' | 'victig' | etc.
+    providerReportId: v.optional(v.string()),
+    status: v.string(),            // 'pending' | 'clear' | 'consider' | 'suspended' | 'expired' | 'error' | 'pending_scan' | 'completed' | 'scan_failed'
+    result: v.optional(v.string()), // JSON string with result summary
+    package: v.string(),           // which check package was used
+    initiatedAt: v.string(),
+    completedAt: v.optional(v.string()),
+    officialResultStorageId: v.optional(v.string()),
+    officialResultUploadedAt: v.optional(v.string()),
+    officialResultUploadedBy: v.optional(v.string()),
+  }).index('by_tenant_candidate', ['tenantId', 'candidateId']),
+
+  // Prefilled PDFs generated for candidate onboarding forms
+  prefilledDocuments: defineTable({
+    tenantId: v.id('tenants'),
+    candidateId: v.id('candidates'),
+    applicationId: v.optional(v.id('applications')),
+    documentType: v.string(), // 'health_screen' | 'live_scan' | 'w4' | 'criminal_record'
+    storageId: v.optional(v.string()), // Convex file storage of the generated PDF
+    generatedAt: v.string(),
+    generatedBy: v.string(),  // clerkUserId or 'system'
+    uploadedSignedStorageId: v.optional(v.string()), // signed/stamped version uploaded by candidate
+    hrSectionCompleted: v.optional(v.boolean()),
+    hrSectionData: v.optional(v.any()),
+  })
+    .index('by_tenant_candidate', ['tenantId', 'candidateId'])
+    .index('by_tenant_candidate_type', ['tenantId', 'candidateId', 'documentType']),
+
+  // Training configurations — configurable per agency
+  trainingConfigs: defineTable({
+    tenantId: v.id('tenants'),
+    isDefault: v.boolean(),
+    steps: v.array(v.object({
+      id: v.string(),
+      title: v.string(),
+      type: v.union(
+        v.literal('text'),
+        v.literal('video'),
+        v.literal('image'),
+        v.literal('policy'),
+        v.literal('quiz'),
+      ),
+      content: v.string(),
+      caption: v.optional(v.string()),
+      minDurationSec: v.optional(v.number()),
+      required: v.boolean(),
+    })),
+    passingScore: v.optional(v.number()),
+  }).index('by_tenant', ['tenantId']),
+
+  // Candidate form drafts — auto-saved application state
+  drafts: defineTable({
+    tenantId: v.id('tenants'),
+    candidateId: v.id('candidates'),
+    formType: v.string(),
+    data: v.any(),
+    updatedAt: v.string(),
+  })
+    .index('by_tenant_candidate_type', ['tenantId', 'candidateId', 'formType'])
+    .index('by_tenant_candidate', ['tenantId', 'candidateId']),
 })

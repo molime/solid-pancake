@@ -9,6 +9,7 @@ import {
   TableRow,
 } from '@/shared/ui/Table'
 import { Download } from 'lucide-react'
+import { formatDateUS } from '@/shared/format'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import type { InvoiceRow } from '../model/invoiceUtils'
 
@@ -69,7 +70,7 @@ export function InvoicesTable({
                   ${invoice.totalAmount.toFixed(2)}
                 </TableCell>
                 <TableCell>
-                  {new Date(invoice.exportedAt).toLocaleDateString()}
+                  {formatDateUS(invoice.exportedAt)}
                 </TableCell>
                 <TableCell className="text-right">
                   <Button

@@ -200,6 +200,15 @@ async function selectOrgIfAsked(page: Page, orgId: string, role?: string) {
   }
 
   if (page.url().includes('/select-agency')) {
+    // The single-membership auto-select bootstrap can stall on a slow Clerk →
+    // Convex auth handshake (page sits on the "Opening your agency workspace"
+    // loader). Reload once to restart the bootstrap before giving up.
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+    await waitForWorkspaceReady(page)
+  }
+
+  if (page.url().includes('/select-agency')) {
     await expect(page).not.toHaveURL(/select-agency/, { timeout: 30000 })
   }
   await waitForWorkspaceReady(page)

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import type { Scheduler } from 'convex/server'
 import {
   isDevInvitationBypassEnabled,
   generateClerkSignInTicket,
@@ -196,7 +197,13 @@ describe('createClerkUserAndJoinOrg', () => {
   })
 
   it('creates a user, verifies the email, disables mfa, joins org and returns a magic link', async () => {
-    const ctx = { scheduler: { runAfter: vi.fn(() => Promise.resolve('sched_1')) } as unknown as Scheduler }
+    const ctx = {
+      scheduler: {
+        runAfter: vi.fn(() => Promise.resolve('sched_1')),
+        runAt: vi.fn(() => Promise.resolve('sched_2')),
+        cancel: vi.fn(() => Promise.resolve()),
+      } as unknown as Scheduler,
+    }
     const result = await createClerkUserAndJoinOrg({
       ctx,
       secretKey: 'sk_test',

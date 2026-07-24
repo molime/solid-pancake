@@ -131,9 +131,22 @@ export const ensureSelectedAgency = mutation({
     }
 
     const roleFromClerk = getClerkOrganizationRole(identity)
+    // Check if a candidate record exists for this user — if so, default to org:candidate
+    let defaultRole: TenantRole = 'org:caregiver'
+    if (!isNewTenant && !roleFromClerk) {
+      const existingCandidate = await ctx.db
+        .query('candidates')
+        .withIndex('by_tenant_clerk_user', (q) =>
+          q.eq('tenantId', tenantId).eq('clerkUserId', identity.subject),
+        )
+        .first()
+      if (existingCandidate) {
+        defaultRole = 'org:candidate'
+      }
+    }
     const role: TenantRole = isNewTenant
       ? 'org:admin'
-      : roleFromClerk ?? 'org:caregiver'
+      : roleFromClerk ?? defaultRole
 
     const memberId = await ctx.db.insert('tenantMembers', {
       tenantId,
@@ -178,6 +191,21 @@ export const updateBillingSettings = mutation({
         defaultRate: args.defaultRate,
         exportFormat: args.exportFormat,
       },
+    })
+  },
+})
+
+export const updateAgencyInfo = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    ein: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+    ])
+    await ctx.db.patch(tenantId, {
+      ...(args.ein !== undefined ? { ein: args.ein } : {}),
     })
   },
 })

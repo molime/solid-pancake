@@ -16,6 +16,10 @@ export function CandidateOnboardingIndex() {
     api.platformTrainingCompletions.listMyCompletions,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
+  const hasFullPlatform = useQuery(
+    api.agencyConfig.hasProduct,
+    clerkOrgId ? { clerkOrgId, productKey: 'full_platform' } : 'skip',
+  )
 
   useEffect(() => {
     if (!data || !clerkOrgId) return
@@ -39,7 +43,13 @@ export function CandidateOnboardingIndex() {
 
     if (status === 'hired') {
       if (isPlatformTrainingComplete(completions)) {
-        navigate('/caregiver/today', { replace: true })
+        // Check if agency has full_platform product
+        if (hasFullPlatform === false) {
+          // Hiring-only agency — show success screen, not caregiver dashboard
+          navigate('/onboarding/success', { replace: true })
+        } else {
+          navigate('/caregiver/today', { replace: true })
+        }
       } else {
         navigate('/onboarding/training', { replace: true })
       }
@@ -48,7 +58,7 @@ export function CandidateOnboardingIndex() {
 
     // applied, hr_review, accepted, rejected, withdrawn -> show onboarding checklist page
     navigate('/onboarding/checklist', { replace: true })
-  }, [data, clerkOrgId, navigate, completions, candidate])
+  }, [data, clerkOrgId, navigate, completions, candidate, hasFullPlatform])
 
   if (!isLoaded || !clerkOrgId) return <AppLoader fullScreen />
   return <AppLoader fullScreen />

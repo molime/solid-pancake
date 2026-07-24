@@ -164,3 +164,209 @@ a {
 [data-theme="light"] ::-webkit-scrollbar-thumb:hover {
   background: #8fa0a8;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+ * Training page animations — interactive game-like experience
+ * ═══════════════════════════════════════════════════════════════ */
+
+@keyframes training-slide-in {
+  from { opacity: 0; transform: translateX(30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes training-fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes training-pop {
+  0% { opacity: 0; transform: scale(0.8); }
+  50% { transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes training-celebrate {
+  0% { transform: scale(0) rotate(0deg); opacity: 0; }
+  50% { transform: scale(1.2) rotate(10deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes training-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+@keyframes training-pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(47, 191, 113, 0.4); }
+  70% { box-shadow: 0 0 0 12px rgba(47, 191, 113, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(47, 191, 113, 0); }
+}
+
+@keyframes training-confetti-fall {
+  0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(200px) rotate(360deg); opacity: 0; }
+}
+
+@keyframes training-progress-fill {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+@keyframes training-bounce-in {
+  0% { opacity: 0; transform: translateY(-20px); }
+  60% { opacity: 1; transform: translateY(5px); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes training-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(22, 163, 74, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(22, 163, 74, 0.6); }
+}
+
+@keyframes training-star-burst {
+  0% { transform: scale(0) rotate(-45deg); opacity: 0; }
+  50% { transform: scale(1.3) rotate(0deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.training-animate-slide-in {
+  animation: training-slide-in 0.5s ease-out forwards;
+}
+
+.training-animate-fade-up {
+  animation: training-fade-up 0.4s ease-out forwards;
+}
+
+.training-animate-pop {
+  animation: training-pop 0.3s ease-out forwards;
+}
+
+.training-animate-celebrate {
+  animation: training-celebrate 0.6s ease-out forwards;
+}
+
+.training-animate-shake {
+  animation: training-shake 0.4s ease-in-out;
+}
+
+.training-animate-pulse-ring {
+  animation: training-pulse-ring 1.5s ease-out infinite;
+}
+
+.training-animate-bounce-in {
+  animation: training-bounce-in 0.5s ease-out forwards;
+}
+
+.training-animate-glow {
+  animation: training-glow 2s ease-in-out infinite;
+}
+
+.training-animate-star-burst {
+  animation: training-star-burst 0.5s ease-out forwards;
+}
+
+.training-stagger-1 { animation-delay: 0.1s; opacity: 0; }
+.training-stagger-2 { animation-delay: 0.2s; opacity: 0; }
+.training-stagger-3 { animation-delay: 0.3s; opacity: 0; }
+.training-stagger-4 { animation-delay: 0.4s; opacity: 0; }
+.training-stagger-5 { animation-delay: 0.5s; opacity: 0; }
+
+/* Confetti pieces for quiz celebration */
+.training-confetti {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  pointer-events: none;
+  animation: training-confetti-fall 1.5s ease-in forwards;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ * Training page enhanced animations — game-like experience v2
+ * ═══════════════════════════════════════════════════════════════ */
+
+@keyframes training-ripple {
+  0% { transform: scale(0); opacity: 0.6; }
+  100% { transform: scale(4); opacity: 0; }
+}
+
+@keyframes training-flip-in {
+  0% { transform: perspective(600px) rotateY(90deg); opacity: 0; }
+  100% { transform: perspective(600px) rotateY(0deg); opacity: 1; }
+}
+
+@keyframes training-star-pop {
+  0% { transform: scale(0) rotate(-45deg); opacity: 0; }
+  50% { transform: scale(1.5) rotate(10deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes training-progress-ring {
+  0% { stroke-dashoffset: 283; }
+  100% { stroke-dashoffset: var(--ring-offset, 0); }
+}
+
+@keyframes training-bounce-in-left {
+  0% { opacity: 0; transform: translateX(-30px); }
+  60% { opacity: 1; transform: translateX(5px); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes training-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes training-tap-feedback {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+@keyframes training-streak-glow {
+  0%, 100% { box-shadow: 0 0 4px rgba(240, 180, 41, 0.3); }
+  50% { box-shadow: 0 0 16px rgba(240, 180, 41, 0.6); }
+}
+
+@keyframes training-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.training-animate-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(22, 163, 74, 0.4);
+  pointer-events: none;
+  animation: training-ripple 0.6s ease-out forwards;
+}
+
+.training-animate-flip-in {
+  animation: training-flip-in 0.5s ease-out forwards;
+}
+
+.training-animate-star-pop {
+  animation: training-star-pop 0.5s ease-out forwards;
+}
+
+.training-animate-bounce-in-left {
+  animation: training-bounce-in-left 0.5s ease-out forwards;
+}
+
+.training-animate-tap {
+  animation: training-tap-feedback 0.2s ease-in-out;
+}
+
+.training-animate-streak-glow {
+  animation: training-streak-glow 2s ease-in-out infinite;
+}
+
+.training-animate-float {
+  animation: training-float 3s ease-in-out infinite;
+}
+
+.training-shimmer-bg {
+  background: linear-gradient(90deg, var(--color-atria-surface-2) 0%, var(--color-atria-surface-3) 50%, var(--color-atria-surface-2) 100%);
+  background-size: 200% 100%;
+  animation: training-shimmer 2s linear infinite;
+}

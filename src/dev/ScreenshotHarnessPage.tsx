@@ -6,6 +6,15 @@ import { AvailabilityPage } from '@/features/scheduling/pages/AvailabilityPage'
 import { ShiftEditorModal } from '@/features/scheduling/components/ShiftEditorModal'
 import { ShiftPacketPanel } from '@/features/scheduling/components/ShiftPacketPanel'
 import { CoverageRequestsPanel } from '@/features/scheduling/components/CoverageRequestsPanel'
+import { CandidateOnboardingPage } from '@/features/onboarding/pages/CandidateOnboardingPage'
+import { ApplicationFormPage } from '@/features/onboarding/pages/ApplicationFormPage'
+import { DocumentUploadPage } from '@/features/onboarding/pages/DocumentUploadPage'
+import { AcknowledgmentPage } from '@/features/onboarding/pages/AcknowledgmentPage'
+import { TrainingPage } from '@/features/onboarding/pages/TrainingPage'
+import { CandidateProfilePage } from '@/features/onboarding/pages/CandidateProfilePage'
+import { ApplicationStatusPage } from '@/features/onboarding/pages/ApplicationStatusPage'
+import { OnboardingSuccessPage } from '@/features/onboarding/pages/OnboardingSuccessPage'
+import { EmploymentAgreementPage } from '@/features/onboarding/pages/EmploymentAgreementPage'
 import { clerkOrgId, featuredShift } from './mockData'
 
 const VIEW_OPTIONS = [
@@ -15,6 +24,15 @@ const VIEW_OPTIONS = [
   'coverage',
   'caregiver-schedule',
   'availability',
+  'candidate-checklist',
+  'candidate-application',
+  'candidate-upload',
+  'candidate-acknowledgment',
+  'candidate-training',
+  'candidate-profile',
+  'candidate-status',
+  'candidate-success',
+  'candidate-employment-agreement',
 ] as const
 
 type HarnessView = (typeof VIEW_OPTIONS)[number]
@@ -77,6 +95,24 @@ function viewToComponent(view: HarnessView): ReactNode {
       return <CaregiverSchedulePage />
     case 'availability':
       return <AvailabilityPage />
+    case 'candidate-checklist':
+      return <CandidateOnboardingPage />
+    case 'candidate-application':
+      return <ApplicationFormPage />
+    case 'candidate-upload':
+      return <DocumentUploadPage />
+    case 'candidate-acknowledgment':
+      return <AcknowledgmentPage />
+    case 'candidate-training':
+      return <TrainingPage />
+    case 'candidate-profile':
+      return <CandidateProfilePage />
+    case 'candidate-status':
+      return <ApplicationStatusPage />
+    case 'candidate-success':
+      return <OnboardingSuccessPage />
+    case 'candidate-employment-agreement':
+      return <EmploymentAgreementPage />
   }
 }
 

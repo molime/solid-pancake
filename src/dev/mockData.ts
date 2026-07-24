@@ -145,7 +145,8 @@ const coordinatorMember = {
   email: 'ana@atriax.example',
 }
 
-export function getCurrentMember(role: 'org:coordinator' | 'org:caregiver') {
+export function getCurrentMember(role: 'org:coordinator' | 'org:caregiver' | 'org:candidate') {
+  if (role === 'org:candidate') return { ...caregivers[0], clerkUserId: 'user_screenshot_candidate', role: 'org:candidate' as const, displayName: 'Sofia Herrera', email: 'sofia.herrera@gmail.com' }
   return role === 'org:caregiver'
     ? { ...caregivers[0], clerkUserId: currentCaregiverUserId }
     : coordinatorMember
@@ -276,3 +277,59 @@ export const auditEvents = [
     createdAt: '2026-06-15T10:00:00.000Z',
   },
 ]
+
+
+// ═══════════════════════════════════════════════════════════════
+// Candidate onboarding mocks
+// ═══════════════════════════════════════════════════════════════
+
+export const mockCandidate = {
+  _id: 'candidate_mock' as Id<'candidates'>,
+  _creationTime: Date.now(),
+  tenantId,
+  clerkUserId: 'user_screenshot_candidate',
+  email: 'sofia.herrera@gmail.com',
+  phone: '(555) 219-4083',
+  displayName: 'Sofia Herrera',
+  status: 'applied',
+  source: 'self_service',
+  requiresPasswordChange: false,
+  createdAt: '2026-07-10T10:00:00.000Z',
+}
+
+export const mockCandidateTasks = [
+  { _id: 'task_form', tenantId, candidateId: mockCandidate._id, type: 'form_submission', status: 'complete', order: 0, completedAt: '2026-07-10T10:30:00.000Z' },
+  { _id: 'task_photo', tenantId, candidateId: mockCandidate._id, type: 'photo_id', status: 'pending', order: 1 },
+  { _id: 'task_tax', tenantId, candidateId: mockCandidate._id, type: 'tax_id_ssn', status: 'pending', order: 2 },
+  { _id: 'task_cpr', tenantId, candidateId: mockCandidate._id, type: 'cpr_certificate', status: 'pending', order: 3 },
+  { _id: 'task_health', tenantId, candidateId: mockCandidate._id, type: 'health_screen', status: 'pending', order: 4 },
+  { _id: 'task_bg', tenantId, candidateId: mockCandidate._id, type: 'background_check', status: 'pending', order: 5 },
+  { _id: 'task_agreement', tenantId, candidateId: mockCandidate._id, type: 'employment_agreement', status: 'pending', order: 6 },
+  { _id: 'task_certs', tenantId, candidateId: mockCandidate._id, type: 'additional_certifications', status: 'pending', order: 7 },
+]
+
+export const mockApplication = {
+  candidate: mockCandidate,
+  application: { _id: 'app_mock', status: 'submitted', submittedAt: '2026-07-10T10:30:00.000Z', fields: { fullName: 'Sofia Herrera', email: 'sofia.herrera@gmail.com', phone: '(555) 219-4083', position: 'Home Care Aide' } },
+  tasks: mockCandidateTasks,
+}
+
+export const mockBranches = [
+  { _id: 'branch_ils', tenantId, branchType: 'ILS', label: 'Independent Living Services', isPredefined: true, order: 0, active: true },
+  { _id: 'branch_sls', tenantId, branchType: 'SLS', label: 'Supported Living Services', isPredefined: true, order: 1, active: true },
+]
+
+export const mockTrainingCompletions = []
+
+export const mockBgCheck = {
+  _id: 'bgcheck_mock',
+  tenantId,
+  candidateId: mockCandidate._id,
+  provider: 'mock',
+  providerReportId: 'mock_123456',
+  status: 'clear',
+  result: JSON.stringify({ provider: 'mock', summary: 'No records found (mock sandbox)', checks: [{ type: 'national_criminal', status: 'clear', records: 0 }] }),
+  package: 'basic',
+  initiatedAt: '2026-07-10T11:00:00.000Z',
+  completedAt: '2026-07-10T11:00:01.000Z',
+}

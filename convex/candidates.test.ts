@@ -107,6 +107,18 @@ function asCandidate(
   })
 }
 
+function asCoordinator(
+  t: ReturnType<typeof createTestConvex>,
+  coordinatorId: string,
+  clerkOrgId: string,
+) {
+  return t.withIdentity({
+    subject: coordinatorId,
+    org_id: clerkOrgId,
+    org_role: 'org:coordinator',
+  })
+}
+
 async function seedTenant(
   t: ReturnType<typeof createTestConvex>,
   clerkOrgId: string,
@@ -151,12 +163,136 @@ async function seedHR(
   })
 }
 
+async function seedCoordinator(
+  t: ReturnType<typeof createTestConvex>,
+  clerkOrgId: string,
+  coordinatorId: string,
+) {
+  return t.run(async (ctx) => {
+    const tenant = await ctx.db
+      .query('tenants')
+      .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+      .unique()
+    if (!tenant) throw new Error('Tenant not found.')
+    await ctx.db.insert('tenantMembers', {
+      tenantId: tenant._id,
+      clerkUserId: coordinatorId,
+      role: 'org:coordinator',
+      displayName: 'Coordinator Person',
+      email: 'coordinator@example.com',
+    })
+  })
+}
+
+type OfferPrerequisites = {
+  w4?: boolean
+  i9Section2?: boolean
+  backgroundCheckResult?: boolean
+}
+
+async function seedCandidateForOffer(
+  t: ReturnType<typeof createTestConvex>,
+  clerkOrgId: string,
+  adminId: string,
+  candidateUserId: string,
+  prereqs: OfferPrerequisites = {},
+) {
+  await seedTenant(t, clerkOrgId, adminId)
+  let tenantId: Id<'tenants'> = 'tenant_placeholder' as Id<'tenants'>
+  let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
+  let applicationId: Id<'applications'> = 'application_placeholder' as Id<'applications'>
+
+  await t.run(async (ctx) => {
+    const tenant = await ctx.db
+      .query('tenants')
+      .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+      .unique()
+    if (!tenant) throw new Error('Tenant not found.')
+    tenantId = tenant._id
+    await ctx.db.insert('tenantMembers', {
+      tenantId,
+      clerkUserId: candidateUserId,
+      role: 'org:candidate',
+      displayName: 'Lifecycle Candidate',
+      email: 'lifecycle@example.com',
+    })
+    candidateId = await ctx.db.insert('candidates', {
+      tenantId,
+      clerkUserId: candidateUserId,
+      email: 'lifecycle@example.com',
+      displayName: 'Lifecycle Candidate',
+      status: 'applied',
+      createdAt: new Date().toISOString(),
+    })
+    applicationId = await ctx.db.insert('applications', {
+      tenantId,
+      candidateId,
+      status: 'submitted',
+      submittedAt: new Date().toISOString(),
+      fields: prereqs.i9Section2
+        ? {
+            i9Section2: {
+              documentTitle: 'US Passport',
+              documentNumber: '123456789',
+              expirationDate: '2030-01-01',
+              employerSignature: 'HR Admin',
+              date: new Date().toISOString().split('T')[0],
+            },
+          }
+        : {},
+    })
+
+    if (prereqs.w4) {
+      await ctx.db.insert('prefilledDocuments', {
+        tenantId,
+        candidateId,
+        documentType: 'w4',
+        storageId: 'w4-storage-id',
+        generatedAt: new Date().toISOString(),
+        generatedBy: adminId,
+        hrSectionCompleted: true,
+        hrSectionData: {
+          employerName: 'Test Agency',
+          ein: '12-3456789',
+          firstDateOfEmployment: new Date().toISOString().split('T')[0],
+        },
+      })
+    }
+
+    if (prereqs.backgroundCheckResult) {
+      await ctx.db.insert('backgroundChecks', {
+        tenantId,
+        candidateId,
+        provider: 'mock',
+        status: 'clear',
+        package: 'basic',
+        initiatedAt: new Date().toISOString(),
+        officialResultStorageId: 'bg-result-storage-id',
+        officialResultUploadedAt: new Date().toISOString(),
+        officialResultUploadedBy: adminId,
+      })
+    }
+  })
+
+  await asAdmin(t, adminId, clerkOrgId).mutation(
+    api.candidates.reviewApplication,
+    {
+      clerkOrgId,
+      candidateId,
+      decision: 'approved',
+      hrNotes: 'Looks good',
+    },
+  )
+
+  return { tenantId, candidateId, applicationId }
+}
+
 beforeEach(() => {
   vi.stubEnv('EMAIL_ENABLED', 'false')
 })
 
 describe('inviteCandidate', () => {
-  it('seeds 5 tasks in order', async () => {
+  it('seeds 9 tasks in order', async () => {
     stubClerkInvitation()
     const t = createTestConvex()
     const clerkOrgId = 'org_invite_candidate'
@@ -191,16 +327,24 @@ describe('inviteCandidate', () => {
         .collect()
     })
 
-    expect(tasks).toHaveLength(5)
+    expect(tasks).toHaveLength(9)
     expect(tasks.map((t) => t.type)).toEqual([
       'form_submission',
       'photo_id',
+      'tax_id_ssn',
       'cpr_certificate',
+      'health_screen',
       'background_check',
       'employment_agreement',
+      'additional_certifications',
+      'car_insurance',
     ])
-    expect(tasks.map((t) => t.order)).toEqual([0, 1, 2, 3, 4])
-    expect(tasks.every((t) => t.status === 'pending')).toBe(true)
+    expect(tasks.map((t) => t.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
+    // car_insurance starts skipped until the applicant answers Yes to the transport question
+    expect(
+      tasks.filter((t) => t.type !== 'car_insurance').every((t) => t.status === 'pending'),
+    ).toBe(true)
+    expect(tasks.find((t) => t.type === 'car_insurance')?.status).toBe('skipped')
   })
 
   it('is allowed for org:hr', async () => {
@@ -1120,6 +1264,193 @@ describe('submitApplication', () => {
   })
 })
 
+describe('submitApplication car insurance task', () => {
+  async function seedCandidateWithTasks(
+    t: ReturnType<typeof createTestConvex>,
+    clerkOrgId: string,
+    candidateUserId: string,
+    carInsuranceStatus?: string,
+  ) {
+    const adminId = 'user_admin_car_ins'
+    await seedTenant(t, clerkOrgId, adminId)
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
+    let tenantId: Id<'tenants'> = 'tenant_placeholder' as Id<'tenants'>
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      tenantId = tenant._id
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: candidateUserId,
+        role: 'org:candidate',
+        displayName: 'Driver Applicant',
+        email: 'driver@example.com',
+      })
+      candidateId = await ctx.db.insert('candidates', {
+        tenantId,
+        clerkUserId: candidateUserId,
+        email: 'driver@example.com',
+        displayName: 'Driver Applicant',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
+        type: 'form_submission',
+        status: 'pending',
+        order: 0,
+      })
+      if (carInsuranceStatus) {
+        await ctx.db.insert('candidateTasks', {
+          tenantId,
+          candidateId,
+          type: 'car_insurance',
+          status: carInsuranceStatus,
+          order: 8,
+        })
+      }
+    })
+    return { candidateId, tenantId }
+  }
+
+  async function getCarInsuranceTasks(
+    t: ReturnType<typeof createTestConvex>,
+    tenantId: Id<'tenants'>,
+    candidateId: Id<'candidates'>,
+  ) {
+    return t.run(async (ctx) => {
+      const tasks = await ctx.db
+        .query('candidateTasks')
+        .withIndex('by_tenant_candidate_order', (q) =>
+          q.eq('tenantId', tenantId).eq('candidateId', candidateId),
+        )
+        .collect()
+      return tasks.filter((task) => task.type === 'car_insurance')
+    })
+  }
+
+  it('creates a pending car_insurance task when canTransportClients is true', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_car_ins_yes'
+    const candidateUserId = 'user_candidate_car_ins_yes'
+    const { candidateId, tenantId } = await seedCandidateWithTasks(
+      t,
+      clerkOrgId,
+      candidateUserId,
+    )
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.submitApplication,
+      {
+        clerkOrgId,
+        fields: { personal: { canTransportClients: true } },
+      },
+    )
+
+    const carTasks = await getCarInsuranceTasks(t, tenantId, candidateId)
+    expect(carTasks).toHaveLength(1)
+    expect(carTasks[0]?.status).toBe('pending')
+  })
+
+  it('creates a skipped car_insurance task when canTransportClients is false', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_car_ins_no'
+    const candidateUserId = 'user_candidate_car_ins_no'
+    const { candidateId, tenantId } = await seedCandidateWithTasks(
+      t,
+      clerkOrgId,
+      candidateUserId,
+    )
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.submitApplication,
+      {
+        clerkOrgId,
+        fields: { personal: { canTransportClients: false } },
+      },
+    )
+
+    const carTasks = await getCarInsuranceTasks(t, tenantId, candidateId)
+    expect(carTasks).toHaveLength(1)
+    expect(carTasks[0]?.status).toBe('skipped')
+  })
+
+  it('creates a skipped car_insurance task when the question is unanswered', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_car_ins_unanswered'
+    const candidateUserId = 'user_candidate_car_ins_unanswered'
+    const { candidateId, tenantId } = await seedCandidateWithTasks(
+      t,
+      clerkOrgId,
+      candidateUserId,
+    )
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.submitApplication,
+      {
+        clerkOrgId,
+        fields: { personal: { firstName: 'Driver' } },
+      },
+    )
+
+    const carTasks = await getCarInsuranceTasks(t, tenantId, candidateId)
+    expect(carTasks).toHaveLength(1)
+    expect(carTasks[0]?.status).toBe('skipped')
+  })
+
+  it('flips an existing skipped task to pending without duplicating it', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_car_ins_flip'
+    const candidateUserId = 'user_candidate_car_ins_flip'
+    const { candidateId, tenantId } = await seedCandidateWithTasks(
+      t,
+      clerkOrgId,
+      candidateUserId,
+      'skipped',
+    )
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.submitApplication,
+      {
+        clerkOrgId,
+        fields: { personal: { canTransportClients: true } },
+      },
+    )
+
+    const carTasks = await getCarInsuranceTasks(t, tenantId, candidateId)
+    expect(carTasks).toHaveLength(1)
+    expect(carTasks[0]?.status).toBe('pending')
+  })
+
+  it('never reopens a completed car_insurance task', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_car_ins_complete'
+    const candidateUserId = 'user_candidate_car_ins_complete'
+    const { candidateId, tenantId } = await seedCandidateWithTasks(
+      t,
+      clerkOrgId,
+      candidateUserId,
+      'complete',
+    )
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.submitApplication,
+      {
+        clerkOrgId,
+        fields: { personal: { canTransportClients: false } },
+      },
+    )
+
+    const carTasks = await getCarInsuranceTasks(t, tenantId, candidateId)
+    expect(carTasks).toHaveLength(1)
+    expect(carTasks[0]?.status).toBe('complete')
+  })
+})
+
 describe('reviewApplication and offer lifecycle', () => {
   it('transitions candidate through approved -> offer -> accepted -> hired', async () => {
     stubAdpEnv()
@@ -1162,6 +1493,40 @@ describe('reviewApplication and offer lifecycle', () => {
         candidateId,
         status: 'submitted',
         submittedAt: new Date().toISOString(),
+        fields: {
+          i9Section2: {
+            documentTitle: 'US Passport',
+            documentNumber: '123456789',
+            expirationDate: '2030-01-01',
+            employerSignature: 'HR Admin',
+            date: new Date().toISOString().split('T')[0],
+          },
+        },
+      })
+      await ctx.db.insert('prefilledDocuments', {
+        tenantId,
+        candidateId,
+        documentType: 'w4',
+        storageId: 'w4-storage-id',
+        generatedAt: new Date().toISOString(),
+        generatedBy: adminId,
+        hrSectionCompleted: true,
+        hrSectionData: {
+          employerName: 'Test Agency',
+          ein: '12-3456789',
+          firstDateOfEmployment: new Date().toISOString().split('T')[0],
+        },
+      })
+      await ctx.db.insert('backgroundChecks', {
+        tenantId,
+        candidateId,
+        provider: 'mock',
+        status: 'clear',
+        package: 'basic',
+        initiatedAt: new Date().toISOString(),
+        officialResultStorageId: 'bg-result-storage-id',
+        officialResultUploadedAt: new Date().toISOString(),
+        officialResultUploadedBy: adminId,
       })
     })
 
@@ -1217,6 +1582,88 @@ describe('reviewApplication and offer lifecycle', () => {
         call[0].includes(`/organizations/${clerkOrgId}/memberships/${candidateUserId}`),
     )
     expect(membershipCall).toBeDefined()
+  })
+
+  it('allows sendOffer without completed pre-hire documents', async () => {
+    // Pre-hire gates (W-4 employer section, I-9 Section 2, official background
+    // check result) are enforced at hire time, not when sending the offer, so
+    // HR can send an offer while documents are still being finalised.
+    const t = createTestConvex()
+    const clerkOrgId = 'org_offer_no_prereqs'
+    const adminId = 'user_admin_offer_no_prereqs'
+    const candidateUserId = 'user_candidate_offer_no_prereqs'
+
+    const { candidateId } = await seedCandidateForOffer(
+      t,
+      clerkOrgId,
+      adminId,
+      candidateUserId,
+    )
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.candidates.reviewApplication,
+      {
+        clerkOrgId,
+        candidateId,
+        decision: 'approved',
+        hrNotes: 'Looks good',
+      },
+    )
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(api.candidates.sendOffer, {
+      clerkOrgId,
+      candidateId,
+    })
+
+    const candidate = await t.run(async (ctx) => ctx.db.get(candidateId))
+    expect(candidate?.status).toBe('offer_sent')
+  })
+
+  it('rejects hireCandidate when pre-hire requirements are missing', async () => {
+    stubAdpEnv()
+    stubClerkMembershipUpdate()
+    const t = createTestConvex()
+    const clerkOrgId = 'org_hire_missing_prereqs'
+    const adminId = 'user_admin_hire_missing_prereqs'
+    const candidateUserId = 'user_candidate_hire_missing_prereqs'
+
+    const { tenantId, candidateId } = await seedCandidateForOffer(
+      t,
+      clerkOrgId,
+      adminId,
+      candidateUserId,
+      { w4: true, i9Section2: true, backgroundCheckResult: true },
+    )
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(api.candidates.sendOffer, {
+      clerkOrgId,
+      candidateId,
+    })
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.acceptOffer,
+      { clerkOrgId },
+    )
+
+    // Remove the W-4 employer completion to break the pre-hire guard.
+    await t.run(async (ctx) => {
+      const w4Doc = await ctx.db
+        .query('prefilledDocuments')
+        .withIndex('by_tenant_candidate_type', (q) =>
+          q.eq('tenantId', tenantId).eq('candidateId', candidateId).eq('documentType', 'w4'),
+        )
+        .first()
+      if (w4Doc) {
+        await ctx.db.patch(w4Doc._id, { hrSectionCompleted: false })
+      }
+    })
+
+    await expect(
+      asAdmin(t, adminId, clerkOrgId).mutation(api.candidates.hireCandidate, {
+        clerkOrgId,
+        candidateId,
+      }),
+    ).rejects.toThrow(/W-4 employer section must be completed/)
   })
 
   it('requests correction and returns candidate to application_draft', async () => {
@@ -1585,6 +2032,14 @@ describe('attachCandidateDocument', () => {
       await ctx.db.insert('candidateTasks', {
         tenantId,
         candidateId,
+        type: 'form_submission',
+        status: 'complete',
+        order: 0,
+        completedAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
         type: 'photo_id',
         status: 'pending',
         order: 1,
@@ -1644,6 +2099,169 @@ describe('attachCandidateDocument', () => {
         .collect(),
     )
     expect(tasks.find((task) => task.type === 'cpr_certificate')?.status).toBe('complete')
+  })
+
+  it('allows car_insurance upload when only the optional certifications step is pending', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_attach_car_ins'
+    const adminId = 'user_admin_attach_car_ins'
+    const candidateUserId = 'user_candidate_attach_car_ins'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
+    let tenantId: Id<'tenants'>
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      tenantId = tenant._id
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: candidateUserId,
+        role: 'org:candidate',
+        displayName: 'Driver Candidate',
+        email: 'driver-attach@example.com',
+      })
+      candidateId = await ctx.db.insert('candidates', {
+        tenantId,
+        clerkUserId: candidateUserId,
+        email: 'driver-attach@example.com',
+        displayName: 'Driver Candidate',
+        status: 'applied',
+        createdAt: new Date().toISOString(),
+      })
+      const requiredTypes = [
+        'form_submission',
+        'photo_id',
+        'tax_id_ssn',
+        'cpr_certificate',
+        'health_screen',
+        'background_check',
+        'employment_agreement',
+      ]
+      for (const [index, type] of requiredTypes.entries()) {
+        await ctx.db.insert('candidateTasks', {
+          tenantId,
+          candidateId,
+          type,
+          status: 'complete',
+          order: index,
+          completedAt: new Date().toISOString(),
+        })
+      }
+      // Optional step left pending — the applicant skipped it.
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
+        type: 'additional_certifications',
+        status: 'pending',
+        order: 7,
+      })
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
+        type: 'car_insurance',
+        status: 'pending',
+        order: 8,
+      })
+    })
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.attachCandidateDocument,
+      {
+        clerkOrgId,
+        storageId: 'storage-car-insurance',
+        fileName: 'policy.pdf',
+        contentType: 'application/pdf',
+        size: 2048,
+        documentType: 'car_insurance',
+        label: 'Car Insurance Policy',
+        expiresAt: '2027-12-31',
+      },
+    )
+
+    const tasks = await t.run(async (ctx) =>
+      ctx.db
+        .query('candidateTasks')
+        .withIndex('by_tenant_candidate_order', (q) =>
+          q.eq('tenantId', tenantId).eq('candidateId', candidateId),
+        )
+        .collect(),
+    )
+    expect(tasks.find((task) => task.type === 'car_insurance')?.status).toBe('complete')
+  })
+
+  it('still blocks car_insurance upload when a required preceding step is pending', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_attach_car_ins_blocked'
+    const adminId = 'user_admin_attach_car_ins_blocked'
+    const candidateUserId = 'user_candidate_attach_car_ins_blocked'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      const tenantId = tenant._id
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: candidateUserId,
+        role: 'org:candidate',
+        displayName: 'Driver Candidate',
+        email: 'driver-blocked@example.com',
+      })
+      candidateId = await ctx.db.insert('candidates', {
+        tenantId,
+        clerkUserId: candidateUserId,
+        email: 'driver-blocked@example.com',
+        displayName: 'Driver Candidate',
+        status: 'applied',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
+        type: 'form_submission',
+        status: 'complete',
+        order: 0,
+        completedAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
+        type: 'photo_id',
+        status: 'pending',
+        order: 1,
+      })
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
+        type: 'car_insurance',
+        status: 'pending',
+        order: 8,
+      })
+    })
+
+    await expect(
+      asCandidate(t, candidateUserId, clerkOrgId).mutation(
+        api.candidates.attachCandidateDocument,
+        {
+          clerkOrgId,
+          storageId: 'storage-car-insurance',
+          fileName: 'policy.pdf',
+          contentType: 'application/pdf',
+          size: 2048,
+          documentType: 'car_insurance',
+          label: 'Car Insurance Policy',
+          expiresAt: '2027-12-31',
+        },
+      ),
+    ).rejects.toThrow('Complete the previous step first')
   })
 })
 
@@ -1869,5 +2487,768 @@ describe('candidate self-service queries after hire', () => {
       })
 
     expect(tasks).toHaveLength(1)
+  })
+})
+
+
+describe('getCandidateById', () => {
+  it('allows org:coordinator to read any candidate', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_get_candidate_coord'
+    const adminId = 'user_admin_get_candidate_coord'
+    const coordinatorId = 'user_coord_get_candidate_coord'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedCoordinator(t, clerkOrgId, coordinatorId)
+
+    const candidateId = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      return ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        email: 'candidate@example.com',
+        displayName: 'Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    const result = await asCoordinator(t, coordinatorId, clerkOrgId).query(
+      api.candidates.getCandidateById,
+      { clerkOrgId, candidateId },
+    )
+
+    expect(result?._id).toBe(candidateId)
+  })
+
+  it('blocks org:candidate from reading another candidate record', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_get_candidate_block'
+    const adminId = 'user_admin_get_candidate_block'
+
+    await seedTenant(t, clerkOrgId, adminId)
+
+    const { candidateId, candidateUserId } = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      const uid = 'user_candidate_block'
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: uid,
+        role: 'org:candidate',
+        displayName: 'Block Candidate',
+        email: 'block@example.com',
+      })
+      await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId: uid,
+        email: 'block@example.com',
+        displayName: 'Block Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+      const otherCid = await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        email: 'other@example.com',
+        displayName: 'Other Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+      return { candidateId: otherCid, candidateUserId: uid }
+    })
+
+    await expect(
+      asCandidate(t, candidateUserId, clerkOrgId).query(api.candidates.getCandidateById, {
+        clerkOrgId,
+        candidateId,
+      }),
+    ).rejects.toThrow(/Forbidden/)
+  })
+
+  it('allows org:candidate to read their own candidate record', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_get_candidate_own'
+    const adminId = 'user_admin_get_candidate_own'
+
+    await seedTenant(t, clerkOrgId, adminId)
+
+    const { candidateId, candidateUserId } = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      const uid = 'user_candidate_own'
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: uid,
+        role: 'org:candidate',
+        displayName: 'Own Candidate',
+        email: 'own@example.com',
+      })
+      const cid = await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId: uid,
+        email: 'own@example.com',
+        displayName: 'Own Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+      return { candidateId: cid, candidateUserId: uid }
+    })
+
+    const result = await asCandidate(t, candidateUserId, clerkOrgId).query(
+      api.candidates.getCandidateById,
+      { clerkOrgId, candidateId },
+    )
+
+    expect(result?._id).toBe(candidateId)
+  })
+})
+
+describe('createSelfServiceCandidate', () => {
+  it('rejects an email that does not match the authenticated identity', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_self_service_email'
+    const adminId = 'user_admin_self_service_email'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: 'user_self_email',
+        role: 'org:candidate',
+        displayName: 'Self Candidate',
+        email: 'identity@example.com',
+      })
+    })
+
+    await expect(
+      t
+        .withIdentity({
+          subject: 'user_self_email',
+          org_id: clerkOrgId,
+          org_role: 'org:candidate',
+          email: 'identity@example.com',
+        })
+        .mutation(api.candidates.createSelfServiceCandidate, {
+          clerkOrgId,
+          email: 'different@example.com',
+          displayName: 'Self Candidate',
+        }),
+    ).rejects.toThrow(/Email must match/)
+  })
+
+  it('creates a candidate when the email matches the identity', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_self_service_match'
+    const adminId = 'user_admin_self_service_match'
+    const candidateUserId = 'user_self_match'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        role: 'org:candidate',
+        displayName: 'Matched Candidate',
+        email: 'match@example.com',
+      })
+    })
+
+    const candidateId = await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.createSelfServiceCandidate,
+      {
+        clerkOrgId,
+        email: 'match@example.com',
+        displayName: 'Matched Candidate',
+      },
+    )
+
+    const candidate = await t.run(async (ctx) => ctx.db.get(candidateId as Id<'candidates'>))
+    expect(candidate?.email).toBe('match@example.com')
+    expect(candidate?.clerkUserId).toBe('user_self_match')
+  })
+})
+
+describe('prefilledDocuments', () => {
+  async function seedCandidateWithApplication(
+    t: ReturnType<typeof createTestConvex>,
+    clerkOrgId: string,
+    candidateUserId: string,
+  ) {
+    return t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        role: 'org:candidate',
+        displayName: 'Prefilled Candidate',
+        email: 'prefilled@example.com',
+      })
+      const candidateId = await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        email: 'prefilled@example.com',
+        displayName: 'Prefilled Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+      const applicationId = await ctx.db.insert('applications', {
+        tenantId: tenant._id,
+        candidateId,
+        status: 'submitted',
+        submittedAt: new Date().toISOString(),
+      })
+      return { tenantId: tenant._id, candidateId, applicationId }
+    })
+  }
+
+  it('savePrefilledDocument is idempotent and updates the same row', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_prefilled_idempotent'
+    const adminId = 'user_admin_prefilled_idempotent'
+    const candidateUserId = 'user_candidate_prefilled_idempotent'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    const { tenantId, candidateId } = await seedCandidateWithApplication(t, clerkOrgId, candidateUserId)
+
+    const firstId = await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.savePrefilledDocument,
+      {
+        clerkOrgId,
+        documentType: 'health_screen',
+        storageId: 'storage-1',
+      },
+    )
+
+    const secondId = await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.savePrefilledDocument,
+      {
+        clerkOrgId,
+        documentType: 'health_screen',
+        storageId: 'storage-2',
+      },
+    )
+
+    expect(secondId).toBe(firstId)
+
+    const docs = await t.run(async (ctx) =>
+      ctx.db
+        .query('prefilledDocuments')
+        .withIndex('by_tenant_candidate_type', (q) =>
+          q.eq('tenantId', tenantId).eq('candidateId', candidateId).eq('documentType', 'health_screen'),
+        )
+        .collect(),
+    )
+    expect(docs).toHaveLength(1)
+    expect(docs[0]?.storageId).toBe('storage-2')
+  })
+
+  it('saveSignedPrefilledDocument patches the signed storage id for the candidate', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_signed_prefilled'
+    const adminId = 'user_admin_signed_prefilled'
+    const candidateUserId = 'user_candidate_signed_prefilled'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    const { tenantId, candidateId } = await seedCandidateWithApplication(t, clerkOrgId, candidateUserId)
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.savePrefilledDocument,
+      {
+        clerkOrgId,
+        documentType: 'health_screen',
+        storageId: 'storage-generated',
+      },
+    )
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.saveSignedPrefilledDocument,
+      {
+        clerkOrgId,
+        documentType: 'health_screen',
+        storageId: 'storage-signed',
+      },
+    )
+
+    const docs = await t.run(async (ctx) =>
+      ctx.db
+        .query('prefilledDocuments')
+        .withIndex('by_tenant_candidate_type', (q) =>
+          q.eq('tenantId', tenantId).eq('candidateId', candidateId).eq('documentType', 'health_screen'),
+        )
+        .collect(),
+    )
+    expect(docs).toHaveLength(1)
+    expect(docs[0]?.storageId).toBe('storage-generated')
+    expect(docs[0]?.uploadedSignedStorageId).toBe('storage-signed')
+  })
+
+  it('savePrefilledDocument guards cross-tenant access', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_prefilled_tenant'
+    const otherClerkOrgId = 'org_other_prefilled_tenant'
+    const adminId = 'user_admin_prefilled_tenant'
+    const candidateUserId = 'user_candidate_prefilled_tenant'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedTenant(t, otherClerkOrgId, 'user_admin_other_prefilled_tenant')
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', otherClerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        role: 'org:candidate',
+        displayName: 'Other Candidate',
+        email: 'other-prefilled@example.com',
+      })
+    })
+
+    await expect(
+      asCandidate(t, candidateUserId, otherClerkOrgId).mutation(
+        api.candidates.savePrefilledDocument,
+        {
+          clerkOrgId,
+          documentType: 'health_screen',
+          storageId: 'storage-x',
+        },
+      ),
+    ).rejects.toThrow(/tenant|Forbidden|not a member/i)
+  })
+
+  it('uploadBackgroundCheckResult rejects org:caregiver', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_bg_reject_cg'
+    const adminId = 'user_admin_bg_reject_cg'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    const candidateId = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: 'user_cg_bg',
+        role: 'org:caregiver',
+        displayName: 'Caregiver',
+        email: 'cg@example.com',
+      })
+      return ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        email: 'bg@example.com',
+        displayName: 'BG Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    await expect(
+      t
+        .withIdentity({
+          subject: 'user_cg_bg',
+          org_id: clerkOrgId,
+          org_role: 'org:caregiver',
+        })
+        .mutation(api.backgroundChecks.uploadBackgroundCheckResult, {
+          clerkOrgId,
+          candidateId,
+          storageId: 'bg-result',
+        }),
+    ).rejects.toThrow(/Forbidden/)
+  })
+
+  it('uploadBackgroundCheckResult creates a backgroundChecks record for HR', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_bg_hr'
+    const adminId = 'user_admin_bg_hr'
+    const hrId = 'user_hr_bg_hr'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedHR(t, clerkOrgId, hrId)
+    const { tenantId, candidateId } = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      const candidateId = await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        email: 'bg-hr@example.com',
+        displayName: 'BG HR Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+      return { tenantId: tenant._id, candidateId }
+    })
+
+    await asHR(t, hrId, clerkOrgId).mutation(api.backgroundChecks.uploadBackgroundCheckResult, {
+      clerkOrgId,
+      candidateId,
+      storageId: 'bg-result-hr',
+    })
+
+    const checks = await t.run(async (ctx) =>
+      ctx.db
+        .query('backgroundChecks')
+        .withIndex('by_tenant_candidate', (q) =>
+          q.eq('tenantId', tenantId).eq('candidateId', candidateId),
+        )
+        .collect(),
+    )
+
+    expect(checks).toHaveLength(1)
+    expect(checks[0]?.officialResultStorageId).toBe('bg-result-hr')
+    // Scan-gated: upload sets 'pending_scan'; scanUploadedResult later transitions to 'completed'/'scan_failed'
+    expect(checks[0]?.status).toBe('pending_scan')
+  })
+
+  it('getPrefilledDocuments is scoped to the candidate for org:candidate callers', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_prefilled_scope'
+    const adminId = 'user_admin_prefilled_scope'
+    const candidateUserId = 'user_candidate_prefilled_scope'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    const { candidateId: ownId } = await seedCandidateWithApplication(t, clerkOrgId, candidateUserId)
+    const otherCandidateId = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      return ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        email: 'other-scope@example.com',
+        displayName: 'Other Scope Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.savePrefilledDocument,
+      {
+        clerkOrgId,
+        documentType: 'health_screen',
+        storageId: 'own-storage',
+      },
+    )
+
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('prefilledDocuments', {
+        tenantId: tenant._id,
+        candidateId: otherCandidateId,
+        documentType: 'health_screen',
+        storageId: 'other-storage',
+        generatedAt: new Date().toISOString(),
+        generatedBy: 'system',
+      })
+    })
+
+    const docs = await asCandidate(t, candidateUserId, clerkOrgId).query(
+      api.candidates.getPrefilledDocuments,
+      { clerkOrgId, candidateId: ownId },
+    )
+
+    expect(docs).toHaveLength(1)
+    expect(docs[0]?.storageId).toBe('own-storage')
+
+    await expect(
+      asCandidate(t, candidateUserId, clerkOrgId).query(api.candidates.getPrefilledDocuments, {
+        clerkOrgId,
+        candidateId: otherCandidateId,
+      }),
+    ).rejects.toThrow(/Forbidden/)
+  })
+
+  it('saveW4EmployerSection updates the existing W-4 prefilled document', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_w4_hr'
+    const adminId = 'user_admin_w4_hr'
+    const hrId = 'user_hr_w4_hr'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedHR(t, clerkOrgId, hrId)
+    const candidateId = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      return ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        email: 'w4@example.com',
+        displayName: 'W4 Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    const prefilledId = await asHR(t, hrId, clerkOrgId).mutation(api.candidates.savePrefilledDocument, {
+      clerkOrgId,
+      candidateId,
+      documentType: 'w4',
+      storageId: 'w4-candidate-generated',
+    })
+
+    const firstId = await asHR(t, hrId, clerkOrgId).mutation(api.candidates.saveW4EmployerSection, {
+      clerkOrgId,
+      candidateId,
+      employerName: 'Employer One',
+      ein: '12-3456789',
+      firstDateOfEmployment: '2026-01-01',
+    })
+
+    expect(firstId).toBe(prefilledId)
+
+    const secondId = await asHR(t, hrId, clerkOrgId).mutation(api.candidates.saveW4EmployerSection, {
+      clerkOrgId,
+      candidateId,
+      employerName: 'Employer Two',
+      ein: '98-7654321',
+      firstDateOfEmployment: '2026-02-01',
+    })
+
+    expect(secondId).toBe(firstId)
+
+    const doc = await t.run(async (ctx) => ctx.db.get(secondId as Id<'prefilledDocuments'>))
+    expect(doc?.documentType).toBe('w4')
+    expect(doc?.storageId).toBe('w4-candidate-generated')
+    expect(doc?.hrSectionCompleted).toBe(true)
+    expect((doc?.hrSectionData as Record<string, string>)?.employerName).toBe('Employer Two')
+  })
+
+  it('saveW4EmployerSection creates the W-4 record on-demand when none exists', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_w4_hr_missing'
+    const adminId = 'user_admin_w4_hr_missing'
+    const hrId = 'user_hr_w4_hr_missing'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedHR(t, clerkOrgId, hrId)
+    const candidateId = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      return ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        email: 'w4-missing@example.com',
+        displayName: 'W4 Missing Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    // HR can fill the W-4 employer section even if the candidate hasn't
+    // generated the PDF yet — the record is created on-demand.
+    const docId = await asHR(t, hrId, clerkOrgId).mutation(api.candidates.saveW4EmployerSection, {
+      clerkOrgId,
+      candidateId,
+      employerName: 'Employer One',
+      ein: '12-3456789',
+      firstDateOfEmployment: '2026-01-01',
+    })
+
+    const doc = await t.run(async (ctx) => ctx.db.get(docId as Id<'prefilledDocuments'>))
+    expect(doc?.documentType).toBe('w4')
+    expect(doc?.hrSectionCompleted).toBe(true)
+    expect((doc?.hrSectionData as Record<string, string>)?.employerName).toBe('Employer One')
+    expect((doc?.hrSectionData as Record<string, string>)?.ein).toBe('12-3456789')
+  })
+})
+
+describe('acknowledgeBackgroundCheck', () => {
+  it('completes the background_check and employment_agreement tasks without a digital provider', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_ack_bg'
+    const adminId = 'user_admin_ack_bg'
+    const candidateUserId = 'user_candidate_ack_bg'
+
+    await seedTenant(t, clerkOrgId, adminId)
+
+    const { tenantId, candidateId } = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        role: 'org:candidate',
+        displayName: 'Ack Candidate',
+        email: 'ack@example.com',
+      })
+      const cid = await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        email: 'ack@example.com',
+        displayName: 'Ack Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+      for (const type of ['form_submission', 'photo_id', 'tax_id_ssn', 'cpr_certificate', 'health_screen', 'background_check', 'employment_agreement']) {
+        await ctx.db.insert('candidateTasks', {
+          tenantId: tenant._id,
+          candidateId: cid,
+          type,
+          status: 'pending',
+          order: 0,
+        })
+      }
+      return { tenantId: tenant._id, candidateId: cid }
+    })
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.acknowledgeBackgroundCheck,
+      { clerkOrgId },
+    )
+
+    const tasks = await t.run(async (ctx) =>
+      ctx.db
+        .query('candidateTasks')
+        .withIndex('by_tenant_candidate_order', (q) =>
+          q.eq('tenantId', tenantId).eq('candidateId', candidateId),
+        )
+        .collect(),
+    )
+
+    expect(tasks.find((task) => task.type === 'background_check')?.status).toBe('complete')
+    expect(tasks.find((task) => task.type === 'employment_agreement')?.status).toBe('complete')
+
+    const bgChecks = await t.run(async (ctx) =>
+      ctx.db
+        .query('backgroundChecks')
+        .withIndex('by_tenant_candidate', (q) =>
+          q.eq('tenantId', tenantId).eq('candidateId', candidateId),
+        )
+        .collect(),
+    )
+    expect(bgChecks).toHaveLength(0)
+  })
+})
+
+describe('reviewApplication notifications', () => {
+  it('schedules a notification using the tenant name when approved', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_review_notify'
+    const adminId = 'user_admin_review_notify'
+    const hrId = 'user_hr_review_notify'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedHR(t, clerkOrgId, hrId)
+
+    const candidateId = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      const cid = await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        email: 'review@example.com',
+        displayName: 'Review Candidate',
+        status: 'applied',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('applications', {
+        tenantId: tenant._id,
+        candidateId: cid,
+        status: 'submitted',
+        submittedAt: new Date().toISOString(),
+      })
+      return cid
+    })
+
+    await asHR(t, hrId, clerkOrgId).mutation(api.candidates.reviewApplication, {
+      clerkOrgId,
+      candidateId,
+      decision: 'approved',
+    })
+
+    const candidate = await t.run(async (ctx) => ctx.db.get(candidateId))
+    expect(candidate?.status).toBe('hr_review')
+  })
+})
+
+describe('getW4ForHR tenant prefill (AC-9)', () => {
+  it('returns agency name and EIN from the tenant config for W-4 prefill', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_w4_prefill'
+    const adminId = 'user_admin_w4_prefill'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.patch(tenant._id, { ein: '12-3456789' })
+    })
+
+    const candidateId = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      const cid = await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        email: 'prefill@example.com',
+        displayName: 'Prefill Candidate',
+        status: 'applied',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('applications', {
+        tenantId: tenant._id,
+        candidateId: cid,
+        status: 'submitted',
+        submittedAt: new Date().toISOString(),
+      })
+      return cid
+    })
+
+    const result = await asAdmin(t, adminId, clerkOrgId).query(
+      api.candidates.getW4ForHR,
+      { clerkOrgId, candidateId },
+    )
+
+    expect(result.agencyName).toBe('Test Agency')
+    expect(result.agencyEin).toBe('12-3456789')
   })
 })

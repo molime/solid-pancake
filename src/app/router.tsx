@@ -131,6 +131,11 @@ const AcknowledgmentPage = lazy(() =>
     default: module.AcknowledgmentPage,
   })),
 )
+const EmploymentAgreementPage = lazy(() =>
+  import('@/features/onboarding/pages/EmploymentAgreementPage').then((module) => ({
+    default: module.EmploymentAgreementPage,
+  })),
+)
 const OfferAcceptancePage = lazy(() =>
   import('@/features/onboarding/pages/OfferAcceptancePage').then((module) => ({
     default: module.OfferAcceptancePage,
@@ -151,6 +156,16 @@ const TrainingPage = lazy(() =>
     default: module.TrainingPage,
   })),
 )
+const OnboardingSuccessPage = lazy(() =>
+  import('@/features/onboarding/pages/OnboardingSuccessPage').then((module) => ({
+    default: module.OnboardingSuccessPage,
+  })),
+)
+const ApplyEntryPage = lazy(() =>
+  import('@/features/onboarding/pages/ApplyEntryPage').then((module) => ({
+    default: module.ApplyEntryPage,
+  })),
+)
 
 let ScreenshotHarnessPage: React.LazyExoticComponent<
   () => React.JSX.Element
@@ -163,6 +178,42 @@ if (
     import('@/dev/ScreenshotHarnessPage').then((module) => ({
       default: module.ScreenshotHarnessPage,
     })),
+  )
+}
+
+function useRedirectParam() {
+  const params = new URLSearchParams(window.location.search)
+  const redirect = params.get('redirect')
+  return redirect ?? '/select-agency'
+}
+
+function SignInRedirect() {
+  const redirectUrl = useRedirectParam()
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-atria-bg p-4">
+      <SignIn
+        routing="path"
+        path="/sign-in"
+        signUpUrl="/sign-up"
+        fallbackRedirectUrl={redirectUrl}
+        forceRedirectUrl={redirectUrl}
+      />
+    </div>
+  )
+}
+
+function SignUpRedirect() {
+  const redirectUrl = useRedirectParam()
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-atria-bg p-4">
+      <SignUp
+        routing="path"
+        path="/sign-up"
+        signInUrl="/sign-in"
+        fallbackRedirectUrl={redirectUrl}
+        forceRedirectUrl={redirectUrl}
+      />
+    </div>
   )
 }
 
@@ -179,31 +230,11 @@ export function AppRouter() {
     <Routes>
       <Route
         path="/sign-in/*"
-        element={
-          <div className="flex min-h-screen items-center justify-center bg-atria-bg p-4">
-            <SignIn
-              routing="path"
-              path="/sign-in"
-              signUpUrl="/sign-up"
-              fallbackRedirectUrl="/select-agency"
-              forceRedirectUrl="/select-agency"
-            />
-          </div>
-        }
+        element={<SignInRedirect />}
       />
       <Route
         path="/sign-up/*"
-        element={
-          <div className="flex min-h-screen items-center justify-center bg-atria-bg p-4">
-            <SignUp
-              routing="path"
-              path="/sign-up"
-              signInUrl="/sign-in"
-              fallbackRedirectUrl="/select-agency"
-              forceRedirectUrl="/select-agency"
-            />
-          </div>
-        }
+        element={<SignUpRedirect />}
       />
       <Route
         path="/accept-invitation/*"
@@ -226,6 +257,14 @@ export function AppRouter() {
           <SignedInRouteGuard>
             <SelectAgencyPage />
           </SignedInRouteGuard>
+        }
+      />
+      <Route
+        path="apply"
+        element={
+          <RouteSuspense>
+            <ApplyEntryPage />
+          </RouteSuspense>
         }
       />
       <Route element={<PlatformShell />}>
@@ -464,16 +503,6 @@ export function AppRouter() {
           }
         />
         <Route
-          path="apply"
-          element={
-            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
-              <RouteSuspense>
-                <ApplicationFormPage />
-              </RouteSuspense>
-            </TenantRoleRouteGuard>
-          }
-        />
-        <Route
           path="onboarding/application"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
@@ -514,6 +543,16 @@ export function AppRouter() {
           }
         />
         <Route
+          path="onboarding/employment-agreement"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
+              <RouteSuspense>
+                <EmploymentAgreementPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
           path="onboarding/offer"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
@@ -533,6 +572,17 @@ export function AppRouter() {
             </TenantRoleRouteGuard>
           }
         />
+        <Route
+          path="onboarding/success"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:candidate', 'org:caregiver']}>
+              <RouteSuspense>
+                <OnboardingSuccessPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+
         {ScreenshotHarnessPage && (
           <Route
             path="dev/screenshots"

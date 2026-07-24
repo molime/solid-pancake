@@ -76,19 +76,27 @@ export function SelectAgencyPage() {
   }, [pendingOrg, convexAuth.isLoading, convexAuth.isAuthenticated])
 
   // Auto-select the only membership so users aren't forced to click.
+  // This fires immediately when there's exactly 1 membership, regardless of
+  // Convex auth loading state. The bootstrap effect handles the Convex auth wait.
   useEffect(() => {
     if (!isLoaded || isBootstrapping || pendingOrg) return
-    if (organization || orgId) return
     const memberships = userMemberships.data ?? []
-    if (memberships.length === 1) {
-      const mem = memberships[0]
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void handleSelect({
-        id: mem.organization.id,
-        name: mem.organization.name,
-        slug: mem.organization.slug ?? null,
-      })
+    if (memberships.length !== 1) return
+    const mem = memberships[0]
+    const orgData = {
+      id: mem.organization.id,
+      name: mem.organization.name,
+      slug: mem.organization.slug ?? null,
     }
+    // If the user already has an active org matching the membership, skip setActive
+    // and go straight to bootstrap by setting pendingOrg directly.
+    if (organization && organization.id === orgData.id && orgId === orgData.id) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPendingOrg(orgData)
+      return
+    }
+    if (organization || orgId) return
+    void handleSelect(orgData)
   }, [
     isLoaded,
     isBootstrapping,
@@ -120,6 +128,11 @@ export function SelectAgencyPage() {
     bootstrappingOrgIdRef.current = targetOrgId
     setError(null)
 
+    // Timeout fallback: if bootstrap takes >10s, navigate to / anyway
+    const timeoutId = setTimeout(() => {
+      navigate('/', { replace: true })
+    }, 10000)
+
     const callEnsureAgency = async () => {
       try {
         return await ensureAgency({
@@ -146,8 +159,12 @@ export function SelectAgencyPage() {
     }
 
     callEnsureAgency()
-      .then(() => navigate('/', { replace: true }))
+      .then(() => {
+        clearTimeout(timeoutId)
+        navigate('/', { replace: true })
+      })
       .catch((err: unknown) => {
+        clearTimeout(timeoutId)
         bootstrappingOrgIdRef.current = null
         setIsBootstrapping(false)
         setPendingOrg(null)
@@ -171,8 +188,20 @@ export function SelectAgencyPage() {
     navigate,
   ])
 
-  if (!isLoaded) {
+  if (!isLoaded || userMemberships.data === undefined) {
     return <AppLoader fullScreen label="Finding your agencies" />
+  }
+
+  const memberships = userMemberships.data ?? []
+
+  // Universal rule: if the user has exactly 1 org membership, always auto-select
+  // and never show the selector UI. Only show the selector for 0 or 2+ memberships.
+  if (memberships.length === 1 && !error) {
+    return <AppLoader fullScreen label="Opening your agency workspace" />
+  }
+
+  if (isBootstrapping) {
+    return <AppLoader fullScreen label="Opening your agency workspace" />
   }
 
   return (

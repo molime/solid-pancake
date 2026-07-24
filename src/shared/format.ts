@@ -24,6 +24,7 @@ export function formatDocumentCategoryLabel(category: string): string {
     background_check: 'Background check',
     employment_agreement: 'Employment agreement',
     form_submission: 'Application form',
+    car_insurance: 'Car insurance policy',
   }
   return labels[category] ?? formatStatusLabel(category)
 }
@@ -53,6 +54,32 @@ export function formatWeekdayDate(input: Date | string): string {
     month: 'long',
     day: 'numeric',
   })
+}
+
+export function formatDateUS(input: Date | string | undefined | null): string {
+  if (input === undefined || input === null) return ''
+  let date: Date
+  if (typeof input === 'string') {
+    // Parse ISO date-only strings as local date to avoid timezone shifts.
+    const dateOnlyMatch = input.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (dateOnlyMatch) {
+      date = new Date(
+        Number(dateOnlyMatch[1]),
+        Number(dateOnlyMatch[2]) - 1,
+        Number(dateOnlyMatch[3]),
+      )
+    } else {
+      date = new Date(input)
+    }
+  } else {
+    date = input
+  }
+  if (Number.isNaN(date.getTime())) return String(input)
+  return new Intl.DateTimeFormat('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+  }).format(date)
 }
 
 export function formatDurationHours(startIso: string, endIso: string): string {

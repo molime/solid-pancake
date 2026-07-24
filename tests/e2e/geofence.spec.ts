@@ -79,6 +79,12 @@ test.describe('geofence scenarios', { tag: '@auth' }, () => {
     await expect(page.locator('[data-testid="shift-clock-in-screen"]')).toBeVisible()
   }
 
+  test.beforeEach(async ({ page }) => {
+    // Self-seed the fixture shifts: earlier specs (candidate resets) wipe the
+    // caregiver's shifts, so this spec cannot rely on leftover state.
+    await resetE2EShifts(page)
+  })
+
   test.afterEach(async ({ page }) => {
     // Restore fixture shifts to a clean scheduled state and disable geofence
     // so each scenario starts from the same baseline.

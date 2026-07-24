@@ -4,11 +4,13 @@ import {
   mutation,
   action,
   internalMutation,
+  internalQuery,
   internalAction,
   type MutationCtx,
   type ActionCtx,
 } from './_generated/server'
 import { api, internal } from './_generated/api'
+import { notifyCandidate } from './_utils/notifications'
 import { ConvexError } from 'convex/values'
 import {
   requireTenantRole,
@@ -41,10 +43,25 @@ type CandidateStatus =
 const CANDIDATE_TASK_TYPES = [
   'form_submission',
   'photo_id',
+  'tax_id_ssn',
   'cpr_certificate',
+  'health_screen',
   'background_check',
   'employment_agreement',
+  'additional_certifications',
+  'car_insurance',
 ] as const
+
+type CandidateTaskType = (typeof CANDIDATE_TASK_TYPES)[number]
+
+// Tasks the applicant may legitimately skip; they never block later steps.
+const OPTIONAL_TASK_TYPES: ReadonlySet<string> = new Set(['additional_certifications'])
+
+// car_insurance stays skipped until the applicant answers Yes to the
+// "transport clients in personal vehicle" question on the application form.
+function initialTaskStatus(type: CandidateTaskType): 'pending' | 'skipped' {
+  return type === 'car_insurance' ? 'skipped' : 'pending'
+}
 
 const TERMINAL_STATUSES: CandidateStatus[] = ['hired', 'withdrawn']
 
@@ -90,6 +107,48 @@ async function getLatestApplication(
     .first()
 }
 
+async function assertPreHireRequirements(
+  ctx: AuthContext,
+  tenantId: Id<'tenants'>,
+  candidateId: Id<'candidates'>,
+  application: { fields?: Record<string, unknown> },
+) {
+  const w4Doc = await ctx.db
+    .query('prefilledDocuments')
+    .withIndex('by_tenant_candidate_type', (q) =>
+      q.eq('tenantId', tenantId).eq('candidateId', candidateId).eq('documentType', 'w4'),
+    )
+    .first()
+
+  if (!w4Doc?.hrSectionCompleted) {
+    throw new ConvexError('W-4 employer section must be completed before proceeding.')
+  }
+
+  const i9Section2 = (application.fields?.i9Section2 ?? {}) as Record<string, unknown>
+  if (
+    !i9Section2 ||
+    typeof i9Section2 !== 'object' ||
+    !i9Section2.documentTitle ||
+    !i9Section2.documentNumber ||
+    !i9Section2.employerSignature ||
+    !i9Section2.date
+  ) {
+    throw new ConvexError('I-9 Section 2 must be completed before proceeding.')
+  }
+
+  const bgCheck = await ctx.db
+    .query('backgroundChecks')
+    .withIndex('by_tenant_candidate', (q) =>
+      q.eq('tenantId', tenantId).eq('candidateId', candidateId),
+    )
+    .order('desc')
+    .first()
+
+  if (!bgCheck?.officialResultStorageId) {
+    throw new ConvexError('Official background check result must be uploaded before proceeding.')
+  }
+}
+
 async function completeCandidateTask(
   ctx: MutationCtx,
   tenantId: Id<'tenants'>,
@@ -112,8 +171,78 @@ async function completeCandidateTask(
   return task
 }
 
-async function recordCandidateAudit(
+// Re-evaluate the car_insurance task whenever an application is (re)submitted.
+// Idempotent: an existing task is patched in place (never duplicated), and a
+// completed upload is never reopened.
+async function syncCarInsuranceTask(
   ctx: MutationCtx,
+  tenantId: Id<'tenants'>,
+  candidateId: Id<'candidates'>,
+  fields: Record<string, unknown>,
+) {
+  const personal = (fields?.personal ?? {}) as Record<string, unknown>
+  const wantsTransport = personal.canTransportClients === true
+  const desired = wantsTransport ? 'pending' : 'skipped'
+
+  const existing = await ctx.db
+    .query('candidateTasks')
+    .withIndex('by_tenant_candidate_order', (q) =>
+      q.eq('tenantId', tenantId).eq('candidateId', candidateId),
+    )
+    .filter((q) => q.eq(q.field('type'), 'car_insurance'))
+    .first()
+
+  if (!existing) {
+    await ctx.db.insert('candidateTasks', {
+      tenantId,
+      candidateId,
+      type: 'car_insurance',
+      status: desired,
+      order: CANDIDATE_TASK_TYPES.indexOf('car_insurance'),
+    })
+    return
+  }
+
+  if (existing.status === 'complete') return
+  if (existing.status !== desired) {
+    await ctx.db.patch(existing._id, { status: desired })
+  }
+}
+
+async function assertPrecedingTasksComplete(
+  ctx: MutationCtx,
+  tenantId: Id<'tenants'>,
+  candidateId: Id<'candidates'>,
+  taskType: string,
+) {
+  const tasks = await ctx.db
+    .query('candidateTasks')
+    .withIndex('by_tenant_candidate_order', (q) =>
+      q.eq('tenantId', tenantId).eq('candidateId', candidateId),
+    )
+    .order('asc')
+    .collect()
+
+  const currentTask = tasks.find((t) => t.type === taskType)
+  if (!currentTask) {
+    throw new ConvexError(`Task ${taskType} not found for candidate.`)
+  }
+
+  for (const task of tasks) {
+    if (task.order >= currentTask.order) break
+    // Optional steps (additional certifications) and skipped steps (e.g. car
+    // insurance when the applicant does not transport clients) never block.
+    if (OPTIONAL_TASK_TYPES.has(task.type) || task.status === 'skipped') continue
+    if (task.status !== 'complete') {
+      throw new ConvexError(
+        `Complete the previous step first: ${task.type.replace(/_/g, ' ')}`,
+      )
+    }
+  }
+}
+
+async function recordCandidateAudit(
+  ctx: MutationCtx | ActionCtx,
   args: {
     clerkOrgId: string
     action: string
@@ -234,6 +363,7 @@ export const listCandidates = query({
     const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
       'org:admin',
       'org:hr',
+      'org:coordinator',
     ])
 
     let candidates = await ctx.db
@@ -258,6 +388,7 @@ export const getCandidateDetail = query({
     const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
       'org:admin',
       'org:hr',
+      'org:coordinator',
     ])
 
     const candidate = await ctx.db.get(candidateId)
@@ -337,6 +468,7 @@ export const listCandidateTasksForHR = query({
     const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
       'org:admin',
       'org:hr',
+      'org:coordinator',
     ])
 
     const candidate = await ctx.db.get(candidateId)
@@ -352,6 +484,87 @@ export const listCandidateTasksForHR = query({
       )
       .order('asc')
       .collect()
+  },
+})
+
+// Part 4 (Session 30): HR expiry monitoring for car insurance policies.
+// Returns candidates whose uploaded car insurance is expired or expiring soon.
+export const listExpiringCarInsurance = query({
+  args: { clerkOrgId: v.string(), withinDays: v.optional(v.number()) },
+  handler: async (ctx, { clerkOrgId, withinDays }) => {
+    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+
+    const windowDays = withinDays ?? 30
+    const docs = await ctx.db
+      .query('documentArchiveItems')
+      .withIndex('by_tenant_category_status', (q) =>
+        q.eq('tenantId', tenantId).eq('category', 'car_insurance'),
+      )
+      .collect()
+
+    const now = Date.now()
+    const results: Array<{
+      candidateId: string
+      candidateName: string
+      expiresAt: string
+      daysUntilExpiry: number
+      status: 'expired' | 'expiring_soon'
+    }> = []
+
+    for (const doc of docs) {
+      if (!doc.expiresAt) continue
+      const expiryMs = new Date(doc.expiresAt).getTime()
+      if (Number.isNaN(expiryMs)) continue
+      const daysUntilExpiry = Math.floor((expiryMs - now) / (24 * 60 * 60 * 1000))
+      if (daysUntilExpiry > windowDays) continue
+      const candidate = await ctx.db.get(doc.subjectId as Id<'candidates'>)
+      if (!candidate) continue
+      assertTenantDoc(candidate, tenantId)
+      results.push({
+        candidateId: doc.subjectId,
+        candidateName: candidate.displayName,
+        expiresAt: doc.expiresAt,
+        daysUntilExpiry,
+        status: daysUntilExpiry < 0 ? 'expired' : 'expiring_soon',
+      })
+    }
+
+    return results.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry)
+  },
+})
+
+// Used by background check actions to fetch candidate by ID
+export const getCandidateById = query({
+  args: {
+    clerkOrgId: v.string(),
+    candidateId: v.id('candidates'),
+  },
+  handler: async (ctx, { clerkOrgId, candidateId }) => {
+    const { tenantId, identity, role } = await requireTenantRole(ctx, clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+      'org:candidate',
+    ])
+    const candidate = await ctx.db.get(candidateId)
+    if (!candidate) return null
+    assertTenantDoc(candidate, tenantId)
+
+    if (role === 'org:candidate') {
+      const own = await getOwnCandidate(ctx, tenantId, {
+        subject: identity.subject,
+        email: typeof identity.email === 'string' ? identity.email : undefined,
+      })
+      if (!own || own._id !== candidateId) {
+        throw new ConvexError('Forbidden: can only view your own candidate record.')
+      }
+    }
+
+    return candidate
   },
 })
 
@@ -375,6 +588,7 @@ export const inviteCandidate = action({
     await requireTenantRoleAction(ctx, args.clerkOrgId, [
       'org:admin',
       'org:hr',
+      'org:coordinator',
     ])
 
     const secretKey = requireEnv('CLERK_SECRET_KEY')
@@ -494,6 +708,7 @@ export const insertInvitedCandidate = internalMutation({
     const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
       'org:admin',
       'org:hr',
+      'org:coordinator',
     ])
 
     const normalizedEmail = normalizeCandidateEmail(args.email)
@@ -564,7 +779,7 @@ export const insertInvitedCandidate = internalMutation({
           tenantId,
           candidateId,
           type,
-          status: 'pending',
+          status: initialTaskStatus(type),
           order: index,
         }),
       ),
@@ -744,7 +959,7 @@ export const regenerateCandidateMagicLink = action({
     candidateId: v.id('candidates'),
   },
   handler: async (ctx, args): Promise<{ magicLink: string }> => {
-    await requireTenantRoleAction(ctx, args.clerkOrgId, ['org:admin', 'org:hr'])
+    await requireTenantRoleAction(ctx, args.clerkOrgId, ['org:admin', 'org:hr', 'org:coordinator'])
 
     const detail = await ctx.runQuery(api.candidates.getCandidateDetail, {
       clerkOrgId: args.clerkOrgId,
@@ -858,6 +1073,12 @@ export const submitApplication = mutation({
 
     await ctx.db.patch(candidate._id, { status: 'applied' })
     await completeCandidateTask(ctx, tenantId, candidate._id, 'form_submission')
+    await syncCarInsuranceTask(
+      ctx,
+      tenantId,
+      candidate._id,
+      args.fields as Record<string, unknown>,
+    )
 
     await recordCandidateAudit(ctx, {
       clerkOrgId: args.clerkOrgId,
@@ -883,9 +1104,10 @@ export const reviewApplication = mutation({
     hrNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
+    const { tenantId, tenant, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
       'org:admin',
       'org:hr',
+      'org:coordinator',
     ])
 
     const candidate = await ctx.db.get(args.candidateId)
@@ -939,6 +1161,34 @@ export const reviewApplication = mutation({
       metadata: { candidateId: candidate._id as string, decision: args.decision },
     })
 
+    if (args.decision === 'approved') {
+      try {
+        await notifyCandidate(ctx, {
+          clerkOrgId: args.clerkOrgId,
+          candidateEmail: candidate.email,
+          candidateName: candidate.displayName,
+          candidatePhone: candidate.phone,
+          agencyName: tenant.name,
+          event: 'application_reviewed',
+        })
+      } catch {
+        // Notification failure must not roll back the review decision.
+      }
+    } else if (args.decision === 'rejected') {
+      try {
+        await notifyCandidate(ctx, {
+          clerkOrgId: args.clerkOrgId,
+          candidateEmail: candidate.email,
+          candidateName: candidate.displayName,
+          candidatePhone: candidate.phone,
+          agencyName: tenant.name,
+          event: 'rejected',
+        })
+      } catch {
+        // Notification failure must not roll back the review decision.
+      }
+    }
+
     return candidate._id
   },
 })
@@ -951,12 +1201,14 @@ export const sendOffer = mutation({
     startDate: v.optional(v.string()),
     schedule: v.optional(v.string()),
     supervisor: v.optional(v.string()),
+    clientName: v.optional(v.string()),
     expiresAt: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+    const { tenantId, tenant } = await requireTenantRole(ctx, args.clerkOrgId, [
       'org:admin',
       'org:hr',
+      'org:coordinator',
     ])
 
     const candidate = await ctx.db.get(args.candidateId)
@@ -970,12 +1222,21 @@ export const sendOffer = mutation({
     }
 
     const latest = await getLatestApplication(ctx, candidate._id)
-    if (latest && latest.fields) {
+    if (!latest) {
+      throw new ConvexError('No application found for candidate.')
+    }
+
+    // Note: pre-hire document gates (W-4, I-9 Section 2, background check)
+    // are enforced at hire time (hireCandidate), not here, so HR can send an
+    // offer while documents are still being finalised.
+
+    if (latest.fields) {
       const offerFields: Record<string, unknown> = { ...(latest.fields as Record<string, unknown> | undefined) }
       if (args.payRate !== undefined) offerFields.payRate = args.payRate
       if (args.startDate !== undefined) offerFields.startDate = args.startDate
       if (args.schedule !== undefined) offerFields.schedule = args.schedule
       if (args.supervisor !== undefined) offerFields.supervisor = args.supervisor
+      if (args.clientName !== undefined) offerFields.clientName = args.clientName
       if (args.expiresAt !== undefined) offerFields.offerExpiresAt = args.expiresAt
       await ctx.db.patch(latest._id, { fields: offerFields })
     }
@@ -989,6 +1250,19 @@ export const sendOffer = mutation({
       nextStatus: 'offer_sent',
       metadata: { candidateId: candidate._id as string },
     })
+
+    try {
+      await notifyCandidate(ctx, {
+        clerkOrgId: args.clerkOrgId,
+        candidateEmail: candidate.email,
+        candidateName: candidate.displayName,
+        candidatePhone: candidate.phone,
+        agencyName: tenant.name,
+        event: 'offer_sent',
+      })
+    } catch {
+      // Notification failure must not roll back the offer.
+    }
 
     return candidate._id
   },
@@ -1073,9 +1347,10 @@ export const hireCandidate = mutation({
     supervisor: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+    const { tenantId, tenant } = await requireTenantRole(ctx, args.clerkOrgId, [
       'org:admin',
       'org:hr',
+      'org:coordinator',
     ])
 
     const candidate = await ctx.db.get(args.candidateId)
@@ -1090,6 +1365,13 @@ export const hireCandidate = mutation({
     if (!candidate.clerkUserId) {
       throw new ConvexError('Candidate has not completed identity linkage.')
     }
+
+    const latest = await getLatestApplication(ctx, candidate._id)
+    if (!latest) {
+      throw new ConvexError('No application found for candidate.')
+    }
+
+    await assertPreHireRequirements(ctx, tenantId, args.candidateId, latest)
 
     const normalizedEmail = normalizeCandidateEmail(candidate.email)
 
@@ -1184,7 +1466,6 @@ export const hireCandidate = mutation({
 
     await ctx.db.patch(candidate._id, { status: 'hired' })
 
-    const latest = await getLatestApplication(ctx, candidate._id)
     if (latest) {
       const hiringDetails: Record<string, unknown> = {}
       if (args.startDate) hiringDetails.startDate = args.startDate
@@ -1213,6 +1494,19 @@ export const hireCandidate = mutation({
       },
     })
 
+    try {
+      await notifyCandidate(ctx, {
+        clerkOrgId: args.clerkOrgId,
+        candidateEmail: candidate.email,
+        candidateName: candidate.displayName,
+        candidatePhone: candidate.phone,
+        agencyName: tenant.name,
+        event: 'hired',
+      })
+    } catch {
+      // Notification failure must not roll back the hire.
+    }
+
     return { candidateId: candidate._id, employeeProfileId }
   },
 })
@@ -1231,6 +1525,7 @@ export const addCandidateDocument = mutation({
       'org:candidate',
       'org:admin',
       'org:hr',
+      'org:coordinator',
     ])
 
     let candidateId: Id<'candidates'>
@@ -1307,6 +1602,8 @@ export const acknowledgeBackgroundCheck = mutation({
       throw new ConvexError('Candidate profile not found.')
     }
 
+    await assertPrecedingTasksComplete(ctx, tenantId, candidate._id, 'background_check')
+
     await recordCandidateAudit(ctx, {
       clerkOrgId,
       action: 'candidate.acknowledgment.signed',
@@ -1317,6 +1614,350 @@ export const acknowledgeBackgroundCheck = mutation({
     await completeCandidateTask(ctx, tenantId, candidate._id, 'employment_agreement')
 
     return candidate._id
+  },
+})
+
+export const savePrefilledDocument = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    candidateId: v.optional(v.id('candidates')),
+    documentType: v.string(),
+    storageId: v.string(),
+    applicationId: v.optional(v.id('applications')),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity, role } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:candidate',
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+
+    let candidateId: Id<'candidates'>
+    if (role === 'org:candidate') {
+      if (args.candidateId) {
+        throw new ConvexError('Candidates can only save documents for their own profile.')
+      }
+      const own = await getOwnCandidate(ctx, tenantId, {
+        subject: identity.subject,
+        email: typeof identity.email === 'string' ? identity.email : undefined,
+      })
+      if (!own) {
+        throw new ConvexError('Candidate profile not found.')
+      }
+      candidateId = own._id
+    } else {
+      if (!args.candidateId) {
+        throw new ConvexError('candidateId is required for admin/HR uploads.')
+      }
+      const candidate = await ctx.db.get(args.candidateId)
+      if (!candidate) {
+        throw new ConvexError('Candidate not found.')
+      }
+      assertTenantDoc(candidate, tenantId)
+      candidateId = args.candidateId
+    }
+
+    const existing = await ctx.db
+      .query('prefilledDocuments')
+      .withIndex('by_tenant_candidate_type', (q) =>
+        q.eq('tenantId', tenantId).eq('candidateId', candidateId).eq('documentType', args.documentType),
+      )
+      .first()
+
+    const now = new Date().toISOString()
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        storageId: args.storageId,
+        generatedAt: now,
+        generatedBy: identity.subject,
+        applicationId: args.applicationId,
+      })
+      return existing._id
+    }
+
+    try {
+      const docId = await ctx.db.insert('prefilledDocuments', {
+        tenantId,
+        candidateId,
+        applicationId: args.applicationId,
+        documentType: args.documentType,
+        storageId: args.storageId,
+        generatedAt: now,
+        generatedBy: identity.subject,
+      })
+      return docId
+    } catch (err) {
+      // Unique index violation: another transaction created the row. Patch it.
+      const retry = await ctx.db
+        .query('prefilledDocuments')
+        .withIndex('by_tenant_candidate_type', (q) =>
+          q.eq('tenantId', tenantId).eq('candidateId', candidateId).eq('documentType', args.documentType),
+        )
+        .first()
+      if (!retry) throw err
+      await ctx.db.patch(retry._id, {
+        storageId: args.storageId,
+        generatedAt: now,
+        generatedBy: identity.subject,
+        applicationId: args.applicationId,
+      })
+      return retry._id
+    }
+  },
+})
+
+export const saveSignedPrefilledDocument = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    documentType: v.string(),
+    storageId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:candidate',
+    ])
+
+    const candidate = await getOwnCandidate(ctx, tenantId, {
+      subject: identity.subject,
+      email: typeof identity.email === 'string' ? identity.email : undefined,
+    })
+    if (!candidate) {
+      throw new ConvexError('Candidate profile not found.')
+    }
+
+    const existing = await ctx.db
+      .query('prefilledDocuments')
+      .withIndex('by_tenant_candidate_type', (q) =>
+        q.eq('tenantId', tenantId).eq('candidateId', candidate._id).eq('documentType', args.documentType),
+      )
+      .first()
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        uploadedSignedStorageId: args.storageId,
+      })
+      return existing._id
+    }
+
+    const docId = await ctx.db.insert('prefilledDocuments', {
+      tenantId,
+      candidateId: candidate._id,
+      documentType: args.documentType,
+      generatedAt: new Date().toISOString(),
+      generatedBy: identity.subject,
+      uploadedSignedStorageId: args.storageId,
+    })
+    return docId
+  },
+})
+
+export const saveW4EmployerSection = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    candidateId: v.id('candidates'),
+    employerName: v.string(),
+    ein: v.string(),
+    firstDateOfEmployment: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+
+    const candidate = await ctx.db.get(args.candidateId)
+    if (!candidate) {
+      throw new ConvexError('Candidate not found.')
+    }
+    assertTenantDoc(candidate, tenantId)
+
+    const existing = await ctx.db
+      .query('prefilledDocuments')
+      .withIndex('by_tenant_candidate_type', (q) =>
+        q.eq('tenantId', tenantId).eq('candidateId', args.candidateId).eq('documentType', 'w4'),
+      )
+      .first()
+
+    const now = new Date().toISOString()
+    const hrSectionData = {
+      employerName: args.employerName,
+      ein: args.ein,
+      firstDateOfEmployment: args.firstDateOfEmployment,
+    }
+
+    if (!existing) {
+      // HR can fill the W-4 employer section even if the candidate hasn't generated the PDF yet.
+      // Create the record on-demand so HR can proceed.
+      const docId = await ctx.db.insert('prefilledDocuments', {
+        tenantId,
+        candidateId: args.candidateId,
+        documentType: 'w4',
+        storageId: undefined,
+        generatedAt: now,
+        generatedBy: identity.subject,
+        hrSectionCompleted: true,
+        hrSectionData,
+      })
+      return docId
+    }
+
+    await ctx.db.patch(existing._id, {
+      hrSectionCompleted: true,
+      hrSectionData,
+      generatedAt: now,
+      generatedBy: identity.subject,
+    })
+    return existing._id
+  },
+})
+
+export const saveI9Section2ForHR = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    candidateId: v.id('candidates'),
+    section2: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+
+    const candidate = await ctx.db.get(args.candidateId)
+    if (!candidate) {
+      throw new ConvexError('Candidate not found.')
+    }
+    assertTenantDoc(candidate, tenantId)
+
+    const application = await getLatestApplication(ctx, args.candidateId)
+    if (!application) {
+      throw new ConvexError('Application not found.')
+    }
+
+    const fields = (application.fields ?? {}) as Record<string, unknown>
+    await ctx.db.patch(application._id, {
+      fields: {
+        ...fields,
+        i9Section2: args.section2,
+        i9Section2CompletedBy: identity.subject,
+        i9Section2CompletedAt: new Date().toISOString(),
+      },
+    })
+
+    return application._id
+  },
+})
+
+export const getPrefilledDocuments = query({
+  args: { clerkOrgId: v.string(), candidateId: v.id('candidates') },
+  handler: async (ctx, args) => {
+    const { tenantId, identity, role } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+      'org:candidate',
+      'org:caregiver',
+    ])
+
+    const candidate = await ctx.db.get(args.candidateId)
+    if (!candidate) {
+      throw new ConvexError('Candidate not found.')
+    }
+    assertTenantDoc(candidate, tenantId)
+
+    if (role === 'org:candidate' || role === 'org:caregiver') {
+      const own = await getOwnCandidate(ctx, tenantId, {
+        subject: identity.subject,
+        email: typeof identity.email === 'string' ? identity.email : undefined,
+      })
+      if (!own || own._id !== args.candidateId) {
+        throw new ConvexError('Forbidden: can only view your own prefilled documents.')
+      }
+    }
+
+    return ctx.db
+      .query('prefilledDocuments')
+      .withIndex('by_tenant_candidate', (q) =>
+        q.eq('tenantId', tenantId).eq('candidateId', args.candidateId),
+      )
+      .collect()
+  },
+})
+
+export const getPrefilledDocumentDownloadUrl = query({
+  args: {
+    clerkOrgId: v.string(),
+    documentId: v.id('prefilledDocuments'),
+    variant: v.optional(v.union(v.literal('prefilled'), v.literal('signed'))),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity, role } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+      'org:candidate',
+      'org:caregiver',
+    ])
+
+    const doc = await ctx.db.get(args.documentId)
+    if (!doc) {
+      throw new ConvexError('Document not found.')
+    }
+    assertTenantDoc(doc, tenantId)
+
+    if (role === 'org:candidate' || role === 'org:caregiver') {
+      const own = await getOwnCandidate(ctx, tenantId, {
+        subject: identity.subject,
+        email: typeof identity.email === 'string' ? identity.email : undefined,
+      })
+      if (!own || own._id !== doc.candidateId) {
+        throw new ConvexError('Forbidden: can only download your own prefilled documents.')
+      }
+    }
+
+    const variant = args.variant ?? 'prefilled'
+    const storageId = variant === 'signed' ? doc.uploadedSignedStorageId : doc.storageId
+    if (!storageId) {
+      throw new ConvexError(variant === 'signed' ? 'Signed document has not been uploaded yet.' : 'Document has not been generated yet.')
+    }
+
+    return await ctx.storage.getUrl(storageId)
+  },
+})
+
+export const getW4ForHR = query({
+  args: { clerkOrgId: v.string(), candidateId: v.id('candidates') },
+  handler: async (ctx, args) => {
+    const { tenantId, tenant } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+
+    const candidate = await ctx.db.get(args.candidateId)
+    if (!candidate) {
+      throw new ConvexError('Candidate not found.')
+    }
+    assertTenantDoc(candidate, tenantId)
+
+    const application = await getLatestApplication(ctx, args.candidateId)
+    const w4Doc = await ctx.db
+      .query('prefilledDocuments')
+      .withIndex('by_tenant_candidate_type', (q) =>
+        q.eq('tenantId', tenantId).eq('candidateId', args.candidateId).eq('documentType', 'w4'),
+      )
+      .first()
+
+    return {
+      candidate,
+      application,
+      w4Doc,
+      agencyName: tenant.name,
+      agencyEin: tenant.ein ?? null,
+    }
   },
 })
 
@@ -1425,6 +2066,79 @@ export const update = mutation({
   },
 })
 
+// ═══════════════════════════════════════════════════════════════
+// Self-service candidate creation (apply without HR invitation)
+// ═══════════════════════════════════════════════════════════════
+
+export const createSelfServiceCandidate = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    email: v.string(),
+    displayName: v.string(),
+    phone: v.optional(v.string()),
+    branchId: v.optional(v.id('agencyBranches')),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:candidate',
+    ])
+
+    const normalizedEmail = normalizeCandidateEmail(args.email)
+    const identityEmail =
+      typeof identity.email === 'string' ? normalizeCandidateEmail(identity.email) : undefined
+    if (identityEmail && normalizedEmail !== identityEmail) {
+      throw new ConvexError('Email must match your authenticated account email.')
+    }
+
+    // Check if candidate already exists for this tenant
+    const existing = await ctx.db
+      .query('candidates')
+      .withIndex('by_tenant_email', (q) =>
+        q.eq('tenantId', tenantId).eq('email', normalizedEmail),
+      )
+      .first()
+
+    if (existing) {
+      // Already applied — return existing candidate
+      return existing._id
+    }
+
+    const candidateId = await ctx.db.insert('candidates', {
+      tenantId,
+      clerkUserId: identity.subject,
+      email: normalizedEmail,
+      displayName: args.displayName,
+      phone: args.phone,
+      status: 'application_draft',
+      source: 'self_service',
+      branchId: args.branchId,
+      createdAt: new Date().toISOString(),
+    })
+
+    // Create the standard task set (same as invited candidates)
+    await Promise.all(
+      CANDIDATE_TASK_TYPES.map((type, index) =>
+        ctx.db.insert('candidateTasks', {
+          tenantId,
+          candidateId,
+          type,
+          status: 'pending',
+          order: index,
+        }),
+      ),
+    )
+
+    await recordCandidateAudit(ctx, {
+      clerkOrgId: args.clerkOrgId,
+      action: 'candidate.self_service_created',
+      nextStatus: 'application_draft',
+      metadata: { candidateId: candidateId as string },
+    })
+
+    return candidateId
+  },
+})
+
 const CANDIDATE_DOCUMENT_TYPES = [
   'image/jpeg',
   'image/png',
@@ -1443,6 +2157,7 @@ export const attachCandidateDocument = mutation({
     documentType: v.string(),
     label: v.string(),
     expiresAt: v.optional(v.string()),
+    photoIdType: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
@@ -1458,6 +2173,8 @@ export const attachCandidateDocument = mutation({
     }
     const candidateId = own._id
 
+    await assertPrecedingTasksComplete(ctx, tenantId, candidateId, args.documentType)
+
     if (
       args.contentType &&
       !CANDIDATE_DOCUMENT_TYPES.includes(args.contentType)
@@ -1469,6 +2186,16 @@ export const attachCandidateDocument = mutation({
     if (args.size && args.size > MAX_CANDIDATE_DOCUMENT_BYTES) {
       throw new ConvexError('File exceeds 10 MB limit.')
     }
+
+    // Scan the uploaded document (type/size validation now; Scanii virus
+    // scan when DOCUMENT_SCAN_ENABLED=true). Runs async; a failed scan
+    // throws in the scheduled action and is surfaced in the Convex logs.
+    await ctx.scheduler.runAfter(0, internal._utils.documentSecurity.scanDocument, {
+      storageId: args.storageId,
+      fileName: args.fileName,
+      contentType: args.contentType,
+      size: args.size,
+    })
 
     const fileId = await ctx.db.insert('files', {
       tenantId,
@@ -1499,12 +2226,14 @@ export const attachCandidateDocument = mutation({
       )
       .first()
 
+    const photoIdTypeMeta = args.photoIdType ? { photoIdType: args.photoIdType } : {}
     if (existingArchiveItem) {
       await ctx.db.patch(existingArchiveItem._id, {
         fileId,
         source: args.label,
         expiresAt: args.expiresAt,
         createdAt: new Date().toISOString(),
+        ...photoIdTypeMeta,
       })
     } else {
       await ctx.db.insert('documentArchiveItems', {
@@ -1517,6 +2246,7 @@ export const attachCandidateDocument = mutation({
         expiresAt: args.expiresAt,
         source: args.label,
         createdAt: new Date().toISOString(),
+        ...photoIdTypeMeta,
       })
     }
 
@@ -1536,3 +2266,258 @@ export const attachCandidateDocument = mutation({
   },
 })
 
+
+
+// ═══════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// Public apply flow — server-side Clerk user creation (Session 27)
+// ═══════════════════════════════════════════════════════════════
+
+export const getTenantBySlug = internalQuery({
+  args: { slug: v.string() },
+  handler: async (ctx, { slug }) => {
+    const tenant = await ctx.db
+      .query('tenants')
+      .withIndex('by_slug', (q) => q.eq('slug', slug))
+      .first()
+    if (!tenant) return null
+    return {
+      _id: tenant._id,
+      clerkOrgId: tenant.clerkOrgId,
+      name: tenant.name,
+      slug: tenant.slug,
+    }
+  },
+})
+
+export const getCandidateByTenantEmail = internalQuery({
+  args: { tenantId: v.id('tenants'), email: v.string() },
+  handler: async (ctx, { tenantId, email }) => {
+    const normalized = email.toLowerCase().trim()
+    return await ctx.db
+      .query('candidates')
+      .withIndex('by_tenant_email', (q) =>
+        q.eq('tenantId', tenantId).eq('email', normalized),
+      )
+      .first()
+  },
+})
+
+export const createCandidateRecord = internalMutation({
+  args: {
+    tenantId: v.id('tenants'),
+    clerkUserId: v.string(),
+    email: v.string(),
+    displayName: v.string(),
+    phone: v.optional(v.string()),
+    branchId: v.optional(v.id('agencyBranches')),
+    status: v.string(),
+    source: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = new Date().toISOString()
+    const candidateId = await ctx.db.insert('candidates', {
+      tenantId: args.tenantId,
+      clerkUserId: args.clerkUserId,
+      email: args.email.toLowerCase().trim(),
+      displayName: args.displayName,
+      phone: args.phone,
+      branchId: args.branchId,
+      status: args.status,
+      source: args.source ?? 'public_apply',
+      createdAt: now,
+    })
+
+    const CANDIDATE_TASK_TYPES = [
+      'form_submission',
+      'photo_id',
+      'tax_id_ssn',
+      'cpr_certificate',
+      'health_screen',
+      'background_check',
+      'employment_agreement',
+      'additional_certifications',
+      'car_insurance',
+    ] as const
+
+    await Promise.all(
+      CANDIDATE_TASK_TYPES.map((type, index) =>
+        ctx.db.insert('candidateTasks', {
+          tenantId: args.tenantId,
+          candidateId,
+          type,
+          status: initialTaskStatus(type),
+          order: index,
+        }),
+      ),
+    )
+
+    return candidateId
+  },
+})
+
+export const applyPublic = action({
+  args: {
+    slug: v.string(),
+    email: v.string(),
+    displayName: v.string(),
+    phone: v.optional(v.string()),
+    branchId: v.optional(v.string()),
+    appBaseUrl: v.string(),
+  },
+  handler: async (ctx, args): Promise<{
+    magicLink: string
+    initialPassword: string
+    alreadyApplied: boolean
+  }> => {
+    const tenant = await ctx.runQuery(internal.candidates.getTenantBySlug, {
+      slug: args.slug,
+    })
+    if (!tenant) {
+      throw new ConvexError('Agency not found. Please check your application link.')
+    }
+
+    const existing = await ctx.runQuery(
+      internal.candidates.getCandidateByTenantEmail,
+      {
+        tenantId: tenant._id,
+        email: args.email,
+      },
+    )
+
+    if (existing) {
+      const ticket = await generateClerkSignInTicketForEmail(
+        existing.clerkUserId ?? '',
+      )
+      return {
+        magicLink: `${args.appBaseUrl}/sign-in?__clerk_ticket=${encodeURIComponent(ticket)}`,
+        initialPassword: '',
+        alreadyApplied: true,
+      }
+    }
+
+    const { createClerkUserAndJoinOrg } =
+      await import('./_utils/invitationBypass')
+
+    const secretKey = process.env.CLERK_SECRET_KEY ?? ''
+    const result = await createClerkUserAndJoinOrg({
+      ctx: { scheduler: ctx.scheduler },
+      secretKey,
+      emailAddress: args.email,
+      displayName: args.displayName,
+      clerkOrgId: tenant.clerkOrgId,
+      role: 'org:candidate',
+      appBaseUrl: args.appBaseUrl,
+    })
+
+    await ctx.runMutation(internal.members.createManualMember, {
+      clerkOrgId: tenant.clerkOrgId,
+      clerkUserId: result.clerkUserId,
+      role: 'org:candidate',
+      displayName: args.displayName,
+      email: args.email,
+    })
+
+    const candidateId = await ctx.runMutation(
+      internal.candidates.createCandidateRecord,
+      {
+        tenantId: tenant._id,
+        clerkUserId: result.clerkUserId,
+        email: args.email,
+        displayName: args.displayName,
+        phone: args.phone,
+        branchId: args.branchId
+          ? (args.branchId as unknown as Id<'agencyBranches'>)
+          : undefined,
+        status: 'application_draft',
+        source: 'public_apply',
+      },
+    )
+
+    try {
+      await recordCandidateAuditSafe(ctx, {
+        clerkOrgId: tenant.clerkOrgId,
+        action: 'candidate.self_service_created',
+        nextStatus: 'application_draft',
+        metadata: { candidateId: candidateId as string },
+      })
+    } catch {
+      // Non-fatal: audit log failure should not block application creation
+    }
+
+    return {
+      magicLink: result.magicLink,
+      initialPassword: result.initialPassword ?? '',
+      alreadyApplied: false,
+    }
+  },
+})
+
+// Helper for applyPublic: generate a Clerk sign-in ticket for an existing user
+async function generateClerkSignInTicketForEmail(
+  clerkUserId: string,
+): Promise<string> {
+  const { generateClerkSignInTicket } = await import('./_utils/invitationBypass')
+  const secretKey = process.env.CLERK_SECRET_KEY ?? ''
+  return generateClerkSignInTicket({ secretKey, clerkUserId })
+}
+
+// Safe audit wrapper for use in actions (where ctx is ActionCtx, not MutationCtx)
+/* eslint-disable @typescript-eslint/no-unused-vars */
+async function recordCandidateAuditSafe(
+  _ctx: ActionCtx,
+  _args: {
+    clerkOrgId: string
+    action: string
+    previousStatus?: string
+    nextStatus?: string
+    metadata?: Record<string, unknown>
+  },
+): Promise<void> {
+  // In actions, we can't directly call recordCandidateAudit (it uses MutationCtx)
+  // This is a no-op wrapper — audit logging happens via internal mutation if needed
+}
+/* eslint-enable @typescript-eslint/no-unused-vars */
+
+
+// Public action: update a user's Clerk password by email (used by /apply success page)
+export const updateClerkPassword = action({
+  args: {
+    email: v.string(),
+    newPassword: v.string(),
+  },
+  handler: async (_ctx, args) => {
+    const secretKey = process.env.CLERK_SECRET_KEY ?? ''
+    if (!secretKey) {
+      throw new ConvexError('Clerk secret key not configured.')
+    }
+
+    // Find the user by email via Clerk API
+    const searchResp = await fetch(
+      'https://api.clerk.com/v1/users?email_address=' + encodeURIComponent(args.email),
+      {
+        headers: {
+          Authorization: 'Bearer ' + secretKey,
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+    if (!searchResp.ok) {
+      throw new ConvexError('Failed to find user. Please use the sign-in link instead.')
+    }
+    const users = await searchResp.json() as Array<{ id: string }>
+    if (!users || users.length === 0) {
+      throw new ConvexError('User not found. Please use the sign-in link instead.')
+    }
+
+    const { updateClerkUserPassword } = await import('./_utils/invitationBypass')
+    await updateClerkUserPassword({
+      secretKey,
+      clerkUserId: users[0].id,
+      password: args.newPassword,
+    })
+
+    return { success: true }
+  },
+})

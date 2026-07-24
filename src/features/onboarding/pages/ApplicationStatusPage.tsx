@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { cn } from '@/shared/lib/cn'
+import { formatDateUS } from '@/shared/format'
 
 
 const STATUS_CONFIG: Record<string, { title: string; description: string; variant: 'success' | 'warning' | 'info' | 'neutral' | 'danger'; cardClass: string; labelClass: string }> = {
@@ -86,7 +87,7 @@ const UPLOAD_TYPES = new Set(['photo_id', 'cpr_certificate'])
 
 function formatDate(value?: string) {
   if (!value) return ''
-  return new Date(value).toLocaleDateString()
+  return formatDateUS(value)
 }
 
 export function ApplicationStatusPage() {

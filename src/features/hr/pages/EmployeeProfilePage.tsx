@@ -19,7 +19,7 @@ import { Link, useParams } from 'react-router-dom'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { adpStatusPill } from '../lib/adpStatus'
 import { cn } from '@/shared/lib/cn'
-import { formatWeekdayDate } from '@/shared/format'
+import { formatDateUS } from '@/shared/format'
 
 const TABS = [
   { value: 'profile', label: 'Profile', icon: User },
@@ -63,7 +63,7 @@ function ProfileTab({
       <ApplicationField label="ROLE" value={member.role.replace('org:', '')} />
       <ApplicationField
         label="START DATE"
-        value={member.createdAt ? formatWeekdayDate(member.createdAt) : ''}
+        value={member.createdAt ? formatDateUS(member.createdAt) : ''}
       />
       <ApplicationField label="EMPLOYMENT TYPE" value="Caregiver" />
       <ApplicationField label="PAY RATE" value="—" />
@@ -124,7 +124,7 @@ function DocumentsTab({
                 {doc.status}
               </StatusBadge>
             </TableCell>
-            <TableCell>{doc.expiresAt ? formatWeekdayDate(doc.expiresAt) : '—'}</TableCell>
+            <TableCell>{doc.expiresAt ? formatDateUS(doc.expiresAt) : '—'}</TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -243,7 +243,7 @@ export function EmployeeProfilePage() {
               <p className="mt-1 text-base text-atria-text-secondary">
                 {member.role.replace('org:', '')} · Started{' '}
                 {profile?.createdAt
-                  ? formatWeekdayDate(profile.createdAt)
+                  ? formatDateUS(profile.createdAt)
                   : '—'}
               </p>
             </div>

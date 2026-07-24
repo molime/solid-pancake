@@ -9,7 +9,8 @@ import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { HrToast } from '../components/HrToast'
 import { useHrToast } from '../hooks/useHrToast'
 import { ArrowLeft, CheckCircle2 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { isNonEmptyString } from '@/features/onboarding/components/application/types'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import type { Id } from '../../../../convex/_generated/dataModel'
 
@@ -40,6 +41,18 @@ export function HireConvertPage() {
     api.members.listManagers,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
+  const prefilledDocs = useQuery(
+    api.candidates.getPrefilledDocuments,
+    clerkOrgId && candidateId
+      ? { clerkOrgId, candidateId: candidateId as Id<'candidates'> }
+      : 'skip',
+  )
+  const bgCheck = useQuery(
+    api.backgroundChecks.getBackgroundCheckForHR,
+    clerkOrgId && candidateId
+      ? { clerkOrgId, candidateId: candidateId as Id<'candidates'> }
+      : 'skip',
+  )
   const hireCandidate = useMutation(api.candidates.hireCandidate)
 
   const [startDate, setStartDate] = useState('')
@@ -52,6 +65,38 @@ export function HireConvertPage() {
   const candidate = detail?.candidate
   const application = detail?.applications?.[0]
   const fields = (application?.fields ?? {}) as Record<string, string>
+  const appFields = (application?.fields ?? {}) as Record<string, unknown>
+  const i9Section2 = appFields.i9Section2 as Record<string, unknown> | undefined
+
+  const w4EmployerComplete = useMemo(() => {
+    const w4Doc = prefilledDocs?.find((d) => d.documentType === 'w4')
+    return !!w4Doc?.hrSectionCompleted
+  }, [prefilledDocs])
+
+  const i9Section2Complete = useMemo(
+    () =>
+      !!i9Section2 &&
+      isNonEmptyString(i9Section2.documentTitle) &&
+      isNonEmptyString(i9Section2.documentNumber) &&
+      isNonEmptyString(i9Section2.employerSignature) &&
+      isNonEmptyString(i9Section2.date),
+    [i9Section2],
+  )
+
+  const backgroundCheckResultComplete = !!bgCheck?.officialResultStorageId
+  const canHire = w4EmployerComplete && i9Section2Complete && backgroundCheckResultComplete
+
+  const prefilled = useRef(false)
+  useEffect(() => {
+    if (prefilled.current || !detail || !application) return
+    const f = (application.fields ?? {}) as Record<string, string>
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (f.startDate) setStartDate(f.startDate)
+    if (f.payRate) setPayRate(f.payRate)
+    if (f.supervisor) setSupervisor(f.supervisor)
+    /* eslint-enable react-hooks/set-state-in-effect */
+    prefilled.current = true
+  }, [detail, application])
 
   if (!detail) {
     return (
@@ -149,6 +194,17 @@ export function HireConvertPage() {
           <CardContent className="space-y-4 p-6">
             {error && <p className="text-sm text-atria-danger">{error}</p>}
 
+            {!canHire && (
+              <div className='rounded-[var(--radius-atria-md)] border border-atria-warning bg-atria-warning/10 p-3 text-sm text-atria-warning'>
+                <p className='font-medium'>Before hiring, complete:</p>
+                <ul className='mt-1 list-inside list-disc'>
+                  {!backgroundCheckResultComplete && <li>Upload official background check result</li>}
+                  {!w4EmployerComplete && <li>W-4 employer section</li>}
+                  {!i9Section2Complete && <li>I-9 Section 2 verification</li>}
+                </ul>
+              </div>
+            )}
+
             <div className="rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-4">
               <p className="text-sm font-medium text-atria-ink">Conversion target</p>
               <p className="text-base font-semibold text-atria-accent">Caregiver</p>
@@ -158,7 +214,7 @@ export function HireConvertPage() {
               Worker will be registered in ADP when credentials are configured.
             </p>
 
-            <FieldGroup label="Start date" htmlFor="start-date">
+            <FieldGroup label="Start date *" htmlFor="start-date">
               <Input
                 id="start-date"
                 type="date"
@@ -167,7 +223,7 @@ export function HireConvertPage() {
               />
             </FieldGroup>
 
-            <FieldGroup label="Pay rate" htmlFor="pay-rate">
+            <FieldGroup label="Pay rate *" htmlFor="pay-rate">
               <Input
                 id="pay-rate"
                 type="text"
@@ -177,7 +233,7 @@ export function HireConvertPage() {
               />
             </FieldGroup>
 
-            <FieldGroup label="Supervisor / Coordinator" htmlFor="supervisor">
+            <FieldGroup label="Supervisor / Coordinator *" htmlFor="supervisor">
               <Select
                 id="supervisor"
                 value={supervisor}
@@ -197,7 +253,7 @@ export function HireConvertPage() {
               size="lg"
               className="w-full"
               data-testid="confirm-hire-button"
-              disabled={submitting}
+              disabled={submitting || !startDate || !payRate || !supervisor || !canHire}
               onClick={handleHire}
             >
               <CheckCircle2 className="h-4 w-4" />

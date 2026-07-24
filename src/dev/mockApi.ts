@@ -12,9 +12,26 @@ import {
   shiftTasks,
   auditEvents,
   getCurrentMember,
+  mockCandidate,
+  mockCandidateTasks,
+  mockApplication,
+  mockBranches,
+  mockTrainingCompletions,
+  mockBgCheck,
 } from './mockData'
 
 export type ScreenshotView =
+  | 'candidate-onboarding'
+  | 'candidate-checklist'
+  | 'candidate-application'
+  | 'candidate-upload'
+  | 'candidate-acknowledgment'
+  | 'candidate-training'
+  | 'candidate-profile'
+  | 'candidate-status'
+  | 'candidate-success'
+  | 'candidate-employment-agreement'
+  | 'candidate-apply-entry'
   | 'scheduling'
   | 'shift-editor'
   | 'shift-packet'
@@ -24,7 +41,7 @@ export type ScreenshotView =
 
 export function resolveQuery(
   view: ScreenshotView,
-  role: 'org:coordinator' | 'org:caregiver',
+  role: 'org:coordinator' | 'org:caregiver' | 'org:candidate',
   name: string,
   _args: Record<string, unknown>,
 ): unknown {
@@ -89,6 +106,45 @@ export function resolveQuery(
     case 'members:checkMembership':
       return true
 
+    // ═══════════════════════════════════════════════════════════════
+    // Candidate onboarding queries
+    // ═══════════════════════════════════════════════════════════════
+    case 'candidates:getCandidateProfile':
+      return mockCandidate
+
+    case 'candidates:getMyApplication':
+      return mockApplication
+
+    case 'candidates:listCandidateTasks':
+      return mockCandidateTasks
+
+    case 'candidates:listCandidateTasksForHR':
+      return mockCandidateTasks
+
+    case 'candidates:getCandidateDetail':
+      return mockApplication
+
+    case 'agencyConfig:listAgencyBranches':
+      return mockBranches
+
+    case 'agencyConfig:hasProduct':
+      // For the 'candidate-success' view, return false (hiring-only)
+      // For others, return true (full platform)
+      if (view === 'candidate-success') return false
+      return true
+
+    case 'agencyConfig:getTrainingConfig':
+      return undefined  // use defaults
+
+    case 'platformTrainingCompletions:listMyCompletions':
+      return mockTrainingCompletions
+
+    case 'backgroundChecks:getBackgroundCheck':
+      return mockBgCheck
+
+    case 'backgroundChecks:getBackgroundCheckForHR':
+      return mockBgCheck
+
     default:
       return undefined
   }
@@ -96,7 +152,7 @@ export function resolveQuery(
 
 export function runMutation(
   _view: ScreenshotView,
-  _role: 'org:coordinator' | 'org:caregiver',
+  _role: 'org:coordinator' | 'org:caregiver' | 'org:candidate',
   name: string,
   _args: Record<string, unknown>,
 ): Promise<unknown> {
@@ -115,6 +171,19 @@ export function runMutation(
       return Promise.resolve({ windowId: 'window_new_mock' })
     case 'scheduling:deleteAvailabilityWindow':
       return Promise.resolve({ windowId: 'window_deleted_mock' })
+
+    // Candidate mutations
+    case 'candidates:submitApplication':
+      return Promise.resolve(mockCandidate._id)
+    case 'candidates:acknowledgeBackgroundCheck':
+      return Promise.resolve(mockCandidate._id)
+    case 'candidates:attachCandidateDocument':
+      return Promise.resolve('file_mock')
+    case 'candidates:createSelfServiceCandidate':
+      return Promise.resolve(mockCandidate._id)
+    case 'platformTrainingCompletions:completeForCandidate':
+      return Promise.resolve('training_mock')
+
     default:
       return Promise.resolve(undefined)
   }

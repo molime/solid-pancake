@@ -112,6 +112,12 @@ describe('SelectAgencyPage', () => {
           role: 'org:member',
           atriaRole: 'org:hr',
         },
+        {
+          id: 'org_456',
+          name: 'Other Agency',
+          slug: 'other',
+          role: 'org:admin',
+        },
       ],
       activeOrgId: 'org_123',
       user: { fullName: 'Alice', primaryEmailAddress: { emailAddress: 'a@x.com' } },
@@ -124,7 +130,10 @@ describe('SelectAgencyPage', () => {
 
   it('does not call Convex while Convex auth is loading', async () => {
     mockClerkState({
-      orgs: [{ id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' }],
+      orgs: [
+        { id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' },
+        { id: 'org_456', name: 'Other Agency', slug: 'other', role: 'org:admin' },
+      ],
       activeOrgId: null,
       user: { fullName: 'Alice', primaryEmailAddress: { emailAddress: 'a@x.com' } },
     })
@@ -138,9 +147,27 @@ describe('SelectAgencyPage', () => {
     expect(mocks.ensureAgency).not.toHaveBeenCalled()
   })
 
-  it('does not call Convex before active org matches pending org', async () => {
+  it('shows loading screen for single-org users and never shows selector', () => {
     mockClerkState({
       orgs: [{ id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' }],
+      activeOrgId: null,
+      user: { fullName: 'Alice', primaryEmailAddress: { emailAddress: 'a@x.com' } },
+    })
+    mockConvexAuth({ isLoading: false, isAuthenticated: true })
+
+    render(<SelectAgencyPage />)
+    // Should show loading screen, NOT the agency selector
+    expect(screen.getByText(/Opening your agency workspace/i)).toBeInTheDocument()
+    // Should NOT show the agency name as a clickable button
+    expect(screen.queryByRole('button', { name: /Test Agency/i })).not.toBeInTheDocument()
+  })
+
+  it('does not call Convex before active org matches pending org', async () => {
+    mockClerkState({
+      orgs: [
+        { id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' },
+        { id: 'org_456', name: 'Other Agency', slug: 'other', role: 'org:admin' },
+      ],
       activeOrgId: 'org_999',
       user: { fullName: 'Alice', primaryEmailAddress: { emailAddress: 'a@x.com' } },
     })
@@ -160,7 +187,10 @@ describe('SelectAgencyPage', () => {
     mocks.setActive.mockResolvedValueOnce(undefined)
 
     mockClerkState({
-      orgs: [{ id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' }],
+      orgs: [
+        { id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' },
+        { id: 'org_456', name: 'Other Agency', slug: 'other', role: 'org:admin' },
+      ],
       activeOrgId: 'org_123',
       user: { fullName: 'Alice', primaryEmailAddress: { emailAddress: 'a@x.com' } },
     })
@@ -192,7 +222,10 @@ describe('SelectAgencyPage', () => {
     mocks.setActive.mockResolvedValueOnce(undefined)
 
     mockClerkState({
-      orgs: [{ id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' }],
+      orgs: [
+        { id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' },
+        { id: 'org_456', name: 'Other Agency', slug: 'other', role: 'org:admin' },
+      ],
       activeOrgId: 'org_123',
       user: { fullName: 'Alice', primaryEmailAddress: { emailAddress: 'a@x.com' } },
     })
@@ -214,7 +247,10 @@ describe('SelectAgencyPage', () => {
     mocks.setActive.mockRejectedValueOnce(new Error('Org switch failed'))
 
     mockClerkState({
-      orgs: [{ id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' }],
+      orgs: [
+        { id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' },
+        { id: 'org_456', name: 'Other Agency', slug: 'other', role: 'org:admin' },
+      ],
       activeOrgId: 'org_123',
       user: { fullName: 'Alice', primaryEmailAddress: { emailAddress: 'a@x.com' } },
     })
@@ -236,7 +272,10 @@ describe('SelectAgencyPage', () => {
     mocks.setActive.mockResolvedValueOnce(undefined)
 
     mockClerkState({
-      orgs: [{ id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' }],
+      orgs: [
+        { id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' },
+        { id: 'org_456', name: 'Other Agency', slug: 'other', role: 'org:admin' },
+      ],
       activeOrgId: 'org_123',
       user: { fullName: 'Alice', primaryEmailAddress: { emailAddress: 'a@x.com' } },
     })
@@ -264,7 +303,10 @@ describe('SelectAgencyPage', () => {
       .mockResolvedValueOnce({ tenantId: 't1', memberId: 'm1' })
 
     mockClerkState({
-      orgs: [{ id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' }],
+      orgs: [
+        { id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' },
+        { id: 'org_456', name: 'Other Agency', slug: 'other', role: 'org:admin' },
+      ],
       activeOrgId: 'org_123',
       user: { fullName: 'Alice', primaryEmailAddress: { emailAddress: 'a@x.com' } },
     })
@@ -287,7 +329,10 @@ describe('SelectAgencyPage', () => {
     )
 
     mockClerkState({
-      orgs: [{ id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' }],
+      orgs: [
+        { id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' },
+        { id: 'org_456', name: 'Other Agency', slug: 'other', role: 'org:admin' },
+      ],
       activeOrgId: 'org_123',
       user: { fullName: 'Alice', primaryEmailAddress: { emailAddress: 'a@x.com' } },
     })

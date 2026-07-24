@@ -42,6 +42,7 @@ export const generateUploadUrl = mutation({
       'org:admin',
       'org:coordinator',
       'org:caregiver',
+      'org:hr',
       'org:candidate',
     ])
 
@@ -198,5 +199,19 @@ export const getDownloadUrl = query({
     }
 
     return await ctx.storage.getUrl(args.storageId)
+  },
+})
+
+
+export const getStorageUrl = query({
+  args: { clerkOrgId: v.string(), storageId: v.string() },
+  handler: async (ctx, args) => {
+    await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin', 'org:coordinator', 'org:caregiver', 'org:hr',
+    ])
+    const url = await ctx.storage.getUrl(
+      args.storageId as import('./_generated/dataModel').Id<'_storage'>,
+    )
+    return url
   },
 })

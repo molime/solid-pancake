@@ -12,6 +12,12 @@ export class AppErrorBoundary extends Component<
   state: AppErrorBoundaryState = { error: null }
 
   static getDerivedStateFromError(error: Error) {
+    // In dev mode, never show the error boundary — HMR handles updates
+    // and stale-asset errors auto-reload via reloadOnStaleAssets.ts
+    if (import.meta.env.DEV) {
+      console.error('ATRIA-X dev error (suppressed in dev):', error)
+      return { error: null }
+    }
     return { error }
   }
 

@@ -1,0 +1,190 @@
+
+ RUN  v4.1.6 C:/Users/pinol/Documents/Work/atriax/solid-pancake
+
+ ✓ src/features/caregiver/components/ShiftDocumentationForm.test.tsx (12 tests) 10404ms
+     ✓ renders the clock-in screen when not clocked in  744ms
+     ✓ advances through each wizard step after clock-in  2841ms
+     ✓ calls clockOut with location when geofence is enabled and note is complete  1645ms
+     ✓ shows outside-radius server error in plain language  972ms
+     ✓ disables the clock-out button and shows a loading label while submitting  982ms
+     ✓ resumes the wizard after a correction and reuses the existing clock-out without requesting location  1017ms
+     ✓ calls onDone when returning home from the success screen  1193ms
+     ✓ autosaves draft note fields  493ms
+ ✓ src/shared/testing/convexApi.test.ts (17 tests) 1938ms
+     ✓ tenants.ts exports ensureSelectedAgency  960ms
+stderr | src/app/auth/SelectAgencyPage.test.tsx > SelectAgencyPage > shows loading screen for single-org users and never shows selector
+An update to SelectAgencyPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/app/auth/SelectAgencyPage.test.tsx (12 tests) 3404ms
+     ✓ does not call Convex while Convex auth is loading  694ms
+     ✓ retries once on transient token error, then succeeds  619ms
+     ✓ shows JWT config error when retry also fails with missing org claim  813ms
+ ✓ src/features/team/pages/TeamPage.test.tsx (12 tests) 10543ms
+     ✓ creates caregiver invitations through the server redirect flow  2238ms
+     ✓ passes coordinator intent to the server invitation flow  1369ms
+     ✓ maps coordinator role to org:member when updating Clerk membership  463ms
+     ✓ preserves org:admin when updating Clerk membership to admin  318ms
+     ✓ refreshes invitations list after sending an invite  1179ms
+     ✓ shows "already a member" message when invitee is already in the org  1727ms
+     ✓ adds a caregiver through the caregiver form  1958ms
+     ✓ loads ADP workers and shows a summary toast  322ms
+     ✓ queues an ADP drain for pending rows  330ms
+ ✓ src/features/onboarding/ApplicationFormPage.test.tsx (1 test) 9018ms
+     ✓ renders the multi-step application and submits all sections  9001ms
+ ✓ src/features/scheduling/components/ShiftPacketPanel.test.tsx (5 tests) 5987ms
+     ✓ renders shift details and audit history for staff  2054ms
+     ✓ calls onEdit when Edit shift is clicked  1274ms
+     ✓ sends a coverage request from caregiver view  2095ms
+ ✓ src/features/hr/pages/ApplicationReviewPage.test.tsx (5 tests) 4725ms
+     ✓ shows signed upload status and download link for prefilled documents  1233ms
+     ✓ shows a Download link for each uploaded document  354ms
+     ✓ calls reviewApplication then sendOffer when approve and send offer is clicked  2856ms
+ ✓ src/features/clients/pages/ClientsPage.test.tsx (4 tests) 4854ms
+     ✓ uses caregiver email as the scheduling dropdown label  2166ms
+     ✓ opens the address dialog and saves the service address  2582ms
+ ✓ src/features/hr/pages/HRCasesPage.test.tsx (2 tests) 2341ms
+     ✓ renders cases table  1441ms
+     ✓ opens new case modal  888ms
+ ✓ src/features/hr/components/InviteCandidateModal.test.tsx (5 tests) 5791ms
+     ✓ shows an email error when email is invalid  2732ms
+     ✓ shows a phone error when phone has too few digits  366ms
+     ✓ does not call inviteCandidate while fields are invalid  776ms
+     ✓ shows required field errors when name and email are blank  407ms
+     ✓ calls inviteCandidate with valid fields  1497ms
+stderr | src/features/hr/pages/HRDashboardPage.test.tsx > HRDashboardPage > opens invite candidate modal
+An update to HRDashboardPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/hr/pages/HRDashboardPage.test.tsx (2 tests) 2822ms
+     ✓ renders title, KPIs, and candidate rows  2236ms
+     ✓ opens invite candidate modal  576ms
+ ✓ src/features/hr/pages/CandidatePipelinePage.test.tsx (2 tests) 4542ms
+     ✓ renders tabs and candidate rows  4312ms
+ ✓ src/features/scheduling/components/CoverageRequestsPanel.test.tsx (2 tests) 7764ms
+     ✓ renders open coverage requests  6561ms
+     ✓ resolves a coverage request with the selected caregiver  1194ms
+ ✓ src/app/shell/Sidebar.test.tsx (9 tests) 1917ms
+     ✓ shows all nav items for org:admin  462ms
+     ✓ shows caregiver items for org:caregiver  794ms
+ ✓ src/features/scheduling/pages/SchedulingPage.test.tsx (4 tests) 4231ms
+     ✓ renders loading state  2891ms
+     ✓ renders empty state when there are no shifts  1065ms
+ ✓ src/features/coordinator/components/ReviewDetail.test.tsx (4 tests) 8832ms
+     ✓ renders note sections from getWithDetails  954ms
+     ✓ calls approve mutation when Approve is clicked  2277ms
+     ✓ shows validation and does not call requestCorrection with a blank comment  702ms
+     ✓ calls requestCorrection mutation after typing a comment  4889ms
+ ✓ src/features/settings/pages/GeofenceSettingsPage.test.tsx (3 tests) 2146ms
+     ✓ renders the current geofence settings  752ms
+     ✓ toggles enforcement options when geofence is enabled  430ms
+     ✓ saves updated geofence settings  955ms
+ ✓ src/features/hr/pages/EmployeesPage.test.tsx (1 test) 3009ms
+     ✓ renders employee rows with ADP status  3001ms
+ ✓ src/app/router.test.tsx (17 tests) 3285ms
+     ✓ renders SchedulingPage at /scheduling for org:admin  513ms
+     ✓ renders CaregiverSchedulePage at /caregiver/schedule for org:caregiver  397ms
+     ✓ renders AvailabilityPage at /caregiver/availability for org:caregiver  411ms
+     ✓ renders HRDashboardPage at /hr for org:hr  409ms
+     ✓ renders CandidatePipelinePage at /hr/candidates for org:hr  414ms
+ ✓ src/features/onboarding/pages/EmploymentAgreementPage.test.tsx (1 test) 1508ms
+     ✓ requires all agreements before continuing  1499ms
+ ✓ src/features/scheduling/components/ShiftEditorModal.test.tsx (2 tests) 2687ms
+     ✓ calls createShift with correct args  2182ms
+     ✓ displays the conflict error with formatted times  485ms
+ ✓ src/features/caregiver/components/ShiftClockOutScreen.test.tsx (4 tests) 1064ms
+     ✓ disables clock-out when note is incomplete  797ms
+ ✓ src/features/onboarding/pages/DocumentUploadPage.test.tsx (3 tests) 1900ms
+     ✓ uploads a file and attaches it with the task type  1328ms
+     ✓ saves signed prefilled document after health screen upload  331ms
+ ✓ src/features/onboarding/pages/CandidateOnboardingPage.test.tsx (4 tests) 1463ms
+     ✓ renders eight tasks and routes the next upload step by task id  1152ms
+ ✓ src/shared/ui/sharedUi.test.tsx (18 tests) 1125ms
+       ✓ renders a default secondary button  538ms
+ ✓ src/features/coordinator/pages/CoordinatorReviewPage.test.tsx (4 tests) 1456ms
+     ✓ renders populated queue with status pills  1014ms
+ ✓ src/app/providers.test.tsx (1 test) 334ms
+     ✓ connects Clerk routing to React Router  323ms
+ ✓ src/features/onboarding/pages/TrainingPage.test.tsx (1 test) 717ms
+     ✓ shows the completion summary and a Go to dashboard button  705ms
+ ✓ src/features/onboarding/pages/ApplicationStatusPage.test.tsx (1 test) 548ms
+     ✓ shows a warning when documents are pending and links to upload  540ms
+ ✓ src/app/shell/RouteGuard.test.tsx (15 tests) 362ms
+ ✓ src/features/hr/pages/HireConvertPage.test.tsx (1 test) 338ms
+     ✓ shows only managers/coordinators/HR, not caregivers  327ms
+ ✓ src/features/caregiver/hooks/useCaregiverLocation.test.ts (5 tests) 120ms
+ ✓ src/features/onboarding/pdf/__tests__/generatePrefilledPdf.test.ts (6 tests) 64ms
+ ✓ src/features/onboarding/pdf/__tests__/mappings.test.ts (5 tests) 33ms
+ ✓ src/features/caregiver/model/documentationWizard.test.ts (6 tests) 21ms
+ ✓ src/shared/search/embedding.test.ts (1 test) 15ms
+ ✓ src/shared/domain/shiftRules.test.ts (4 tests) 19ms
+ ✓ src/features/billing/model/invoiceUtils.test.ts (4 tests) 24ms
+ ❯ src/shared/format.test.ts (6 tests | 1 failed) 39ms
+     ✓ maps known document categories to human-readable labels 6ms
+     ✓ falls back to formatStatusLabel for unknown categories 5ms
+     ✓ formats Date objects as mm/dd/yyyy 3ms
+     × handles ISO date-only strings without timezone shift 19ms
+     ✓ handles ISO strings with explicit local time 1ms
+     ✓ returns an empty string for null/undefined 1ms
+ ✓ src/features/onboarding/model/trainingCompletion.test.ts (5 tests) 17ms
+ ✓ src/features/caregiver/model/documentationDraft.test.ts (3 tests) 14ms
+ ✓ src/app/reloadOnStaleAssets.test.ts (2 tests) 40ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/shared/format.test.ts > formatDateUS > handles ISO date-only strings without timezone shift
+AssertionError: expected '07/20/2026' to be '07/21/2026' // Object.is equality
+
+Expected: "07/21/2026"
+Received: "07/20/2026"
+
+ ❯ src/shared/format.test.ts:26:40
+     24|
+     25|   it('handles ISO date-only strings without timezone shift', () => {
+     26|     expect(formatDateUS('2026-07-21')).toBe('07/21/2026')
+       |                                        ^
+     27|     expect(formatDateUS('2026-01-05')).toBe('01/05/2026')
+     28|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯⎯⎯ Unhandled Error ⎯⎯⎯⎯⎯⎯⎯
+Error: [vitest-pool]: Failed to start threads worker for test files C:/Users/pinol/Documents/Work/atriax/solid-pancake/src/features/scheduling/pages/AvailabilityPage.test.tsx.
+ ❯ node_modules/vitest/dist/chunks/cli-api.B5majYba.js:3449:94
+ ❯ Pool.schedule node_modules/vitest/dist/chunks/cli-api.B5majYba.js:3449:5
+
+Caused by: Error: [vitest-pool-runner]: Timeout waiting for worker to respond
+ ❯ Timeout.<anonymous> node_modules/vitest/dist/chunks/cli-api.B5majYba.js:3029:58
+ ❯ listOnTimeout node:internal/timers:605:17
+ ❯ processTimers node:internal/timers:541:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  1 failed | 41 passed (42)
+      Tests  1 failed | 220 passed (221)
+     Errors  1 error
+   Start at  17:06:59
+   Duration  1063.45s (transform 22.53s, setup 84.68s, import 126.42s, tests 111.46s, environment 600.03s)
+

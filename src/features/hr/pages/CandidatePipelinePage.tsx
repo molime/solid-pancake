@@ -21,7 +21,7 @@ import type { Id } from '../../../../convex/_generated/dataModel'
 import { HrToast } from '../components/HrToast'
 import { useHrToast } from '../hooks/useHrToast'
 import { candidateStatusPill } from '../lib/candidateStatus'
-import { formatWeekdayDate } from '@/shared/format'
+import { formatDateUS } from '@/shared/format'
 import { cn } from '@/shared/lib/cn'
 
 const TABS = [
@@ -165,7 +165,7 @@ export function CandidatePipelinePage() {
                         {candidate.email}
                       </TableCell>
                       <TableCell>
-                        {formatWeekdayDate(candidate.createdAt)}
+                        {formatDateUS(candidate.createdAt)}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap items-center gap-2">

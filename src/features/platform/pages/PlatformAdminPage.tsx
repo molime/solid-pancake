@@ -9,6 +9,7 @@ import {
   TableRow,
 } from '@/shared/ui/Table'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
+import { formatDateUS } from '@/shared/format'
 import { Globe, ShieldAlert } from 'lucide-react'
 
 type TenantSummary = {
@@ -106,7 +107,7 @@ export function PlatformAdminPage() {
                     <TableCell>{tenant.clientCount}</TableCell>
                     <TableCell>{tenant.shiftCount}</TableCell>
                     <TableCell className="text-atria-muted">
-                      {new Date(tenant.createdAt).toLocaleDateString()}
+                      {formatDateUS(tenant.createdAt)}
                     </TableCell>
                   </TableRow>
                 ))}

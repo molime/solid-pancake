@@ -625,6 +625,25 @@ async function seedE2EFixtures(
     return all.find((c) => c.displayName === displayName) ?? null
   }
 
+  // The fixture caregiver is an active caregiver: mark platform training
+  // complete so the TrainingRouteGuard lets them reach /caregiver/today.
+  const existingTraining = await ctx.db
+    .query('platformTrainingCompletions')
+    .withIndex('by_tenant_user', (q) =>
+      q.eq('tenantId', tenantId).eq('clerkUserId', userIds.caregiverUserId),
+    )
+    .filter((q) => q.eq(q.field('trainingId'), 'platform_training'))
+    .first()
+  if (!existingTraining) {
+    await ctx.db.insert('platformTrainingCompletions', {
+      tenantId,
+      clerkUserId: userIds.caregiverUserId,
+      trainingId: 'platform_training',
+      completedAt: new Date().toISOString(),
+      status: 'completed',
+    })
+  }
+
   let lifecycleClientId: Id<'clients'>
   const lifecycleClient = await findClient('Sam Lee')
   if (!lifecycleClient) {
@@ -948,6 +967,16 @@ async function seedE2ECandidateFixtures(
   const toDelete = new Set([...byEmail, ...byClerkUser].map((c) => c._id))
   for (const staleId of toDelete) {
     await ctx.db.delete(staleId)
+    // Remove the stale candidate's task rows so they do not pile up across runs.
+    const staleTasks = await ctx.db
+      .query('candidateTasks')
+      .withIndex('by_tenant_candidate_order', (q) =>
+        q.eq('tenantId', tenantId).eq('candidateId', staleId),
+      )
+      .collect()
+    for (const task of staleTasks) {
+      await ctx.db.delete(task._id)
+    }
   }
 
   // Clean up any stale employee profiles tied to the fixture candidate so
@@ -969,6 +998,39 @@ async function seedE2ECandidateFixtures(
     status: 'applied',
     createdAt: now,
   })
+
+  // Standard onboarding task set (mirrors createCandidateRecord): the fixture
+  // candidate already submitted an application, so form_submission is complete
+  // and car_insurance stays skipped until the applicant answers Yes to the
+  // transport question on a fresh application.
+  const E2E_CANDIDATE_TASK_TYPES = [
+    'form_submission',
+    'photo_id',
+    'tax_id_ssn',
+    'cpr_certificate',
+    'health_screen',
+    'background_check',
+    'employment_agreement',
+    'additional_certifications',
+    'car_insurance',
+  ] as const
+  await Promise.all(
+    E2E_CANDIDATE_TASK_TYPES.map((type, index) =>
+      ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
+        type,
+        status:
+          type === 'form_submission'
+            ? 'complete'
+            : type === 'car_insurance'
+              ? 'skipped'
+              : 'pending',
+        order: index,
+        completedAt: type === 'form_submission' ? now : undefined,
+      }),
+    ),
+  )
 
   // Reset any stale platform-training completion so the onboarding E2E can
   // assert the before/after training state deterministically.
@@ -992,15 +1054,24 @@ async function seedE2ECandidateFixtures(
     name: 'Phase 2 Candidate',
     experience: '2 years',
     notes: 'Seeded fixture application',
+    // Pre-hire gate: I-9 Section 2 completed by HR.
+    i9Section2: {
+      documentTitle: "Driver's License",
+      documentNumber: 'D1234567',
+      employerSignature: 'E2E HR',
+      date: '2026-07-18',
+    },
   }
+  let seededApplicationId: Id<'applications'>
   if (existingApplication) {
     await ctx.db.patch(existingApplication._id, {
       status: 'submitted',
       submittedAt: now,
       fields: applicationFields,
     })
+    seededApplicationId = existingApplication._id
   } else {
-    await ctx.db.insert('applications', {
+    seededApplicationId = await ctx.db.insert('applications', {
       tenantId,
       candidateId,
       status: 'submitted',
@@ -1008,6 +1079,35 @@ async function seedE2ECandidateFixtures(
       fields: applicationFields,
     })
   }
+
+  // Pre-hire gates: W-4 employer section completed and an official background
+  // check result on file, so hireCandidate can proceed in the lifecycle E2E.
+  await ctx.db.insert('prefilledDocuments', {
+    tenantId,
+    candidateId,
+    applicationId: seededApplicationId,
+    documentType: 'w4',
+    generatedAt: now,
+    generatedBy: userIds.hrUserId,
+    hrSectionCompleted: true,
+    hrSectionData: {
+      employerName: "Diego's Agency",
+      ein: '12-3456789',
+      firstDateOfEmployment: '2026-08-01',
+    },
+  })
+  await ctx.db.insert('backgroundChecks', {
+    tenantId,
+    candidateId,
+    provider: 'mock',
+    status: 'clear',
+    package: 'basic',
+    initiatedAt: now,
+    completedAt: now,
+    officialResultStorageId: 'phase2-fixture-bg-result',
+    officialResultUploadedAt: now,
+    officialResultUploadedBy: userIds.hrUserId,
+  })
 
   const availabilityWindows = await ctx.db
     .query('availabilityWindows')

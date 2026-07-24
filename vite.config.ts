@@ -27,6 +27,12 @@ export default defineConfig(async ({ mode }) => {
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, './src'),
+        ...(env.VITE_SCREENSHOT_MODE === 'true'
+          ? {
+              '@clerk/react': path.resolve(import.meta.dirname, './src/dev/mockClerkReact.tsx'),
+              'convex/react': path.resolve(import.meta.dirname, './src/dev/mockConvexReact.tsx'),
+            }
+          : {}),
       },
     },
     server: {

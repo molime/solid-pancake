@@ -22,7 +22,7 @@ import {
 
 type MockConvexContextValue = {
   view: ScreenshotView
-  role: 'org:coordinator' | 'org:caregiver'
+  role: 'org:coordinator' | 'org:caregiver' | 'org:candidate'
   getQuery: (name: string, args: Record<string, unknown>) => unknown
   runMutation: (name: string, args: Record<string, unknown>) => Promise<unknown>
 }
@@ -37,9 +37,12 @@ function useMockConvexContext() {
   return ctx
 }
 
-function getRoleForView(view: ScreenshotView): 'org:coordinator' | 'org:caregiver' {
+function getRoleForView(view: ScreenshotView): 'org:coordinator' | 'org:caregiver' | 'org:candidate' {
   if (view === 'caregiver-schedule' || view === 'availability') {
     return 'org:caregiver'
+  }
+  if (view.startsWith('candidate')) {
+    return 'org:candidate'
   }
   return 'org:coordinator'
 }
@@ -54,6 +57,16 @@ function getViewFromUrl(): ScreenshotView {
     'coverage',
     'caregiver-schedule',
     'availability',
+    'candidate-checklist',
+    'candidate-application',
+    'candidate-upload',
+    'candidate-acknowledgment',
+    'candidate-employment-agreement',
+    'candidate-training',
+    'candidate-profile',
+    'candidate-status',
+    'candidate-success',
+    'candidate-apply-entry',
   ]
   return valid.includes(raw as ScreenshotView) ? (raw as ScreenshotView) : 'scheduling'
 }

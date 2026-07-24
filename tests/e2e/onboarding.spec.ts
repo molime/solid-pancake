@@ -75,7 +75,7 @@ async function recreateE2ECandidate() {
     userId = create.json.id as string
   }
 
-  const memberships = await clerkFetch(`/organizations/${E2E_ORG_ID}/memberships`)
+  const memberships = await clerkFetch(`/organizations/${E2E_ORG_ID}/memberships?limit=100`)
   const existing = memberships.json?.data?.find(
     (m: { public_user_data?: { user_id: string } }) => m.public_user_data?.user_id === userId,
   )
@@ -87,7 +87,7 @@ async function recreateE2ECandidate() {
     })
     if (!add.ok && add.status === 422) {
       // Clerk org quota hit; free one seat by removing the oldest non-admin member.
-      const current = await clerkFetch(`/organizations/${E2E_ORG_ID}/memberships`)
+      const current = await clerkFetch(`/organizations/${E2E_ORG_ID}/memberships?limit=100`)
       const removable = current.json?.data?.find(
         (m: { role: string; id: string }) => m.role !== 'org:admin',
       )
@@ -327,12 +327,14 @@ test.describe('dev invitation bypass for restricted emails', { tag: '@auth' }, (
     await page.getByTestId('candidate-email-input').fill(bypassEmail)
     await page.getByTestId('send-invitation-button').click()
 
-    const bypassCard = page.getByTestId('dev-bypass-card')
-    await expect(bypassCard).toBeVisible({ timeout: 15000 })
+    // Restricted (gmail) domains fall back to manual account setup; the modal
+    // then shows the shareable sign-in link card.
+    const manualCard = page.getByTestId('manual-setup-card')
+    await expect(manualCard).toBeVisible({ timeout: 15000 })
 
-    const magicLink = await bypassCard.locator('a[href*="__clerk_ticket"]').getAttribute('href')
+    const magicLink = await manualCard.locator('a[href*="__clerk_ticket"]').getAttribute('href')
     if (!magicLink) {
-      throw new Error('Dev bypass did not return a magic link.')
+      throw new Error('Manual account setup did not return a magic link.')
     }
 
     await signOut(page)
@@ -358,7 +360,7 @@ test.describe('dev invitation bypass for restricted emails', { tag: '@auth' }, (
           ),
       )?.id ?? null
 
-    const membershipsAfter = await clerkFetch(`/organizations/${E2E_ORG_ID}/memberships`)
+    const membershipsAfter = await clerkFetch(`/organizations/${E2E_ORG_ID}/memberships?limit=100`)
     const bypassMembership = membershipsAfter.json?.data?.find(
       (m: { public_user_data?: { user_id: string }; id: string }) =>
         m.public_user_data?.user_id === bypassUserId,

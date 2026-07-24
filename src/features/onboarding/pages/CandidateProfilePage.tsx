@@ -3,7 +3,6 @@ import { useQuery } from 'convex/react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
-import { Button } from '@/shared/ui/Button'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { candidateStatusPill } from '@/features/hr/lib/candidateStatus'
 import { ChangePasswordSection } from '../components/ChangePasswordSection'
@@ -46,12 +45,14 @@ export function CandidateProfilePage() {
     <div className='flex min-h-screen flex-col items-center justify-center bg-atria-bg px-4 py-8'>
       <Card className='w-full max-w-[520px]'>
         <CardContent className='p-8'>
-          <button
-            className='mb-4 text-sm text-atria-text-secondary hover:text-atria-ink'
-            onClick={() => navigate('/onboarding/checklist')}
-          >
-            {String.fromCharCode(8592)} Back to checklist
-          </button>
+          {!forcePasswordChange && (
+            <button
+              className='mb-4 text-sm text-atria-text-secondary hover:text-atria-ink'
+              onClick={() => navigate('/onboarding/checklist')}
+            >
+              {String.fromCharCode(8592)} Back to checklist
+            </button>
+          )}
 
           <div className='mb-6 flex items-center gap-3'>
             <div className='flex h-10 w-10 items-center justify-center rounded-[var(--radius-atria-md)] bg-atria-accent text-atria-on-accent'>
@@ -63,7 +64,7 @@ export function CandidateProfilePage() {
             </div>
           </div>
 
-          <h1 className='mb-6 text-2xl font-semibold text-atria-ink'>My Profile</h1>
+          <h1 className='mb-6 text-xl font-semibold text-atria-ink'>My Profile</h1>
 
           <div className='mb-8 flex flex-col items-center text-center'>
             <div className='mb-3 flex h-20 w-20 items-center justify-center rounded-full bg-atria-accent text-2xl font-semibold text-atria-on-accent'>
@@ -94,17 +95,15 @@ export function CandidateProfilePage() {
             ))}
           </div>
 
-          <Button
-            variant='secondary'
-            size='lg'
-            className='mt-6 w-full'
-            onClick={() => navigate('/onboarding/checklist')}
-          >
-            Back to checklist {String.fromCharCode(8594)}
-          </Button>
+          {!forcePasswordChange && (
+            <p className='mt-6 text-center text-sm text-atria-accent'>
+              Need to update something? Tap Edit above {String.fromCharCode(8594)}
+            </p>
+          )}
 
           <div className="mt-8 border-t border-atria-border pt-6">
-            <h2 className="mb-4 text-lg font-semibold text-atria-ink">Security</h2>
+            {!forcePasswordChange && <h2 className="mb-4 text-lg font-semibold text-atria-ink">Security</h2>}
+            {forcePasswordChange && <h2 className="mb-4 text-lg font-semibold text-atria-ink">Set your password</h2>}
             <ChangePasswordSection
               onSuccess={() => {
                 if (searchParams.get('forcePasswordChange')) {

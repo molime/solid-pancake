@@ -12,7 +12,7 @@ import { InviteCandidateModal } from '../components/InviteCandidateModal'
 import { HrToast } from '../components/HrToast'
 import { useHrToast } from '../hooks/useHrToast'
 import { candidateStatusPill, candidateStatusAccentClass } from '../lib/candidateStatus'
-import { formatWeekdayDate } from '@/shared/format'
+import { formatDateUS } from '@/shared/format'
 
 function initials(name: string) {
   return name
@@ -153,7 +153,7 @@ export function HRDashboardPage() {
                             </StatusBadge>
                             <span className="text-xs text-atria-text-muted">
                               Invited{' '}
-                              {formatWeekdayDate(candidate.createdAt)}
+                              {formatDateUS(candidate.createdAt)}
                             </span>
                           </div>
                         </div>

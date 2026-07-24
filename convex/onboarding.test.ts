@@ -539,7 +539,7 @@ describe('candidate-to-caregiver lifecycle', () => {
         displayName: 'Candidate',
         email: 'candidate@example.com',
       })
-      return ctx.db.insert('candidates', {
+      const id = await ctx.db.insert('candidates', {
         tenantId: tenant._id,
         clerkUserId: candidateUserId,
         email: 'candidate@example.com',
@@ -547,6 +547,47 @@ describe('candidate-to-caregiver lifecycle', () => {
         status: 'hr_review',
         createdAt: new Date().toISOString(),
       })
+      await ctx.db.insert('applications', {
+        tenantId: tenant._id,
+        candidateId: id,
+        status: 'submitted',
+        submittedAt: new Date().toISOString(),
+        fields: {
+          i9Section2: {
+            documentTitle: 'US Passport',
+            documentNumber: '123456789',
+            expirationDate: '2030-01-01',
+            employerSignature: 'HR Admin',
+            date: new Date().toISOString().split('T')[0],
+          },
+        },
+      })
+      await ctx.db.insert('prefilledDocuments', {
+        tenantId: tenant._id,
+        candidateId: id,
+        documentType: 'w4',
+        storageId: 'w4-storage-id',
+        generatedAt: new Date().toISOString(),
+        generatedBy: adminId,
+        hrSectionCompleted: true,
+        hrSectionData: {
+          employerName: 'Test Agency',
+          ein: '12-3456789',
+          firstDateOfEmployment: new Date().toISOString().split('T')[0],
+        },
+      })
+      await ctx.db.insert('backgroundChecks', {
+        tenantId: tenant._id,
+        candidateId: id,
+        provider: 'mock',
+        status: 'clear',
+        package: 'basic',
+        initiatedAt: new Date().toISOString(),
+        officialResultStorageId: 'bg-result-storage-id',
+        officialResultUploadedAt: new Date().toISOString(),
+        officialResultUploadedBy: adminId,
+      })
+      return id
     })
 
     await asAdmin(t, adminId, clerkOrgId).mutation(api.candidates.sendOffer, {
@@ -645,6 +686,40 @@ describe('candidate-to-caregiver lifecycle', () => {
         candidateId: id,
         status: 'submitted',
         submittedAt: new Date().toISOString(),
+        fields: {
+          i9Section2: {
+            documentTitle: 'US Passport',
+            documentNumber: '123456789',
+            expirationDate: '2030-01-01',
+            employerSignature: 'HR Admin',
+            date: new Date().toISOString().split('T')[0],
+          },
+        },
+      })
+      await ctx.db.insert('prefilledDocuments', {
+        tenantId: tenant._id,
+        candidateId: id,
+        documentType: 'w4',
+        storageId: 'w4-storage-id',
+        generatedAt: new Date().toISOString(),
+        generatedBy: adminId,
+        hrSectionCompleted: true,
+        hrSectionData: {
+          employerName: 'Test Agency',
+          ein: '12-3456789',
+          firstDateOfEmployment: new Date().toISOString().split('T')[0],
+        },
+      })
+      await ctx.db.insert('backgroundChecks', {
+        tenantId: tenant._id,
+        candidateId: id,
+        provider: 'mock',
+        status: 'clear',
+        package: 'basic',
+        initiatedAt: new Date().toISOString(),
+        officialResultStorageId: 'bg-result-storage-id',
+        officialResultUploadedAt: new Date().toISOString(),
+        officialResultUploadedBy: adminId,
       })
       return id
     })
