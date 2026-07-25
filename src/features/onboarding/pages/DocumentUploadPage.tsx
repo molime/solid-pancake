@@ -6,6 +6,7 @@ import { api } from '../../../../convex/_generated/api'
 import type { Doc } from '../../../../convex/_generated/dataModel'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
+import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 import { Input } from '@/shared/ui/Input'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { cn } from '@/shared/lib/cn'
@@ -63,7 +64,7 @@ const MAX_SIZE = 10 * 1024 * 1024
 export function DocumentUploadPage() {
   const navigate = useNavigate()
   const { taskId = 'required' } = useParams<{ taskId: string }>()
-  const { clerkOrgId, tenantName, isLoading } = useTenant()
+  const { clerkOrgId, tenantName, agencyAddress, isLoading } = useTenant()
   const tasks = useQuery(
     api.candidates.listCandidateTasks,
     clerkOrgId ? { clerkOrgId } : 'skip',
@@ -143,6 +144,7 @@ export function DocumentUploadPage() {
       const daysOfWeek = Array.isArray(personal.daysOfWeek) ? (personal.daysOfWeek as unknown[]) : []
       return {
         facilityName: agencyName,
+        facilityAddress: agencyAddress ?? '',
         personName: `${personal.firstName ?? ''} ${personal.lastName ?? ''}`.trim(),
         positionTitle: personal.positionApplyingFor ?? '',
         workDaysPerWeek: daysOfWeek.length > 0 ? String(daysOfWeek.length) : '5',
@@ -275,11 +277,8 @@ export function DocumentUploadPage() {
           </button>
 
           <div className='mb-6 flex items-center gap-3'>
-            <div className='flex h-10 w-10 items-center justify-center rounded-[var(--radius-atria-md)] bg-atria-accent text-atria-on-accent'>
-              <span className='text-lg font-bold'>A</span>
-            </div>
+            <AtriaLogo />
             <div>
-              <p className='text-lg font-semibold leading-none text-atria-ink'>ATRIA-X</p>
               <p className='text-sm text-atria-text-secondary'>Caregiver Portal</p>
             </div>
           </div>

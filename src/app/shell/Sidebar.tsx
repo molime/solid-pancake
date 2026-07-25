@@ -18,6 +18,7 @@ import { cn } from '@/shared/lib/cn'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { useTenant } from '@/app/useTenant'
+import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 
 interface NavItem {
   label: string
@@ -224,13 +225,8 @@ function SidebarContent({
 }) {
   return (
     <>
-      <div className="flex h-16 items-center gap-2 border-b border-white/5 px-4">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-atria-accent">
-          <span className="text-xs font-bold text-white">A</span>
-        </div>
-        <span className="text-sm font-semibold tracking-tight text-white">
-          ATRIA-X
-        </span>
+      <div className="flex h-16 items-center border-b border-white/5 px-4">
+        <AtriaLogo />
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">

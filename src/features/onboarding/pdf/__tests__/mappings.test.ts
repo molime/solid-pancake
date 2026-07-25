@@ -33,6 +33,7 @@ describe('PDF coordinate mappings', () => {
     const expectedKeys: Record<string, string[]> = {
       health_screen: [
         'facilityName',
+        'facilityAddress',
         'personName',
         'age',
         'positionTitle',

@@ -54,6 +54,7 @@ export function useTenant() {
   return {
     clerkOrgId,
     tenantName: organization?.name ?? dbTenant?.tenantName,
+    agencyAddress: dbTenant?.agencyAddress ?? null,
     role: dbTenant?.role,
     isLoading,
   }

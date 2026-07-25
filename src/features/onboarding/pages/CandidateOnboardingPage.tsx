@@ -4,6 +4,7 @@ import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
+import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 import { Button } from '@/shared/ui/Button'
 import { cn } from '@/shared/lib/cn'
 import type { Doc } from '../../../../convex/_generated/dataModel'
@@ -142,11 +143,8 @@ export function CandidateOnboardingPage() {
       <Card className='w-full max-w-[540px]'>
         <CardContent className='p-8'>
           <div className='mb-6 flex items-center gap-3'>
-            <div className='flex h-10 w-10 items-center justify-center rounded-[var(--radius-atria-md)] bg-atria-accent text-atria-on-accent'>
-              <span className='text-lg font-bold'>A</span>
-            </div>
+            <AtriaLogo />
             <div>
-              <p className='text-lg font-semibold leading-none text-atria-ink'>ATRIA-X</p>
               <p className='text-sm text-atria-text-secondary'>Caregiver Portal</p>
             </div>
           </div>

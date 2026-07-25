@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/shared/ui/Card'
 import { Input } from '@/shared/ui/Input'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { cn } from '@/shared/lib/cn'
+import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 
 function formatPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '').slice(0, 10)
@@ -59,9 +60,7 @@ export function ApplyEntryPage() {
       <div className='flex min-h-screen flex-col items-center justify-center bg-atria-bg px-4 py-8'>
         <Card className='w-full max-w-[480px]'>
           <CardContent className='p-8 text-center'>
-            <div className='mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-[var(--radius-atria-md)] bg-atria-accent text-atria-on-accent'>
-              <span className='text-lg font-bold'>A</span>
-            </div>
+            <AtriaLogo className='mx-auto mb-4' />
             <h1 className='mb-2 text-xl font-semibold text-atria-ink'>Invalid application link</h1>
             <p className='text-sm text-atria-text-secondary'>
               Please use the application link provided by your agency to apply.
@@ -142,11 +141,8 @@ export function ApplyEntryPage() {
         <Card className='w-full max-w-[520px]'>
           <CardContent className='p-8'>
             <div className='mb-6 flex items-center gap-3'>
-              <div className='flex h-10 w-10 items-center justify-center rounded-[var(--radius-atria-md)] bg-atria-accent text-atria-on-accent'>
-                <span className='text-lg font-bold'>A</span>
-              </div>
+              <AtriaLogo />
               <div>
-                <p className='text-lg font-semibold leading-none text-atria-ink'>ATRIA-X</p>
                 <p className='text-sm text-atria-text-secondary'>{agencyName}</p>
               </div>
             </div>
@@ -210,11 +206,8 @@ export function ApplyEntryPage() {
       <Card className='w-full max-w-[560px]'>
         <CardContent className='p-8'>
           <div className='mb-6 flex items-center gap-3'>
-            <div className='flex h-10 w-10 items-center justify-center rounded-[var(--radius-atria-md)] bg-atria-accent text-atria-on-accent'>
-              <span className='text-lg font-bold'>A</span>
-            </div>
+            <AtriaLogo />
             <div>
-              <p className='text-lg font-semibold leading-none text-atria-ink'>ATRIA-X</p>
               <p className='text-sm text-atria-text-secondary'>{agencyName} · Caregiver Application</p>
             </div>
           </div>

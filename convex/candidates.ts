@@ -380,6 +380,7 @@ export const getMyTenant = query({
         tenants.push({
           clerkOrgId: tenant.clerkOrgId,
           tenantName: tenant.name,
+          agencyAddress: tenant.address ?? null,
           role: member.role,
         })
       }
@@ -2049,6 +2050,7 @@ export const getW4ForHR = query({
       application,
       w4Doc,
       agencyName: tenant.name,
+      agencyAddress: tenant.address ?? null,
       agencyEin: tenant.ein ?? null,
     }
   },

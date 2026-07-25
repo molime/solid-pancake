@@ -7,6 +7,7 @@ import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
 import { Checkbox } from '@/shared/ui/Checkbox'
 import { Card, CardContent } from '@/shared/ui/Card'
+import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 import { ProgressSteps } from '@/shared/ui/ProgressSteps'
 import { generatePrefilledPdf, saveAndDownload, saveAndUpload } from '../pdf/generatePrefilledPdf'
 import { getMapping, normalizeW4PdfData } from '../pdf/mappings'
@@ -785,11 +786,8 @@ export function ApplicationFormPage() {
       <Card className='w-full max-w-4xl'>
         <CardContent className='p-8'>
           <div className='mb-6 flex items-center gap-3'>
-            <div className='flex h-10 w-10 items-center justify-center rounded-[var(--radius-atria-md)] bg-atria-accent text-atria-on-accent'>
-              <span className='text-lg font-bold'>A</span>
-            </div>
+            <AtriaLogo />
             <div>
-              <p className='text-lg font-semibold leading-none text-atria-ink'>ATRIA-X</p>
               <p className='text-sm text-atria-text-secondary'>Caregiver Portal</p>
             </div>
           </div>

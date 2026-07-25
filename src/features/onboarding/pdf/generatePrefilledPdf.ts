@@ -29,19 +29,19 @@ const WHITEOUT_AREAS: Record<
   Array<{ page: number; x: number; y: number; width: number; height: number }>
 > = {
   health_screen: [
-    // Residual agency name / facility block where we overlay the hiring agency
-    { page: 0, x: 300, y: 660, width: 240, height: 45 },
+    // Residual pre-filled facility name/address text where we overlay the
+    // hiring agency's own values — kept narrow so we only hide the original
+    // text, not the surrounding form
+    { page: 0, x: 325, y: 658, width: 235, height: 42 },
     // Residual "SAN JOSE, CA." stamp near the right middle of the page
     { page: 0, x: 540, y: 235, width: 72, height: 20 },
     // Residual "CA 95121" stamp at the bottom-left edge
     { page: 0, x: 0, y: 0, width: 70, height: 20 },
   ],
-  live_scan: [
-    // Section 4 "Agency Address Set Contributing Agency" comes pre-filled with
-    // the California Department of Social Services address in the scanned
-    // template. White out the whole block so our employer overlay is clean.
-    { page: 0, x: 25, y: 500, width: 560, height: 120 },
-  ],
+  // Section 4 "Agency Address Set Contributing Agency" comes pre-filled with
+  // the California Department of Social Services address — that pre-fill is
+  // correct and must stay visible, so no whiteout for live_scan.
+  live_scan: [],
   criminal_record: [],
   w4: [],
   i9: [],

@@ -5,6 +5,7 @@ import { api } from '../../../convex/_generated/api'
 import { cn } from '@/shared/lib/cn'
 import { Menu, LogOut, Building2 } from 'lucide-react'
 import { useTenant } from '@/app/useTenant'
+import { resolveAgencyLogo } from './agencyLogo'
 
 function breadcrumbFromPath(path: string): string {
   if (path === '/') return 'Dashboard'
@@ -15,7 +16,7 @@ function breadcrumbFromPath(path: string): string {
 }
 
 export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
-  const { clerkOrgId, tenantName } = useTenant()
+  const { clerkOrgId, tenantName, isLoading } = useTenant()
   const { user } = useUser()
   const { signOut } = useClerk()
   const navigate = useNavigate()
@@ -25,6 +26,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
   const role = member?.role ?? 'org:caregiver'
+  const agencyLogo = resolveAgencyLogo(tenantName)
 
   return (
     <header className="h-16 bg-atria-surface border-b border-atria-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
@@ -42,6 +44,13 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
       </div>
 
       <div className="flex items-center gap-4">
+        {!isLoading && agencyLogo && (
+          <img
+            src={agencyLogo}
+            alt={`${tenantName} logo`}
+            className="h-8 w-auto object-contain"
+          />
+        )}
         <button
           onClick={() => navigate('/select-agency')}
           className="flex items-center gap-2 px-3 py-1.5 text-sm border border-atria-border rounded-md hover:bg-atria-bg transition-colors text-atria-ink"

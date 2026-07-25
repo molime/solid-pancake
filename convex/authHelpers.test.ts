@@ -352,6 +352,43 @@ describe('getMyTenant', () => {
       {
         clerkOrgId,
         tenantName: 'Care Agency',
+        agencyAddress: null,
+        role: 'org:caregiver',
+      },
+    ])
+  })
+
+  it('returns the agency address when the tenant has one set', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_get_my_tenant_addr'
+    const caregiverId = 'user_cg_get_my_tenant_addr'
+
+    await t.run(async (ctx) => {
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId,
+        name: 'Care Agency',
+        slug: 'care-agency-addr',
+        address: '750 N CAPITOL AVE, STE A3, SAN JOSE, CA 95133',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: caregiverId,
+        role: 'org:caregiver',
+        displayName: 'Caregiver',
+        email: 'caregiver@example.com',
+      })
+    })
+
+    const result = await t
+      .withIdentity({ subject: caregiverId })
+      .query(api.candidates.getMyTenant, {})
+
+    expect(result).toEqual([
+      {
+        clerkOrgId,
+        tenantName: 'Care Agency',
+        agencyAddress: '750 N CAPITOL AVE, STE A3, SAN JOSE, CA 95133',
         role: 'org:caregiver',
       },
     ])

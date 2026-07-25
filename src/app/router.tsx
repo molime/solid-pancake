@@ -6,6 +6,7 @@ import { PlatformShell } from './shell/PlatformShell'
 import { SelectAgencyPage } from './auth/SelectAgencyPage'
 import { SignedInRouteGuard, TenantRoleRouteGuard, TrainingRouteGuard } from './shell/RouteGuard'
 import { AppLoader } from '@/shared/ui/AppLoader'
+import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 
 const DashboardPage = lazy(() =>
   import('@/features/dashboard/pages/DashboardPage').then((module) => ({
@@ -197,7 +198,8 @@ function useRedirectParam() {
 function SignInRedirect() {
   const redirectUrl = useRedirectParam()
   return (
-    <div className="flex min-h-screen items-center justify-center bg-atria-bg p-4">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-atria-bg p-4">
+      <AtriaLogo />
       <SignIn
         routing="path"
         path="/sign-in"
@@ -212,7 +214,8 @@ function SignInRedirect() {
 function SignUpRedirect() {
   const redirectUrl = useRedirectParam()
   return (
-    <div className="flex min-h-screen items-center justify-center bg-atria-bg p-4">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-atria-bg p-4">
+      <AtriaLogo />
       <SignUp
         routing="path"
         path="/sign-up"

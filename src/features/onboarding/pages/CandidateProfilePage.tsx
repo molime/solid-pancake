@@ -3,6 +3,7 @@ import { useQuery } from 'convex/react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
+import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { candidateStatusPill } from '@/features/hr/lib/candidateStatus'
 import { ChangePasswordSection } from '../components/ChangePasswordSection'
@@ -54,11 +55,8 @@ export function CandidateProfilePage() {
           )}
 
           <div className='mb-6 flex items-center gap-3'>
-            <div className='flex h-10 w-10 items-center justify-center rounded-[var(--radius-atria-md)] bg-atria-accent text-atria-on-accent'>
-              <span className='text-lg font-bold'>A</span>
-            </div>
+            <AtriaLogo />
             <div>
-              <p className='text-lg font-semibold leading-none text-atria-ink'>ATRIA-X</p>
               <p className='text-sm text-atria-text-secondary'>Caregiver Portal</p>
             </div>
           </div>

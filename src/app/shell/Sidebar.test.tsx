@@ -54,6 +54,24 @@ describe('Sidebar', () => {
     vi.clearAllMocks()
   })
 
+  it('renders the ATRIA logo image', () => {
+    mockSidebarState({
+      orgId: 'org_123',
+      user: { fullName: 'Admin User', firstName: 'A' },
+      memberRole: 'org:admin',
+    })
+
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    )
+
+    const logo = screen.getByAltText('ATRIA-X')
+    expect(logo).toBeInTheDocument()
+    expect(logo).toHaveAttribute('src', '/atria-logo.png')
+  })
+
   it('shows all nav items for org:admin', () => {
     mockSidebarState({
       orgId: 'org_123',
