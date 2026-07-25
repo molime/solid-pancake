@@ -734,13 +734,26 @@ export function TrainingPage() {
     return 0
   }, [completedIds, steps])
 
-  const [currentIndex, setCurrentIndex] = useState(initialIndex)
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    // Persist the step index in sessionStorage so the user doesn't lose
+    // their place when a Clerk token refresh unmounts/remounts the page.
+    const stored = typeof window !== 'undefined'
+      ? window.sessionStorage.getItem('atria.training.stepIndex')
+      : null
+    const parsed = stored !== null ? parseInt(stored, 10) : NaN
+    return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, steps.length - 1) : initialIndex
+  })
   // After the user starts training, don't let the index jump back
   // when completions briefly refetches and becomes undefined
   const hasStarted = useRef(false)
   useEffect(() => {
     hasStarted.current = true
   }, [])
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem('atria.training.stepIndex', String(currentIndex))
+    }
+  }, [currentIndex])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const step = steps[currentIndex]
@@ -763,6 +776,9 @@ export function TrainingPage() {
 
   if (allTrainingComplete) {
     markTrainingCompletedInSession()
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem('atria.training.stepIndex')
+    }
   }
 
   if (isLoading || !clerkOrgId) return null
@@ -789,6 +805,9 @@ export function TrainingPage() {
   }
 
   const handleGoToDashboard = () => {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem('atria.training.stepIndex')
+    }
     if (hasFullPlatform === false) {
       navigate('/onboarding/success', { replace: true })
     } else {
