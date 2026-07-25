@@ -1,4 +1,4 @@
-import { ClerkProvider, useAuth } from '@clerk/react'
+import { ClerkProvider, useAuth, useClerk } from '@clerk/react'
 import { ConvexReactClient } from 'convex/react'
 import { ConvexProviderWithAuth } from 'convex/react'
 import type { PropsWithChildren, ReactElement } from 'react'
@@ -29,6 +29,7 @@ const convex = new ConvexReactClient(
  */
 function useAuthFromClerk() {
   const { isLoaded, isSignedIn, getToken, orgId, orgRole } = useAuth()
+  const { setActive } = useClerk()
   const lastFetchedOrgIdRef = useRef<string | null | undefined>(undefined)
 
   const fetchAccessToken = useCallback(
@@ -40,12 +41,20 @@ function useAuthFromClerk() {
       try {
         return await getToken({ skipCache: forceRefreshToken || orgChanged })
       } catch {
-        return null
+        // Caregiver/candidate users have no Clerk org membership. If Clerk
+        // still has a stale active organization from a previous session,
+        // getToken throws 'not a member of the organization'. Clear the
+        // stale org and retry without org claims so Convex gets a valid JWT.
+        try {
+          await setActive?.({ organization: null })
+          return await getToken({ skipCache: true })
+        } catch {
+          return null
+        }
       }
     },
-    // Clerk's getToken is not memoized, so we depend on org context instead.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [orgId, orgRole],
+    [orgId, orgRole, setActive],
   )
 
   return useMemo(
