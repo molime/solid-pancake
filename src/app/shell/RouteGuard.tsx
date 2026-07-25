@@ -2,6 +2,7 @@ import { useAuth } from '@clerk/react'
 import { useQuery, useConvexAuth } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { Navigate } from 'react-router-dom'
+import { useRef } from 'react'
 import type { PropsWithChildren } from 'react'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { isPlatformTrainingComplete } from '@/features/onboarding/model/trainingCompletion'
@@ -31,30 +32,33 @@ export function TenantRouteGuard({ children }: PropsWithChildren) {
 
 function TenantMembershipGuard({ children }: PropsWithChildren) {
   const { clerkOrgId, isLoading } = useTenant()
-  // A no-org user's resolved tenant lives in localStorage and is stable
-  // across Clerk token refreshes. Fall back to it before concluding the
-  // user has no tenant — a momentary undefined from useTenant() must not
-  // bounce a resolved caregiver/candidate to /select-agency.
   const effectiveClerkOrgId = clerkOrgId ?? getStoredClerkOrgId() ?? undefined
+  const hasAuthorized = useRef(false)
 
   const membership = useQuery(
     api.members.checkMembership,
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
 
+  if (membership === true) {
+    hasAuthorized.current = true
+  }
+
   if (isLoading) {
-    return <AppLoader fullScreen />
+    return hasAuthorized.current ? <>{children}</> : <AppLoader fullScreen />
   }
 
   if (!effectiveClerkOrgId) {
+    hasAuthorized.current = false
     return <Navigate to="/select-agency" replace />
   }
 
   if (membership === undefined || membership === null) {
-    return <AppLoader fullScreen label="Opening agency workspace" />
+    return hasAuthorized.current ? <>{children}</> : <AppLoader fullScreen label="Opening agency workspace" />
   }
 
   if (membership === false) {
+    hasAuthorized.current = false
     return <Navigate to="/select-agency" replace />
   }
 
@@ -97,16 +101,27 @@ export function TenantRoleRouteGuard({
     api.members.me,
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
+  // Keep rendering children during a brief Convex query blip (token refresh)
+  // so the user doesn't see a flash/reload. Only show the loader on the
+  // FIRST render before children have ever been authorized.
+  const hasAuthorized = useRef(false)
+  const isReady = effectiveClerkOrgId && member !== undefined && member !== null && !convexAuthLoading
+
+  if (isReady && member && allowedRoles.includes(member.role)) {
+    hasAuthorized.current = true
+  }
 
   if (!effectiveClerkOrgId || member === undefined || convexAuthLoading) {
-    return <AppLoader fullScreen label="Checking access" />
+    return hasAuthorized.current ? <>{children}</> : <AppLoader fullScreen label="Checking access" />
   }
 
   if (!member) {
+    hasAuthorized.current = false
     return <Navigate to="/select-agency" replace />
   }
 
   if (!allowedRoles.includes(member.role)) {
+    hasAuthorized.current = false
     return <Navigate to={roleHomePath(member.role)} replace />
   }
 
@@ -123,12 +138,19 @@ export function TrainingRouteGuard({ children }: PropsWithChildren) {
     api.platformTrainingCompletions.listMyCompletions,
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
+  const hasAuthorized = useRef(false)
+  const isReady = effectiveClerkOrgId && member !== undefined && member !== null && completions !== undefined && completions !== null && !convexAuthLoading
+
+  if (isReady && member) {
+    hasAuthorized.current = true
+  }
 
   if (!effectiveClerkOrgId || member === undefined || completions === undefined || convexAuthLoading) {
-    return <AppLoader fullScreen label="Checking training status" />
+    return hasAuthorized.current ? <>{children}</> : <AppLoader fullScreen label="Checking training status" />
   }
 
   if (!member) {
+    hasAuthorized.current = false
     return <Navigate to="/select-agency" replace />
   }
 
