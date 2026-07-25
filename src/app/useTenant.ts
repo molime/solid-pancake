@@ -5,6 +5,15 @@ import { api } from '../../convex/_generated/api'
 
 const SELECTED_ORG_STORAGE_KEY = 'atria.selectedClerkOrgId'
 
+// How long a resolved membership list must continuously exclude the stored
+// tenant before the stored id is cleared. During a Clerk token refresh the
+// getMyTenant query resubscribes and can transiently resolve without the
+// stored tenant (auth not yet propagated to the fresh subscription);
+// clearing on the first such resolution wipes the only stable tenant handle
+// a no-org caregiver/candidate has and strands them on /select-agency. A
+// genuine revocation persists, so the clear still lands — just deferred.
+const STALE_STORED_TENANT_GRACE_MS = 10_000
+
 /**
  * Persists the tenant a no-org user picked on SelectAgencyPage. Caregivers
  * and candidates hold no Clerk org membership, so there is no Clerk-side
@@ -62,9 +71,12 @@ export function useTenant() {
 
   // First-time resolution: persist the query-resolved tenant so later renders
   // (and page reloads) never depend on query timing. Also validates the
-  // stored id against live memberships: if the stored tenant is no longer
-  // among the user's memberships (revoked access or a different account on
-  // the same browser), clear it so the picker flow can run.
+  // stored id against live memberships: if the stored tenant stays absent
+  // from the user's memberships for the full grace period (revoked access or
+  // a different account on the same browser), clear it so the picker flow
+  // can run. The clear is deferred so a transient mid-refresh resolution
+  // cannot wipe the stored id — the effect cleanup cancels the pending
+  // clear as soon as any resolution includes the stored tenant again.
   useEffect(() => {
     if (orgClerkOrgId || !dbTenants) return
     const stored = getStoredClerkOrgId()
@@ -73,9 +85,11 @@ export function useTenant() {
       if (first) setSelectedClerkOrgId(first.clerkOrgId)
       return
     }
-    if (!dbTenants.some((tenant) => tenant.clerkOrgId === stored)) {
-      setSelectedClerkOrgId(null)
-    }
+    if (dbTenants.some((tenant) => tenant.clerkOrgId === stored)) return
+    const timeout = setTimeout(() => {
+      if (getStoredClerkOrgId() === stored) setSelectedClerkOrgId(null)
+    }, STALE_STORED_TENANT_GRACE_MS)
+    return () => clearTimeout(timeout)
   }, [orgClerkOrgId, dbTenants])
 
   return {

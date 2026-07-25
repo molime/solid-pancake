@@ -4,7 +4,9 @@ import {
   TenantRouteGuard,
   SignedInRouteGuard,
   TenantRoleRouteGuard,
+  TrainingRouteGuard,
 } from './RouteGuard'
+import { getFunctionName } from 'convex/server'
 
 const mockNavigate = vi.fn()
 
@@ -78,6 +80,22 @@ function mockMembership(result: boolean | undefined | null) {
 
 function mockMember(result: { role: string } | undefined | null) {
   mockUseQueryResult(result)
+}
+
+// Distinguishes queries by function path so guards that issue several
+// queries (member + training completions + getMyTenant) each get their
+// own result.
+function mockQueries(results: Record<string, unknown>) {
+  vi.mocked(useQuery).mockImplementation(((
+    query: unknown,
+    args: unknown,
+  ) => {
+    if (args === 'skip') return undefined
+    const name = getFunctionName(
+      query as Parameters<typeof getFunctionName>[0],
+    )
+    return results[name]
+  }) as unknown as typeof useQuery)
 }
 
 describe('TenantRouteGuard', () => {
@@ -405,5 +423,214 @@ describe('TenantRoleRouteGuard', () => {
     )
 
     expect(mockNavigate).toHaveBeenCalledWith('/onboarding')
+  })
+})
+
+describe('guard stability during a Clerk token refresh', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+  })
+
+  const storedCaregiverTenant = {
+    clerkOrgId: 'org_stored',
+    tenantName: 'Test Agency',
+    role: 'org:caregiver',
+  }
+
+  // Puts Clerk and Convex into the transient mid-refresh state: the
+  // resubscribed getMyTenant query resolves WITHOUT the stored tenant
+  // (auth not yet propagated to the fresh subscription).
+  function mockTransientEmptyResolution(memberResults: Record<string, unknown>) {
+    mockClerkState({
+      authLoaded: true,
+      isSignedIn: true,
+      orgLoaded: true,
+      organization: null,
+    })
+    mockQueries({
+      'candidates:getMyTenant': [],
+      ...memberResults,
+    })
+  }
+
+  it('TenantRoleRouteGuard keeps a caregiver on the route through a mid-refresh resubscribe', () => {
+    window.localStorage.setItem('atria.selectedClerkOrgId', 'org_stored')
+    mockClerkState({
+      authLoaded: true,
+      isSignedIn: true,
+      orgLoaded: true,
+      organization: null,
+    })
+    mockQueries({
+      'candidates:getMyTenant': [storedCaregiverTenant],
+      'members:me': { role: 'org:caregiver' },
+    })
+
+    const ui = (
+      <TenantRoleRouteGuard allowedRoles={['org:caregiver']}>
+        <div data-testid="protected">Protected</div>
+      </TenantRoleRouteGuard>
+    )
+    const { rerender } = render(ui)
+    expect(screen.getByTestId('protected')).toBeInTheDocument()
+
+    // Token refresh: getMyTenant resubscribes and transiently resolves
+    // without the stored tenant.
+    mockTransientEmptyResolution({
+      'members:me': { role: 'org:caregiver' },
+    })
+    rerender(ui)
+
+    // The stored id survives the transient resolution and the guard keeps
+    // the caregiver on the route — no stuck loader, no /select-agency bounce.
+    expect(window.localStorage.getItem('atria.selectedClerkOrgId')).toBe(
+      'org_stored',
+    )
+    expect(screen.getByTestId('protected')).toBeInTheDocument()
+    expect(screen.queryByTestId('navigate')).not.toBeInTheDocument()
+    // The member query keeps running against the stored tenant.
+    expect(useQuery).toHaveBeenCalledWith(expect.anything(), {
+      clerkOrgId: 'org_stored',
+    })
+  })
+
+  it('TrainingRouteGuard keeps a caregiver on the route through a mid-refresh resubscribe', () => {
+    window.localStorage.setItem('atria.selectedClerkOrgId', 'org_stored')
+    mockClerkState({
+      authLoaded: true,
+      isSignedIn: true,
+      orgLoaded: true,
+      organization: null,
+    })
+    mockQueries({
+      'candidates:getMyTenant': [storedCaregiverTenant],
+      'members:me': { role: 'org:caregiver' },
+      'platformTrainingCompletions:listMyCompletions': [
+        { trainingId: 'platform_training', status: 'completed' },
+      ],
+    })
+
+    const ui = (
+      <TrainingRouteGuard>
+        <div data-testid="protected">Protected</div>
+      </TrainingRouteGuard>
+    )
+    const { rerender } = render(ui)
+    expect(screen.getByTestId('protected')).toBeInTheDocument()
+
+    // Token refresh: getMyTenant resubscribes and transiently resolves
+    // without the stored tenant.
+    mockTransientEmptyResolution({
+      'members:me': { role: 'org:caregiver' },
+      'platformTrainingCompletions:listMyCompletions': [
+        { trainingId: 'platform_training', status: 'completed' },
+      ],
+    })
+    rerender(ui)
+
+    expect(window.localStorage.getItem('atria.selectedClerkOrgId')).toBe(
+      'org_stored',
+    )
+    expect(screen.getByTestId('protected')).toBeInTheDocument()
+    expect(screen.queryByTestId('navigate')).not.toBeInTheDocument()
+    expect(useQuery).toHaveBeenCalledWith(expect.anything(), {
+      clerkOrgId: 'org_stored',
+    })
+  })
+
+  it('TenantRoleRouteGuard still redirects when the member query finds no membership', () => {
+    // No stored tenant; getMyTenant resolves one, but the user is not a
+    // member of it — authorization stays server-side and still wins.
+    mockClerkState({
+      authLoaded: true,
+      isSignedIn: true,
+      orgLoaded: true,
+      organization: null,
+    })
+    mockQueries({
+      'candidates:getMyTenant': [
+        {
+          clerkOrgId: 'org_db',
+          tenantName: 'Test Agency',
+          role: 'org:caregiver',
+        },
+      ],
+      'members:me': null,
+    })
+
+    render(
+      <TenantRoleRouteGuard allowedRoles={['org:caregiver']}>
+        <div data-testid="protected">Protected</div>
+      </TenantRoleRouteGuard>,
+    )
+
+    expect(screen.getByText('Navigate to /select-agency')).toBeInTheDocument()
+    expect(mockNavigate).toHaveBeenCalledWith('/select-agency')
+  })
+
+  it('TrainingRouteGuard still redirects a caregiver with incomplete training to /onboarding/training', () => {
+    window.localStorage.setItem('atria.selectedClerkOrgId', 'org_stored')
+    mockClerkState({
+      authLoaded: true,
+      isSignedIn: true,
+      orgLoaded: true,
+      organization: null,
+    })
+    mockQueries({
+      'candidates:getMyTenant': [
+        {
+          clerkOrgId: 'org_stored',
+          tenantName: 'Test Agency',
+          role: 'org:caregiver',
+        },
+      ],
+      'members:me': { role: 'org:caregiver' },
+      'platformTrainingCompletions:listMyCompletions': [
+        { trainingId: 'platform_training', status: 'in_progress' },
+      ],
+    })
+
+    render(
+      <TrainingRouteGuard>
+        <div data-testid="protected">Protected</div>
+      </TrainingRouteGuard>,
+    )
+
+    expect(
+      screen.getByText('Navigate to /onboarding/training'),
+    ).toBeInTheDocument()
+    expect(mockNavigate).toHaveBeenCalledWith('/onboarding/training')
+  })
+
+  it('an active Clerk org wins over a stale stored tenant', () => {
+    window.localStorage.setItem('atria.selectedClerkOrgId', 'org_stale')
+    mockClerkState({
+      authLoaded: true,
+      isSignedIn: true,
+      orgLoaded: true,
+      organization: { id: 'org_123', name: 'Test Agency' },
+    })
+    mockQueries({
+      'members:me': { role: 'org:coordinator' },
+      'platformTrainingCompletions:listMyCompletions': [
+        { trainingId: 'platform_training', status: 'completed' },
+      ],
+    })
+
+    render(
+      <TrainingRouteGuard>
+        <div data-testid="protected">Protected</div>
+      </TrainingRouteGuard>,
+    )
+
+    expect(screen.getByTestId('protected')).toBeInTheDocument()
+    expect(useQuery).toHaveBeenCalledWith(expect.anything(), {
+      clerkOrgId: 'org_123',
+    })
+    expect(useQuery).not.toHaveBeenCalledWith(expect.anything(), {
+      clerkOrgId: 'org_stale',
+    })
   })
 })

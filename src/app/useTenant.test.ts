@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import {
   useTenant,
   setSelectedClerkOrgId,
@@ -135,17 +135,74 @@ describe('useTenant', () => {
     expect(getStoredClerkOrgId()).toBe('org_stored')
   })
 
-  it('clears the stored id when it is no longer among the resolved memberships', () => {
-    setSelectedClerkOrgId('org_revoked')
-    mockOrganization({ isLoaded: true, organization: null })
-    mockDbTenants([caregiverTenant])
+  it('clears the stored id only after it stays absent from the resolved memberships for the full grace period', () => {
+    vi.useFakeTimers()
+    try {
+      setSelectedClerkOrgId('org_revoked')
+      mockOrganization({ isLoaded: true, organization: null })
+      mockDbTenants([caregiverTenant])
 
-    const { result, rerender } = renderHook(() => useTenant())
+      const { result, rerender } = renderHook(() => useTenant())
 
-    expect(getStoredClerkOrgId()).toBeNull()
-    rerender()
-    // Falls back to the first live membership once the stale id is cleared.
-    expect(result.current.clerkOrgId).toBe('org_stored')
+      // A mismatch never clears immediately — the clear is deferred so a
+      // transient mid-refresh resolution cannot wipe the stored id.
+      expect(getStoredClerkOrgId()).toBe('org_revoked')
+
+      act(() => {
+        vi.advanceTimersByTime(10_000)
+      })
+
+      expect(getStoredClerkOrgId()).toBeNull()
+      rerender()
+      // Falls back to the first live membership once the stale id is cleared.
+      expect(result.current.clerkOrgId).toBe('org_stored')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the stored id when a mid-refresh resubscribe transiently resolves without it', () => {
+    vi.useFakeTimers()
+    try {
+      setSelectedClerkOrgId('org_stored')
+      mockOrganization({ isLoaded: true, organization: null })
+      mockDbTenants([caregiverTenant])
+
+      const { result, rerender } = renderHook(() => useTenant())
+      expect(result.current.clerkOrgId).toBe('org_stored')
+
+      // Clerk token refresh: isLoaded flaps to false and the getMyTenant
+      // query is skipped (returns undefined) while it resubscribes.
+      mockOrganization({ isLoaded: false, organization: null })
+      rerender()
+      expect(result.current.clerkOrgId).toBe('org_stored')
+
+      // The fresh subscription transiently resolves WITHOUT the stored
+      // tenant (auth not yet propagated server-side).
+      mockOrganization({ isLoaded: true, organization: null })
+      mockDbTenants([])
+      rerender()
+
+      // Partway through the grace period the stored id must still be there.
+      act(() => {
+        vi.advanceTimersByTime(5_000)
+      })
+      expect(getStoredClerkOrgId()).toBe('org_stored')
+      expect(result.current.clerkOrgId).toBe('org_stored')
+      expect(result.current.isLoading).toBe(false)
+
+      // The correct resolution arrives before the grace period ends and
+      // cancels the pending clear.
+      mockDbTenants([caregiverTenant])
+      rerender()
+      act(() => {
+        vi.advanceTimersByTime(10_000)
+      })
+      expect(getStoredClerkOrgId()).toBe('org_stored')
+      expect(result.current.clerkOrgId).toBe('org_stored')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('reports loading while a first-time no-org resolution is in flight', () => {

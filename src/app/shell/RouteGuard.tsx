@@ -75,17 +75,29 @@ export function SignedInRouteGuard({ children }: PropsWithChildren) {
   return <>{children}</>
 }
 
+// A no-org user's resolved tenant lives in localStorage and is stable
+// across Clerk token refreshes. Role/training guards fall back to it
+// before concluding there is no tenant — a momentary undefined from
+// useTenant() during a token refresh must not strand a resolved
+// caregiver/candidate on a loader or bounce them to /select-agency.
+// Authorization is unchanged: every query still re-authorizes the id
+// server-side via requireTenant.
+function useEffectiveClerkOrgId() {
+  const { clerkOrgId } = useTenant()
+  return clerkOrgId ?? getStoredClerkOrgId() ?? undefined
+}
+
 export function TenantRoleRouteGuard({
   allowedRoles,
   children,
 }: PropsWithChildren<{ allowedRoles: TenantRole[] }>) {
-  const { clerkOrgId, isLoading } = useTenant()
+  const effectiveClerkOrgId = useEffectiveClerkOrgId()
   const member = useQuery(
     api.members.me,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
 
-  if (isLoading || !clerkOrgId || member === undefined) {
+  if (!effectiveClerkOrgId || member === undefined) {
     return <AppLoader fullScreen label="Checking access" />
   }
 
@@ -100,17 +112,17 @@ export function TenantRoleRouteGuard({
   return <>{children}</>
 }
 export function TrainingRouteGuard({ children }: PropsWithChildren) {
-  const { clerkOrgId, isLoading } = useTenant()
+  const effectiveClerkOrgId = useEffectiveClerkOrgId()
   const member = useQuery(
     api.members.me,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
   const completions = useQuery(
     api.platformTrainingCompletions.listMyCompletions,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
 
-  if (isLoading || !clerkOrgId || member === undefined || completions === undefined) {
+  if (!effectiveClerkOrgId || member === undefined || completions === undefined) {
     return <AppLoader fullScreen label="Checking training status" />
   }
 

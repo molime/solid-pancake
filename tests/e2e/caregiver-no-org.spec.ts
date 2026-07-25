@@ -169,4 +169,50 @@ test.describe('caregiver auth without Clerk org membership', { tag: '@auth' }, (
     await page.goto('/select-agency')
     await expect(page).toHaveURL(/caregiver\/today/, { timeout: 30000 })
   })
+
+  test('caregiver survives a session refresh mid-training', async ({
+    page,
+  }) => {
+    await signInWithClerk(
+      page,
+      E2E_CAREGIVER_EMAIL,
+      E2E_CAREGIVER_PASSWORD,
+      E2E_ORG_ID,
+      'org:caregiver',
+    )
+
+    await page.goto('/')
+    await expect(page).toHaveURL(/caregiver\/today/, { timeout: 30000 })
+
+    // The tenant is pinned in localStorage before the refresh hits.
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.localStorage.getItem('atria.selectedClerkOrgId'),
+        ),
+      )
+      .toBe(E2E_ORG_ID)
+
+    // Sit on the training route — this is where the bounce was reported —
+    // then force a Clerk token refresh mid-session.
+    await page.goto('/onboarding/training')
+    await expect(page).not.toHaveURL(/select-agency/)
+    await page.evaluate(async () => {
+      const clerk = (
+        window as unknown as {
+          Clerk?: { session?: { getToken(o: object): Promise<string | null> } }
+        }
+      ).Clerk
+      await clerk?.session?.getToken({ skipCache: true })
+    })
+
+    // The role/training guards must ride out the flap on the stored tenant:
+    // no /select-agency redirect, no stuck "Checking access" loader.
+    await expect(page).not.toHaveURL(/select-agency/)
+    await page.reload()
+    await expect(page).not.toHaveURL(/select-agency/)
+    await page.goto('/caregiver/today')
+    await expect(page).toHaveURL(/caregiver\/today/, { timeout: 30000 })
+    await expect(page).not.toHaveURL(/select-agency/)
+  })
 })
