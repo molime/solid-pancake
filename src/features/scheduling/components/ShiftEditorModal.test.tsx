@@ -12,6 +12,7 @@ vi.mock('@clerk/react', () => ({
 }))
 
 vi.mock('convex/react', () => ({
+  useConvexAuth: () => ({ isLoading: false, isAuthenticated: true }),
   useQuery: vi.fn(),
   useMutation: vi.fn(),
 }))

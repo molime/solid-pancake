@@ -41,6 +41,7 @@ const completions = [
 // Track which query was called by reference identity
 let callCount = 0
 vi.mock('convex/react', () => ({
+  useConvexAuth: () => ({ isLoading: false, isAuthenticated: true }),
   useQuery: vi.fn(() => {
     callCount++
     // 1st call = listMyCompletions, 2nd = hasProduct, 3rd = getTrainingConfig

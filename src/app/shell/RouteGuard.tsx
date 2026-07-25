@@ -1,5 +1,5 @@
 import { useAuth } from '@clerk/react'
-import { useQuery } from 'convex/react'
+import { useQuery, useConvexAuth } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { Navigate } from 'react-router-dom'
 import type { PropsWithChildren } from 'react'
@@ -50,11 +50,11 @@ function TenantMembershipGuard({ children }: PropsWithChildren) {
     return <Navigate to="/select-agency" replace />
   }
 
-  if (membership === undefined) {
+  if (membership === undefined || membership === null) {
     return <AppLoader fullScreen label="Opening agency workspace" />
   }
 
-  if (!membership) {
+  if (membership === false) {
     return <Navigate to="/select-agency" replace />
   }
 
@@ -92,12 +92,13 @@ export function TenantRoleRouteGuard({
   children,
 }: PropsWithChildren<{ allowedRoles: TenantRole[] }>) {
   const effectiveClerkOrgId = useEffectiveClerkOrgId()
+  const { isLoading: convexAuthLoading } = useConvexAuth()
   const member = useQuery(
     api.members.me,
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
 
-  if (!effectiveClerkOrgId || member === undefined) {
+  if (!effectiveClerkOrgId || member === undefined || convexAuthLoading) {
     return <AppLoader fullScreen label="Checking access" />
   }
 
@@ -113,6 +114,7 @@ export function TenantRoleRouteGuard({
 }
 export function TrainingRouteGuard({ children }: PropsWithChildren) {
   const effectiveClerkOrgId = useEffectiveClerkOrgId()
+  const { isLoading: convexAuthLoading } = useConvexAuth()
   const member = useQuery(
     api.members.me,
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
@@ -122,7 +124,7 @@ export function TrainingRouteGuard({ children }: PropsWithChildren) {
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
 
-  if (!effectiveClerkOrgId || member === undefined || completions === undefined) {
+  if (!effectiveClerkOrgId || member === undefined || completions === undefined || convexAuthLoading) {
     return <AppLoader fullScreen label="Checking training status" />
   }
 

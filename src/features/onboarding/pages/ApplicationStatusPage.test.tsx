@@ -26,6 +26,7 @@ vi.mock('@/app/useTenant', () => ({
 }))
 
 vi.mock('convex/react', () => ({
+  useConvexAuth: () => ({ isLoading: false, isAuthenticated: true }),
   useQuery: () => ({
     candidate: { status: 'applied', displayName: 'Jane Doe' },
     application: { submittedAt: '2026-07-09T10:00:00.000Z' },

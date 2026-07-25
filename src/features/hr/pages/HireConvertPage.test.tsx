@@ -22,6 +22,7 @@ const detailResponse = {
 }
 
 vi.mock('convex/react', () => ({
+  useConvexAuth: () => ({ isLoading: false, isAuthenticated: true }),
   useQuery: vi.fn().mockImplementation((query) => {
     const name = getFunctionName(query as Parameters<typeof getFunctionName>[0])
     if (name === 'candidates:getCandidateDetail') return detailResponse

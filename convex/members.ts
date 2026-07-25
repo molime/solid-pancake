@@ -36,7 +36,7 @@ export const checkMembership = query({
   args: { clerkOrgId: v.string() },
   handler: async (ctx, { clerkOrgId }) => {
     const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return false
+    if (!identity) return null
 
     const activeOrgId = getActiveClerkOrganizationId(identity)
 

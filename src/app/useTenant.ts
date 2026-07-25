@@ -1,5 +1,5 @@
 import { useOrganization } from '@clerk/react'
-import { useQuery } from 'convex/react'
+import { useQuery, useConvexAuth } from 'convex/react'
 import { useEffect } from 'react'
 import { api } from '../../convex/_generated/api'
 
@@ -66,8 +66,9 @@ export function useTenant() {
     dbTenants?.find((tenant) => tenant.clerkOrgId === storedClerkOrgId) ??
     dbTenants?.[0]
 
+  const { isLoading: convexAuthLoading } = useConvexAuth()
   const clerkOrgId = orgClerkOrgId ?? storedClerkOrgId ?? dbTenant?.clerkOrgId
-  const isLoading = !clerkOrgId && (!isLoaded || dbTenants === undefined)
+  const isLoading = !clerkOrgId && (!isLoaded || dbTenants === undefined || convexAuthLoading)
 
   // First-time resolution: persist the query-resolved tenant so later renders
   // (and page reloads) never depend on query timing. Also validates the

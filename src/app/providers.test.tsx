@@ -19,6 +19,7 @@ vi.mock('@clerk/react', () => ({
 }))
 
 vi.mock('convex/react', () => ({
+  useConvexAuth: () => ({ isLoading: false, isAuthenticated: true }),
   ConvexReactClient: vi.fn(),
   ConvexProviderWithAuth: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="convex-provider">{children}</div>

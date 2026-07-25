@@ -18,6 +18,7 @@ vi.mock('convex/react', async () => {
     await vi.importActual<typeof import('convex/react')>('convex/react')
   return {
     ...actual,
+    useConvexAuth: () => ({ isLoading: false, isAuthenticated: true }),
     useQuery: vi.fn(),
   }
 })

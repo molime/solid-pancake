@@ -32,6 +32,7 @@ const baseTasks = [
 let tasks = [...baseTasks]
 
 vi.mock('convex/react', () => ({
+  useConvexAuth: () => ({ isLoading: false, isAuthenticated: true }),
   useQuery: () => tasks,
 }))
 

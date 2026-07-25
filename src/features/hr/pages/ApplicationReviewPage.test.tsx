@@ -70,6 +70,7 @@ function defaultUseQueryImplementation(query: unknown, _args?: unknown) {
 }
 
 vi.mock('convex/react', () => ({
+  useConvexAuth: () => ({ isLoading: false, isAuthenticated: true }),
   useQuery: vi.fn().mockImplementation(defaultUseQueryImplementation),
   useMutation: vi.fn().mockImplementation((mutation) => {
     const name = getFunctionName(mutation as Parameters<typeof getFunctionName>[0])
