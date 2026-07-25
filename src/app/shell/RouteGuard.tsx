@@ -98,7 +98,7 @@ export function TenantRoleRouteGuard({
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
 
-  if (!effectiveClerkOrgId || member === undefined || convexAuthLoading) {
+  if (!effectiveClerkOrgId || member === undefined || member === null || convexAuthLoading) {
     return <AppLoader fullScreen label="Checking access" />
   }
 
@@ -124,7 +124,7 @@ export function TrainingRouteGuard({ children }: PropsWithChildren) {
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
 
-  if (!effectiveClerkOrgId || member === undefined || completions === undefined || convexAuthLoading) {
+  if (!effectiveClerkOrgId || member === undefined || member === null || completions === undefined || completions === null || convexAuthLoading) {
     return <AppLoader fullScreen label="Checking training status" />
   }
 

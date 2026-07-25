@@ -757,7 +757,7 @@ export function TrainingPage() {
     )
   }
   const allTrainingComplete =
-    completions !== undefined &&
+    completions !== undefined && completions !== null &&
     completions.length > 0 &&
     steps.every((s) => completedIds.has(s.id))
 

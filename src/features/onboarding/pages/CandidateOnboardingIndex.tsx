@@ -41,7 +41,7 @@ export function CandidateOnboardingIndex() {
     }
 
     if (status === 'hired') {
-      if (isPlatformTrainingComplete(completions)) {
+      if (completions && isPlatformTrainingComplete(completions)) {
         // Check if agency has full_platform product
         if (hasFullPlatform === false) {
           // Hiring-only agency — show success screen, not caregiver dashboard

@@ -102,14 +102,17 @@ export const completeForCandidate = mutation({
 export const listMyCompletions = query({
   args: { clerkOrgId: v.string() },
   handler: async (ctx, { clerkOrgId }) => {
-    const { tenantId, identity } = await requireTenantRole(ctx, clerkOrgId, [
-      'org:candidate',
-      'org:caregiver',
-    ])
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) return null
+    const tenant = await ctx.db
+      .query('tenants')
+      .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+      .unique()
+    if (!tenant) return null
     return ctx.db
       .query('platformTrainingCompletions')
       .withIndex('by_tenant_user', (q) =>
-        q.eq('tenantId', tenantId).eq('clerkUserId', identity.subject),
+        q.eq('tenantId', tenant._id).eq('clerkUserId', identity.subject),
       )
       .collect()
   },
