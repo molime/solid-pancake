@@ -409,7 +409,9 @@ describe('SelectAgencyPage', () => {
     render(<SelectAgencyPage />)
 
     await waitFor(() => {
-      expect(mocks.navigate).toHaveBeenCalledWith('/', { replace: true })
+      expect(mocks.navigate).toHaveBeenCalledWith('/caregiver/today', {
+        replace: true,
+      })
     })
     // Never shows the "no agency" empty state or an org bootstrap.
     expect(
@@ -420,6 +422,34 @@ describe('SelectAgencyPage', () => {
     expect(window.localStorage.getItem('atria.selectedClerkOrgId')).toBe(
       'org_123',
     )
+  })
+
+  it('redirects candidates with no Clerk org membership to onboarding', async () => {
+    dbTenantResult = [
+      {
+        clerkOrgId: 'org_123',
+        tenantName: 'Test Agency',
+        role: 'org:candidate',
+      },
+    ]
+    mockClerkState({
+      orgs: [],
+      activeOrgId: null,
+      user: { fullName: 'Candice', primaryEmailAddress: { emailAddress: 'c@x.com' } },
+    })
+    mockConvexAuth({ isLoading: false, isAuthenticated: true })
+
+    render(<SelectAgencyPage />)
+
+    await waitFor(() => {
+      expect(mocks.navigate).toHaveBeenCalledWith('/onboarding', {
+        replace: true,
+      })
+    })
+    expect(window.localStorage.getItem('atria.selectedClerkOrgId')).toBe(
+      'org_123',
+    )
+    expect(mocks.ensureAgency).not.toHaveBeenCalled()
   })
 
   it('lets a caregiver with multiple tenant memberships pick their agency', async () => {
@@ -454,7 +484,9 @@ describe('SelectAgencyPage', () => {
     expect(window.localStorage.getItem('atria.selectedClerkOrgId')).toBe(
       'org_home_b',
     )
-    expect(mocks.navigate).toHaveBeenCalledWith('/', { replace: true })
+    expect(mocks.navigate).toHaveBeenCalledWith('/caregiver/today', {
+      replace: true,
+    })
     expect(mocks.ensureAgency).not.toHaveBeenCalled()
   })
 

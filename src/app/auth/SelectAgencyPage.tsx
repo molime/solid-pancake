@@ -16,6 +16,7 @@ import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { setSelectedClerkOrgId } from '@/app/useTenant'
+import { roleHomePath } from '@/app/roleHomePath'
 
 type PendingOrg = {
   id: string
@@ -52,16 +53,18 @@ export function SelectAgencyPage() {
 
   // Exactly one tenant: pick it and go straight in. Multiple tenants fall
   // through to the picker below so the user can choose their agency.
+  // Navigate to the role-appropriate home (not '/') so the route guards
+  // don't re-evaluate and risk a redirect loop back to /select-agency.
   useEffect(() => {
     if (!hasNoClerkMemberships || !dbTenants || dbTenants.length !== 1) return
     setSelectedClerkOrgId(dbTenants[0].clerkOrgId)
-    navigate('/', { replace: true })
+    navigate(roleHomePath(dbTenants[0].role), { replace: true })
   }, [hasNoClerkMemberships, dbTenants, navigate])
 
   const handleDbTenantSelect = useCallback(
-    (clerkOrgId: string) => {
+    (clerkOrgId: string, role: string) => {
       setSelectedClerkOrgId(clerkOrgId)
-      navigate('/', { replace: true })
+      navigate(roleHomePath(role), { replace: true })
     },
     [navigate],
   )
@@ -272,7 +275,9 @@ export function SelectAgencyPage() {
                   <CardContent className="p-4">
                     <button
                       className="w-full flex items-center justify-between text-left"
-                      onClick={() => handleDbTenantSelect(tenant.clerkOrgId)}
+                      onClick={() =>
+                        handleDbTenantSelect(tenant.clerkOrgId, tenant.role)
+                      }
                     >
                       <div>
                         <p className="text-sm font-medium text-atria-ink">

@@ -83,6 +83,7 @@ function mockMember(result: { role: string } | undefined | null) {
 describe('TenantRouteGuard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.localStorage.clear()
   })
 
   it('shows loading spinner while auth is loading', () => {
@@ -196,6 +197,52 @@ describe('TenantRouteGuard', () => {
       organization: { id: 'org_123', name: 'Test Agency' },
     })
     mockMembership(false)
+
+    render(
+      <TenantRouteGuard>
+        <div data-testid="protected">Protected</div>
+      </TenantRouteGuard>,
+    )
+
+    expect(screen.getByText('Navigate to /select-agency')).toBeInTheDocument()
+    expect(mockNavigate).toHaveBeenCalledWith('/select-agency')
+  })
+
+  it('does not redirect a no-org user with a stored tenant when useOrganization flaps', () => {
+    // Caregiver mid-session: token refresh makes Clerk report no loaded org,
+    // but the resolved tenant is stable in localStorage.
+    window.localStorage.setItem('atria.selectedClerkOrgId', 'org_stored')
+    mockClerkState({
+      authLoaded: true,
+      isSignedIn: true,
+      orgLoaded: false,
+      organization: null,
+    })
+    mockMembership(true)
+
+    render(
+      <TenantRouteGuard>
+        <div data-testid="protected">Protected</div>
+      </TenantRouteGuard>,
+    )
+
+    expect(screen.getByTestId('protected')).toBeInTheDocument()
+    expect(screen.queryByTestId('navigate')).not.toBeInTheDocument()
+    // The stored id is used for the membership check.
+    expect(useQuery).toHaveBeenCalledWith(expect.anything(), {
+      clerkOrgId: 'org_stored',
+    })
+  })
+
+  it('still redirects a no-org user when localStorage is genuinely empty', () => {
+    mockClerkState({
+      authLoaded: true,
+      isSignedIn: true,
+      orgLoaded: true,
+      organization: null,
+    })
+    // No tenantMembers record at all.
+    mockMembership(null)
 
     render(
       <TenantRouteGuard>

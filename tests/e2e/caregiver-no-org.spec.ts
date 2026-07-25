@@ -113,4 +113,60 @@ test.describe('caregiver auth without Clerk org membership', { tag: '@auth' }, (
       'not a member of this tenant',
     )
   })
+
+  test('caregiver is not kicked out to /select-agency after a token refresh', async ({
+    page,
+  }) => {
+    await signInWithClerk(
+      page,
+      E2E_CAREGIVER_EMAIL,
+      E2E_CAREGIVER_PASSWORD,
+      E2E_ORG_ID,
+      'org:caregiver',
+    )
+
+    await page.goto('/')
+    await expect(page).toHaveURL(/caregiver\/today/, { timeout: 30000 })
+
+    // Once resolved, the tenant is pinned in localStorage for the session.
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.localStorage.getItem('atria.selectedClerkOrgId'),
+        ),
+      )
+      .toBe(E2E_ORG_ID)
+
+    // Navigate around the app — the tenant must survive each guard pass.
+    await page.goto('/caregiver/schedule')
+    await expect(page).toHaveURL(/caregiver\/schedule/, { timeout: 30000 })
+    await expect(page).not.toHaveURL(/select-agency/)
+    await page.goto('/caregiver/today')
+    await expect(page).toHaveURL(/caregiver\/today/, { timeout: 30000 })
+
+    // Force a Clerk session token refresh: useOrganization() flaps while the
+    // token rotates, which used to bounce no-org users to /select-agency.
+    await page.evaluate(async () => {
+      const clerk = (
+        window as unknown as {
+          Clerk?: { session?: { getToken(o: object): Promise<string | null> } }
+        }
+      ).Clerk
+      await clerk?.session?.getToken({ skipCache: true })
+    })
+    await page.goto('/caregiver/schedule')
+    await expect(page).toHaveURL(/caregiver\/schedule/, { timeout: 30000 })
+    await expect(page).not.toHaveURL(/select-agency/)
+
+    // A full reload must land straight back on the caregiver dashboard.
+    await page.reload()
+    await expect(page).not.toHaveURL(/select-agency/)
+    await page.goto('/caregiver/today')
+    await expect(page).toHaveURL(/caregiver\/today/, { timeout: 30000 })
+
+    // Even a direct visit to /select-agency resolves back to the dashboard
+    // instead of sticking on the "Opening your agency workspace" loader.
+    await page.goto('/select-agency')
+    await expect(page).toHaveURL(/caregiver\/today/, { timeout: 30000 })
+  })
 })

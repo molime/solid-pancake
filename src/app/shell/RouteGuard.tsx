@@ -5,7 +5,8 @@ import { Navigate } from 'react-router-dom'
 import type { PropsWithChildren } from 'react'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { isPlatformTrainingComplete } from '@/features/onboarding/model/trainingCompletion'
-import { useTenant } from '@/app/useTenant'
+import { getStoredClerkOrgId, useTenant } from '@/app/useTenant'
+import { roleHomePath } from '@/app/roleHomePath'
 
 type TenantRole =
   | 'org:admin'
@@ -30,17 +31,22 @@ export function TenantRouteGuard({ children }: PropsWithChildren) {
 
 function TenantMembershipGuard({ children }: PropsWithChildren) {
   const { clerkOrgId, isLoading } = useTenant()
+  // A no-org user's resolved tenant lives in localStorage and is stable
+  // across Clerk token refreshes. Fall back to it before concluding the
+  // user has no tenant — a momentary undefined from useTenant() must not
+  // bounce a resolved caregiver/candidate to /select-agency.
+  const effectiveClerkOrgId = clerkOrgId ?? getStoredClerkOrgId() ?? undefined
 
   const membership = useQuery(
     api.members.checkMembership,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
 
   if (isLoading) {
     return <AppLoader fullScreen />
   }
 
-  if (!clerkOrgId) {
+  if (!effectiveClerkOrgId) {
     return <Navigate to="/select-agency" replace />
   }
 
@@ -88,13 +94,7 @@ export function TenantRoleRouteGuard({
   }
 
   if (!allowedRoles.includes(member.role)) {
-    const fallback =
-      member.role === 'org:caregiver'
-        ? '/caregiver/today'
-        : member.role === 'org:candidate'
-          ? '/onboarding'
-          : '/'
-    return <Navigate to={fallback} replace />
+    return <Navigate to={roleHomePath(member.role)} replace />
   }
 
   return <>{children}</>
