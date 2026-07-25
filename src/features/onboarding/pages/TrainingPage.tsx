@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useTenant } from '@/app/useTenant'
+import { getStoredClerkOrgId, useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
@@ -697,25 +697,49 @@ const DEFAULT_STEPS: TrainingStep[] = [
 export function TrainingPage() {
   const navigate = useNavigate()
   const { clerkOrgId, isLoading } = useTenant()
-  const completions = useQuery(api.platformTrainingCompletions.listMyCompletions, clerkOrgId ? { clerkOrgId } : 'skip')
+  // Same effective-org-id fallback as the route guards: a momentary
+  // useTenant() blip during a Clerk token refresh must not flip the
+  // queries to 'skip'. Authorization is unchanged — every query/mutation
+  // still re-authorizes the org id server-side.
+  const effectiveClerkOrgId = clerkOrgId ?? getStoredClerkOrgId() ?? undefined
+  const completions = useQuery(
+    api.platformTrainingCompletions.listMyCompletions,
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
+  )
   const completeTraining = useMutation(api.platformTrainingCompletions.completeForCandidate)
   const hasFullPlatform = useQuery(
     api.agencyConfig.hasProduct,
-    clerkOrgId ? { clerkOrgId, productKey: 'full_platform' } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId, productKey: 'full_platform' } : 'skip',
   )
   const trainingConfig = useQuery(
     api.agencyConfig.getTrainingConfig,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
 
+  // Hold the last resolved values so a transient `undefined` during a Clerk
+  // token refresh doesn't flip `steps` back to DEFAULT_STEPS (which would
+  // change step.id and remount StepView, wiping quiz/scroll state — the
+  // visible "reload") or flicker the finish button. Stickiness only bridges
+  // `undefined`; any real resolution replaces the held value.
+  const [lastTrainingConfig, setLastTrainingConfig] = useState<typeof trainingConfig>(undefined)
+  if (trainingConfig !== undefined && trainingConfig !== lastTrainingConfig) {
+    setLastTrainingConfig(trainingConfig)
+  }
+  const [lastHasFullPlatform, setLastHasFullPlatform] = useState<typeof hasFullPlatform>(undefined)
+  if (hasFullPlatform !== undefined && hasFullPlatform !== lastHasFullPlatform) {
+    setLastHasFullPlatform(hasFullPlatform)
+  }
+  const effectiveTrainingConfig = trainingConfig !== undefined ? trainingConfig : lastTrainingConfig
+  const effectiveHasFullPlatform = hasFullPlatform !== undefined ? hasFullPlatform : lastHasFullPlatform
+
   const steps = useMemo<TrainingStep[]>(() => {
-    if (trainingConfig?.steps?.length) {
-      return trainingConfig.steps as TrainingStep[]
+    if (effectiveTrainingConfig?.steps?.length) {
+      return effectiveTrainingConfig.steps as TrainingStep[]
     }
     return DEFAULT_STEPS
-  }, [trainingConfig])
+  }, [effectiveTrainingConfig])
 
-  const passingScore = trainingConfig?.passingScore ?? 70
+  const passingScore = effectiveTrainingConfig?.passingScore ?? 70
 
   const completedIds = useMemo(() => {
     const ids = new Set<string>()
@@ -743,12 +767,14 @@ export function TrainingPage() {
     const parsed = stored !== null ? parseInt(stored, 10) : NaN
     return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, steps.length - 1) : initialIndex
   })
-  // After the user starts training, don't let the index jump back
-  // when completions briefly refetches and becomes undefined
-  const hasStarted = useRef(false)
-  useEffect(() => {
-    hasStarted.current = true
-  }, [])
+  // Once the org id has resolved and training content has rendered, a
+  // transient isLoading/org-id blip (Clerk token refresh) must not blank
+  // the page — keep rendering the current step. Only the first load
+  // (nothing rendered yet) waits on the org id.
+  const [hasStarted, setHasStarted] = useState(false)
+  if (!hasStarted && effectiveClerkOrgId) {
+    setHasStarted(true)
+  }
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.sessionStorage.setItem('atria.training.stepIndex', String(currentIndex))
@@ -781,13 +807,17 @@ export function TrainingPage() {
     }
   }
 
-  if (isLoading || !clerkOrgId) return null
+  // A transient isLoading/org-id blip (Clerk token refresh) must not blank
+  // the page once training content has rendered — keep rendering the
+  // current step. Only the first load waits on the org id.
+  if (!hasStarted && (isLoading || !effectiveClerkOrgId)) return null
 
   const handleComplete = async () => {
+    if (!effectiveClerkOrgId) return
     setIsSubmitting(true)
     try {
       await completeTraining({
-        clerkOrgId,
+        clerkOrgId: effectiveClerkOrgId,
         trainingId: step.id,
         completedAt: new Date().toISOString(),
         status: 'complete',
@@ -808,7 +838,7 @@ export function TrainingPage() {
     if (typeof window !== 'undefined') {
       window.sessionStorage.removeItem('atria.training.stepIndex')
     }
-    if (hasFullPlatform === false) {
+    if (effectiveHasFullPlatform === false) {
       navigate('/onboarding/success', { replace: true })
     } else {
       navigate('/onboarding', { replace: true })
@@ -886,7 +916,7 @@ export function TrainingPage() {
                 className='w-full training-animate-glow'
                 onClick={handleGoToDashboard}
               >
-                {hasFullPlatform === false ? '🎉 Finish' : 'Go to dashboard →'}
+                {effectiveHasFullPlatform === false ? '🎉 Finish' : 'Go to dashboard →'}
               </Button>
             </div>
           ) : (

@@ -1,26 +1,50 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useTenant } from '@/app/useTenant'
+import { getStoredClerkOrgId, useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
+import { AppLoader } from '@/shared/ui/AppLoader'
 import { formatDateUS } from '@/shared/format'
 
 export function OfferAcceptancePage() {
   const navigate = useNavigate()
-  const { clerkOrgId, tenantName, isLoading } = useTenant()
-  const data = useQuery(api.candidates.getMyApplication, clerkOrgId ? { clerkOrgId } : 'skip')
+  const { clerkOrgId, tenantName } = useTenant()
+  // Same effective-org-id fallback as the route guards: a momentary
+  // useTenant() blip during a Clerk token refresh must not flip the query
+  // to 'skip'. Authorization is unchanged — the query still re-authorizes
+  // the org id server-side on every resolution.
+  const effectiveClerkOrgId = clerkOrgId ?? getStoredClerkOrgId() ?? undefined
+  const data = useQuery(
+    api.candidates.getMyApplication,
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
+  )
   const accept = useMutation(api.candidates.acceptOffer)
   const reject = useMutation(api.candidates.rejectOffer)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  if (isLoading || !clerkOrgId) return null
+  // Hold the last payload that showed a pending offer so a transient
+  // `undefined` (query resubscribe during a Clerk token refresh) keeps
+  // rendering the offer instead of flashing "No pending offer". Stickiness
+  // only ever bridges `undefined` — a real resolution with any other status
+  // renders that status.
+  const [lastOfferData, setLastOfferData] = useState<typeof data>(undefined)
+  if (data !== undefined && data !== lastOfferData && data?.candidate?.status === 'offer_sent') {
+    setLastOfferData(data)
+  }
+  const effectiveData = data !== undefined ? data : lastOfferData
 
-  const candidate = data?.candidate
-  const application = data?.application
+  // Query loading or momentarily blipped — never show "No pending offer"
+  // until the query has actually resolved.
+  if (effectiveData === undefined) {
+    return <AppLoader fullScreen label='Loading your offer' />
+  }
+
+  const candidate = effectiveData?.candidate
+  const application = effectiveData?.application
   const status = candidate?.status
 
   const firstName = candidate?.displayName?.split(' ')[0] ?? 'there'
@@ -35,15 +59,17 @@ export function OfferAcceptancePage() {
   const offerExpiresAt = (fields.offerExpiresAt as string) ?? undefined
 
   const handleAccept = async () => {
+    if (!effectiveClerkOrgId) return
     setIsSubmitting(true)
-    await accept({ clerkOrgId })
+    await accept({ clerkOrgId: effectiveClerkOrgId })
     navigate('/onboarding', { replace: true })
   }
 
   const handleReject = async () => {
     if (!window.confirm('Are you sure you want to decline this offer?')) return
+    if (!effectiveClerkOrgId) return
     setIsSubmitting(true)
-    await reject({ clerkOrgId })
+    await reject({ clerkOrgId: effectiveClerkOrgId })
     navigate('/onboarding/status', { replace: true })
   }
 

@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { TrainingPage } from './TrainingPage'
+import { getFunctionName } from 'convex/server'
 
 const navigateMock = vi.fn()
 
@@ -17,12 +18,11 @@ vi.mock('@clerk/react', () => ({
   useOrganization: () => ({ organization: { id: 'org_123' }, isLoaded: true }),
 }))
 
+let mockTenant: { clerkOrgId: string | undefined, tenantName: string, isLoading: boolean }
+
 vi.mock('@/app/useTenant', () => ({
-  useTenant: () => ({
-    clerkOrgId: 'org_123',
-    tenantName: 'Test Agency',
-    isLoading: false,
-  }),
+  useTenant: () => mockTenant,
+  getStoredClerkOrgId: () => null,
 }))
 
 // Match the new default training step IDs (8 steps from handbook)
@@ -38,21 +38,57 @@ const completions = [
   { trainingId: 'quiz', status: 'complete' },
 ]
 
-// Track which query was called by reference identity
-let callCount = 0
+const customTrainingConfig = {
+  steps: [
+    {
+      id: 'agency_custom_step',
+      title: 'Agency Custom Step',
+      type: 'text',
+      content: 'FIRST SECTION: Alpha details here\n\nSECOND SECTION: Beta details here',
+      minDurationSec: 0,
+      required: true,
+    },
+  ],
+  passingScore: 80,
+}
+
+let mockCompletionsResult: unknown
+let mockHasFullPlatformResult: unknown
+let mockTrainingConfigResult: unknown
+
 vi.mock('convex/react', () => ({
   useConvexAuth: () => ({ isLoading: false, isAuthenticated: true }),
-  useQuery: vi.fn(() => {
-    callCount++
-    // 1st call = listMyCompletions, 2nd = hasProduct, 3rd = getTrainingConfig
-    if (callCount === 1) return completions
-    if (callCount === 2) return true  // hasFullPlatform = true
-    return undefined  // getTrainingConfig = undefined (use defaults)
+  useQuery: vi.fn((query: unknown, args: unknown) => {
+    if (args === 'skip') return undefined
+    const name = getFunctionName(query as Parameters<typeof getFunctionName>[0])
+    if (name.includes('listMyCompletions')) return mockCompletionsResult
+    if (name.includes('hasProduct')) return mockHasFullPlatformResult
+    if (name.includes('getTrainingConfig')) return mockTrainingConfigResult
+    return undefined
   }),
   useMutation: () => vi.fn(),
 }))
 
+function resetMocks() {
+  mockTenant = { clerkOrgId: 'org_123', tenantName: 'Test Agency', isLoading: false }
+  mockCompletionsResult = completions
+  mockHasFullPlatformResult = true
+  mockTrainingConfigResult = undefined
+}
+
+function blipAllQueries() {
+  mockCompletionsResult = undefined
+  mockHasFullPlatformResult = undefined
+  mockTrainingConfigResult = undefined
+}
+
 describe('TrainingPage when complete', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    window.sessionStorage.clear()
+    resetMocks()
+  })
+
   it('shows the completion summary and a Go to dashboard button', async () => {
     render(
       <MemoryRouter>
@@ -73,5 +109,75 @@ describe('TrainingPage when complete', () => {
 
     goButton.click()
     expect(navigateMock).toHaveBeenCalledWith('/onboarding', { replace: true })
+  })
+})
+
+describe('TrainingPage query blips mid-training', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    window.sessionStorage.clear()
+    resetMocks()
+    mockCompletionsResult = []
+    mockTrainingConfigResult = customTrainingConfig
+  })
+
+  function renderTraining() {
+    return render(
+      <MemoryRouter>
+        <TrainingPage />
+      </MemoryRouter>,
+    )
+  }
+
+  it('keeps rendering the current step when all queries blip to undefined', () => {
+    const { rerender } = renderTraining()
+    expect(screen.getByText('Agency Custom Step')).toBeInTheDocument()
+
+    blipAllQueries()
+    rerender(
+      <MemoryRouter>
+        <TrainingPage />
+      </MemoryRouter>,
+    )
+
+    // Step content persists — no blank screen, no "Loading training..."
+    expect(screen.getByText('Agency Custom Step')).toBeInTheDocument()
+    expect(screen.queryByText('Loading training...')).not.toBeInTheDocument()
+    // Custom steps must not revert to the defaults mid-training
+    expect(screen.queryByText('Welcome to Individuals Choice')).not.toBeInTheDocument()
+  })
+
+  it('keeps rendering through a transient isLoading/org-id blip once started', () => {
+    const { rerender } = renderTraining()
+    expect(screen.getByText('Agency Custom Step')).toBeInTheDocument()
+
+    mockTenant = { clerkOrgId: undefined, tenantName: 'Test Agency', isLoading: true }
+    blipAllQueries()
+    rerender(
+      <MemoryRouter>
+        <TrainingPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Agency Custom Step')).toBeInTheDocument()
+  })
+
+  it('does not remount StepView (expanded cards stay expanded) across a blip', () => {
+    const { rerender } = renderTraining()
+
+    // Expand both cards — expanding all of them surfaces the confirmation
+    fireEvent.click(screen.getByText('FIRST SECTION:'))
+    fireEvent.click(screen.getByText('SECOND SECTION:'))
+    expect(screen.getByText(/All sections reviewed!/i)).toBeInTheDocument()
+
+    blipAllQueries()
+    rerender(
+      <MemoryRouter>
+        <TrainingPage />
+      </MemoryRouter>,
+    )
+
+    // InteractiveContent state survives => StepView was not remounted
+    expect(screen.getByText(/All sections reviewed!/i)).toBeInTheDocument()
   })
 })
