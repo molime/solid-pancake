@@ -541,7 +541,9 @@ describe('guard stability during a Clerk token refresh', () => {
     })
   })
 
-  it('TenantRoleRouteGuard shows loader (not redirect) when the member query returns null — null means auth may be refreshing', () => {
+  it('TenantRoleRouteGuard still redirects when the member query finds no membership', () => {
+    // No stored tenant; getMyTenant resolves one, but the user is not a
+    // member of it — authorization stays server-side and still wins.
     mockClerkState({
       authLoaded: true,
       isSignedIn: true,
@@ -565,7 +567,8 @@ describe('guard stability during a Clerk token refresh', () => {
       </TenantRoleRouteGuard>,
     )
 
-    expect(screen.queryByText('Navigate to /select-agency')).not.toBeInTheDocument()
+    expect(screen.getByText('Navigate to /select-agency')).toBeInTheDocument()
+    expect(mockNavigate).toHaveBeenCalledWith('/select-agency')
   })
 
   it('TrainingRouteGuard still redirects a caregiver with incomplete training to /onboarding/training', () => {
