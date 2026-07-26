@@ -108,7 +108,24 @@ describe('TrainingPage when complete', () => {
     expect(goButton).toBeInTheDocument()
 
     goButton.click()
-    expect(navigateMock).toHaveBeenCalledWith('/onboarding', { replace: true })
+    expect(navigateMock).toHaveBeenCalledWith('/caregiver/today', { replace: true })
+  })
+
+  it('navigates to /onboarding/success when the candidate has no full platform access', async () => {
+    mockHasFullPlatformResult = false
+    render(
+      <MemoryRouter>
+        <TrainingPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/Training complete/i)).toBeInTheDocument()
+    })
+
+    const finishButton = screen.getByRole('button', { name: /Finish/i })
+    finishButton.click()
+    expect(navigateMock).toHaveBeenCalledWith('/onboarding/success', { replace: true })
   })
 })
 

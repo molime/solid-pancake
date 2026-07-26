@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/shared/ui/Card'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 import { Checkbox } from '@/shared/ui/Checkbox'
 import { Input } from '@/shared/ui/Input'
+import { USDateInput } from '@/shared/ui/USDateInput'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { cn } from '@/shared/lib/cn'
 import {
@@ -165,11 +166,10 @@ export function EmploymentAgreementPage() {
                       />
                     </FieldGroup>
                     <FieldGroup label='DATE' htmlFor={`${key}-date`} required>
-                      <Input
+                      <USDateInput
                         id={`${key}-date`}
-                        type='date'
                         value={state.date}
-                        onChange={(e) => updateAgreement(key, { date: e.target.value })}
+                        onChange={(iso) => updateAgreement(key, { date: iso })}
                       />
                     </FieldGroup>
                   </div>

@@ -1,5 +1,6 @@
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { Input } from '@/shared/ui/Input'
+import { USDateInput } from '@/shared/ui/USDateInput'
 import { Select } from '@/shared/ui/Select'
 import { Checkbox } from '@/shared/ui/Checkbox'
 import {
@@ -177,11 +178,10 @@ export function PersonalInfoSection({ value, onChange, branchType, showErrors }:
 
       <div className='grid grid-cols-1 gap-5 sm:grid-cols-2'>
         <FieldGroup label='Date of birth' htmlFor='dateOfBirth' required error={required(value.dateOfBirth)}>
-          <Input
+          <USDateInput
             id='dateOfBirth'
-            type='date'
             value={value.dateOfBirth}
-            onChange={(e) => update('dateOfBirth', e.target.value)}
+            onChange={(iso) => update('dateOfBirth', iso)}
           />
         </FieldGroup>
 

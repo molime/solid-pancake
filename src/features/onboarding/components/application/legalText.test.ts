@@ -149,6 +149,7 @@ describe('position options', () => {
     expect(positionOptionsForBranch('SLS').map((o) => o.value)).toEqual([
       'Caregiver',
       'Coordinator',
+      'Support Coordinator',
       'Day Program Assistant',
     ])
   })
@@ -157,6 +158,7 @@ describe('position options', () => {
     expect(positionOptionsForBranch('ILS').map((o) => o.value)).toEqual([
       'ILS Instructor',
       'Coordinator',
+      'Support Coordinator',
       'Day Program Assistant',
     ])
   })

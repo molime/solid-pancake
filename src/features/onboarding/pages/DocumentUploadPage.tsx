@@ -7,7 +7,7 @@ import type { Doc } from '../../../../convex/_generated/dataModel'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
-import { Input } from '@/shared/ui/Input'
+import { USDateInput } from '@/shared/ui/USDateInput'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { cn } from '@/shared/lib/cn'
 import { uploadFileToConvex } from '@/shared/lib/upload'
@@ -412,11 +412,10 @@ export function DocumentUploadPage() {
               helperText='When does this document expire?'
               className='mb-6'
             >
-              <Input
+              <USDateInput
                 id='expiresAt'
-                type='date'
                 value={expiresAt}
-                onChange={(e) => setExpiresAt(e.target.value)}
+                onChange={(iso) => setExpiresAt(iso)}
               />
             </FieldGroup>
           )}

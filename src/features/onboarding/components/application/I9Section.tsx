@@ -1,5 +1,6 @@
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { Input } from '@/shared/ui/Input'
+import { USDateInput } from '@/shared/ui/USDateInput'
 import { Select } from '@/shared/ui/Select'
 import { Checkbox } from '@/shared/ui/Checkbox'
 import { type I9Info, CITIZENSHIP_OPTIONS, STATE_OPTIONS } from './types'
@@ -108,11 +109,10 @@ export function I9Section({ value, onChange, showErrors }: I9SectionProps) {
 
       <div className='grid grid-cols-1 gap-5 sm:grid-cols-3'>
         <FieldGroup label='Date of birth' htmlFor='i9DateOfBirth' required error={required(value.dateOfBirth)}>
-          <Input
+          <USDateInput
             id='i9DateOfBirth'
-            type='date'
             value={value.dateOfBirth}
-            onChange={(e) => update('dateOfBirth', e.target.value)}
+            onChange={(iso) => update('dateOfBirth', iso)}
           />
         </FieldGroup>
 
@@ -182,11 +182,10 @@ export function I9Section({ value, onChange, showErrors }: I9SectionProps) {
         </FieldGroup>
 
         <FieldGroup label='Date' htmlFor='i9Date' required error={required(value.date)}>
-          <Input
+          <USDateInput
             id='i9Date'
-            type='date'
             value={value.date}
-            onChange={(e) => update('date', e.target.value)}
+            onChange={(iso) => update('date', iso)}
           />
         </FieldGroup>
       </div>

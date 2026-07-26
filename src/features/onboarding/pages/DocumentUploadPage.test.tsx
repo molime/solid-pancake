@@ -84,7 +84,7 @@ describe('DocumentUploadPage', () => {
     fireEvent.change(input, { target: { files: [file] } })
 
     fireEvent.change(screen.getByLabelText(/EXPIRY DATE/i), {
-      target: { value: '2026-12-31' },
+      target: { value: '12/31/2026' },
     })
 
     // Select photo ID type first

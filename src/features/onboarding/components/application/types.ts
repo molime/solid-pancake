@@ -169,6 +169,7 @@ export interface EmploymentSectionValue {
 export const POSITION_OPTIONS = [
   { value: 'Caregiver', label: 'Caregiver' },
   { value: 'Coordinator', label: 'Coordinator' },
+  { value: 'Support Coordinator', label: 'Support Coordinator' },
   { value: 'Day Program Assistant', label: 'Day Program Assistant' },
 ]
 

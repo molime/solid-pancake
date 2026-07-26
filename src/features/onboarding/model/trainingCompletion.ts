@@ -3,9 +3,10 @@ export const PLATFORM_TRAINING_ID = 'platform_training'
 export const COMPLETE_STATUSES = ['complete', 'completed']
 
 const SESSION_KEY = 'atria_training_complete_until'
-// Short grace period so the client does not bounce between /onboarding/training
+// Grace period so the client does not bounce between /onboarding/training
 // and /caregiver/today while Convex mutations propagate to listMyCompletions.
-const SESSION_MS = 30_000
+// Long enough to cover a realistic training session.
+const SESSION_MS = 300_000
 
 export function isPlatformTrainingComplete(
   completions: Array<{ trainingId: string; status: string }> | undefined,

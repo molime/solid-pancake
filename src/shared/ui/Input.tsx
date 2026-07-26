@@ -1,14 +1,16 @@
-import type { InputHTMLAttributes } from 'react'
+import type { InputHTMLAttributes, Ref } from 'react'
 import { cn } from '@/shared/lib/cn'
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   controlSize?: 'md' | 'lg'
   hasError?: boolean
+  ref?: Ref<HTMLInputElement>
 }
 
-export function Input({ className, controlSize = 'md', hasError, ...props }: InputProps) {
+export function Input({ className, controlSize = 'md', hasError, ref, ...props }: InputProps) {
   return (
     <input
+      ref={ref}
       className={cn(
         'flex w-full rounded-[var(--radius-atria-md)] border bg-atria-surface-3 px-3 text-base text-atria-ink placeholder:text-atria-text-muted/60 focus:outline-none focus:ring-1 focus:ring-atria-accent focus:border-atria-accent disabled:opacity-45',
         controlSize === 'md' && 'h-10',

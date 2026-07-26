@@ -841,7 +841,7 @@ export function TrainingPage() {
     if (effectiveHasFullPlatform === false) {
       navigate('/onboarding/success', { replace: true })
     } else {
-      navigate('/onboarding', { replace: true })
+      navigate('/caregiver/today', { replace: true })
     }
   }
 

@@ -48,7 +48,7 @@ describe('EmploymentAgreementPage', () => {
     const dateInputs = screen.getAllByLabelText(/Date/i)
     for (let i = 0; i < docs.length; i++) {
       fireEvent.change(initialsInputs[i], { target: { value: 'SH' } })
-      fireEvent.change(dateInputs[i], { target: { value: '2026-01-15' } })
+      fireEvent.change(dateInputs[i], { target: { value: '01/15/2026' } })
     }
 
     fireEvent.click(screen.getByRole('button', { name: /Confirm and continue/i }))

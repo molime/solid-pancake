@@ -66,7 +66,7 @@ function fillPersonal() {
   fireEvent.change(screen.getByLabelText(/State/i), { target: { value: 'CA' } })
   fireEvent.change(screen.getByLabelText(/ZIP/i), { target: { value: '90001' } })
   fireEvent.change(screen.getByLabelText(/Cell phone/i), { target: { value: '555-123-4567' } })
-  fireEvent.change(screen.getByLabelText(/Date of birth/i), { target: { value: '1990-01-01' } })
+  fireEvent.change(screen.getByLabelText(/Date of birth/i), { target: { value: '01/01/1990' } })
   fireEvent.click(screen.getByLabelText(/I am 18 years of age or older/i))
   fireEvent.change(screen.getByLabelText(/Position applying for/i), { target: { value: 'Caregiver' } })
   fireEvent.change(screen.getByLabelText(/Availability/i), { target: { value: 'full_time' } })
@@ -100,11 +100,11 @@ function fillI9() {
   fireEvent.change(cities[0], { target: { value: 'Los Angeles' } })
   fireEvent.change(states[0], { target: { value: 'CA' } })
   fireEvent.change(zips[0], { target: { value: '90001' } })
-  fireEvent.change(screen.getByLabelText(/^Date of birth/i), { target: { value: '1990-01-01' } })
+  fireEvent.change(screen.getByLabelText(/^Date of birth/i), { target: { value: '01/01/1990' } })
   fireEvent.change(ssns[0], { target: { value: '123-45-6789' } })
   fireEvent.change(screen.getByLabelText(/Citizenship status/i), { target: { value: 'citizen' } })
   fireEvent.change(signatures[0], { target: { value: 'Sofia Herrera' } })
-  fireEvent.change(dates[0], { target: { value: '2026-01-15' } })
+  fireEvent.change(dates[0], { target: { value: '01/15/2026' } })
 }
 
 function fillW4() {
@@ -118,7 +118,7 @@ function fillW4() {
   fireEvent.change(ssns[1], { target: { value: '123-45-6789' } })
   fireEvent.change(screen.getByLabelText(/Filing status/i), { target: { value: 'single' } })
   fireEvent.change(signatures[1], { target: { value: 'Sofia Herrera' } })
-  fireEvent.change(dates[1], { target: { value: '2026-01-15' } })
+  fireEvent.change(dates[1], { target: { value: '01/15/2026' } })
 }
 
 function fillDisbursement() {
@@ -135,7 +135,7 @@ function fillAcknowledgments() {
   const dateInputs = screen.getAllByLabelText('Date*')
   for (let i = 0; i < docs.length; i++) {
     fireEvent.change(initialsInputs[i], { target: { value: 'SH' } })
-    fireEvent.change(dateInputs[i], { target: { value: '2026-01-15' } })
+    fireEvent.change(dateInputs[i], { target: { value: '01/15/2026' } })
   }
 }
 

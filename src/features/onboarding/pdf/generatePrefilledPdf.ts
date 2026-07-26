@@ -28,16 +28,9 @@ const WHITEOUT_AREAS: Record<
   keyof typeof MAPPINGS,
   Array<{ page: number; x: number; y: number; width: number; height: number }>
 > = {
-  health_screen: [
-    // Residual pre-filled facility name/address text where we overlay the
-    // hiring agency's own values — kept narrow so we only hide the original
-    // text, not the surrounding form
-    { page: 0, x: 325, y: 658, width: 235, height: 42 },
-    // Residual "SAN JOSE, CA." stamp near the right middle of the page
-    { page: 0, x: 540, y: 235, width: 72, height: 20 },
-    // Residual "CA 95121" stamp at the bottom-left edge
-    { page: 0, x: 0, y: 0, width: 70, height: 20 },
-  ],
+  // The LIC 503 template is a clean scan — no residual agency data to hide,
+  // so no whiteout rectangles (they were masking our own overlaid values).
+  health_screen: [],
   // Section 4 "Agency Address Set Contributing Agency" comes pre-filled with
   // the California Department of Social Services address — that pre-fill is
   // correct and must stay visible, so no whiteout for live_scan.

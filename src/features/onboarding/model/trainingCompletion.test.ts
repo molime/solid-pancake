@@ -49,7 +49,7 @@ describe('isPlatformTrainingComplete', () => {
   it('session flag expires after the grace window', () => {
     markTrainingCompletedInSession()
     const now = Date.now()
-    Date.now = () => now + 60_000
+    Date.now = () => now + 600_000
     expect(isPlatformTrainingComplete([])).toBe(false)
   })
 })

@@ -20,7 +20,7 @@ const HEALTH_SCREEN_MAPPING: PdfFieldMapping = {
   page: 0,
   fields: [
     { key: 'facilityName', x: 330, y: toPdfY(105, 9), fontSize: 9, maxWidth: 185 },
-    { key: 'facilityAddress', x: 330, y: toPdfY(127, 9), fontSize: 9, maxWidth: 200 },
+    { key: 'facilityAddress', x: 330, y: toPdfY(127, 9), fontSize: 9, maxWidth: 250 },
     { key: 'personName', x: 85, y: toPdfY(155, 10), fontSize: 10, maxWidth: 200 },
     { key: 'age', x: 540, y: toPdfY(155, 10), fontSize: 10 },
     { key: 'positionTitle', x: 30, y: toPdfY(178, 9), fontSize: 9, maxWidth: 105 },

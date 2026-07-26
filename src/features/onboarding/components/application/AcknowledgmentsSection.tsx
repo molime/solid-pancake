@@ -1,5 +1,6 @@
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { Input } from '@/shared/ui/Input'
+import { USDateInput } from '@/shared/ui/USDateInput'
 import { Checkbox } from '@/shared/ui/Checkbox'
 import { type Acknowledgments } from './types'
 import { ACKNOWLEDGMENT_DOCUMENTS, jobDescriptionForBranch } from './legalText'
@@ -74,12 +75,11 @@ export function AcknowledgmentsSection({ value, onChange, branchType, showErrors
                 required
                 error={showErrors && !item.date ? 'Date is required' : undefined}
               >
-                <Input
+                <USDateInput
                   id={`${doc.key}-date`}
-                  type='date'
                   value={item.date}
-                  onChange={(e) =>
-                    updateDoc(doc.key, { ...item, date: e.target.value })
+                  onChange={(iso) =>
+                    updateDoc(doc.key, { ...item, date: iso })
                   }
                 />
               </FieldGroup>

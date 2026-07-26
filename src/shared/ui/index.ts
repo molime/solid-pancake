@@ -1,6 +1,7 @@
 export { Button } from './Button'
 export { Badge } from './Badge'
 export { Input } from './Input'
+export { USDateInput } from './USDateInput'
 export { Textarea } from './Textarea'
 export { Select } from './Select'
 export { Card, CardHeader, CardTitle, CardContent } from './Card'
