@@ -128,10 +128,86 @@ Signature                               Date
 Individuals Choice, Inc is an equal opportunity employer. Employment, evaluations and wages are based on the qualifications of an applicant and her/his ability to perform the duties listed in this Job Description without regard to race, religious creed, gender, national origin, ancestry, disability, age, marital status, sexual orientation, medical condition or any other characteristic protected from discrimination by federal, state or local law.
 `.trim()
 
+export const SLS_SUPPORT_COORDINATOR_JD = `
+SLS Support Coordinator Job Description
+Supported Living Services
+Support Coordinators are responsible for providing skill support to support staffs and consumers as per their Individual Service Plan (ISP) and Individual Program Plan (IPP) goals and objectives.
+Reports to: SLS Program Director
+Primary Job Duties:
+Supported Living Services
+Responsibilities:
+1. Locating, accessing, and coordinating with local community services.
+2. Identify new resource(s) or tools in relation to SLS curriculum.
+3. Coordinate with the Consumer, Support staff and Program Director in identifying the consumers changing needs and how best to provide assistance in meeting such needs.
+4. Responsible for coordinating the schedule of the IDT meeting with the Service Coordinator
+5. Participate in IPP meetings.
+6. In addition to the responsibilities stated above, the Consumer Support Coordinator shall also perform Support staff duties if necessary. Please refer to description of Support staff's duties on page 64.
+Minimum Qualifications
+Consumer Support Coordinator shall possess the following minimum qualifications:
+- At least six months experience providing direct service and support to people with intellectual disabilities, or experience working in human services setting.
+- High School Diploma or GED.
+- Has the ability to represent Individuals Choice, LLC in a professional manner at all times
+- Is fluent in English.
+- Good oral, written and interpersonal skills and the ability to work effectively on a multi-disciplinary interagency team.
+- Is able to work with diverse stakeholders (Parents, Regional Center Service Coordinators, Generic Community Based Programs, IHSS, Section 8, etc.).
+- Is able to get along with co-workers, Program Director and the participant's Circle of Support (Parents, Advocates, and Day Program Providers).
+- Is able to attend staff meetings and trainings.
+- Respects the cultural and linguistic values of the consumers and their Circle of Support
+- Ability to report violations of consumer's rights, or dependent abuse.
+- Be able to work as a team member.
+- Has TB clearance, current certification in First aide/CPR, TB and fingerprint clearance.
+- Has valid California Driver's license and/or ID, clean DMV printout and current registration and automobile insurance if required by supervisor.
+I agree to perform the above mentioned job tasks:
+_____________________________ Signature ______________________ Date
+Individuals Choice, LLC is an equal opportunity employer. Employment, evaluations and wages are based on the qualifications of an applicant and her/his ability to perform the duties listed in this Job Description without regard to race, religious creed, gender, national origin, ancestry, disability, age, marital status, sexual orientation, medical condition or any other characteristic protected from discrimination by federal, state or local law.
+`.trim()
+
+export const ILS_SUPPORT_COORDINATOR_JD = `
+ILS Support Coordinator Job Description
+Independent Living Skills Services
+Support Coordinators are responsible for providing skill support to support staffs and consumers as per their Individual Service Plan (ISP) and Individual Program Plan (IPP) goals and objectives.
+Reports to: ILS Program Director
+Primary Job Duties:
+Independent Living Skills Services
+Responsibilities:
+1. Locating, accessing, and coordinating with local community services.
+2. Identify new resource(s) or tools in relation to ILS curriculum.
+3. Coordinate with the Consumer, Support staff and Program Director in identifying the consumers changing needs and how best to provide assistance in meeting such needs.
+4. Responsible for coordinating the schedule of the IDT meeting with the Service Coordinator
+5. Participate in IPP meetings.
+6. In addition to the responsibilities stated above, the Consumer Support Coordinator shall also perform Support staff duties if necessary. Please refer to description of Support staff's duties on page 64.
+Minimum Qualifications
+Consumer Support Coordinator shall possess the following minimum qualifications:
+- At least six months experience providing direct service and support to people with intellectual disabilities, or experience working in human services setting.
+- High School Diploma or GED.
+- Has the ability to represent Individuals Choice, LLC in a professional manner at all times
+- Is fluent in English.
+- Good oral, written and interpersonal skills and the ability to work effectively on a multi-disciplinary interagency team.
+- Is able to work with diverse stakeholders (Parents, Regional Center Service Coordinators, Generic Community Based Programs, IHSS, Section 8, etc.).
+- Is able to get along with co-workers, Program Director and the participant's Circle of Support (Parents, Advocates, and Day Program Providers).
+- Is able to attend staff meetings and trainings.
+- Respects the cultural and linguistic values of the consumers and their Circle of Support
+- Ability to report violations of consumer's rights, or dependent abuse.
+- Be able to work as a team member.
+- Has TB clearance, current certification in First aide/CPR, TB and fingerprint clearance.
+- Has valid California Driver's license and/or ID, clean DMV printout and current registration and automobile insurance if required by supervisor.
+I agree to perform the above mentioned job tasks:
+_____________________________ Signature ______________________ Date
+Individuals Choice, LLC is an equal opportunity employer. Employment, evaluations and wages are based on the qualifications of an applicant and her/his ability to perform the duties listed in this Job Description without regard to race, religious creed, gender, national origin, ancestry, disability, age, marital status, sexual orientation, medical condition or any other characteristic protected from discrimination by federal, state or local law.
+`.trim()
+
 export function jobDescriptionForBranch(branchType?: string): string {
   if (branchType === 'ILS') return ILS_JOB_DESCRIPTION
   if (branchType === 'SLS') return SLS_JOB_DESCRIPTION
   return JOB_DESCRIPTION_TEXT
+}
+
+export function jobDescriptionForPosition(branchType?: string, positionTitle?: string): string {
+  if (positionTitle === 'Support Coordinator') {
+    if (branchType === 'ILS') return ILS_SUPPORT_COORDINATOR_JD
+    return SLS_SUPPORT_COORDINATOR_JD
+  }
+  return jobDescriptionForBranch(branchType)
 }
 
 export const EMPLOYEE_CONTRACT_TEXT = `

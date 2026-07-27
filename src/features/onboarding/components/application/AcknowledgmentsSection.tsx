@@ -3,17 +3,18 @@ import { Input } from '@/shared/ui/Input'
 import { USDateInput } from '@/shared/ui/USDateInput'
 import { Checkbox } from '@/shared/ui/Checkbox'
 import { type Acknowledgments } from './types'
-import { ACKNOWLEDGMENT_DOCUMENTS, jobDescriptionForBranch } from './legalText'
+import { ACKNOWLEDGMENT_DOCUMENTS, jobDescriptionForPosition } from './legalText'
 
 interface AcknowledgmentsSectionProps {
   value: Acknowledgments
   onChange: (value: Acknowledgments) => void
   agencyName: string
   branchType?: string
+  positionTitle?: string
   showErrors?: boolean
 }
 
-export function AcknowledgmentsSection({ value, onChange, branchType, showErrors }: AcknowledgmentsSectionProps) {
+export function AcknowledgmentsSection({ value, onChange, branchType, positionTitle, showErrors }: AcknowledgmentsSectionProps) {
   const updateDoc = <K extends keyof Acknowledgments>(key: K, val: Acknowledgments[K]) => {
     onChange({ ...value, [key]: val })
   }
@@ -22,7 +23,7 @@ export function AcknowledgmentsSection({ value, onChange, branchType, showErrors
     <div className='flex flex-col gap-6'>
       {ACKNOWLEDGMENT_DOCUMENTS.map((doc) => {
         const item = value[doc.key]
-        const text = doc.key === 'jobDescription' ? jobDescriptionForBranch(branchType) : doc.text
+        const text = doc.key === 'jobDescription' ? jobDescriptionForPosition(branchType, positionTitle) : doc.text
 
         return (
           <div

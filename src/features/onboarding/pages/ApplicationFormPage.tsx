@@ -6,6 +6,8 @@ import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
 import { Checkbox } from '@/shared/ui/Checkbox'
+import { Select } from '@/shared/ui/Select'
+import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 import { ProgressSteps } from '@/shared/ui/ProgressSteps'
@@ -24,9 +26,10 @@ import {
   type DisbursementInfo,
   createDefaultApplicationFormData,
   isNonEmptyString,
+  positionOptionsForBranch,
 } from '../components/application/types'
 import { prefilledI9FromPersonal, prefilledW4FromPersonal, mergeDraft } from './applicationUtils'
-import { jobDescriptionForBranch, LEGAL_VALIDITY_TEXT } from '../components/application/legalText'
+import { jobDescriptionForPosition, LEGAL_VALIDITY_TEXT } from '../components/application/legalText'
 import { formatDateUS } from '@/shared/format'
 
 
@@ -653,9 +656,32 @@ export function ApplicationFormPage() {
           <div className='flex flex-col gap-6'>
             <div className='rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface-2 p-6'>
               <h3 className='mb-3 text-lg font-semibold text-atria-ink'>Job Description</h3>
-              <p className='whitespace-pre-line text-sm leading-relaxed text-atria-text-secondary'>
-                {jobDescriptionForBranch(branchType)}
-              </p>
+              <FieldGroup label='Position applying for' htmlFor='jdPositionApplyingFor' className='mb-4'>
+                <Select
+                  id='jdPositionApplyingFor'
+                  value={data.personal.positionApplyingFor}
+                  onChange={(e) =>
+                    setData((prev) => ({
+                      ...prev,
+                      personal: { ...prev.personal, positionApplyingFor: e.target.value },
+                    }))
+                  }
+                >
+                  <option value='' disabled>Select position</option>
+                  {positionOptionsForBranch(branchType).map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </Select>
+              </FieldGroup>
+              {data.personal.positionApplyingFor ? (
+                <p className='whitespace-pre-line text-sm leading-relaxed text-atria-text-secondary'>
+                  {jobDescriptionForPosition(branchType, data.personal.positionApplyingFor)}
+                </p>
+              ) : (
+                <p className='text-sm leading-relaxed text-atria-text-secondary'>
+                  Please select a position to view the job description.
+                </p>
+              )}
             </div>
             <label className='flex items-start gap-3 cursor-pointer'>
               <Checkbox
@@ -770,6 +796,7 @@ export function ApplicationFormPage() {
               onChange={(acknowledgments) => setData((prev) => ({ ...prev, acknowledgments }))}
               agencyName={data.agencyName || tenantName || 'Your agency'}
               branchType={branchType}
+              positionTitle={data.personal.positionApplyingFor}
               showErrors={showErrors}
             />
           </div>

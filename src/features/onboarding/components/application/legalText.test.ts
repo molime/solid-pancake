@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   ILS_JOB_DESCRIPTION,
   SLS_JOB_DESCRIPTION,
+  ILS_SUPPORT_COORDINATOR_JD,
+  SLS_SUPPORT_COORDINATOR_JD,
   JOB_DESCRIPTION_TEXT,
   EMPLOYEE_CONTRACT_TEXT,
   EMPLOYEE_RIGHTS_TEXT,
@@ -10,6 +12,7 @@ import {
   LEGAL_VALIDITY_TEXT,
   ACKNOWLEDGMENT_DOCUMENTS,
   jobDescriptionForBranch,
+  jobDescriptionForPosition,
 } from './legalText'
 import { positionOptionsForBranch } from './types'
 
@@ -63,6 +66,50 @@ describe('job descriptions', () => {
     expect(SLS_JOB_DESCRIPTION).toContain('Individuals Choice, Inc')
     expect(ILS_JOB_DESCRIPTION).not.toContain('LLC')
     expect(SLS_JOB_DESCRIPTION).not.toContain('LLC')
+  })
+})
+
+describe('position-dependent job descriptions', () => {
+  it('returns the SLS Support Coordinator JD for the SLS branch', () => {
+    expect(jobDescriptionForPosition('SLS', 'Support Coordinator')).toBe(SLS_SUPPORT_COORDINATOR_JD)
+  })
+
+  it('returns the ILS Support Coordinator JD for the ILS branch', () => {
+    expect(jobDescriptionForPosition('ILS', 'Support Coordinator')).toBe(ILS_SUPPORT_COORDINATOR_JD)
+  })
+
+  it('defaults to the SLS Support Coordinator JD when no branch is selected', () => {
+    expect(jobDescriptionForPosition(undefined, 'Support Coordinator')).toBe(SLS_SUPPORT_COORDINATOR_JD)
+    expect(jobDescriptionForPosition('', 'Support Coordinator')).toBe(SLS_SUPPORT_COORDINATOR_JD)
+  })
+
+  it('falls back to the branch-based JD for other positions', () => {
+    expect(jobDescriptionForPosition('SLS', 'Caregiver')).toBe(jobDescriptionForBranch('SLS'))
+    expect(jobDescriptionForPosition('ILS', 'ILS Instructor')).toBe(jobDescriptionForBranch('ILS'))
+  })
+
+  it('falls back to the branch-based JD when no position is selected', () => {
+    expect(jobDescriptionForPosition('ILS', undefined)).toBe(jobDescriptionForBranch('ILS'))
+    expect(jobDescriptionForPosition(undefined, undefined)).toBe(jobDescriptionForBranch(undefined))
+  })
+
+  it('contains the word-for-word SLS Support Coordinator job description', () => {
+    expect(SLS_SUPPORT_COORDINATOR_JD).toContain('SLS Support Coordinator Job Description')
+    expect(SLS_SUPPORT_COORDINATOR_JD).toContain('Supported Living Services')
+    expect(SLS_SUPPORT_COORDINATOR_JD).toContain('Reports to: SLS Program Director')
+    expect(SLS_SUPPORT_COORDINATOR_JD).toContain(
+      'Support Coordinators are responsible for providing skill support to support staffs and consumers as per their Individual Service Plan (ISP) and Individual Program Plan (IPP) goals and objectives.',
+    )
+    expect(SLS_SUPPORT_COORDINATOR_JD).toContain('SLS curriculum')
+  })
+
+  it('contains the ILS variant with branch wording substituted', () => {
+    expect(ILS_SUPPORT_COORDINATOR_JD).toContain('ILS Support Coordinator Job Description')
+    expect(ILS_SUPPORT_COORDINATOR_JD).toContain('Independent Living Skills Services')
+    expect(ILS_SUPPORT_COORDINATOR_JD).toContain('Reports to: ILS Program Director')
+    expect(ILS_SUPPORT_COORDINATOR_JD).toContain('ILS curriculum')
+    expect(ILS_SUPPORT_COORDINATOR_JD).not.toContain('Supported Living Services')
+    expect(ILS_SUPPORT_COORDINATOR_JD).not.toContain('SLS')
   })
 })
 
