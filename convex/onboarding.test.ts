@@ -331,7 +331,7 @@ describe('candidate-to-caregiver lifecycle', () => {
         candidateId,
         type: 'platform_training',
         status: 'pending',
-        order: 5,
+        order: 4,
       })
       await ctx.db.insert('candidateTasks', {
         tenantId,
@@ -357,16 +357,9 @@ describe('candidate-to-caregiver lifecycle', () => {
       await ctx.db.insert('candidateTasks', {
         tenantId,
         candidateId,
-        type: 'background_check',
-        status: 'pending',
-        order: 3,
-      })
-      await ctx.db.insert('candidateTasks', {
-        tenantId,
-        candidateId,
         type: 'employment_agreement',
         status: 'pending',
-        order: 4,
+        order: 3,
       })
     })
 
@@ -375,16 +368,15 @@ describe('candidate-to-caregiver lifecycle', () => {
       { clerkOrgId },
     )
 
-    expect(tasks).toHaveLength(6)
+    expect(tasks).toHaveLength(5)
     expect(tasks.map((task) => task.type)).toEqual([
       'form_submission',
       'photo_id',
       'cpr_certificate',
-      'background_check',
       'employment_agreement',
       'platform_training',
     ])
-    expect(tasks.map((task) => task.order)).toEqual([0, 1, 2, 3, 4, 5])
+    expect(tasks.map((task) => task.order)).toEqual([0, 1, 2, 3, 4])
   })
 
   it('submitApplication creates application and completes form_submission task', async () => {

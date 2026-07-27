@@ -327,19 +327,18 @@ describe('inviteCandidate', () => {
         .collect()
     })
 
-    expect(tasks).toHaveLength(9)
+    expect(tasks).toHaveLength(8)
     expect(tasks.map((t) => t.type)).toEqual([
       'form_submission',
       'photo_id',
       'tax_id_ssn',
       'cpr_certificate',
       'health_screen',
-      'background_check',
       'employment_agreement',
       'additional_certifications',
       'car_insurance',
     ])
-    expect(tasks.map((t) => t.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
+    expect(tasks.map((t) => t.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
     // car_insurance starts skipped until the applicant answers Yes to the transport question
     expect(
       tasks.filter((t) => t.type !== 'car_insurance').every((t) => t.status === 'pending'),
@@ -2204,7 +2203,6 @@ describe('attachCandidateDocument', () => {
         'tax_id_ssn',
         'cpr_certificate',
         'health_screen',
-        'background_check',
         'employment_agreement',
       ]
       for (const [index, type] of requiredTypes.entries()) {
@@ -3158,7 +3156,7 @@ describe('prefilledDocuments', () => {
 })
 
 describe('acknowledgeBackgroundCheck', () => {
-  it('completes the background_check and employment_agreement tasks without a digital provider', async () => {
+  it('completes the employment_agreement task without a digital provider', async () => {
     const t = createTestConvex()
     const clerkOrgId = 'org_ack_bg'
     const adminId = 'user_admin_ack_bg'
@@ -3187,7 +3185,7 @@ describe('acknowledgeBackgroundCheck', () => {
         status: 'invited',
         createdAt: new Date().toISOString(),
       })
-      for (const type of ['form_submission', 'photo_id', 'tax_id_ssn', 'cpr_certificate', 'health_screen', 'background_check', 'employment_agreement']) {
+      for (const type of ['form_submission', 'photo_id', 'tax_id_ssn', 'cpr_certificate', 'health_screen', 'employment_agreement']) {
         await ctx.db.insert('candidateTasks', {
           tenantId: tenant._id,
           candidateId: cid,
@@ -3213,7 +3211,6 @@ describe('acknowledgeBackgroundCheck', () => {
         .collect(),
     )
 
-    expect(tasks.find((task) => task.type === 'background_check')?.status).toBe('complete')
     expect(tasks.find((task) => task.type === 'employment_agreement')?.status).toBe('complete')
 
     const bgChecks = await t.run(async (ctx) =>

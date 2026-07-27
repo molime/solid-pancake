@@ -68,7 +68,6 @@ function fillPersonal() {
   fireEvent.change(screen.getByLabelText(/Cell phone/i), { target: { value: '555-123-4567' } })
   fireEvent.change(screen.getByLabelText(/Date of birth/i), { target: { value: '01/01/1990' } })
   fireEvent.click(screen.getByLabelText(/I am 18 years of age or older/i))
-  fireEvent.change(screen.getByLabelText(/Position applying for/i), { target: { value: 'Caregiver' } })
   fireEvent.change(screen.getByLabelText(/Availability/i), { target: { value: 'full_time' } })
   fireEvent.click(screen.getByLabelText(/Morning \(7am-3pm\)/i))
   fireEvent.click(screen.getByLabelText('Monday'))
@@ -233,6 +232,8 @@ describe('ApplicationFormPage', () => {
 
     expect(screen.getByText('Job application')).toBeInTheDocument()
 
+    // Position is selected on step 0 (no longer asked again in personal info)
+    fireEvent.change(screen.getByLabelText(/Position applying for/i), { target: { value: 'Caregiver' } })
     agreeToJobDescription()
     clickContinue()
 

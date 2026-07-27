@@ -15,6 +15,7 @@ import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Input } from '@/shared/ui/Input'
 import { Select } from '@/shared/ui/Select'
+import { isValidEmail } from '@/shared/validation'
 import { Building2, Mail, RefreshCw, UserPlus, X } from 'lucide-react'
 import { useState, useCallback, useEffect } from 'react'
 
@@ -250,6 +251,10 @@ export function TeamPage() {
 
   const handleInvite = useCallback(async () => {
     if (!inviteEmail.trim() || !clerkOrgId) return
+    if (!isValidEmail(inviteEmail)) {
+      setInviteError('Please enter a valid email address.')
+      return
+    }
     setIsInviting(true)
     setInviteError(null)
     setInviteSuccess(null)
@@ -332,6 +337,10 @@ export function TeamPage() {
 
   const handleCreateCaregiver = useCallback(async () => {
     if (!clerkOrgId || !caregiverName.trim() || !caregiverEmail.trim()) return
+    if (!isValidEmail(caregiverEmail)) {
+      setCaregiverError('Please enter a valid email address.')
+      return
+    }
     setIsCreatingCaregiver(true)
     setCaregiverError(null)
     setCaregiverMessage(null)
@@ -495,8 +504,12 @@ export function TeamPage() {
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
                     className="pl-9"
+                    hasError={!!inviteEmail.trim() && !isValidEmail(inviteEmail)}
                   />
                 </div>
+                {inviteEmail.trim() && !isValidEmail(inviteEmail) && (
+                  <p className="mt-1 text-sm text-atria-danger">Please enter a valid email address.</p>
+                )}
               </div>
               <div className="sm:w-40">
                 <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
@@ -668,7 +681,11 @@ export function TeamPage() {
                   onChange={(e) => setCaregiverEmail(e.target.value)}
                   placeholder="caregiver@agency.com"
                   className="mt-1"
+                  hasError={!!caregiverEmail.trim() && !isValidEmail(caregiverEmail)}
                 />
+                {caregiverEmail.trim() && !isValidEmail(caregiverEmail) && (
+                  <p className="mt-1 text-sm text-atria-danger">Please enter a valid email address.</p>
+                )}
               </div>
             </div>
             <Button

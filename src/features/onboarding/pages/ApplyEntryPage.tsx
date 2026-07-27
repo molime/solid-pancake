@@ -9,15 +9,8 @@ import { Select } from '@/shared/ui/Select'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { cn } from '@/shared/lib/cn'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
+import { formatPhone, isValidEmail, isValidPhone } from '@/shared/validation'
 import { positionOptionsForBranch } from '../components/application/types'
-
-function formatPhone(raw: string): string {
-  const digits = raw.replace(/\D/g, '').slice(0, 10)
-  if (digits.length === 0) return ''
-  if (digits.length < 4) return `(${digits}`
-  if (digits.length < 7) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
-}
 
 export function ApplyEntryPage() {
   const [searchParams] = useSearchParams()
@@ -64,6 +57,12 @@ export function ApplyEntryPage() {
         <Card className='w-full max-w-[480px]'>
           <CardContent className='p-8 text-center'>
             <AtriaLogo className='mx-auto mb-4' />
+            {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
+            <img
+              src="/agency-logo-individualschoice.jpeg"
+              alt="Agency logo"
+              className='mx-auto mb-4 h-8 w-auto object-contain'
+            />
             <h1 className='mb-2 text-xl font-semibold text-atria-ink'>Invalid application link</h1>
             <p className='text-sm text-atria-text-secondary'>
               Please use the application link provided by your agency to apply.
@@ -96,9 +95,8 @@ export function ApplyEntryPage() {
   const selectedBranchObj = agencyInfo?.branches?.find((b) => b._id === effectiveBranchId)
   const branchType = selectedBranchObj?.branchType ?? singleBranch?.branchType
   const needsPosition = !!selectedBranchObj || !!singleBranch
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
-  const phoneDigits = phone.replace(/\D/g, '')
-  const phoneValid = phoneDigits.length === 10
+  const emailValid = isValidEmail(email)
+  const phoneValid = isValidPhone(phone)
   const isValid =
     fullName.trim() &&
     emailValid &&
@@ -158,6 +156,12 @@ export function ApplyEntryPage() {
           <CardContent className='p-8'>
             <div className='mb-6 flex items-center gap-3'>
               <AtriaLogo />
+            {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
+            <img
+              src="/agency-logo-individualschoice.jpeg"
+              alt="Agency logo"
+              className='h-8 w-auto object-contain'
+            />
               <div>
                 <p className='text-sm text-atria-text-secondary'>{agencyName}</p>
               </div>
@@ -223,6 +227,12 @@ export function ApplyEntryPage() {
         <CardContent className='p-8'>
           <div className='mb-6 flex items-center gap-3'>
             <AtriaLogo />
+            {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
+            <img
+              src="/agency-logo-individualschoice.jpeg"
+              alt="Agency logo"
+              className='h-8 w-auto object-contain'
+            />
             <div>
               <p className='text-sm text-atria-text-secondary'>{agencyName} · Caregiver Application</p>
             </div>

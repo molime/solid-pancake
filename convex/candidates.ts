@@ -51,7 +51,6 @@ const CANDIDATE_TASK_TYPES = [
   'tax_id_ssn',
   'cpr_certificate',
   'health_screen',
-  'background_check',
   'employment_agreement',
   'additional_certifications',
   'car_insurance',
@@ -1696,7 +1695,7 @@ export const acknowledgeBackgroundCheck = mutation({
       throw new ConvexError('Candidate profile not found.')
     }
 
-    await assertPrecedingTasksComplete(ctx, tenantId, candidate._id, 'background_check')
+    await assertPrecedingTasksComplete(ctx, tenantId, candidate._id, 'employment_agreement')
 
     await recordCandidateAudit(ctx, {
       clerkOrgId,
@@ -1704,7 +1703,6 @@ export const acknowledgeBackgroundCheck = mutation({
       metadata: { candidateId: candidate._id as string },
     })
 
-    await completeCandidateTask(ctx, tenantId, candidate._id, 'background_check')
     await completeCandidateTask(ctx, tenantId, candidate._id, 'employment_agreement')
 
     return candidate._id
@@ -2431,7 +2429,6 @@ export const createCandidateRecord = internalMutation({
       'tax_id_ssn',
       'cpr_certificate',
       'health_screen',
-      'background_check',
       'employment_agreement',
       'additional_certifications',
       'car_insurance',

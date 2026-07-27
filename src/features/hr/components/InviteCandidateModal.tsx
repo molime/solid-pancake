@@ -12,15 +12,12 @@ import {
 import { Button } from '@/shared/ui/Button'
 import { Input } from '@/shared/ui/Input'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
+import { formatPhone, isValidEmail, isValidPhone } from '@/shared/validation'
 
-function isValidEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
-}
-
-function isValidPhone(value: string): boolean {
+// Phone is optional for invites, but when present it must be a valid 10-digit number
+function isValidPhoneOptional(value: string): boolean {
   if (!value.trim()) return true
-  const digits = value.replace(/\D/g, '')
-  return digits.length >= 10
+  return isValidPhone(value)
 }
 
 export function InviteCandidateModal({
@@ -101,7 +98,7 @@ export function InviteCandidateModal({
 
     setTouched({ displayName: true, email: true, phone: true })
 
-    if (!trimmedName || !trimmedEmail || !isValidEmail(trimmedEmail) || !isValidPhone(trimmedPhone)) {
+    if (!trimmedName || !trimmedEmail || !isValidEmail(trimmedEmail) || !isValidPhoneOptional(trimmedPhone)) {
       return
     }
 
@@ -235,8 +232,8 @@ export function InviteCandidateModal({
               label="Phone"
               htmlFor="candidate-phone"
               error={
-                touched.phone && !isValidPhone(phone)
-                  ? 'Please enter a valid phone number with at least 10 digits.'
+                touched.phone && !isValidPhoneOptional(phone)
+                  ? 'Please enter a valid 10-digit phone number.'
                   : undefined
               }
             >
@@ -244,10 +241,12 @@ export function InviteCandidateModal({
                 id="candidate-phone"
                 data-testid="candidate-phone-input"
                 type="tel"
+                inputMode="numeric"
+                maxLength={14}
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(formatPhone(e.target.value))}
                 onBlur={() => setTouched((t) => ({ ...t, phone: true }))}
-                placeholder="+1 (555) 000-0000"
+                placeholder="(555) 000-0000"
               />
             </FieldGroup>
             <label className="flex items-center gap-2 text-sm text-atria-ink">
@@ -276,7 +275,7 @@ export function InviteCandidateModal({
               !displayName.trim() ||
               !email.trim() ||
               !isValidEmail(email.trim()) ||
-              !isValidPhone(phone.trim())
+              !isValidPhoneOptional(phone.trim())
             }
             onClick={handleSubmit}
           >

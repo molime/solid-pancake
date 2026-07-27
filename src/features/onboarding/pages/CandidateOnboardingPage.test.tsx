@@ -17,14 +17,13 @@ vi.mock('@clerk/react', () => ({
   useOrganization: () => ({ organization: { id: 'org_123' }, isLoaded: true }),
 }))
 
-// 8 tasks in the new order
+// 7 tasks in the new order
 const baseTasks = [
   { _id: 'task_form', type: 'form_submission', status: 'complete' },
   { _id: 'task_photo', type: 'photo_id', status: 'pending' },
   { _id: 'task_tax', type: 'tax_id_ssn', status: 'pending' },
   { _id: 'task_cpr', type: 'cpr_certificate', status: 'pending' },
   { _id: 'task_health', type: 'health_screen', status: 'pending' },
-  { _id: 'task_bg', type: 'background_check', status: 'pending' },
   { _id: 'task_agreement', type: 'employment_agreement', status: 'pending' },
   { _id: 'task_certs', type: 'additional_certifications', status: 'pending' },
 ]
@@ -41,19 +40,19 @@ describe('CandidateOnboardingPage', () => {
     tasks = [...baseTasks]
     navigateMock.mockClear()
   })
-  it('renders eight tasks and routes the next upload step by task id', () => {
+  it('renders seven tasks and routes the next upload step by task id', () => {
     render(
       <MemoryRouter>
         <CandidateOnboardingPage />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('1 of 8 complete')).toBeInTheDocument()
+    expect(screen.getByText('1 of 7 complete')).toBeInTheDocument()
     expect(screen.getByText('Photo ID')).toBeInTheDocument()
     expect(screen.getByText('Tax ID or SSN')).toBeInTheDocument()
     expect(screen.getByText('CPR certificate')).toBeInTheDocument()
     expect(screen.getByText('Health screen')).toBeInTheDocument()
-    expect(screen.getByText('Background check')).toBeInTheDocument()
+    expect(screen.queryByText('Background check')).not.toBeInTheDocument()
     expect(screen.getByText('Employment agreement & privacy policy')).toBeInTheDocument()
     expect(screen.getByText('Additional certifications')).toBeInTheDocument()
 
@@ -104,7 +103,7 @@ describe('CandidateOnboardingPage', () => {
 
     expect(screen.queryByText('Car insurance policy')).not.toBeInTheDocument()
     // skipped tasks do not count toward progress either
-    expect(screen.getByText('1 of 8 complete')).toBeInTheDocument()
+    expect(screen.getByText('1 of 7 complete')).toBeInTheDocument()
   })
 
   it('shows the car insurance step when its task is pending', () => {
@@ -116,6 +115,6 @@ describe('CandidateOnboardingPage', () => {
     )
 
     expect(screen.getByText('Car insurance policy')).toBeInTheDocument()
-    expect(screen.getByText('1 of 9 complete')).toBeInTheDocument()
+    expect(screen.getByText('1 of 8 complete')).toBeInTheDocument()
   })
 })

@@ -869,6 +869,12 @@ export function TrainingPage() {
 
           <div className='mb-6 flex items-center gap-3'>
             <AtriaLogo />
+            {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
+            <img
+              src="/agency-logo-individualschoice.jpeg"
+              alt="Agency logo"
+              className='h-8 w-auto object-contain'
+            />
             <div className='flex-1'>
               <p className='text-sm text-atria-text-secondary'>Required Training</p>
             </div>

@@ -70,7 +70,7 @@ describe('Sidebar', () => {
 
     const logo = screen.getByAltText('ATRIA-X')
     expect(logo).toBeInTheDocument()
-    expect(logo).toHaveAttribute('src', '/atria-logo.png')
+    expect(logo).toHaveAttribute('src', '/atria-logo-horizontal.png')
   })
 
   it('shows all nav items for org:admin', () => {

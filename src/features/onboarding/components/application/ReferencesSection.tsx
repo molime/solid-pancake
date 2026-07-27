@@ -2,6 +2,7 @@ import { Button } from '@/shared/ui/Button'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { Input } from '@/shared/ui/Input'
 import { type ReferenceEntry } from './types'
+import { formatPhone, isValidPhone } from '@/shared/validation'
 
 interface ReferencesSectionProps {
   value: ReferenceEntry[]
@@ -33,6 +34,9 @@ export function ReferencesSection({ value, onChange, showErrors }: ReferencesSec
   }
 
   const required = (val: string) => (showErrors && !val.trim() ? 'This field is required' : undefined)
+
+  const phoneError = (val: string) =>
+    showErrors && val.trim() && !isValidPhone(val) ? 'Enter a valid 10-digit phone number' : undefined
 
   return (
     <div className='flex flex-col gap-4'>
@@ -74,13 +78,15 @@ export function ReferencesSection({ value, onChange, showErrors }: ReferencesSec
                 label='Phone'
                 htmlFor={`refPhone-${index}`}
                 required
-                error={required(entry.phone)}
+                error={required(entry.phone) ?? phoneError(entry.phone)}
               >
                 <Input
                   id={`refPhone-${index}`}
                   type='tel'
+                  inputMode='numeric'
+                  maxLength={14}
                   value={entry.phone}
-                  onChange={(e) => updateEntry(index, 'phone', e.target.value)}
+                  onChange={(e) => updateEntry(index, 'phone', formatPhone(e.target.value))}
                 />
               </FieldGroup>
 

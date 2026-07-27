@@ -130,6 +130,12 @@ export function ApplicationStatusPage() {
         <CardContent className='p-8'>
           <div className='mb-6 flex items-center gap-3'>
             <AtriaLogo />
+            {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
+            <img
+              src="/agency-logo-individualschoice.jpeg"
+              alt="Agency logo"
+              className='h-8 w-auto object-contain'
+            />
             <div>
               <p className='text-sm text-atria-text-secondary'>Caregiver Portal</p>
             </div>

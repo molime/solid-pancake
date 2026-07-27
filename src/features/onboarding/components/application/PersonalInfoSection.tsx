@@ -12,8 +12,8 @@ import {
   SHIFT_OPTIONS,
   PART_TIME_SHIFT_OPTIONS,
   DAYS_OF_WEEK_OPTIONS,
-  positionOptionsForBranch,
 } from './types'
+import { formatPhone, isValidEmail, isValidPhone } from '@/shared/validation'
 
 interface PersonalInfoSectionProps {
   value: PersonalInfo
@@ -22,7 +22,7 @@ interface PersonalInfoSectionProps {
   showErrors?: boolean
 }
 
-export function PersonalInfoSection({ value, onChange, branchType, showErrors }: PersonalInfoSectionProps) {
+export function PersonalInfoSection({ value, onChange, showErrors }: PersonalInfoSectionProps) {
   const update = <K extends keyof PersonalInfo>(key: K, val: PersonalInfo[K]) => {
     onChange({ ...value, [key]: val })
   }
@@ -40,7 +40,12 @@ export function PersonalInfoSection({ value, onChange, branchType, showErrors }:
 
   const required = (val: string) => (showErrors && !val.trim() ? 'This field is required' : undefined)
 
-  const positionOptions = positionOptionsForBranch(branchType)
+  const phoneError = (val: string) =>
+    showErrors && val.trim() && !isValidPhone(val) ? 'Enter a valid 10-digit phone number' : undefined
+
+  const emailError = (val: string) =>
+    showErrors && val.trim() && !isValidEmail(val) ? 'Enter a valid email address' : undefined
+
   const shiftOptions = value.availability === 'part_time' ? PART_TIME_SHIFT_OPTIONS : SHIFT_OPTIONS
 
   return (
@@ -148,25 +153,29 @@ export function PersonalInfoSection({ value, onChange, branchType, showErrors }:
       </div>
 
       <div className='grid grid-cols-1 gap-5 sm:grid-cols-3'>
-        <FieldGroup label='Home phone' htmlFor='homePhone' required error={required(value.homePhone)}>
+        <FieldGroup label='Home phone' htmlFor='homePhone' required error={required(value.homePhone) ?? phoneError(value.homePhone)}>
           <Input
             id='homePhone'
             type='tel'
+            inputMode='numeric'
+            maxLength={14}
             value={value.homePhone}
-            onChange={(e) => update('homePhone', e.target.value)}
+            onChange={(e) => update('homePhone', formatPhone(e.target.value))}
           />
         </FieldGroup>
 
-        <FieldGroup label='Cell phone' htmlFor='cellPhone' required error={required(value.cellPhone)}>
+        <FieldGroup label='Cell phone' htmlFor='cellPhone' required error={required(value.cellPhone) ?? phoneError(value.cellPhone)}>
           <Input
             id='cellPhone'
             type='tel'
+            inputMode='numeric'
+            maxLength={14}
             value={value.cellPhone}
-            onChange={(e) => update('cellPhone', e.target.value)}
+            onChange={(e) => update('cellPhone', formatPhone(e.target.value))}
           />
         </FieldGroup>
 
-        <FieldGroup label='Email' htmlFor='email' required error={required(value.email)}>
+        <FieldGroup label='Email' htmlFor='email' required error={required(value.email) ?? emailError(value.email)}>
           <Input
             id='email'
             type='email'
@@ -281,19 +290,6 @@ export function PersonalInfoSection({ value, onChange, branchType, showErrors }:
           </FieldGroup>
         </div>
       )}
-
-      <FieldGroup label='Position applying for' htmlFor='positionApplyingFor' required error={required(value.positionApplyingFor)}>
-        <Select
-          id='positionApplyingFor'
-          value={value.positionApplyingFor}
-          onChange={(e) => update('positionApplyingFor', e.target.value)}
-        >
-          <option value='' disabled>Select position</option>
-          {positionOptions.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </Select>
-      </FieldGroup>
 
       <div className='grid grid-cols-1 gap-5 sm:grid-cols-2'>
         <FieldGroup label='Skills' htmlFor='skills'>

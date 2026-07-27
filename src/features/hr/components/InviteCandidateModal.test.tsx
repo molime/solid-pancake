@@ -61,12 +61,12 @@ describe('InviteCandidateModal', () => {
 
     const phoneInput = screen.getByTestId('candidate-phone-input')
 
-    await user.type(phoneInput, 'abc')
+    await user.type(phoneInput, '5551234')
     await user.tab()
 
     await waitFor(() => {
       expect(
-        screen.getByText('Please enter a valid phone number with at least 10 digits.'),
+        screen.getByText('Please enter a valid 10-digit phone number.'),
       ).toBeInTheDocument()
     })
   })
@@ -120,7 +120,7 @@ describe('InviteCandidateModal', () => {
 
     await user.type(nameInput, 'Sofia Herrera')
     await user.type(emailInput, 'sofia@example.com')
-    await user.type(phoneInput, '+1 (555) 123-4567')
+    await user.type(phoneInput, '5551234567')
 
     const submitButton = screen.getByTestId('send-invitation-button')
     expect(submitButton).not.toBeDisabled()
@@ -132,7 +132,7 @@ describe('InviteCandidateModal', () => {
         clerkOrgId: 'org_123',
         displayName: 'Sofia Herrera',
         email: 'sofia@example.com',
-        phone: '+1 (555) 123-4567',
+        phone: '(555) 123-4567',
         manualSetup: false,
       })
     })

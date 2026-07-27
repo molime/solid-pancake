@@ -4,6 +4,7 @@ import { USDateInput } from '@/shared/ui/USDateInput'
 import { Select } from '@/shared/ui/Select'
 import { Checkbox } from '@/shared/ui/Checkbox'
 import { type I9Info, CITIZENSHIP_OPTIONS, STATE_OPTIONS } from './types'
+import { formatPhone, isValidEmail, isValidPhone } from '@/shared/validation'
 
 interface I9SectionProps {
   value: I9Info
@@ -17,6 +18,12 @@ export function I9Section({ value, onChange, showErrors }: I9SectionProps) {
   }
 
   const required = (val: string) => (showErrors && !val.trim() ? 'This field is required' : undefined)
+
+  const phoneError = (val: string) =>
+    showErrors && val.trim() && !isValidPhone(val) ? 'Enter a valid 10-digit phone number' : undefined
+
+  const emailError = (val: string) =>
+    showErrors && val.trim() && !isValidEmail(val) ? 'Enter a valid email address' : undefined
 
   return (
     <div className='flex flex-col gap-5'>
@@ -124,17 +131,19 @@ export function I9Section({ value, onChange, showErrors }: I9SectionProps) {
           />
         </FieldGroup>
 
-        <FieldGroup label='Phone' htmlFor='i9Phone'>
+        <FieldGroup label='Phone' htmlFor='i9Phone' error={phoneError(value.phone)}>
           <Input
             id='i9Phone'
             type='tel'
+            inputMode='numeric'
+            maxLength={14}
             value={value.phone}
-            onChange={(e) => update('phone', e.target.value)}
+            onChange={(e) => update('phone', formatPhone(e.target.value))}
           />
         </FieldGroup>
       </div>
 
-      <FieldGroup label='Email' htmlFor='i9Email'>
+      <FieldGroup label='Email' htmlFor='i9Email' error={emailError(value.email)}>
         <Input
           id='i9Email'
           type='email'

@@ -71,3 +71,37 @@ describe('PersonalInfoSection transport question', () => {
     expect(screen.getByText(infoText)).toBeInTheDocument()
   })
 })
+
+describe('PersonalInfoSection position selector', () => {
+  it('does not render a position selector (position is chosen on step 0)', () => {
+    renderSection()
+
+    expect(screen.queryByText('Position applying for')).not.toBeInTheDocument()
+  })
+})
+
+describe('PersonalInfoSection phone and email validation', () => {
+  it('formats phone input as (XXX) XXX-XXXX on change', () => {
+    const { onChange } = renderSection()
+
+    fireEvent.change(screen.getByLabelText(/Home phone/), { target: { value: '5551234567' } })
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ homePhone: '(555) 123-4567' }),
+    )
+  })
+
+  it('shows a phone error when showErrors is set and the number is invalid', () => {
+    const value = { ...createDefaultApplicationFormData().personal, homePhone: '(555) 123' }
+    render(<PersonalInfoSection value={value} onChange={vi.fn()} showErrors />)
+
+    expect(screen.getByText('Enter a valid 10-digit phone number')).toBeInTheDocument()
+  })
+
+  it('shows an email error when showErrors is set and the email is invalid', () => {
+    const value = { ...createDefaultApplicationFormData().personal, email: 'not-an-email' }
+    render(<PersonalInfoSection value={value} onChange={vi.fn()} showErrors />)
+
+    expect(screen.getByText('Enter a valid email address')).toBeInTheDocument()
+  })
+})
