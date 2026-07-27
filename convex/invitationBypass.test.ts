@@ -77,6 +77,23 @@ describe('updateClerkUserPassword', () => {
       }),
     ).resolves.toBeUndefined()
   })
+
+  it('sends skip_password_checks: false so Clerk rejects breached passwords', async () => {
+    await updateClerkUserPassword({
+      secretKey: 'sk_test',
+      clerkUserId: 'user_test',
+      password: 'new-password',
+    })
+    const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls as [string, RequestInit][]
+    expect(calls).toHaveLength(1)
+    const [url, init] = calls[0]
+    expect(url).toBe('https://api.clerk.com/v1/users/user_test')
+    expect(init.method).toBe('PATCH')
+    expect(JSON.parse(init.body as string)).toEqual({
+      password: 'new-password',
+      skip_password_checks: false,
+    })
+  })
 })
 
 describe('createClerkUserAndJoinOrg', () => {
@@ -222,6 +239,12 @@ describe('createClerkUserAndJoinOrg', () => {
     )
     expect(verifyCall).toBeDefined()
     expect(verifyCall?.[1]?.body).toContain('"verified":true')
+    // Temporary passwords must still bypass Clerk's breach checks
+    const createCall = calls.find(([url, init]) =>
+      url === 'https://api.clerk.com/v1/users' && init?.method === 'POST',
+    )
+    expect(createCall).toBeDefined()
+    expect(JSON.parse(createCall?.[1]?.body as string).skip_password_checks).toBe(true)
     const mfaDeletes = calls.filter(([url]) =>
       url.includes('/totp') || url.includes('/backup_codes'),
     )

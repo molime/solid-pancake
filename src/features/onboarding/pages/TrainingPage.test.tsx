@@ -16,6 +16,7 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('@clerk/react', () => ({
   useOrganization: () => ({ organization: { id: 'org_123' }, isLoaded: true }),
+  useClerk: () => ({ signOut: vi.fn() }),
 }))
 
 let mockTenant: { clerkOrgId: string | undefined, tenantName: string, isLoading: boolean }

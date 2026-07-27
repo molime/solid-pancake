@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useClerk } from '@clerk/react'
 import { useTenant } from '@/app/useTenant'
 import { useMutation } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
@@ -48,6 +49,7 @@ const AGREEMENTS: Record<AgreementKey, { title: string; body: string }> = {
 
 export function EmploymentAgreementPage() {
   const navigate = useNavigate()
+  const { signOut } = useClerk()
   const { clerkOrgId, isLoading } = useTenant()
   const acknowledge = useMutation(api.candidates.acknowledgeBackgroundCheck)
 
@@ -115,6 +117,13 @@ export function EmploymentAgreementPage() {
             <div>
               <p className='text-sm text-atria-text-secondary'>Caregiver Portal</p>
             </div>
+            <button
+              type='button'
+              onClick={() => signOut(() => navigate('/sign-in'))}
+              className='ml-auto self-start text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
+            >
+              Sign out
+            </button>
           </div>
 
           <h1 className='mb-1 text-2xl font-semibold text-atria-ink'>Employment agreements</h1>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useClerk } from '@clerk/react'
 import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
@@ -26,6 +27,7 @@ const POLICY_SECTIONS = [
 
 export function AcknowledgmentPage() {
   const navigate = useNavigate()
+  const { signOut } = useClerk()
   const { clerkOrgId, isLoading } = useTenant()
   const acknowledge = useMutation(api.candidates.acknowledgeBackgroundCheck)
   const bgCheck = useQuery(
@@ -81,6 +83,13 @@ export function AcknowledgmentPage() {
             <div>
               <p className='text-sm text-atria-text-secondary'>Caregiver Portal</p>
             </div>
+            <button
+              type='button'
+              onClick={() => signOut(() => navigate('/sign-in'))}
+              className='ml-auto self-start text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
+            >
+              Sign out
+            </button>
           </div>
 
           <h1 className='mb-1 text-2xl font-semibold text-atria-ink'>Read & confirm</h1>

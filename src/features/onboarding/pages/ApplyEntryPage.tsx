@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useClerk } from '@clerk/react'
 import { useAction, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
@@ -14,6 +15,8 @@ import { positionOptionsForBranch } from '../components/application/types'
 
 export function ApplyEntryPage() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const { signOut } = useClerk()
 
   useEffect(() => {
     // Clear all session state when loading the /apply page so the applicant starts fresh
@@ -165,6 +168,13 @@ export function ApplyEntryPage() {
               <div>
                 <p className='text-sm text-atria-text-secondary'>{agencyName}</p>
               </div>
+              <button
+                type='button'
+                onClick={() => signOut(() => navigate('/sign-in'))}
+                className='ml-auto self-start text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
+              >
+                Sign out
+              </button>
             </div>
 
             {success.alreadyApplied ? (
@@ -385,7 +395,17 @@ function SetPasswordForm({ email, onDone }: { email: string; tempPassword?: stri
       await updateClerkPassword({ email, newPassword: newPassword })
       onDone()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to set password. Please use the sign-in link instead.')
+      // Convex wraps server errors with a '[Request ID: ...] Server Error' /
+      // 'Uncaught ConvexError:' prefix — strip it so the candidate sees
+      // Clerk's plain message (e.g. 'Password has been found in a data breach').
+      const raw = err instanceof Error ? err.message : ''
+      const cleaned = raw
+        .replace(/^\[CONVEX[^\]]*\]\s*/i, '')
+        .replace(/\[Request ID:[^\]]*\]\s*/i, '')
+        .replace(/^Server Error\s*/i, '')
+        .replace(/^Uncaught (Convex)?Error:\s*/i, '')
+        .trim()
+      setError(cleaned || 'Failed to set password. Please use the sign-in link instead.')
     }
     setIsSetting(false)
   }
@@ -408,6 +428,9 @@ function SetPasswordForm({ email, onDone }: { email: string; tempPassword?: stri
           minLength={8}
         />
       </FieldGroup>
+      <p className='-mt-2 text-xs text-atria-text-muted'>
+        Use a strong, unique password. Common passwords will be rejected.
+      </p>
       <FieldGroup label='CONFIRM PASSWORD' htmlFor='confirmPassword' required>
         <Input
           id='confirmPassword'

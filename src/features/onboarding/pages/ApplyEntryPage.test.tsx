@@ -10,6 +10,8 @@ const applyPublicMock = vi.fn().mockResolvedValue({
   alreadyApplied: false,
 })
 
+const updateClerkPasswordMock = vi.fn().mockResolvedValue(undefined)
+
 let agencyInfo: unknown = undefined
 
 vi.mock('convex/react', () => ({
@@ -18,7 +20,15 @@ vi.mock('convex/react', () => ({
     if (name === 'agencyConfig:getPublicAgencyInfo') return agencyInfo
     return undefined
   },
-  useAction: () => applyPublicMock,
+  useAction: (action: unknown) => {
+    const name = getFunctionName(action as Parameters<typeof getFunctionName>[0])
+    if (name === 'candidates:updateClerkPassword') return updateClerkPasswordMock
+    return applyPublicMock
+  },
+}))
+
+vi.mock('@clerk/react', () => ({
+  useClerk: () => ({ signOut: vi.fn() }),
 }))
 
 const twoBranchAgency = {
@@ -56,6 +66,7 @@ describe('ApplyEntryPage', () => {
   beforeEach(() => {
     sessionStorage.clear()
     applyPublicMock.mockClear()
+    updateClerkPasswordMock.mockClear()
     agencyInfo = twoBranchAgency
   })
 
@@ -130,5 +141,32 @@ describe('ApplyEntryPage', () => {
 
     expect(sessionStorage.getItem('atriax_apply_position')).toBe('Caregiver')
     expect(sessionStorage.getItem('atriax_apply_slug')).toBe('test-agency')
+  })
+
+  it('shows a user-friendly Clerk message when the new password is rejected', async () => {
+    updateClerkPasswordMock.mockRejectedValueOnce(
+      new Error(
+        '[CONVEX A(candidates:updateClerkPassword)] [Request ID: req_123] Server Error\n' +
+          'Uncaught ConvexError: Password has been found in an online data breach.',
+      ),
+    )
+
+    renderApplyPage()
+
+    fillContactFields()
+    fireEvent.click(screen.getByRole('button', { name: 'SLS Branch' }))
+    fireEvent.change(screen.getByLabelText(/WHICH POSITION ARE YOU APPLYING FOR\?/i), {
+      target: { value: 'Caregiver' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Start application/i }))
+
+    await screen.findByText('Application started!')
+
+    fireEvent.change(screen.getByLabelText(/NEW PASSWORD/i), { target: { value: 'Password123' } })
+    fireEvent.change(screen.getByLabelText(/CONFIRM PASSWORD/i), { target: { value: 'Password123' } })
+    fireEvent.click(screen.getByRole('button', { name: /Set password and continue/i }))
+
+    await screen.findByText('Password has been found in an online data breach.')
+    expect(screen.queryByText(/Request ID/i)).not.toBeInTheDocument()
   })
 })

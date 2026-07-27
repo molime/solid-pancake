@@ -196,7 +196,7 @@ export async function updateClerkUserPassword({
     },
     body: JSON.stringify({
       password,
-      skip_password_checks: true,
+      skip_password_checks: false,
     }),
   })
 

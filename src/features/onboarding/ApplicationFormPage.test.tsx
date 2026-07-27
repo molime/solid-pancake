@@ -25,6 +25,7 @@ vi.mock('@clerk/react', () => ({
     },
     isLoaded: true,
   }),
+  useClerk: () => ({ signOut: vi.fn() }),
 }))
 
 const submitMock = vi.fn().mockResolvedValue('candidate-1')
@@ -224,6 +225,7 @@ describe('createDefaultApplicationFormData', () => {
 
 describe('ApplicationFormPage', () => {
   it('renders the multi-step application and submits all sections', async () => {
+    sessionStorage.clear()
     render(
       <MemoryRouter>
         <ApplicationFormPage />
@@ -286,6 +288,59 @@ describe('ApplicationFormPage', () => {
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith('/onboarding/status', { replace: true })
     })
+
+    // Successful submission clears the saved step so a fresh application starts at step 0
+    expect(sessionStorage.getItem('atriax.application.step')).toBeNull()
+  })
+})
+
+describe('ApplicationFormPage step persistence', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+  })
+
+  afterEach(() => {
+    sessionStorage.clear()
+  })
+
+  it('resumes at the saved step on mount', () => {
+    sessionStorage.setItem('atriax.application.step', '2')
+
+    render(
+      <MemoryRouter>
+        <ApplicationFormPage />
+      </MemoryRouter>,
+    )
+
+    // Step index 2 is 'Employment & references'
+    expect(screen.getByLabelText(/Company name/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Position applying for/i)).not.toBeInTheDocument()
+  })
+
+  it('ignores an out-of-range saved step and starts at the first step', () => {
+    sessionStorage.setItem('atriax.application.step', '99')
+
+    render(
+      <MemoryRouter>
+        <ApplicationFormPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByLabelText(/Position applying for/i)).toBeInTheDocument()
+  })
+
+  it('persists the current step to sessionStorage when it changes', () => {
+    render(
+      <MemoryRouter>
+        <ApplicationFormPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.change(screen.getByLabelText(/Position applying for/i), { target: { value: 'Caregiver' } })
+    agreeToJobDescription()
+    clickContinue()
+
+    expect(sessionStorage.getItem('atriax.application.step')).toBe('1')
   })
 })
 

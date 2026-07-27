@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useClerk } from '@clerk/react'
 import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
@@ -63,6 +64,7 @@ const MAX_SIZE = 10 * 1024 * 1024
 
 export function DocumentUploadPage() {
   const navigate = useNavigate()
+  const { signOut } = useClerk()
   const { taskId = 'required' } = useParams<{ taskId: string }>()
   const { clerkOrgId, tenantName, agencyAddress, isLoading } = useTenant()
   const tasks = useQuery(
@@ -287,6 +289,13 @@ export function DocumentUploadPage() {
             <div>
               <p className='text-sm text-atria-text-secondary'>Caregiver Portal</p>
             </div>
+            <button
+              type='button'
+              onClick={() => signOut(() => navigate('/sign-in'))}
+              className='ml-auto self-start text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
+            >
+              Sign out
+            </button>
           </div>
 
           <h1 className='mb-1 text-2xl font-semibold text-atria-ink'>{meta.title}</h1>

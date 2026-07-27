@@ -21,6 +21,10 @@ vi.mock('@/app/useTenant', () => ({
   getStoredClerkOrgId: () => 'org_123',
 }))
 
+vi.mock('@clerk/react', () => ({
+  useClerk: () => ({ signOut: vi.fn() }),
+}))
+
 let mockQueryResult: unknown
 
 vi.mock('convex/react', () => ({

@@ -15,6 +15,7 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('@clerk/react', () => ({
   useOrganization: () => ({ organization: { id: 'org_123' }, isLoaded: true }),
+  useClerk: () => ({ signOut: vi.fn() }),
 }))
 
 // 7 tasks in the new order

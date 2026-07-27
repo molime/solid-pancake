@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useClerk } from '@clerk/react'
 import { getStoredClerkOrgId, useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
@@ -11,6 +12,7 @@ import { formatDateUS } from '@/shared/format'
 
 export function OfferAcceptancePage() {
   const navigate = useNavigate()
+  const { signOut } = useClerk()
   const { clerkOrgId, tenantName } = useTenant()
   // Same effective-org-id fallback as the route guards: a momentary
   // useTenant() blip during a Clerk token refresh must not flip the query
@@ -104,6 +106,13 @@ export function OfferAcceptancePage() {
             <div>
               <p className='text-sm text-atria-text-secondary'>Caregiver Portal</p>
             </div>
+            <button
+              type='button'
+              onClick={() => signOut(() => navigate('/sign-in'))}
+              className='ml-auto self-start text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
+            >
+              Sign out
+            </button>
           </div>
 
           <div className='mb-6 rounded-[var(--radius-atria-md)] border border-atria-success/30 bg-atria-success-bg p-5'>

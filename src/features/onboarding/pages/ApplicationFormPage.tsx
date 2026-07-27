@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useUser } from '@clerk/react'
+import { useUser, useClerk } from '@clerk/react'
 import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
@@ -274,6 +274,7 @@ function ReviewSection({ data }: { data: ApplicationFormData }) {
 
 export function ApplicationFormPage() {
   const navigate = useNavigate()
+  const { signOut } = useClerk()
   const { clerkOrgId, tenantName, isLoading } = useTenant()
   const { user, isLoaded: userLoaded } = useUser()
   const candidate = useQuery(
@@ -299,7 +300,19 @@ export function ApplicationFormPage() {
   const savePrefilledDocument = useMutation(api.candidates.savePrefilledDocument)
 
   const [data, setData] = useState<ApplicationFormData>(() => createDefaultApplicationFormData())
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useState(() => {
+    // Resume at the step the applicant left off at (same tab session).
+    try {
+      const saved = sessionStorage.getItem('atriax.application.step')
+      const parsed = Number(saved)
+      if (saved !== null && Number.isInteger(parsed) && parsed >= 0 && parsed < STEPS.length) {
+        return parsed
+      }
+    } catch {
+      // Storage might be restricted in some contexts
+    }
+    return 0
+  })
   const [jdAgreed, setJdAgreed] = useState(false)
   const [generatedPdfs, setGeneratedPdfs] = useState<{ name: string; bytes: Uint8Array; description?: string }[]>([])
 
@@ -308,6 +321,16 @@ export function ApplicationFormPage() {
   useEffect(() => {
     if (scrollRef.current?.scrollIntoView) {
       scrollRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [step])
+
+  // Persist the current step so an applicant who leaves and returns (same tab
+  // session) resumes exactly where they left off.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('atriax.application.step', String(step))
+    } catch {
+      // Storage might be restricted in some contexts
     }
   }, [step])
   const [showErrors, setShowErrors] = useState(false)
@@ -436,6 +459,11 @@ export function ApplicationFormPage() {
       await generateAndUploadPrefilledDocuments()
       await submit({ clerkOrgId, fields: data })
       await deleteDraft({ clerkOrgId, formType: 'application' })
+      try {
+        sessionStorage.removeItem('atriax.application.step')
+      } catch {
+        // Storage might be restricted in some contexts
+      }
       navigate('/onboarding/status', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Submission failed. Please try again.')
@@ -832,6 +860,13 @@ export function ApplicationFormPage() {
             <div>
               <p className='text-sm text-atria-text-secondary'>Caregiver Portal</p>
             </div>
+            <button
+              type='button'
+              onClick={() => signOut(() => navigate('/sign-in'))}
+              className='ml-auto self-start text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
+            >
+              Sign out
+            </button>
           </div>
 
           <h1 className='mb-1 text-2xl font-semibold text-atria-ink'>Job application</h1>

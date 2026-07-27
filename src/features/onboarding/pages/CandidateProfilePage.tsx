@@ -1,6 +1,7 @@
 import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useClerk } from '@clerk/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
@@ -19,6 +20,7 @@ function initials(name: string) {
 
 export function CandidateProfilePage() {
   const navigate = useNavigate()
+  const { signOut } = useClerk()
   const [searchParams, setSearchParams] = useSearchParams()
   const { clerkOrgId, isLoading } = useTenant()
   const candidate = useQuery(api.candidates.getCandidateProfile, clerkOrgId ? { clerkOrgId } : 'skip')
@@ -65,6 +67,13 @@ export function CandidateProfilePage() {
             <div>
               <p className='text-sm text-atria-text-secondary'>Caregiver Portal</p>
             </div>
+            <button
+              type='button'
+              onClick={() => signOut(() => navigate('/sign-in'))}
+              className='ml-auto self-start text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
+            >
+              Sign out
+            </button>
           </div>
 
           <h1 className='mb-6 text-xl font-semibold text-atria-ink'>My Profile</h1>
