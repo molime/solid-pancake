@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { getFunctionName } from 'convex/server'
@@ -285,5 +285,43 @@ describe('ApplicationFormPage', () => {
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith('/onboarding/status', { replace: true })
     })
+  })
+})
+
+describe('ApplicationFormPage position pre-fill', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+  })
+
+  afterEach(() => {
+    sessionStorage.clear()
+  })
+
+  it('pre-fills the position from sessionStorage and shows the job description immediately', () => {
+    sessionStorage.setItem('atriax_apply_position', 'Caregiver')
+
+    render(
+      <MemoryRouter>
+        <ApplicationFormPage />
+      </MemoryRouter>,
+    )
+
+    const positionSelect = screen.getByLabelText(/Position applying for/i) as HTMLSelectElement
+    expect(positionSelect.value).toBe('Caregiver')
+    expect(
+      screen.queryByText(/Please select a position to view the job description/i),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the prompt and empty dropdown when no position is stored', () => {
+    render(
+      <MemoryRouter>
+        <ApplicationFormPage />
+      </MemoryRouter>,
+    )
+
+    const positionSelect = screen.getByLabelText(/Position applying for/i) as HTMLSelectElement
+    expect(positionSelect.value).toBe('')
+    expect(screen.getByText(/Please select a position to view the job description/i)).toBeInTheDocument()
   })
 })

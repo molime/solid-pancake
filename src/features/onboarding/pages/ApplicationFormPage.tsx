@@ -358,6 +358,14 @@ export function ApplicationFormPage() {
 
     const submittedFields = myApplication?.application?.fields as Record<string, unknown> | undefined
     const merged = mergeDraft(base, draft?.data ?? submittedFields)
+    // Pre-fill the position chosen on the /apply entry page (stored in
+    // sessionStorage before sign-in) when the draft has none yet.
+    let storedPosition = ''
+    try {
+      storedPosition = sessionStorage.getItem('atriax_apply_position') ?? ''
+    } catch {
+      // Storage might be restricted in some contexts
+    }
     const nextPersonal = {
       ...merged.personal,
       firstName,
@@ -365,6 +373,7 @@ export function ApplicationFormPage() {
       middleInitial,
       email,
       homePhone: phone,
+      positionApplyingFor: merged.personal.positionApplyingFor || storedPosition,
     }
 
     // One-time initialization after candidate profile and draft load.

@@ -5,9 +5,11 @@ import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { Input } from '@/shared/ui/Input'
+import { Select } from '@/shared/ui/Select'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { cn } from '@/shared/lib/cn'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
+import { positionOptionsForBranch } from '../components/application/types'
 
 function formatPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '').slice(0, 10)
@@ -51,6 +53,7 @@ export function ApplyEntryPage() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [selectedBranch, setSelectedBranch] = useState('')
+  const [selectedPosition, setSelectedPosition] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState<{ magicLink: string; initialPassword: string; alreadyApplied: boolean } | null>(null)
@@ -90,10 +93,18 @@ export function ApplyEntryPage() {
   const singleBranch = agencyInfo?.branches?.length === 1 ? agencyInfo.branches[0] : null
   const effectiveBranchId = selectedBranch || (singleBranch?._id ?? '')
   const needsBranch = (agencyInfo?.branches?.length ?? 0) > 1
+  const selectedBranchObj = agencyInfo?.branches?.find((b) => b._id === effectiveBranchId)
+  const branchType = selectedBranchObj?.branchType ?? singleBranch?.branchType
+  const needsPosition = !!selectedBranchObj || !!singleBranch
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
   const phoneDigits = phone.replace(/\D/g, '')
   const phoneValid = phoneDigits.length === 10
-  const isValid = fullName.trim() && emailValid && phoneValid && (!needsBranch || !!effectiveBranchId)
+  const isValid =
+    fullName.trim() &&
+    emailValid &&
+    phoneValid &&
+    (!needsBranch || !!effectiveBranchId) &&
+    (!needsPosition || !!selectedPosition)
 
   const handleSubmit = async () => {
     if (!fullName.trim()) {
@@ -112,10 +123,15 @@ export function ApplyEntryPage() {
       setError('Please select which branch you are applying to.')
       return
     }
+    if (needsPosition && !selectedPosition) {
+      setError('Please select a position.')
+      return
+    }
     setIsSubmitting(true)
     setError('')
     try {
       sessionStorage.setItem('atriax_apply_slug', slug)
+      sessionStorage.setItem('atriax_apply_position', selectedPosition)
       const result = await applyPublic({
         slug,
         email: email.trim(),
@@ -266,7 +282,12 @@ export function ApplyEntryPage() {
                       <button
                         key={branch._id}
                         type='button'
-                        onClick={() => setSelectedBranch(branch._id)}
+                        onClick={() => {
+                          setSelectedBranch(branch._id)
+                          // Clear the position so a stale pick from another
+                          // branch's option list can't be submitted.
+                          setSelectedPosition('')
+                        }}
                         className={cn(
                           'flex items-center gap-3 rounded-[var(--radius-atria-md)] border p-3 text-left text-sm transition-colors',
                           effectiveBranchId === branch._id
@@ -293,6 +314,21 @@ export function ApplyEntryPage() {
                     ))}
                   </div>
                 </div>
+              )}
+
+              {needsPosition && (
+                <FieldGroup label='WHICH POSITION ARE YOU APPLYING FOR?' htmlFor='applyPosition' required>
+                  <Select
+                    id='applyPosition'
+                    value={selectedPosition}
+                    onChange={(e) => setSelectedPosition(e.target.value)}
+                  >
+                    <option value='' disabled>Select position</option>
+                    {positionOptionsForBranch(branchType).map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </Select>
+                </FieldGroup>
               )}
 
               {error && <p className='text-sm text-atria-danger'>{error}</p>}

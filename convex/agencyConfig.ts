@@ -453,7 +453,7 @@ export const getPublicAgencyInfo = query({
       clerkOrgId: tenant.clerkOrgId,
       name: tenant.name,
       address: tenant.address ?? null,
-      branches: branches.map((b) => ({ _id: b._id, label: b.label })),
+      branches: branches.map((b) => ({ _id: b._id, label: b.label, branchType: b.branchType })),
     }
   },
 })
