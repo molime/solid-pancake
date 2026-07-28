@@ -15,6 +15,7 @@ import { Badge } from '@/shared/ui/Badge'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { AppLoader } from '@/shared/ui/AppLoader'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { setSelectedClerkOrgId } from '@/app/useTenant'
 import { roleHomePath } from '@/app/roleHomePath'
 
@@ -81,7 +82,7 @@ export function SelectAgencyPage() {
         setIsBootstrapping(false)
         setPendingOrg(null)
         setError(
-          err instanceof Error ? err.message : 'Failed to switch organization.',
+          err instanceof Error ? sanitizeConvexError(err.message) : 'Failed to switch organization.',
         )
       }
     },
@@ -138,7 +139,7 @@ export function SelectAgencyPage() {
   ])
 
   const isTokenError = (err: unknown): boolean => {
-    const message = err instanceof Error ? err.message : ''
+    const message = err instanceof Error ? sanitizeConvexError(err.message) : ''
     return (
       message.includes('missing from token') ||
       message.includes('does not match the requested agency')
@@ -198,7 +199,7 @@ export function SelectAgencyPage() {
         bootstrappingOrgIdRef.current = null
         setIsBootstrapping(false)
         setPendingOrg(null)
-        const message = err instanceof Error ? err.message : ''
+        const message = err instanceof Error ? sanitizeConvexError(err.message) : ''
         if (message.includes('missing from token')) {
           setError(
             'Agency could not be opened because the Convex JWT is missing active organization claims. Check the Clerk convex JWT template and Convex auth config.',

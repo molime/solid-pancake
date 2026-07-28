@@ -16,6 +16,7 @@ import { Textarea } from '@/shared/ui/Textarea'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { Check, AlertCircle } from 'lucide-react'
 import { cn } from '@/shared/lib/cn'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import {
   coversSlot,
   formatDateInput,
@@ -153,7 +154,7 @@ export function ShiftEditorModal({
         onSuccess?.('Shift created')
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = err instanceof Error ? sanitizeConvexError(err.message) : String(err)
       const conflict = parseConflictError(message)
       if (conflict) {
         const startHm = conflict.start.slice(11, 16)

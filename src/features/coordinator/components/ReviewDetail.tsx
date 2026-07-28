@@ -7,6 +7,7 @@ import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { Separator } from '@/shared/ui/Separator'
 import { Textarea } from '@/shared/ui/Textarea'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { ReviewHistory } from './ReviewHistory'
 import {
   ArrowLeft,
@@ -69,7 +70,7 @@ export function ReviewDetail({
       setComment('')
       onBack?.()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Approval failed.')
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Approval failed.')
     } finally {
       setIsSubmitting(false)
     }
@@ -88,7 +89,7 @@ export function ReviewDetail({
       setComment('')
       onBack?.()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Correction request failed.')
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Correction request failed.')
     } finally {
       setIsSubmitting(false)
     }

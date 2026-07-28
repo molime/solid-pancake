@@ -5,6 +5,8 @@ import {
   generateClerkSignInTicket,
   updateClerkUserPassword,
   createClerkUserAndJoinOrg,
+  friendlyClerkMessage,
+  clerkErrorMessage,
 } from './_utils/invitationBypass'
 
 
@@ -295,5 +297,130 @@ describe('createClerkUserAndJoinOrg', () => {
       allowedEmailDomains: ['example.com'],
     })
     expect(result.clerkUserId).toBe('user_new')
+  })
+})
+
+describe('friendlyClerkMessage', () => {
+  it('maps the weak-password Clerk error to friendly text', () => {
+    expect(friendlyClerkMessage('Given password is not strong enough.')).toBe(
+      'Your password is not strong enough. Please use a mix of uppercase and lowercase letters, numbers, and symbols. Avoid common passwords.',
+    )
+  })
+
+  it('maps the duplicate-email Clerk error to friendly text', () => {
+    expect(friendlyClerkMessage('That email address is already in use.')).toBe(
+      'An account with this email already exists. Please sign in instead.',
+    )
+  })
+
+  it('maps the invalid-phone Clerk error to friendly text', () => {
+    expect(friendlyClerkMessage('That phone number is invalid.')).toBe(
+      'Please enter a valid 10-digit phone number.',
+    )
+  })
+
+  it('maps the invalid-email Clerk error to friendly text', () => {
+    expect(friendlyClerkMessage('That email address is invalid.')).toBe(
+      'Please enter a valid email address.',
+    )
+  })
+
+  it('maps the lowercase not-found Clerk error to friendly text', () => {
+    expect(friendlyClerkMessage('user not found')).toBe(
+      'Account not found. Please check your email or use the sign-in link.',
+    )
+  })
+
+  it('maps the identification_exists Clerk error to friendly text', () => {
+    expect(friendlyClerkMessage('identification_exists')).toBe(
+      'An account with this email already exists.',
+    )
+  })
+
+  it("matches Clerk's capitalized 'Not found' error case-insensitively", () => {
+    expect(friendlyClerkMessage('Not found')).toBe(
+      'Account not found. Please check your email or use the sign-in link.',
+    )
+  })
+
+  it("matches 'NOT FOUND' case-insensitively", () => {
+    expect(friendlyClerkMessage('NOT FOUND')).toBe(
+      'Account not found. Please check your email or use the sign-in link.',
+    )
+  })
+
+  it("strips the 'at async handler' suffix from unmapped errors", () => {
+    expect(
+      friendlyClerkMessage(
+        'Something went sideways. at async handler (../convex/candidates.ts:2609:6)',
+      ),
+    ).toBe('Something went sideways.')
+  })
+
+  it("strips the 'Called by client' suffix from unmapped errors", () => {
+    expect(
+      friendlyClerkMessage('Something went sideways. Called by client'),
+    ).toBe('Something went sideways.')
+  })
+
+  it('strips both Convex wrapper suffixes from unmapped errors', () => {
+    expect(
+      friendlyClerkMessage(
+        'Something went sideways. at async handler (../convex/candidates.ts:2609:6) Called by client',
+      ),
+    ).toBe('Something went sideways.')
+  })
+
+  it('returns unmapped errors unchanged apart from wrapper stripping', () => {
+    expect(friendlyClerkMessage('A totally unknown Clerk error.')).toBe(
+      'A totally unknown Clerk error.',
+    )
+  })
+})
+
+describe('clerkErrorMessage', () => {
+  it('translates a mapped Clerk error payload', () => {
+    expect(
+      clerkErrorMessage({
+        errors: [{ message: 'Given password is not strong enough.' }],
+      }),
+    ).toBe(
+      'Your password is not strong enough. Please use a mix of uppercase and lowercase letters, numbers, and symbols. Avoid common passwords.',
+    )
+  })
+
+  it('prefers long_message over message', () => {
+    expect(
+      clerkErrorMessage({
+        errors: [
+          {
+            message: 'short',
+            long_message: 'That email address is already in use.',
+          },
+        ],
+      }),
+    ).toBe('An account with this email already exists. Please sign in instead.')
+  })
+
+  it("translates Clerk's capitalized 'Not found' payload", () => {
+    expect(clerkErrorMessage({ errors: [{ message: 'Not found' }] })).toBe(
+      'Account not found. Please check your email or use the sign-in link.',
+    )
+  })
+
+  it('falls back to a generic message for non-string error payloads', () => {
+    expect(clerkErrorMessage({ errors: [{ code: 422 }] })).toBe(
+      'Clerk request failed.',
+    )
+  })
+
+  it('falls back to a generic message for non-object payloads', () => {
+    expect(clerkErrorMessage(null)).toBe('Clerk request failed.')
+    expect(clerkErrorMessage('boom')).toBe('Clerk request failed.')
+    expect(clerkErrorMessage(undefined)).toBe('Clerk request failed.')
+  })
+
+  it('falls back to a generic message when errors is not an array', () => {
+    expect(clerkErrorMessage({ errors: 'nope' })).toBe('Clerk request failed.')
   })
 })

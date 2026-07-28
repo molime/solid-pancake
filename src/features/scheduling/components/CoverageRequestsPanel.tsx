@@ -8,6 +8,7 @@ import { Button } from '@/shared/ui/Button'
 import { Select } from '@/shared/ui/Select'
 import { Badge } from '@/shared/ui/Badge'
 import { formatTime, formatWeekdayDate } from '@/shared/format'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 
 type CoverageStatus = 'open' | 'filled' | 'cancelled'
 
@@ -80,7 +81,7 @@ export function CoverageRequestsPanel({
       })
       setSelections((prev) => ({ ...prev, [request._id]: '' }))
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = err instanceof Error ? sanitizeConvexError(err.message) : String(err)
       window.alert(message)
     } finally {
       setResolving((prev) => ({ ...prev, [request._id]: false }))

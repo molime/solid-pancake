@@ -9,6 +9,7 @@ import { Input } from '@/shared/ui/Input'
 import { Select } from '@/shared/ui/Select'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { cn } from '@/shared/lib/cn'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 import { formatPhone, isValidEmail, isValidPhone } from '@/shared/validation'
 import { positionOptionsForBranch } from '../components/application/types'
@@ -152,7 +153,7 @@ export function ApplyEntryPage() {
         alreadyApplied: result.alreadyApplied,
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start application. Please try again.')
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Failed to start application. Please try again.')
     }
     setIsSubmitting(false)
   }
@@ -403,15 +404,11 @@ function SetPasswordForm({ email, onDone }: { email: string; tempPassword?: stri
       onDone()
     } catch (err) {
       // Convex wraps server errors with a '[Request ID: ...] Server Error' /
-      // 'Uncaught ConvexError:' prefix — strip it so the candidate sees
-      // Clerk's plain message (e.g. 'Password has been found in a data breach').
+      // 'Uncaught ConvexError:' prefix and may append an 'at async handler…'
+      // stack suffix — sanitize so the candidate sees only the friendly
+      // message (e.g. 'Your password is not strong enough. …').
       const raw = err instanceof Error ? err.message : ''
-      const cleaned = raw
-        .replace(/^\[CONVEX[^\]]*\]\s*/i, '')
-        .replace(/\[Request ID:[^\]]*\]\s*/i, '')
-        .replace(/^Server Error\s*/i, '')
-        .replace(/^Uncaught (Convex)?Error:\s*/i, '')
-        .trim()
+      const cleaned = sanitizeConvexError(raw)
       setError(cleaned || 'Failed to set password. Please use the sign-in link instead.')
     }
     setIsSetting(false)

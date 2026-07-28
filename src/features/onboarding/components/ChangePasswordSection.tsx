@@ -5,6 +5,7 @@ import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
 import { Input } from '@/shared/ui/Input'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 
 export function ChangePasswordSection({
   onSuccess,
@@ -48,7 +49,7 @@ export function ChangePasswordSection({
       setConfirmPassword('')
       onSuccess?.()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not update password.')
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Could not update password.')
     } finally {
       setSubmitting(false)
     }

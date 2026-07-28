@@ -13,6 +13,7 @@ import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { Checkbox } from '@/shared/ui/Checkbox'
 import { Textarea } from '@/shared/ui/Textarea'
 import { Separator } from '@/shared/ui/Separator'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { ArrowLeft, MapPin, Home, Phone, Check, Star, Printer } from 'lucide-react'
 import {
   formatAddress,
@@ -96,7 +97,7 @@ export function ShiftPacketPanel({
       onSuccess?.('Shift deleted')
       onClose()
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = err instanceof Error ? sanitizeConvexError(err.message) : String(err)
       window.alert(message)
       setDeleting(false)
     }
@@ -116,7 +117,7 @@ export function ShiftPacketPanel({
       setRequestReason('')
       onClose()
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = err instanceof Error ? sanitizeConvexError(err.message) : String(err)
       window.alert(message)
       setRequesting(false)
     }

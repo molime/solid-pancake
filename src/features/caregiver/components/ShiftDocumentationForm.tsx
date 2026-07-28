@@ -31,6 +31,7 @@ import { ShiftNoteStep } from './ShiftNoteStep'
 import { ShiftSuccessScreen } from './ShiftSuccessScreen'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/shared/lib/cn'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { formatStreetAddress } from '@/shared/format'
 
 type ShiftDetails = FunctionReturnType<typeof api.shiftQueries.getWithDetails>
@@ -163,7 +164,7 @@ function ShiftDocumentationWizard({
         })
         setSaved(true)
       } catch (err) {
-        setSaveError(err instanceof Error ? err.message : 'Autosave failed')
+        setSaveError(err instanceof Error ? sanitizeConvexError(err.message) : 'Autosave failed')
       } finally {
         setIsSaving(false)
       }
@@ -212,7 +213,7 @@ function ShiftDocumentationWizard({
       await clockIn({ clerkOrgId, shiftId, location })
       setView('wizard')
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Clock in failed'
+      const message = err instanceof Error ? sanitizeConvexError(err.message) : 'Clock in failed'
       if (message.toLowerCase().includes('outside')) {
         setOutsideError(message)
       } else {
@@ -244,7 +245,7 @@ function ShiftDocumentationWizard({
       })
       setView('success')
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Clock out failed'
+      const message = err instanceof Error ? sanitizeConvexError(err.message) : 'Clock out failed'
       if (message.toLowerCase().includes('outside')) {
         setOutsideError(message)
       } else {

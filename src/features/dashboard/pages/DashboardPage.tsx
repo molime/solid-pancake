@@ -4,6 +4,7 @@ import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import {
   Bell,
   Database,
@@ -49,7 +50,7 @@ export function DashboardPage() {
       setSeedStatus(result.status)
     } catch (error) {
       setSeedMessage(
-        error instanceof Error ? error.message : 'Unable to seed demo data.',
+        error instanceof Error ? sanitizeConvexError(error.message) : 'Unable to seed demo data.',
       )
       setSeedStatus('')
     } finally {

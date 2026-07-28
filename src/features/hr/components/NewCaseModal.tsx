@@ -14,6 +14,7 @@ import { Input } from '@/shared/ui/Input'
 import { Textarea } from '@/shared/ui/Textarea'
 import { Select } from '@/shared/ui/Select'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 
 const CASE_KINDS = [
   { value: 'discrepancy', label: 'Discrepancy' },
@@ -88,7 +89,7 @@ export function NewCaseModal({
       onCreated?.()
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create case.')
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Failed to create case.')
     } finally {
       setSubmitting(false)
     }

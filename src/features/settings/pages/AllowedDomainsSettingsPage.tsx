@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { Input } from '@/shared/ui/Input'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { Mail } from 'lucide-react'
 
 export function AllowedDomainsSettingsPage() {
@@ -53,7 +54,7 @@ export function AllowedDomainsSettingsPage() {
           : 'Domain restriction cleared — all email domains are now allowed.',
       )
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save settings.')
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Failed to save settings.')
     } finally {
       setIsSaving(false)
     }

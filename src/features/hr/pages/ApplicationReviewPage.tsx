@@ -13,6 +13,7 @@ import { candidateStatusPill, candidateStatusAccentClass } from '../lib/candidat
 import { getCarInsuranceStatus } from '../lib/carInsurance'
 import { formatDocumentCategoryLabel, formatDateUS } from '@/shared/format'
 import { uploadFileToConvex } from '@/shared/lib/upload'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { generatePrefilledPdf, saveAndUpload } from '@/features/onboarding/pdf/generatePrefilledPdf'
 import { getMapping, normalizeW4PdfData } from '@/features/onboarding/pdf/mappings'
 import { isNonEmptyString } from '@/features/onboarding/components/application/types'
@@ -546,7 +547,7 @@ export function ApplicationReviewPage() {
       show(
         'danger',
         'Could not advance candidate',
-        err instanceof Error ? err.message : 'Unknown error.',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
       )
     } finally {
       setSubmitting(false)
@@ -577,7 +578,7 @@ export function ApplicationReviewPage() {
       show(
         'danger',
         'Could not approve and send offer',
-        err instanceof Error ? err.message : 'Unknown error.',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
       )
     } finally {
       setSubmitting(false)
@@ -600,7 +601,7 @@ export function ApplicationReviewPage() {
       show(
         'danger',
         'Request failed',
-        err instanceof Error ? err.message : 'Unknown error.',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
       )
     } finally {
       setSubmitting(false)
@@ -623,7 +624,7 @@ export function ApplicationReviewPage() {
       show(
         'danger',
         'Rejection failed',
-        err instanceof Error ? err.message : 'Unknown error.',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
       )
     } finally {
       setSubmitting(false)
@@ -675,7 +676,7 @@ export function ApplicationReviewPage() {
       show(
         'danger',
         'Could not save W-4 employer section',
-        err instanceof Error ? err.message : 'Unknown error.',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
       )
     } finally {
       setIsGeneratingW4(false)
@@ -695,7 +696,7 @@ export function ApplicationReviewPage() {
       show(
         'danger',
         'Could not save I-9 Section 2',
-        err instanceof Error ? err.message : 'Unknown error.',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
       )
     }
   }
@@ -720,7 +721,7 @@ export function ApplicationReviewPage() {
       show(
         'danger',
         'Upload failed',
-        err instanceof Error ? err.message : 'Unknown error.',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
       )
     } finally {
       setIsUploadingBgResult(false)

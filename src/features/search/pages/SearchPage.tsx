@@ -8,6 +8,7 @@ import { Input } from '@/shared/ui/Input'
 import { Button } from '@/shared/ui/Button'
 import { Badge } from '@/shared/ui/Badge'
 import { Textarea } from '@/shared/ui/Textarea'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { Search, Upload, BookOpen, Loader2 } from 'lucide-react'
 
 type SearchResult = FunctionReturnType<
@@ -99,7 +100,7 @@ export function SearchPage() {
       }
     } catch (err) {
       console.error('Upload error:', err)
-      alert(err instanceof Error ? err.message : 'Upload failed')
+      alert(err instanceof Error ? sanitizeConvexError(err.message) : 'Upload failed')
     } finally {
       setUploading(false)
     }

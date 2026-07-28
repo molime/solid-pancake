@@ -12,6 +12,7 @@ import { Input } from '@/shared/ui/Input'
 import { USDateInput } from '@/shared/ui/USDateInput'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { cn } from '@/shared/lib/cn'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import {
   EMPLOYEE_CONTRACT_TEXT,
   EMPLOYEE_RIGHTS_TEXT,
@@ -90,7 +91,7 @@ export function EmploymentAgreementPage() {
       await acknowledge({ clerkOrgId })
       navigate('/onboarding', { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit agreements. Please try again.')
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Failed to submit agreements. Please try again.')
       setIsSubmitting(false)
     }
   }

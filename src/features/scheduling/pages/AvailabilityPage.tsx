@@ -9,6 +9,7 @@ import { Input } from '@/shared/ui/Input'
 import { Select } from '@/shared/ui/Select'
 import { Checkbox } from '@/shared/ui/Checkbox'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { ChevronLeft, Plus, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
@@ -120,7 +121,7 @@ export function AvailabilityPage() {
       setToast('Availability updated')
       setTimeout(() => setToast(null), 3000)
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : String(err))
+      window.alert(err instanceof Error ? sanitizeConvexError(err.message) : String(err))
     }
   }
 
@@ -132,7 +133,7 @@ export function AvailabilityPage() {
       setToast('Availability updated')
       setTimeout(() => setToast(null), 3000)
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : String(err))
+      window.alert(err instanceof Error ? sanitizeConvexError(err.message) : String(err))
     }
   }
 

@@ -20,6 +20,7 @@ import { NewCaseModal } from '../components/NewCaseModal'
 import { HrToast } from '../components/HrToast'
 import { useHrToast } from '../hooks/useHrToast'
 import { formatDateUS } from '@/shared/format'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import type { Id } from '../../../../convex/_generated/dataModel'
 
 const STATUS_OPTIONS = [
@@ -66,7 +67,7 @@ export function HRCasesPage() {
       show(
         'danger',
         'Update failed',
-        err instanceof Error ? err.message : 'Unknown error.',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
       )
     }
   }

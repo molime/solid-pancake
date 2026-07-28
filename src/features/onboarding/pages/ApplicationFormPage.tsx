@@ -11,6 +11,7 @@ import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 import { ProgressSteps } from '@/shared/ui/ProgressSteps'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { generatePrefilledPdf, saveAndDownload, saveAndUpload } from '../pdf/generatePrefilledPdf'
 import { getMapping, normalizeW4PdfData } from '../pdf/mappings'
 import { PersonalInfoSection } from '../components/application/PersonalInfoSection'
@@ -466,7 +467,7 @@ export function ApplicationFormPage() {
       }
       navigate('/onboarding/status', { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Submission failed. Please try again.')
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Submission failed. Please try again.')
       setIsSubmitting(false)
     }
   }

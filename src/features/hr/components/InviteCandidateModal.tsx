@@ -13,6 +13,7 @@ import { Button } from '@/shared/ui/Button'
 import { Input } from '@/shared/ui/Input'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { formatPhone, isValidEmail, isValidPhone } from '@/shared/validation'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 
 // Phone is optional for invites, but when present it must be a valid 10-digit number
 function isValidPhoneOptional(value: string): boolean {
@@ -126,7 +127,7 @@ export function InviteCandidateModal({
       onInvited?.()
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invitation failed.')
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Invitation failed.')
     } finally {
       setSubmitting(false)
     }

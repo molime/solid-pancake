@@ -23,6 +23,7 @@ import { useHrToast } from '../hooks/useHrToast'
 import { candidateStatusPill } from '../lib/candidateStatus'
 import { formatDateUS } from '@/shared/format'
 import { cn } from '@/shared/lib/cn'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 
 const TABS = [
   { value: 'all', label: 'All' },
@@ -83,7 +84,7 @@ export function CandidatePipelinePage() {
       show(
         'danger',
         'Could not regenerate link',
-        err instanceof Error ? err.message : 'Unknown error',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error',
       )
     } finally {
       setRegenerating((prev) => ({ ...prev, [candidateId]: false }))

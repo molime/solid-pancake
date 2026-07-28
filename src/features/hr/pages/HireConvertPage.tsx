@@ -6,6 +6,7 @@ import { Button } from '@/shared/ui/Button'
 import { Input } from '@/shared/ui/Input'
 import { Select } from '@/shared/ui/Select'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { HrToast } from '../components/HrToast'
 import { useHrToast } from '../hooks/useHrToast'
 import { ArrowLeft, CheckCircle2 } from 'lucide-react'
@@ -134,7 +135,7 @@ export function HireConvertPage() {
       )
       navigate('/hr/employees')
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Hire failed.'
+      const message = err instanceof Error ? sanitizeConvexError(err.message) : 'Hire failed.'
       setError(message)
       show('danger', 'Could not hire candidate', message)
     } finally {

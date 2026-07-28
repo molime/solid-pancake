@@ -1123,7 +1123,7 @@ export const updateMyPassword = action({
 export const submitApplication = mutation({
   args: { clerkOrgId: v.string(), fields: v.any() },
   handler: async (ctx, args) => {
-    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
+    const { tenantId, tenant, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
       'org:candidate',
     ])
 
@@ -1174,6 +1174,20 @@ export const submitApplication = mutation({
       nextStatus: 'applied',
       metadata: { candidateId: candidate._id as string },
     })
+
+    try {
+      await notifyCandidate(ctx, {
+        clerkOrgId: args.clerkOrgId,
+        candidateEmail: candidate.email,
+        candidateName: candidate.displayName,
+        candidatePhone: candidate.phone,
+        agencyName: tenant.name,
+        event: 'application_submitted',
+      })
+    } catch (err) {
+      // Notification failure must not block or roll back the submission.
+      console.error('Failed to send application_submitted notification', err)
+    }
 
     return candidate._id
   },

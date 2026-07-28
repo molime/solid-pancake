@@ -16,6 +16,7 @@ import { Button } from '@/shared/ui/Button'
 import { Input } from '@/shared/ui/Input'
 import { Select } from '@/shared/ui/Select'
 import { Badge } from '@/shared/ui/Badge'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import {
   Dialog,
   DialogHeader,
@@ -223,7 +224,7 @@ export function ClientsPage() {
       setAddressOpen(false)
       setAddressClientId(null)
     } catch (err) {
-      setAddressError(err instanceof Error ? err.message : 'Failed to save address.')
+      setAddressError(err instanceof Error ? sanitizeConvexError(err.message) : 'Failed to save address.')
     }
   }
 
@@ -256,7 +257,7 @@ export function ClientsPage() {
       setScheduleClientId(null)
     } catch (err) {
       setScheduleError(
-        err instanceof Error ? err.message : 'Failed to schedule shift.',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Failed to schedule shift.',
       )
     }
   }
@@ -293,7 +294,7 @@ export function ClientsPage() {
       setBulkOpen(false)
     } catch (err) {
       setBulkError(
-        err instanceof Error ? err.message : 'Failed to schedule shifts.',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Failed to schedule shifts.',
       )
     }
   }

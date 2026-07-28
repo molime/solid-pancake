@@ -23,7 +23,47 @@ interface CreateClerkUserAndJoinOrgResult {
   initialPassword: string
 }
 
-function clerkErrorMessage(payload: unknown) {
+const CLERK_ERROR_MAP: Array<[string, string]> = [
+  [
+    'Given password is not strong enough.',
+    'Your password is not strong enough. Please use a mix of uppercase and lowercase letters, numbers, and symbols. Avoid common passwords.',
+  ],
+  [
+    'That email address is already in use.',
+    'An account with this email already exists. Please sign in instead.',
+  ],
+  [
+    'That phone number is invalid.',
+    'Please enter a valid 10-digit phone number.',
+  ],
+  [
+    'That email address is invalid.',
+    'Please enter a valid email address.',
+  ],
+  [
+    'not found',
+    'Account not found. Please check your email or use the sign-in link.',
+  ],
+  [
+    'identification_exists',
+    'An account with this email already exists.',
+  ],
+]
+
+export function friendlyClerkMessage(message: string): string {
+  const haystack = message.toLowerCase()
+  for (const [needle, friendly] of CLERK_ERROR_MAP) {
+    if (haystack.includes(needle.toLowerCase())) return friendly
+  }
+  // Unmapped error: return the original message with any Convex wrapper
+  // suffix ('at async handler…', 'Called by client') stripped.
+  return message
+    .replace(/\s+at async handler[\s\S]*$/, '')
+    .replace(/\s*Called by client\.?\s*$/, '')
+    .trim()
+}
+
+export function clerkErrorMessage(payload: unknown) {
   if (
     payload &&
     typeof payload === 'object' &&
@@ -32,7 +72,7 @@ function clerkErrorMessage(payload: unknown) {
   ) {
     const first = (payload as { errors: Array<Record<string, unknown>> }).errors[0]
     const message = first?.long_message ?? first?.message
-    if (typeof message === 'string') return message
+    if (typeof message === 'string') return friendlyClerkMessage(message)
   }
   return 'Clerk request failed.'
 }

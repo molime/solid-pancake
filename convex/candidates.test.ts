@@ -1263,6 +1263,155 @@ describe('submitApplication', () => {
   })
 })
 
+describe('submitApplication notification', () => {
+  async function seedSubmittableCandidate(
+    t: ReturnType<typeof createTestConvex>,
+    clerkOrgId: string,
+    candidateUserId: string,
+    email: string,
+  ) {
+    const adminId = 'user_admin_submit_notify'
+    await seedTenant(t, clerkOrgId, adminId)
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        role: 'org:candidate',
+        displayName: 'Applicant',
+        email,
+      })
+      candidateId = await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        email,
+        phone: '+15551234567',
+        displayName: 'Applicant',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('candidateTasks', {
+        tenantId: tenant._id,
+        candidateId,
+        type: 'form_submission',
+        status: 'pending',
+        order: 0,
+      })
+    })
+    return candidateId
+  }
+
+  function stubNotificationEnv() {
+    vi.stubEnv('EMAIL_ENABLED', 'true')
+    vi.stubEnv('RESEND_API_KEY', 're_test')
+    vi.stubEnv('RESEND_FROM_EMAIL', 'noreply@example.com')
+    vi.stubEnv('SMS_ENABLED', 'true')
+    vi.stubEnv('TWILIO_ACCOUNT_SID', 'AC_test')
+    vi.stubEnv('TWILIO_AUTH_TOKEN', 'token_test')
+    vi.stubEnv('TWILIO_PHONE_NUMBER', '+15550001111')
+  }
+
+  it('sends an application_submitted email and SMS after submission', async () => {
+    stubNotificationEnv()
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ id: 'msg_test' }),
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch)
+
+    const t = createTestConvex()
+    const clerkOrgId = 'org_submit_notify'
+    const candidateUserId = 'user_candidate_notify'
+    const email = 'submit.notify@example.com'
+    const candidateId = await seedSubmittableCandidate(
+      t,
+      clerkOrgId,
+      candidateUserId,
+      email,
+    )
+
+    vi.useFakeTimers()
+    const result = await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.submitApplication,
+      { clerkOrgId, fields: { name: 'Applicant' } },
+    )
+    expect(result).toBe(candidateId)
+
+    await t.finishAllScheduledFunctions(vi.runAllTimers)
+
+    const calls = fetchMock.mock.calls as unknown as [string, RequestInit][]
+    const resendCall = calls.find(([url, init]) => {
+      if (!String(url).includes('resend.com')) return false
+      const payload = JSON.parse(init?.body as string)
+      return payload.to === email
+    })
+    expect(resendCall).toBeDefined()
+    const emailPayload = JSON.parse(resendCall?.[1]?.body as string)
+    expect(emailPayload.to).toBe(email)
+    expect(emailPayload.subject).toBe('Your application has been submitted')
+    expect(emailPayload.html).toContain('has been submitted successfully')
+    expect(emailPayload.html).toContain('Test Agency')
+
+    const twilioCall = calls.find(([url, init]) => {
+      if (!String(url).includes('twilio.com')) return false
+      const params = new URLSearchParams(init?.body as string)
+      return params.get('To') === '+15551234567'
+    })
+    expect(twilioCall).toBeDefined()
+    const smsParams = new URLSearchParams(twilioCall?.[1]?.body as string)
+    expect(smsParams.get('To')).toBe('+15551234567')
+    expect(smsParams.get('Body')).toBe(
+      'Your application to Test Agency has been submitted. We will contact you with next steps.',
+    )
+  })
+
+  it('still returns the candidate id when notification delivery fails', async () => {
+    stubNotificationEnv()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 500,
+          json: () => Promise.resolve({}),
+        }),
+      ) as unknown as typeof fetch,
+    )
+
+    const t = createTestConvex()
+    const clerkOrgId = 'org_submit_notify_fail'
+    const candidateUserId = 'user_candidate_notify_fail'
+    const email = 'submit.notify.fail@example.com'
+    const candidateId = await seedSubmittableCandidate(
+      t,
+      clerkOrgId,
+      candidateUserId,
+      email,
+    )
+
+    vi.useFakeTimers()
+    const result = await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.submitApplication,
+      { clerkOrgId, fields: { name: 'Applicant' } },
+    )
+    expect(result).toBe(candidateId)
+
+    // The scheduled notification fails against the stubbed 500 response;
+    // this must not affect the already-committed submission.
+    await t.finishAllScheduledFunctions(vi.runAllTimers)
+
+    const candidate = await t.run(async (ctx) => ctx.db.get(candidateId))
+    expect(candidate?.status).toBe('applied')
+  })
+})
+
 describe('submitApplication car insurance task', () => {
   async function seedCandidateWithTasks(
     t: ReturnType<typeof createTestConvex>,

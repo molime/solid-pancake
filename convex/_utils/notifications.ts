@@ -4,6 +4,7 @@ import { internal } from '../_generated/api'
 import type { MutationCtx } from '../_generated/server'
 
 const SUBJECTS: Record<string, string> = {
+  application_submitted: 'Your application has been submitted',
   application_reviewed: 'Your application is being reviewed',
   offer_sent: 'You have received an offer!',
   hired: 'Welcome to the team!',
@@ -21,6 +22,8 @@ function escapeHtml(value: string): string {
 }
 
 const EMAIL_BODIES: Record<string, (name: string, agency: string) => string> = {
+  application_submitted: (n, a) =>
+    `<p>Hi ${n},</p><p>Your application to ${a} has been submitted successfully. Our hiring team will review it and contact you with next steps.</p><p>— ${a} Team</p>`,
   application_reviewed: (n, a) =>
     `<p>Hi ${n},</p><p>Your application to ${a} is now being reviewed by the hiring team. You can check your portal for updates.</p><p>— ${a} Team</p>`,
   offer_sent: (n, a) =>
@@ -32,6 +35,7 @@ const EMAIL_BODIES: Record<string, (name: string, agency: string) => string> = {
 }
 
 const SMS_BODIES: Record<string, (name: string, agency: string) => string> = {
+  application_submitted: (_n, a) => `Your application to ${a} has been submitted. We will contact you with next steps.`,
   application_reviewed: (_n, a) => `Your application to ${a} is being reviewed. Check your portal for updates.`,
   offer_sent: (_n, a) => `You received an offer from ${a}! Log in to your portal to review and accept.`,
   hired: (_n, a) => `Congratulations! You've been hired by ${a}. Check your portal for next steps.`,

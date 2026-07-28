@@ -7,6 +7,7 @@ import { updateTaskDraft } from '../model/documentationDraft'
 import { Input } from '@/shared/ui/Input'
 import { Button } from '@/shared/ui/Button'
 import { Checkbox } from '@/shared/ui/Checkbox'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { X, Upload, FileCheck } from 'lucide-react'
 
 export interface ShiftTaskListItem<TaskId extends string = string> {
@@ -69,7 +70,7 @@ export function ShiftTaskList<TaskId extends string>({
       )
     } catch (err) {
       console.error('Upload error:', err)
-      alert(err instanceof Error ? err.message : 'Upload failed')
+      alert(err instanceof Error ? sanitizeConvexError(err.message) : 'Upload failed')
     } finally {
       setUploadingTaskId(null)
     }
@@ -89,7 +90,7 @@ export function ShiftTaskList<TaskId extends string>({
       )
     } catch (err) {
       console.error('Remove error:', err)
-      alert(err instanceof Error ? err.message : 'Remove failed')
+      alert(err instanceof Error ? sanitizeConvexError(err.message) : 'Remove failed')
     }
   }
 

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { Input } from '@/shared/ui/Input'
 import { Checkbox } from '@/shared/ui/Checkbox'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { MapPin } from 'lucide-react'
 
 export function GeofenceSettingsPage() {
@@ -60,7 +61,7 @@ export function GeofenceSettingsPage() {
       })
       setMessage('Geofence settings saved.')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save settings.')
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Failed to save settings.')
     } finally {
       setIsSaving(false)
     }

@@ -12,6 +12,7 @@ import { USDateInput } from '@/shared/ui/USDateInput'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { cn } from '@/shared/lib/cn'
 import { uploadFileToConvex } from '@/shared/lib/upload'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { generatePrefilledPdf, saveAndDownload, saveAndUpload } from '../pdf/generatePrefilledPdf'
 import { getMapping } from '../pdf/mappings'
 import { formatDateUS } from '@/shared/format'
@@ -205,7 +206,7 @@ export function DocumentUploadPage() {
         )
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate prefilled form.')
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Failed to generate prefilled form.')
     } finally {
       setIsGenerating(false)
     }
@@ -258,7 +259,7 @@ export function DocumentUploadPage() {
         navigate('/onboarding', { replace: true })
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Upload failed. Please try again.')
       setIsUploading(false)
     }
   }

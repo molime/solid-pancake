@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Separator } from '@/shared/ui/Separator'
 import { AppLoader } from '@/shared/ui/AppLoader'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { BillingInvoicePanel } from '../components/BillingInvoicePanel'
 import { BillingLinesTable } from '../components/BillingLinesTable'
 import { EmptyBillingState } from '../components/EmptyBillingState'
@@ -136,7 +137,7 @@ export function BillingPage() {
         `Created invoice for ${visibleSelectedLineIds.length} billing line(s).`,
       )
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invoice creation failed.')
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Invoice creation failed.')
     } finally {
       setIsCreating(false)
     }

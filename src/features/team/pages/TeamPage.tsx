@@ -16,6 +16,7 @@ import { Button } from '@/shared/ui/Button'
 import { Input } from '@/shared/ui/Input'
 import { Select } from '@/shared/ui/Select'
 import { isValidEmail } from '@/shared/validation'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { Building2, Mail, RefreshCw, UserPlus, X } from 'lucide-react'
 import { useState, useCallback, useEffect } from 'react'
 
@@ -199,7 +200,7 @@ export function TeamPage() {
         setInviteError(null)
       } catch (err) {
         const message =
-          err instanceof Error ? err.message : 'Failed to load invitations'
+          err instanceof Error ? sanitizeConvexError(err.message) : 'Failed to load invitations'
         if (attempt < 2) {
           await new Promise((r) => setTimeout(r, 500))
           return loadInvitations(attempt + 1)
@@ -235,7 +236,7 @@ export function TeamPage() {
       } catch (err) {
         if (!cancelled) {
           const message =
-            err instanceof Error ? err.message : 'Failed to load invitations'
+            err instanceof Error ? sanitizeConvexError(err.message) : 'Failed to load invitations'
           setInviteError(message)
         }
       } finally {
@@ -302,7 +303,7 @@ export function TeamPage() {
       setInviteEmail('')
       await loadInvitations()
     } catch (err) {
-      setInviteError(err instanceof Error ? err.message : 'Invite failed')
+      setInviteError(err instanceof Error ? sanitizeConvexError(err.message) : 'Invite failed')
     } finally {
       setIsInviting(false)
     }
@@ -326,7 +327,7 @@ export function TeamPage() {
         }
       } catch (err) {
         setInviteError(
-          err instanceof Error ? err.message : 'Failed to revoke invitation',
+          err instanceof Error ? sanitizeConvexError(err.message) : 'Failed to revoke invitation',
         )
       } finally {
         setIsRevoking(null)
@@ -356,7 +357,7 @@ export function TeamPage() {
       setCaregiverName('')
       setCaregiverEmail('')
     } catch (err) {
-      setCaregiverError(err instanceof Error ? err.message : 'Failed to add caregiver')
+      setCaregiverError(err instanceof Error ? sanitizeConvexError(err.message) : 'Failed to add caregiver')
     } finally {
       setIsCreatingCaregiver(false)
     }
@@ -380,7 +381,7 @@ export function TeamPage() {
         )
       }
     } catch (err) {
-      setAdpError(err instanceof Error ? err.message : 'ADP load failed')
+      setAdpError(err instanceof Error ? sanitizeConvexError(err.message) : 'ADP load failed')
     } finally {
       setIsLoadingAdp(false)
     }
@@ -396,7 +397,7 @@ export function TeamPage() {
       await drainAdpPendingRows({ clerkOrgId })
       setAdpMessage('ADP drain queued. Pending punches and profiles will sync shortly.')
     } catch (err) {
-      setAdpError(err instanceof Error ? err.message : 'ADP drain failed')
+      setAdpError(err instanceof Error ? sanitizeConvexError(err.message) : 'ADP drain failed')
     } finally {
       setIsLoadingAdp(false)
     }
@@ -440,7 +441,7 @@ export function TeamPage() {
           return next
         })
         const message =
-          err instanceof Error ? err.message : 'Role update failed'
+          err instanceof Error ? sanitizeConvexError(err.message) : 'Role update failed'
         setRoleSyncError(message)
       } finally {
         setIsUpdatingRole(null)
