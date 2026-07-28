@@ -82,6 +82,28 @@ export function formatDateUS(input: Date | string | undefined | null): string {
   }).format(date)
 }
 
+export function calculateAge(dateOfBirth: string | undefined): number | undefined {
+  if (!dateOfBirth) return undefined
+  let birth: Date
+  // Parse ISO date-only strings as local date to avoid timezone shifts.
+  const dateOnlyMatch = dateOfBirth.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (dateOnlyMatch) {
+    birth = new Date(
+      Number(dateOnlyMatch[1]),
+      Number(dateOnlyMatch[2]) - 1,
+      Number(dateOnlyMatch[3]),
+    )
+  } else {
+    birth = new Date(dateOfBirth)
+  }
+  if (Number.isNaN(birth.getTime())) return undefined
+  const today = new Date()
+  let age = today.getFullYear() - birth.getFullYear()
+  const birthdayThisYear = new Date(today.getFullYear(), birth.getMonth(), birth.getDate())
+  if (today < birthdayThisYear) age -= 1
+  return age
+}
+
 export function formatDurationHours(startIso: string, endIso: string): string {
   const start = new Date(startIso)
   const end = new Date(endIso)

@@ -15,7 +15,7 @@ import { uploadFileToConvex } from '@/shared/lib/upload'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { generatePrefilledPdf, saveAndDownload, saveAndUpload } from '../pdf/generatePrefilledPdf'
 import { getMapping } from '../pdf/mappings'
-import { formatDateUS } from '@/shared/format'
+import { formatDateUS, calculateAge } from '@/shared/format'
 
 const DOCUMENT_LABELS: Record<string, { title: string; hint: string; expiry: boolean }> = {
   photo_id: {
@@ -149,6 +149,7 @@ export function DocumentUploadPage() {
         facilityName: agencyName,
         facilityAddress: agencyAddress ?? '',
         personName: `${personal.firstName ?? ''} ${personal.lastName ?? ''}`.trim(),
+        age: calculateAge(personal.dateOfBirth as string | undefined),
         positionTitle: personal.positionApplyingFor ?? '',
         workDaysPerWeek: daysOfWeek.length > 0 ? String(daysOfWeek.length) : '5',
         workHoursPerDay:
