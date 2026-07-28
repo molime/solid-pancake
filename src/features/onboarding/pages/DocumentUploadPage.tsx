@@ -280,7 +280,7 @@ export function DocumentUploadPage() {
 
           <div className='mb-6 flex flex-col items-center text-center'>
             <AtriaLogo />
-            <p className='mt-2 text-sm text-atria-text-secondary'>Caregiver Portal</p>
+            <p className='mt-2 text-sm text-atria-text-secondary'>Onboarding</p>
             <button
               type='button'
               onClick={() => signOut(() => navigate('/sign-in'))}

@@ -9,7 +9,7 @@ export function AtriaLogo({ className }: AtriaLogoProps) {
     <img
       src="/atria-logo-horizontal.png"
       alt="ATRIA-X"
-      className={cn('h-20 w-auto object-contain', className)}
+      className={cn('h-28 w-auto object-contain', className)}
     />
   )
 }

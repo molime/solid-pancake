@@ -9,10 +9,10 @@ describe('AtriaLogo', () => {
     expect(screen.getByAltText('ATRIA-X')).toHaveAttribute('src', '/atria-logo-horizontal.png')
   })
 
-  it('renders at the default h-20 height', () => {
+  it('renders at the default h-28 height', () => {
     render(<AtriaLogo />)
 
-    expect(screen.getByAltText('ATRIA-X')).toHaveClass('h-20')
+    expect(screen.getByAltText('ATRIA-X')).toHaveClass('h-28')
   })
 
   it('applies a custom className to the image', () => {

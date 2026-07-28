@@ -243,7 +243,7 @@ export function ApplyEntryPage() {
         <CardContent className='p-8'>
           <div className='mb-6 flex flex-col items-center text-center'>
             <AtriaLogo />
-            <p className='mt-2 text-sm text-atria-text-secondary'>{agencyName} · Caregiver Application</p>
+            <p className='mt-2 text-sm text-atria-text-secondary'>{agencyName}</p>
           </div>
 
           <h1 className='mb-1 text-2xl font-semibold text-atria-ink'>Apply to join {agencyName}</h1>
