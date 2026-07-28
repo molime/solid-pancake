@@ -41,6 +41,12 @@ const TASK_META: Record<string, { label: string; shortLabel: string; actionLabel
     actionLabel: 'Upload health screen',
     due: 'Due in 3 days',
   },
+  background_check: {
+    label: 'Background check',
+    shortLabel: 'Background check',
+    actionLabel: 'Upload background check',
+    due: 'Due in 3 days',
+  },
   employment_agreement: {
     label: 'Employment agreement & privacy policy',
     shortLabel: 'Employment agreement',
@@ -62,7 +68,7 @@ const TASK_META: Record<string, { label: string; shortLabel: string; actionLabel
   },
 }
 
-const UPLOAD_TYPES = new Set(['photo_id', 'tax_id_ssn', 'cpr_certificate', 'health_screen', 'additional_certifications', 'car_insurance'])
+const UPLOAD_TYPES = new Set(['photo_id', 'tax_id_ssn', 'cpr_certificate', 'health_screen', 'background_check', 'additional_certifications', 'car_insurance'])
 
 function getTaskRoute(task: Doc<'candidateTasks'>) {
   if (task.type === 'form_submission') return '/onboarding/application'

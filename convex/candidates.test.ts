@@ -327,18 +327,19 @@ describe('inviteCandidate', () => {
         .collect()
     })
 
-    expect(tasks).toHaveLength(8)
+    expect(tasks).toHaveLength(9)
     expect(tasks.map((t) => t.type)).toEqual([
       'form_submission',
       'photo_id',
       'tax_id_ssn',
       'cpr_certificate',
       'health_screen',
+      'background_check',
       'employment_agreement',
       'additional_certifications',
       'car_insurance',
     ])
-    expect(tasks.map((t) => t.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
+    expect(tasks.map((t) => t.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
     // car_insurance starts skipped until the applicant answers Yes to the transport question
     expect(
       tasks.filter((t) => t.type !== 'car_insurance').every((t) => t.status === 'pending'),
