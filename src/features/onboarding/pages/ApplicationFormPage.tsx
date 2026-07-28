@@ -849,21 +849,13 @@ export function ApplicationFormPage() {
     <div ref={scrollRef} className='flex min-h-screen flex-col items-center justify-center bg-atria-bg px-4 py-8'>
       <Card className='w-full max-w-4xl'>
         <CardContent className='p-8'>
-          <div className='mb-6 flex items-center gap-3'>
+          <div className='mb-6 flex flex-col items-center text-center'>
             <AtriaLogo />
-            {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
-            <img
-              src="/agency-logo-individualschoice.jpeg"
-              alt="Agency logo"
-              className='h-8 w-auto object-contain'
-            />
-            <div>
-              <p className='text-sm text-atria-text-secondary'>Caregiver Portal</p>
-            </div>
+            <p className='mt-2 text-sm text-atria-text-secondary'>Caregiver Portal</p>
             <button
               type='button'
               onClick={() => signOut(() => navigate('/sign-in'))}
-              className='ml-auto self-start text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
+              className='mt-2 text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
             >
               Sign out
             </button>
@@ -936,6 +928,15 @@ export function ApplicationFormPage() {
           </button>
         </CardContent>
       </Card>
+      <div className='mt-6 flex flex-col items-center gap-2'>
+        {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
+        <img
+          src="/agency-logo-individualschoice.jpeg"
+          alt="Agency logo"
+          className='h-10 w-auto object-contain opacity-70'
+        />
+        <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
+      </div>
     </div>
   )
 }

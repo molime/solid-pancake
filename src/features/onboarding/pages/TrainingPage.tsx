@@ -869,29 +869,19 @@ export function TrainingPage() {
             </div>
           )}
 
-          <div className='mb-6 flex items-center gap-3'>
+          <div className='mb-6 flex flex-col items-center text-center'>
             <AtriaLogo />
-            {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
-            <img
-              src="/agency-logo-individualschoice.jpeg"
-              alt="Agency logo"
-              className='h-8 w-auto object-contain'
-            />
-            <div className='flex-1'>
-              <p className='text-sm text-atria-text-secondary'>Required Training</p>
-            </div>
-            <div className='text-right'>
-              <p className='text-sm font-medium text-atria-ink'>
-                {Math.min(currentIndex + 1, steps.length)} / {steps.length}
-              </p>
-              <button
-                type='button'
-                onClick={() => signOut(() => navigate('/sign-in'))}
-                className='text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
-              >
-                Sign out
-              </button>
-            </div>
+            <p className='mt-2 text-sm text-atria-text-secondary'>Required Training</p>
+            <p className='mt-2 text-sm font-medium text-atria-ink'>
+              {Math.min(currentIndex + 1, steps.length)} / {steps.length}
+            </p>
+            <button
+              type='button'
+              onClick={() => signOut(() => navigate('/sign-in'))}
+              className='mt-2 text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
+            >
+              Sign out
+            </button>
           </div>
 
           <div className='mb-4 flex flex-wrap gap-2'>
@@ -952,6 +942,15 @@ export function TrainingPage() {
           </p>
         </CardContent>
       </Card>
+      <div className='mt-6 flex flex-col items-center gap-2'>
+        {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
+        <img
+          src="/agency-logo-individualschoice.jpeg"
+          alt="Agency logo"
+          className='h-10 w-auto object-contain opacity-70'
+        />
+        <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
+      </div>
     </div>
   )
 }

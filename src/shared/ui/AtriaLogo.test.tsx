@@ -9,16 +9,10 @@ describe('AtriaLogo', () => {
     expect(screen.getByAltText('ATRIA-X')).toHaveAttribute('src', '/atria-logo-horizontal.png')
   })
 
-  it('shows the powered-by caption by default', () => {
+  it('renders at the default h-20 height', () => {
     render(<AtriaLogo />)
 
-    expect(screen.getByText('Powered by ATRIA-X Digital Solutions')).toBeInTheDocument()
-  })
-
-  it('hides the caption when hideCaption is set', () => {
-    render(<AtriaLogo hideCaption />)
-
-    expect(screen.queryByText('Powered by ATRIA-X Digital Solutions')).not.toBeInTheDocument()
+    expect(screen.getByAltText('ATRIA-X')).toHaveClass('h-20')
   })
 
   it('applies a custom className to the image', () => {

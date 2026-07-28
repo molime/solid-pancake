@@ -59,19 +59,24 @@ export function ApplyEntryPage() {
       <div className='flex min-h-screen flex-col items-center justify-center bg-atria-bg px-4 py-8'>
         <Card className='w-full max-w-[480px]'>
           <CardContent className='p-8 text-center'>
-            <AtriaLogo className='mx-auto mb-4' />
-            {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
-            <img
-              src="/agency-logo-individualschoice.jpeg"
-              alt="Agency logo"
-              className='mx-auto mb-4 h-8 w-auto object-contain'
-            />
+            <div className='mb-6 flex flex-col items-center text-center'>
+              <AtriaLogo />
+            </div>
             <h1 className='mb-2 text-xl font-semibold text-atria-ink'>Invalid application link</h1>
             <p className='text-sm text-atria-text-secondary'>
               Please use the application link provided by your agency to apply.
             </p>
           </CardContent>
         </Card>
+        <div className='mt-6 flex flex-col items-center gap-2'>
+          {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
+          <img
+            src="/agency-logo-individualschoice.jpeg"
+            alt="Agency logo"
+            className='h-10 w-auto object-contain opacity-70'
+          />
+          <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
+        </div>
       </div>
     )
   }
@@ -157,21 +162,13 @@ export function ApplyEntryPage() {
       <div className='flex min-h-screen flex-col items-center justify-center bg-atria-bg px-4 py-8'>
         <Card className='w-full max-w-[520px]'>
           <CardContent className='p-8'>
-            <div className='mb-6 flex items-center gap-3'>
+            <div className='mb-6 flex flex-col items-center text-center'>
               <AtriaLogo />
-            {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
-            <img
-              src="/agency-logo-individualschoice.jpeg"
-              alt="Agency logo"
-              className='h-8 w-auto object-contain'
-            />
-              <div>
-                <p className='text-sm text-atria-text-secondary'>{agencyName}</p>
-              </div>
+              <p className='mt-2 text-sm text-atria-text-secondary'>{agencyName}</p>
               <button
                 type='button'
                 onClick={() => signOut(() => navigate('/sign-in'))}
-                className='ml-auto self-start text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
+                className='mt-2 text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
               >
                 Sign out
               </button>
@@ -225,6 +222,15 @@ export function ApplyEntryPage() {
             </p>
           </CardContent>
         </Card>
+        <div className='mt-6 flex flex-col items-center gap-2'>
+          {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
+          <img
+            src="/agency-logo-individualschoice.jpeg"
+            alt="Agency logo"
+            className='h-10 w-auto object-contain opacity-70'
+          />
+          <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
+        </div>
       </div>
     )
   }
@@ -235,17 +241,9 @@ export function ApplyEntryPage() {
     <div className='flex min-h-screen flex-col items-center justify-center bg-atria-bg px-4 py-8'>
       <Card className='w-full max-w-[560px]'>
         <CardContent className='p-8'>
-          <div className='mb-6 flex items-center gap-3'>
+          <div className='mb-6 flex flex-col items-center text-center'>
             <AtriaLogo />
-            {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
-            <img
-              src="/agency-logo-individualschoice.jpeg"
-              alt="Agency logo"
-              className='h-8 w-auto object-contain'
-            />
-            <div>
-              <p className='text-sm text-atria-text-secondary'>{agencyName} · Caregiver Application</p>
-            </div>
+            <p className='mt-2 text-sm text-atria-text-secondary'>{agencyName} · Caregiver Application</p>
           </div>
 
           <h1 className='mb-1 text-2xl font-semibold text-atria-ink'>Apply to join {agencyName}</h1>
@@ -366,6 +364,15 @@ export function ApplyEntryPage() {
           )}
         </CardContent>
       </Card>
+      <div className='mt-6 flex flex-col items-center gap-2'>
+        {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
+        <img
+          src="/agency-logo-individualschoice.jpeg"
+          alt="Agency logo"
+          className='h-10 w-auto object-contain opacity-70'
+        />
+        <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
+      </div>
     </div>
   )
 }
