@@ -26,8 +26,12 @@ export function ApplyEntryPage() {
   }
 
   useEffect(() => {
-    // Clear all session state when loading the /apply page so the applicant starts fresh
+    // Sign out any existing Clerk session, then wipe all local state so the
+    // applicant starts completely fresh — even if they were logged in as HR
+    // or another role and navigated to /apply without signing out first.
     clearSessionData()
+    void signOut?.({ redirectUrl: window.location.href })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const slug = searchParams.get('agency') ?? ''
 
