@@ -13,6 +13,7 @@ import {
   MapPin,
   Mail,
   Clock,
+  Home,
 } from 'lucide-react'
 import { cn } from '@/shared/lib/cn'
 import { useQuery } from 'convex/react'
@@ -25,6 +26,7 @@ interface NavItem {
   path: string
   icon: React.ReactNode
   roles: string[]
+  exact?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -87,6 +89,12 @@ const navItems: NavItem[] = [
     path: '/team',
     icon: <Building2 className="h-4 w-4" />,
     roles: ['org:admin'],
+  },
+  {
+    label: 'Home',
+    path: '/hr',
+    icon: <LayoutDashboard className="h-4 w-4" />,
+    roles: ['org:admin', 'org:hr'],
   },
   {
     label: 'Candidates',
@@ -231,9 +239,10 @@ function SidebarContent({
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {visibleItems.map((item) => {
-          const isActive =
-            locationPath === item.path ||
-            (item.path !== '/' && locationPath.startsWith(`${item.path}/`))
+          const isActive = item.exact
+            ? locationPath === item.path
+            : locationPath === item.path ||
+              (item.path !== '/' && locationPath.startsWith(`${item.path}/`))
           return (
             <NavLink
               key={item.path}
