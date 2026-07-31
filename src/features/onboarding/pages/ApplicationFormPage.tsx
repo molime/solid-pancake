@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser, useClerk } from '@clerk/react'
+import { clearSessionData } from '@/shared/lib/clearSession'
 import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
@@ -10,6 +11,7 @@ import { Select } from '@/shared/ui/Select'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
+import { AppLoader } from '@/shared/ui/AppLoader'
 import { ProgressSteps } from '@/shared/ui/ProgressSteps'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { generatePrefilledPdf, saveAndDownload, saveAndUpload } from '../pdf/generatePrefilledPdf'
@@ -276,23 +278,38 @@ function ReviewSection({ data }: { data: ApplicationFormData }) {
 export function ApplicationFormPage() {
   const navigate = useNavigate()
   const { signOut } = useClerk()
+
+  const handleSignOut = () => {
+    clearSessionData()
+    signOut(() => navigate('/sign-in'))
+  }
   const { clerkOrgId, tenantName, isLoading } = useTenant()
   const { user, isLoaded: userLoaded } = useUser()
+
+  // Sticky mounting: once the page has rendered its content once, it must
+  // never unmount back to a loader during brief Clerk/Convex auth flickers.
+  const hasMountedRef = useRef(false)
+  const lastClerkOrgIdRef = useRef<string | undefined>(undefined)
+  // eslint-disable-next-line react-hooks/refs
+  if (clerkOrgId) lastClerkOrgIdRef.current = clerkOrgId
+  // eslint-disable-next-line react-hooks/refs
+  const effectiveClerkOrgId = clerkOrgId ?? lastClerkOrgIdRef.current
+
   const candidate = useQuery(
     api.candidates.getCandidateProfile,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
   const draft = useQuery(
     api.drafts.getDraft,
-    clerkOrgId ? { clerkOrgId, formType: 'application' } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId, formType: 'application' } : 'skip',
   )
   const myApplication = useQuery(
     api.candidates.getMyApplication,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
   const branches = useQuery(
     api.agencyConfig.listAgencyBranches,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
   const submit = useMutation(api.candidates.submitApplication)
   const saveDraft = useMutation(api.drafts.saveDraft)
@@ -415,15 +432,23 @@ export function ApplicationFormPage() {
 
   // Auto-save draft on changes (debounced)
   useEffect(() => {
-    if (!clerkOrgId || !hasInitialized) return
+    if (!effectiveClerkOrgId || !hasInitialized) return
     const timeout = setTimeout(() => {
-      saveDraft({ clerkOrgId, formType: 'application', data })
+      saveDraft({ clerkOrgId: effectiveClerkOrgId, formType: 'application', data })
       draftSavedAtRef.current = Date.now()
     }, 1000)
     return () => clearTimeout(timeout)
-  }, [data, clerkOrgId, hasInitialized, saveDraft])
+  }, [data, effectiveClerkOrgId, hasInitialized, saveDraft])
 
-  if (isLoading || !userLoaded || !clerkOrgId) return null
+  // Only show the loader on the very first load; afterwards the page stays
+  // mounted and the last known clerkOrgId covers brief auth flickers.
+  // eslint-disable-next-line react-hooks/refs
+  if (!hasMountedRef.current && (isLoading || !userLoaded || !effectiveClerkOrgId)) {
+    return <AppLoader fullScreen />
+  }
+  // eslint-disable-next-line react-hooks/refs
+  hasMountedRef.current = true
+  const orgId = effectiveClerkOrgId as string
 
   const handleContinue = () => {
     setShowErrors(true)
@@ -458,8 +483,8 @@ export function ApplicationFormPage() {
     setIsSubmitting(true)
     try {
       await generateAndUploadPrefilledDocuments()
-      await submit({ clerkOrgId, fields: data })
-      await deleteDraft({ clerkOrgId, formType: 'application' })
+      await submit({ clerkOrgId: orgId, fields: data })
+      await deleteDraft({ clerkOrgId: orgId, formType: 'application' })
       try {
         sessionStorage.removeItem('atriax.application.step')
       } catch {
@@ -473,9 +498,9 @@ export function ApplicationFormPage() {
   }
 
   const generateAndUploadPrefilledDocuments = async () => {
-    if (!clerkOrgId || !candidate?._id) return
+    if (!candidate?._id) return
     const getUploadUrl = async () => {
-      const { url } = await generateUploadUrl({ clerkOrgId })
+      const { url } = await generateUploadUrl({ clerkOrgId: orgId })
       return url
     }
 
@@ -492,7 +517,7 @@ export function ApplicationFormPage() {
           i9Bytes,
           'i9_prefilled.pdf',
           'i9',
-          clerkOrgId,
+          orgId,
           getUploadUrl,
           savePrefilledDocument,
           candidate._id,
@@ -514,7 +539,7 @@ export function ApplicationFormPage() {
           w4Bytes,
           'w4_prefilled.pdf',
           'w4',
-          clerkOrgId,
+          orgId,
           getUploadUrl,
           savePrefilledDocument,
           candidate._id,
@@ -554,7 +579,7 @@ export function ApplicationFormPage() {
           criminalBytes,
           'lic_508_criminal_record_prefilled.pdf',
           'criminal_record',
-          clerkOrgId,
+          orgId,
           getUploadUrl,
           savePrefilledDocument,
           candidate._id,
@@ -852,10 +877,10 @@ export function ApplicationFormPage() {
         <CardContent className='p-8'>
           <div className='mb-6 flex flex-col items-center text-center'>
             <AtriaLogo />
-            <p className='mt-2 text-sm text-atria-text-secondary'>Onboarding</p>
+            <p className='mt-2 text-sm text-atria-text-secondary'>Candidate Portal</p>
             <button
               type='button'
-              onClick={() => signOut(() => navigate('/sign-in'))}
+              onClick={handleSignOut}
               className='mt-2 text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
             >
               Sign out

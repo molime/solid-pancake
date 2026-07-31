@@ -11,6 +11,12 @@ import { ProgressSteps } from './ProgressSteps'
 import { EmptyState } from './EmptyState'
 import { Toast } from './Toast'
 import { Badge } from './Badge'
+import { AgencyBranding } from './AgencyBranding'
+import { useTenant } from '@/app/useTenant'
+
+vi.mock('@/app/useTenant', () => ({
+  useTenant: vi.fn(),
+}))
 
 describe('shared UI primitives', () => {
   describe('Button', () => {
@@ -182,6 +188,10 @@ describe('shared UI primitives', () => {
       const active = screen.getByText('What').closest('li')
       expect(active).toHaveAttribute('aria-current', 'step')
       expect(screen.getByText('Date and time')).toBeInTheDocument()
+      // Labels are hidden below the sm breakpoint to prevent overflow
+      const labelContainer = screen.getByText('What').parentElement
+      expect(labelContainer?.className).toContain('hidden')
+      expect(labelContainer?.className).toContain('sm:block')
     })
   })
 
@@ -217,6 +227,33 @@ describe('shared UI primitives', () => {
       expect(screen.getByText('The documentation is complete.')).toBeInTheDocument()
       await userEvent.click(screen.getByLabelText('Close notification'))
       expect(onClose).toHaveBeenCalled()
+    })
+  })
+
+  describe('AgencyBranding', () => {
+    it('renders the agency logo and powered-by text when a logo resolves', () => {
+      vi.mocked(useTenant).mockReturnValue({
+        tenantName: 'Individuals Choice Home Care',
+      } as ReturnType<typeof useTenant>)
+      render(<AgencyBranding />)
+      expect(screen.getByAltText('Agency logo')).toHaveAttribute(
+        'src',
+        '/agency-logo-individualschoice.jpeg',
+      )
+      expect(
+        screen.getByText('Powered by ATRIA-X Digital Solutions'),
+      ).toBeInTheDocument()
+    })
+
+    it('renders only the powered-by text when no agency logo resolves', () => {
+      vi.mocked(useTenant).mockReturnValue({
+        tenantName: 'Some Other Agency',
+      } as ReturnType<typeof useTenant>)
+      render(<AgencyBranding />)
+      expect(screen.queryByAltText('Agency logo')).not.toBeInTheDocument()
+      expect(
+        screen.getByText('Powered by ATRIA-X Digital Solutions'),
+      ).toBeInTheDocument()
     })
   })
 })

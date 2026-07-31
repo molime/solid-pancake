@@ -94,7 +94,7 @@ export function PersonalInfoSection({ value, onChange, showErrors }: PersonalInf
           </Select>
         </FieldGroup>
 
-        <FieldGroup label='SSN / ITIN' htmlFor='ssn' required error={required(value.ssn)}>
+        <FieldGroup label={value.idType ? value.idType.toUpperCase() : 'SSN / ITIN'} htmlFor='ssn' required error={required(value.ssn)}>
           <Input
             id='ssn'
             value={value.ssn}

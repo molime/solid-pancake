@@ -842,7 +842,7 @@ export function ApplicationReviewPage() {
                 <ApplicationField label="FIRST NAME" value={String(i9.firstName ?? '')} />
                 <ApplicationField label="ADDRESS" value={`${i9.address ?? ''}, ${i9.city ?? ''}, ${i9.state ?? ''} ${i9.zip ?? ''}`.trim()} />
                 <ApplicationField label="DATE OF BIRTH" value={String(i9.dateOfBirth ?? '')} />
-                <ApplicationField label="SSN" value={String(i9.ssn ?? '')} />
+                <ApplicationField label={String(personal.idType ?? 'ssn').toUpperCase()} value={String(i9.ssn ?? '')} />
                 <ApplicationField label="CITIZENSHIP STATUS" value={String(i9.citizenshipStatus ?? '').replace(/_/g, ' ')} />
                 <ApplicationField label="ALIEN NUMBER" value={String(i9.alienNumber ?? '')} />
               </div>

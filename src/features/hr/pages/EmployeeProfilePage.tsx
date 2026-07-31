@@ -18,6 +18,8 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { adpStatusPill } from '../lib/adpStatus'
+import { CaseDetailModal } from '../components/CaseDetailModal'
+import { caseStatusVariant } from '../lib/caseStatus'
 import { cn } from '@/shared/lib/cn'
 import { formatDateUS } from '@/shared/format'
 
@@ -145,6 +147,9 @@ function CasesTab({
       ? { clerkOrgId, subjectType: 'employee', subjectId: clerkUserId }
       : 'skip',
   )
+  const [selectedCaseId, setSelectedCaseId] = useState<Id<'hrCases'> | null>(
+    null,
+  )
 
   if (!cases || cases.length === 0) {
     return (
@@ -157,38 +162,47 @@ function CasesTab({
   }
 
   return (
-    <Table>
-      <TableHead>
-        <TableRow>
-          <TableHeader>CATEGORY</TableHeader>
-          <TableHeader>STATUS</TableHeader>
-          <TableHeader>DESCRIPTION</TableHeader>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {cases.map((c) => (
-          <TableRow key={c._id}>
-            <TableCell className="font-medium">{c.category}</TableCell>
-            <TableCell>
-              <StatusBadge
-                variant={
-                  c.status === 'open'
-                    ? 'danger'
-                    : c.status === 'in_review'
-                      ? 'warning'
-                      : c.status === 'resolved'
-                        ? 'success'
-                        : 'neutral'
-                }
-              >
-                {c.status}
-              </StatusBadge>
-            </TableCell>
-            <TableCell>{c.description || '—'}</TableCell>
+    <>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableHeader>CASE ID</TableHeader>
+            <TableHeader>TITLE</TableHeader>
+            <TableHeader>CATEGORY</TableHeader>
+            <TableHeader>STATUS</TableHeader>
+            <TableHeader>DESCRIPTION</TableHeader>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHead>
+        <TableBody>
+          {cases.map((c) => (
+            <TableRow
+              key={c._id}
+              className="cursor-pointer"
+              onClick={() => setSelectedCaseId(c._id)}
+            >
+              <TableCell className="font-medium">
+                {c.caseNumber ?? '—'}
+              </TableCell>
+              <TableCell className="font-medium">{c.title}</TableCell>
+              <TableCell className="text-atria-text-secondary">
+                {c.category}
+              </TableCell>
+              <TableCell>
+                <StatusBadge variant={caseStatusVariant(c.status)}>
+                  {c.status}
+                </StatusBadge>
+              </TableCell>
+              <TableCell>{c.description || '—'}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <CaseDetailModal
+        caseId={selectedCaseId}
+        clerkOrgId={clerkOrgId}
+        onClose={() => setSelectedCaseId(null)}
+      />
+    </>
   )
 }
 

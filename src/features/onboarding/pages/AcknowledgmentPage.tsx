@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useClerk } from '@clerk/react'
+import { clearSessionData } from '@/shared/lib/clearSession'
 import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
@@ -28,6 +29,11 @@ const POLICY_SECTIONS = [
 export function AcknowledgmentPage() {
   const navigate = useNavigate()
   const { signOut } = useClerk()
+
+  const handleSignOut = () => {
+    clearSessionData()
+    signOut(() => navigate('/sign-in'))
+  }
   const { clerkOrgId, isLoading } = useTenant()
   const acknowledge = useMutation(api.candidates.acknowledgeBackgroundCheck)
   const bgCheck = useQuery(
@@ -74,10 +80,10 @@ export function AcknowledgmentPage() {
 
           <div className='mb-6 flex flex-col items-center text-center'>
             <AtriaLogo />
-            <p className='mt-2 text-sm text-atria-text-secondary'>Onboarding</p>
+            <p className='mt-2 text-sm text-atria-text-secondary'>Candidate Portal</p>
             <button
               type='button'
-              onClick={() => signOut(() => navigate('/sign-in'))}
+              onClick={handleSignOut}
               className='mt-2 text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
             >
               Sign out

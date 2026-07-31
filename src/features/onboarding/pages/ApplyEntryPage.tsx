@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useClerk } from '@clerk/react'
+import { clearSessionData } from '@/shared/lib/clearSession'
 import { useAction, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
@@ -19,23 +20,14 @@ export function ApplyEntryPage() {
   const navigate = useNavigate()
   const { signOut } = useClerk()
 
+  const handleSignOut = () => {
+    clearSessionData()
+    signOut(() => navigate('/sign-in'))
+  }
+
   useEffect(() => {
     // Clear all session state when loading the /apply page so the applicant starts fresh
-    try {
-      localStorage.clear()
-      sessionStorage.clear()
-    } catch {
-      // Storage might be restricted in some contexts
-    }
-    // Clear all cookies
-    document.cookie.split(';').forEach((c) => {
-      const eq = c.indexOf('=')
-      const name = eq > -1 ? c.substring(0, eq).trim() : c.trim()
-      // Set expiry to past to delete, for multiple path/domain combinations
-      document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/'
-      document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' + window.location.hostname
-      document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.' + window.location.hostname
-    })
+    clearSessionData()
   }, [])
   const slug = searchParams.get('agency') ?? ''
 
@@ -168,7 +160,7 @@ export function ApplyEntryPage() {
               <p className='mt-2 text-sm text-atria-text-secondary'>{agencyName}</p>
               <button
                 type='button'
-                onClick={() => signOut(() => navigate('/sign-in'))}
+                onClick={handleSignOut}
                 className='mt-2 text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
               >
                 Sign out

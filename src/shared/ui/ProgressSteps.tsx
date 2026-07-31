@@ -72,8 +72,8 @@ interface ProgressStepsProps {
 
 export function ProgressSteps({ steps, currentStep, className }: ProgressStepsProps) {
   return (
-    <nav aria-label="Progress" className={cn('w-full', className)}>
-      <ol className="flex items-start gap-2">
+    <nav aria-label="Progress" className={cn('w-full overflow-x-auto', className)}>
+      <ol className="flex items-start gap-1">
         {steps.map((step, index) => {
           const isComplete = index < currentStep
           const isActive = index === currentStep
@@ -98,7 +98,7 @@ export function ProgressSteps({ steps, currentStep, className }: ProgressStepsPr
                 )}
                 <div
                   className={cn(
-                    'z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-semibold',
+                    'z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-semibold',
                     isComplete && `${accent.border} ${accent.bg} text-white`,
                     isActive && `${accent.border} bg-atria-accent-quiet ${activeTextClass}`,
                     isUpcoming && 'border-atria-border bg-atria-surface text-atria-text-muted',
@@ -106,7 +106,7 @@ export function ProgressSteps({ steps, currentStep, className }: ProgressStepsPr
                 >
                   {isComplete ? (
                     <svg
-                      className="h-5 w-5"
+                      className="h-4 w-4"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -127,7 +127,7 @@ export function ProgressSteps({ steps, currentStep, className }: ProgressStepsPr
                   />
                 )}
               </div>
-              <div className="mt-2 px-1">
+              <div className="mt-2 px-1 hidden sm:block">
                 <p
                   className={cn(
                     'text-sm font-medium',

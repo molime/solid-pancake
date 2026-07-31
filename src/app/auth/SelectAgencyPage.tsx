@@ -18,11 +18,32 @@ import { AppLoader } from '@/shared/ui/AppLoader'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { setSelectedClerkOrgId } from '@/app/useTenant'
 import { roleHomePath } from '@/app/roleHomePath'
+import { clearSessionData } from '@/shared/lib/clearSession'
 
 type PendingOrg = {
   id: string
   name: string
   slug: string | null
+}
+
+type MembershipLike = {
+  role?: string
+  publicMetadata?: unknown
+}
+
+// If the user has any candidate/caregiver membership, hide admin-role
+// memberships from the picker — candidates should never see admin options.
+function getVisibleMemberships<T extends MembershipLike>(memberships: T[]): T[] {
+  const atriaRoleOf = (m: T) =>
+    (m.publicMetadata as { atriaRole?: string } | undefined)?.atriaRole
+  const hasNonAdminRole = memberships.some(
+    (m) =>
+      atriaRoleOf(m) === 'org:candidate' || atriaRoleOf(m) === 'org:caregiver',
+  )
+  if (!hasNonAdminRole) return memberships
+  return memberships.filter(
+    (m) => atriaRoleOf(m) !== 'org:admin' && m.role !== 'org:admin',
+  )
 }
 
 export function SelectAgencyPage() {
@@ -111,7 +132,7 @@ export function SelectAgencyPage() {
   // Convex auth loading state. The bootstrap effect handles the Convex auth wait.
   useEffect(() => {
     if (!isLoaded || isBootstrapping || pendingOrg) return
-    const memberships = userMemberships.data ?? []
+    const memberships = getVisibleMemberships(userMemberships.data ?? [])
     if (memberships.length !== 1) return
     const mem = memberships[0]
     const orgData = {
@@ -231,7 +252,7 @@ export function SelectAgencyPage() {
     return <AppLoader fullScreen label="Opening your agency workspace" />
   }
 
-  const memberships = userMemberships.data ?? []
+  const memberships = getVisibleMemberships(userMemberships.data ?? [])
 
   // Universal rule: if the user has exactly 1 org membership, always auto-select
   // and never show the selector UI. Only show the selector for 0 or 2+ memberships.
@@ -306,7 +327,10 @@ export function SelectAgencyPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => void signOut?.()}
+                    onClick={() => {
+                      clearSessionData()
+                      void signOut?.()
+                    }}
                   >
                     Sign out
                   </Button>
@@ -314,7 +338,7 @@ export function SelectAgencyPage() {
               </Card>
             )
           ) : (
-            userMemberships.data?.map((mem: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+            memberships.map((mem: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
               const isLoading = pendingOrg?.id === mem.organization.id
               return (
                 <Card

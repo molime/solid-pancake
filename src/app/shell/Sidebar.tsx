@@ -225,8 +225,8 @@ function SidebarContent({
 }) {
   return (
     <>
-      <div className="flex h-16 items-center border-b border-white/5 px-4">
-        <AtriaLogo className="h-10" />
+      <div className="flex h-28 items-center border-b border-white/5 px-4">
+        <AtriaLogo className="h-20 px-1" />
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">

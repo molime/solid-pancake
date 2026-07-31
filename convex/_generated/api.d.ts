@@ -25,6 +25,7 @@ import type * as billing from "../billing.js";
 import type * as billingHelpers from "../billingHelpers.js";
 import type * as candidates from "../candidates.js";
 import type * as clients from "../clients.js";
+import type * as crons from "../crons.js";
 import type * as disableUserMfa from "../disableUserMfa.js";
 import type * as documentArchive from "../documentArchive.js";
 import type * as drafts from "../drafts.js";
@@ -80,6 +81,7 @@ declare const fullApi: ApiFromModules<{
   billingHelpers: typeof billingHelpers;
   candidates: typeof candidates;
   clients: typeof clients;
+  crons: typeof crons;
   disableUserMfa: typeof disableUserMfa;
   documentArchive: typeof documentArchive;
   drafts: typeof drafts;

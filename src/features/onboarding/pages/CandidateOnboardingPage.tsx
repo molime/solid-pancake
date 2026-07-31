@@ -1,11 +1,13 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useClerk } from '@clerk/react'
+import { clearSessionData } from '@/shared/lib/clearSession'
 import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
+import { AppLoader } from '@/shared/ui/AppLoader'
 import { Button } from '@/shared/ui/Button'
 import { cn } from '@/shared/lib/cn'
 import type { Doc } from '../../../../convex/_generated/dataModel'
@@ -80,20 +82,46 @@ function getTaskRoute(task: Doc<'candidateTasks'>) {
 export function CandidateOnboardingPage() {
   const navigate = useNavigate()
   const { signOut } = useClerk()
+
+  const handleSignOut = () => {
+    clearSessionData()
+    signOut(() => navigate('/sign-in'))
+  }
   const { clerkOrgId, isLoading } = useTenant()
+
+  // Sticky mounting: once the page has rendered its content once, it must
+  // never unmount back to a loader during brief Clerk/Convex auth flickers.
+  const hasMountedRef = useRef(false)
+  const lastClerkOrgIdRef = useRef<string | undefined>(undefined)
+  // eslint-disable-next-line react-hooks/refs
+  if (clerkOrgId) lastClerkOrgIdRef.current = clerkOrgId
+  // eslint-disable-next-line react-hooks/refs
+  const effectiveClerkOrgId = clerkOrgId ?? lastClerkOrgIdRef.current
+
   const tasks = useQuery(
     api.candidates.listCandidateTasks,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
   const candidate = useQuery(
     api.candidates.getCandidateProfile,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
 
   // Skipped tasks (e.g. car_insurance when the applicant answered No to the
   // transport question) are never shown and never block progress.
   const visibleTasks = useMemo(
     () => tasks?.filter((t) => t.status !== 'skipped'),
+    [tasks],
+  )
+
+  // Skipped OPTIONAL tasks (e.g. additional certifications) stay visible at
+  // the bottom of the checklist with a "Skipped" badge so the candidate can
+  // change their mind and upload later.
+  const skippedOptionalTasks = useMemo(
+    () =>
+      tasks?.filter(
+        (t) => t.status === 'skipped' && TASK_META[t.type]?.optional,
+      ) ?? [],
     [tasks],
   )
 
@@ -118,7 +146,14 @@ export function CandidateOnboardingPage() {
 
   const isUploadNext = nextPending ? UPLOAD_TYPES.has(nextPending.type) : false
 
-  if (isLoading || !clerkOrgId) return null
+  // Only show the loader on the very first load; afterwards the page stays
+  // mounted through brief auth flickers.
+  // eslint-disable-next-line react-hooks/refs
+  if (!hasMountedRef.current && (isLoading || !effectiveClerkOrgId)) {
+    return <AppLoader fullScreen />
+  }
+  // eslint-disable-next-line react-hooks/refs
+  hasMountedRef.current = true
 
   const handleNext = () => {
     if (nextPending) {
@@ -146,17 +181,17 @@ export function CandidateOnboardingPage() {
         <CardContent className='p-8'>
           <div className='mb-6 flex flex-col items-center text-center'>
             <AtriaLogo />
-            <p className='mt-2 text-sm text-atria-text-secondary'>Onboarding</p>
+            <p className='mt-2 text-sm text-atria-text-secondary'>Candidate Portal</p>
             <button
               type='button'
-              onClick={() => signOut(() => navigate('/sign-in'))}
+              onClick={handleSignOut}
               className='mt-2 text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
             >
               Sign out
             </button>
           </div>
 
-          <h1 className='mb-1 text-2xl font-semibold text-atria-ink'>Your onboarding tasks</h1>
+          <h1 className='mb-1 text-2xl font-semibold text-atria-ink'>Your tasks</h1>
           <p className='mb-6 text-base text-atria-text-secondary'>
             Complete these before your first shift.
           </p>
@@ -291,6 +326,46 @@ export function CandidateOnboardingPage() {
           <Button variant='primary' size='lg' className='mt-6 w-full' onClick={handleNext}>
             {nextLabel}
           </Button>
+
+          {skippedOptionalTasks.length > 0 && (
+            <div className='mt-6 border-t border-atria-border pt-4'>
+              <p className='mb-3 text-sm font-medium text-atria-text-secondary'>
+                Skipped optional steps
+              </p>
+              <div className='flex flex-col gap-3'>
+                {skippedOptionalTasks.map((task) => {
+                  const meta = TASK_META[task.type] ?? {
+                    label: task.type,
+                    shortLabel: task.type,
+                    actionLabel: `Complete ${task.type}`,
+                    due: 'Pending',
+                  }
+                  return (
+                    <div
+                      key={task._id}
+                      className='flex items-center gap-4 rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface-2 p-4'
+                    >
+                      <div className='min-w-0 flex-1'>
+                        <p className='truncate text-base font-medium text-atria-text-muted'>
+                          {meta.label}
+                        </p>
+                      </div>
+                      <span className='rounded-full bg-atria-surface-3 px-3 py-1 text-xs font-medium text-atria-text-muted'>
+                        Skipped
+                      </span>
+                      <Button
+                        variant='secondary'
+                        size='sm'
+                        onClick={() => navigate(getTaskRoute(task))}
+                      >
+                        Upload now
+                      </Button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           <p className='mt-4 text-center text-sm text-atria-text-secondary'>
             Need help?{' '}

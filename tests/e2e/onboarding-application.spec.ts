@@ -21,6 +21,7 @@ async function uploadFile(page: import('@playwright/test').Page, file: { name: s
 
 async function acceptJobDescriptionAndLegalValidity(page: import('@playwright/test').Page) {
   // Step 1 of 8: job description + legal-validity consent (Session 29).
+  await page.locator('#jdPositionApplyingFor').selectOption('Caregiver')
   await page.getByLabel('I have read and understand the job description').check()
   await page.getByLabel('I understand that typing my name').check()
   await page.getByRole('button', { name: /Save and continue/i }).click()
@@ -30,7 +31,7 @@ async function fillPersonalInfo(page: import('@playwright/test').Page) {
   await page.getByLabel('First name').fill('E2E')
   await page.getByLabel('Last name').fill('Candidate')
   await page.locator('#idType').selectOption('ssn')
-  await page.getByLabel('SSN / ITIN').fill('123-45-6789')
+  await page.getByLabel('SSN').fill('123-45-6789')
   await page.getByLabel('Street address').fill('123 Main St')
   await page.getByLabel('Apt / suite').fill('Apt 1')
   await page.getByLabel('City').first().fill('San Jose')
@@ -39,13 +40,12 @@ async function fillPersonalInfo(page: import('@playwright/test').Page) {
   await page.getByLabel('Home phone').fill('555-111-2222')
   await page.getByLabel('Cell phone').fill('555-333-4444')
   await page.locator('#email').fill(E2E_CANDIDATE_EMAIL)
-  await page.locator('#dateOfBirth').fill('1990-06-15')
+  await page.locator('#dateOfBirth').fill('06/15/1990')
   await page.locator('#gender').selectOption('female')
   await page.locator('#availability').selectOption('full_time')
   await page.locator('#shift-morning').check()
   await page.locator('#day-monday').check()
   await page.locator('#day-tuesday').check()
-  await page.locator('#positionApplyingFor').selectOption('Caregiver')
   await page.getByLabel('I am 18 years of age or older').check()
 }
 
@@ -76,11 +76,11 @@ async function fillI9AndW4(page: import('@playwright/test').Page) {
   await page.locator('#i9City').fill('San Jose')
   await page.locator('#i9State').selectOption('CA')
   await page.locator('#i9Zip').fill('95131')
-  await page.locator('#i9DateOfBirth').fill('1990-06-15')
+  await page.locator('#i9DateOfBirth').fill('06/15/1990')
   await page.locator('#i9Ssn').fill('123-45-6789')
   await page.locator('#citizenshipStatus').selectOption('citizen')
   await page.locator('#i9Signature').fill('E2E Candidate')
-  await page.locator('#i9Date').fill('2026-07-18')
+  await page.locator('#i9Date').fill('07/18/2026')
 
   // W-4
   await page.locator('#w4FirstName').fill('E2E')
@@ -90,7 +90,7 @@ async function fillI9AndW4(page: import('@playwright/test').Page) {
   await page.locator('#w4Ssn').fill('123-45-6789')
   await page.locator('#filingStatus').selectOption('single')
   await page.locator('#w4Signature').fill('E2E Candidate')
-  await page.locator('#w4Date').fill('2026-07-18')
+  await page.locator('#w4Date').fill('07/18/2026')
 }
 
 async function fillDisbursement(page: import('@playwright/test').Page) {
@@ -122,24 +122,32 @@ async function completeApplicationAndSubmit(page: import('@playwright/test').Pag
   await expect(page.getByText('Review & submit', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: /Submit application/i }).click()
   await page.waitForURL(/onboarding\/status/)
+  await page.waitForLoadState('networkidle')
 }
 
 // Navigate to the HR review page for a candidate, recovering from the
 // "ATRIA-X needs a refresh" interstitial when it appears.
 async function gotoHrReviewPage(page: import('@playwright/test').Page, candidateId: string) {
-  await page.goto('about:blank')
-  await page.waitForTimeout(500)
-  await page.goto(`/hr/candidates/${candidateId}`)
-  await page.waitForLoadState('networkidle')
   for (let attempt = 0; attempt < 3; attempt++) {
+    await page.goto('about:blank')
+    await page.waitForTimeout(500)
+    await page.goto(`/hr/candidates/${candidateId}`)
+    await page.waitForLoadState('domcontentloaded')
     const refreshBtn = page.getByRole('button', { name: 'Refresh app' })
     if (await refreshBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await refreshBtn.click()
-      await page.waitForLoadState('networkidle')
-      await page.goto(`/hr/candidates/${candidateId}`)
-      await page.waitForLoadState('networkidle')
-    } else {
-      break
+      await page.waitForLoadState('domcontentloaded')
+      continue
+    }
+    if (page.url().includes('/select-agency')) {
+      await page.waitForTimeout(5000)
+      continue
+    }
+    try {
+      await expect(page.getByText('Application Review')).toBeVisible({ timeout: 15000 })
+      return
+    } catch {
+      // Retry on next iteration.
     }
   }
   await expect(page.getByText('Application Review')).toBeVisible({ timeout: 30000 })
@@ -150,7 +158,7 @@ async function fillAcknowledgments(page: import('@playwright/test').Page) {
   for (const key of docs) {
     await page.locator(`#${key}-agreed`).check()
     await page.locator(`#${key}-initials`).fill('EC')
-    await page.locator(`#${key}-date`).fill('2026-07-18')
+    await page.locator(`#${key}-date`).fill('07/18/2026')
   }
 }
 
@@ -170,6 +178,11 @@ test.describe('onboarding application and document upload', { tag: '@auth' }, ()
   })
 
   test('candidate submits application, uploads signed documents, and HR reviews', async ({ page }) => {
+    // This end-to-end journey (two sign-ins, full 8-section form, two UI
+    // uploads, HR review) runs close to the default 120s budget against the
+    // live dev backend; give it headroom so a slow Clerk/Convex round-trip
+    // does not flake the run.
+    test.setTimeout(300_000)
     // Candidate fills and submits the multi-section application.
     if (mockE2EEnabled()) {
       test.skip(true, 'This spec requires a live Clerk-backed candidate session for file uploads.')
@@ -213,6 +226,8 @@ test.describe('onboarding application and document upload', { tag: '@auth' }, ()
     // health screen (photo ID, tax ID, CPR) so the signed uploads are accepted.
     const candidateToken = await extractClerkToken(page)
     if (!candidateToken) throw new Error('Could not extract candidate session token.')
+    // Wait for the form_submission task to be marked complete before uploading documents.
+    await page.waitForTimeout(2000)
     await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'photo_id', 'Upload photo ID', '2027-12-31')
     await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'tax_id_ssn', 'Upload Tax ID or SSN')
     await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'cpr_certificate', 'Upload CPR certificate', '2027-12-31')
@@ -344,7 +359,7 @@ test.describe('onboarding application and document upload', { tag: '@auth' }, ()
     // The checklist shows the car insurance step when transport = Yes.
     await page.goto('/onboarding/checklist')
     await page.waitForLoadState('networkidle')
-    await expect(page.getByText('Your onboarding tasks')).toBeVisible()
+    await expect(page.getByText('Your tasks')).toBeVisible()
     await expect(page.getByText('Car insurance policy')).toBeVisible()
 
     // The car insurance upload step requires an expiry date before submit.
@@ -362,7 +377,7 @@ test.describe('onboarding application and document upload', { tag: '@auth' }, ()
     })
     // A file alone is not enough — the expiry date is mandatory.
     await expect(submitButton).toBeDisabled()
-    await expiryInput.fill('2027-01-31')
+    await expiryInput.fill('01/31/2027')
     await expect(submitButton).toBeEnabled()
   })
 
@@ -388,7 +403,7 @@ test.describe('onboarding application and document upload', { tag: '@auth' }, ()
 
     await page.goto('/onboarding/checklist')
     await page.waitForLoadState('networkidle')
-    await expect(page.getByText('Your onboarding tasks')).toBeVisible()
+    await expect(page.getByText('Your tasks')).toBeVisible()
     await expect(page.getByText('Car insurance policy')).toBeHidden()
   })
 
@@ -417,10 +432,13 @@ test.describe('onboarding application and document upload', { tag: '@auth' }, ()
     // way the main flow does.
     const candidateToken = await extractClerkToken(page)
     if (!candidateToken) throw new Error('Could not extract candidate session token.')
+    // Wait for the form_submission task to be marked complete before uploading documents.
+    await page.waitForTimeout(2000)
     await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'photo_id', 'Upload photo ID', '2027-12-31')
     await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'tax_id_ssn', 'Upload Tax ID or SSN')
     await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'cpr_certificate', 'Upload CPR certificate', '2027-12-31')
     await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'health_screen', 'Upload signed health screen')
+    await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'background_check', 'Upload stamped Live Scan receipt')
     // Signing the acknowledgment completes the background check and the
     // employment agreement steps.
     await callConvexMutation(candidateToken, 'candidates:acknowledgeBackgroundCheck', {

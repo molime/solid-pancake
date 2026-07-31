@@ -160,12 +160,22 @@ async function completeCandidateTask(
   candidateId: Id<'candidates'>,
   type: string,
 ) {
+  // Match pending tasks and skipped optional tasks, so uploading after a
+  // skip ("Upload now" on the checklist) flips the task back to complete.
   const task = await ctx.db
     .query('candidateTasks')
-    .withIndex('by_tenant_candidate_status', (q) =>
-      q.eq('tenantId', tenantId).eq('candidateId', candidateId).eq('status', 'pending'),
+    .withIndex('by_tenant_candidate_order', (q) =>
+      q.eq('tenantId', tenantId).eq('candidateId', candidateId),
     )
-    .filter((q) => q.eq(q.field('type'), type))
+    .filter((q) =>
+      q.and(
+        q.eq(q.field('type'), type),
+        q.or(
+          q.eq(q.field('status'), 'pending'),
+          q.eq(q.field('status'), 'skipped'),
+        ),
+      ),
+    )
     .first()
   if (task) {
     await ctx.db.patch(task._id, {
@@ -2358,6 +2368,16 @@ export const attachCandidateDocument = mutation({
       })
     }
 
+    // If the document expires within 30 days, run the issue-flag check
+    // immediately instead of waiting for the next daily cron so HR sees
+    // the expiring-document case right away.
+    if (args.expiresAt) {
+      const expiryMs = new Date(args.expiresAt).getTime()
+      if (expiryMs <= Date.now() + 30 * 24 * 60 * 60 * 1000) {
+        await ctx.scheduler.runAfter(0, internal.hrCases.checkAndFlagIssues, {})
+      }
+    }
+
     await completeCandidateTask(ctx, tenantId, candidateId, args.documentType)
 
     await recordCandidateAudit(ctx, {
@@ -2371,6 +2391,44 @@ export const attachCandidateDocument = mutation({
     })
 
     return fileId
+  },
+})
+
+
+// Lets a candidate skip an optional onboarding task (e.g. additional
+// certifications) so it stops showing up as their next pending step.
+export const skipCandidateTask = mutation({
+  args: { clerkOrgId: v.string(), taskId: v.id('candidateTasks') },
+  handler: async (ctx, { clerkOrgId, taskId }) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, clerkOrgId, [
+      'org:candidate',
+    ])
+
+    const candidate = await getOwnCandidate(ctx, tenantId, {
+      subject: identity.subject,
+      email: typeof identity.email === 'string' ? identity.email : undefined,
+    })
+    if (!candidate) {
+      throw new ConvexError('Candidate profile not found.')
+    }
+
+    const task = await ctx.db.get(taskId)
+    if (!task) {
+      throw new ConvexError('Task not found.')
+    }
+    assertTenantDoc(task, tenantId)
+    if (task.candidateId !== candidate._id) {
+      throw new ConvexError('Candidates can only skip their own tasks.')
+    }
+    if (!OPTIONAL_TASK_TYPES.has(task.type)) {
+      throw new ConvexError('Only optional tasks can be skipped.')
+    }
+    // Only pending tasks can be skipped. This is a no-op for anything else,
+    // so a completed task is never regressed back to skipped (e.g. when the
+    // candidate revisits the multi-upload page after uploading).
+    if (task.status !== 'pending') return
+
+    await ctx.db.patch(task._id, { status: 'skipped' })
   },
 })
 

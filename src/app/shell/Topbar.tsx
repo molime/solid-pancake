@@ -1,4 +1,5 @@
 import { useUser, useClerk } from '@clerk/react'
+import { clearSessionData } from '@/shared/lib/clearSession'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
@@ -20,6 +21,11 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { user } = useUser()
   const { signOut } = useClerk()
   const navigate = useNavigate()
+
+  const handleSignOut = () => {
+    clearSessionData()
+    signOut(() => navigate('/sign-in'))
+  }
   const location = useLocation()
   const member = useQuery(
     api.members.me,
@@ -70,7 +76,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           {role.replace('org:', '')}
         </span>
         <button
-          onClick={() => signOut(() => navigate('/sign-in'))}
+          onClick={handleSignOut}
           className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-atria-muted hover:text-atria-ink hover:bg-atria-bg transition-colors"
           aria-label="Sign out"
         >

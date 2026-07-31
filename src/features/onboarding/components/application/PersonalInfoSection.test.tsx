@@ -80,6 +80,28 @@ describe('PersonalInfoSection position selector', () => {
   })
 })
 
+describe('PersonalInfoSection SSN/ITIN label', () => {
+  it('shows the combined label when no ID type is selected', () => {
+    renderSection()
+
+    expect(screen.getByText('SSN / ITIN')).toBeInTheDocument()
+  })
+
+  it('shows ITIN as the label when ITIN is selected', () => {
+    renderSection({ idType: 'itin' })
+
+    expect(screen.getByText('ITIN')).toBeInTheDocument()
+    expect(screen.queryByText('SSN / ITIN')).not.toBeInTheDocument()
+  })
+
+  it('shows SSN as the label when SSN is selected', () => {
+    renderSection({ idType: 'ssn' })
+
+    expect(screen.getByText('SSN')).toBeInTheDocument()
+    expect(screen.queryByText('SSN / ITIN')).not.toBeInTheDocument()
+  })
+})
+
 describe('PersonalInfoSection phone and email validation', () => {
   it('formats phone input as (XXX) XXX-XXXX on change', () => {
     const { onChange } = renderSection()

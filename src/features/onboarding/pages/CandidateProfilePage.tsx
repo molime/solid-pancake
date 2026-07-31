@@ -2,6 +2,7 @@ import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useClerk } from '@clerk/react'
+import { clearSessionData } from '@/shared/lib/clearSession'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
@@ -21,6 +22,11 @@ function initials(name: string) {
 export function CandidateProfilePage() {
   const navigate = useNavigate()
   const { signOut } = useClerk()
+
+  const handleSignOut = () => {
+    clearSessionData()
+    signOut(() => navigate('/sign-in'))
+  }
   const [searchParams, setSearchParams] = useSearchParams()
   const { clerkOrgId, isLoading } = useTenant()
   const candidate = useQuery(api.candidates.getCandidateProfile, clerkOrgId ? { clerkOrgId } : 'skip')
@@ -58,10 +64,10 @@ export function CandidateProfilePage() {
 
           <div className='mb-6 flex flex-col items-center text-center'>
             <AtriaLogo />
-            <p className='mt-2 text-sm text-atria-text-secondary'>Onboarding</p>
+            <p className='mt-2 text-sm text-atria-text-secondary'>Candidate Portal</p>
             <button
               type='button'
-              onClick={() => signOut(() => navigate('/sign-in'))}
+              onClick={handleSignOut}
               className='mt-2 text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
             >
               Sign out

@@ -183,6 +183,44 @@ describe('ApplicationReviewPage', () => {
     expect(downloadUrlMock).toHaveBeenCalled()
   })
 
+  it('labels the I-9 SSN field with the selected ID type', async () => {
+    const { useQuery } = await import('convex/react')
+    vi.mocked(useQuery).mockImplementation(
+      ((query: unknown) => {
+        const name = getFunctionName(query as Parameters<typeof getFunctionName>[0])
+        if (name === 'candidates:getCandidateDetail') {
+          return createDetailResponse({
+            fields: {
+              personal: { idType: 'itin' },
+              i9: { ssn: '999-99-9999' },
+            },
+          })
+        }
+        if (name === 'candidates:listCandidateTasksForHR') return []
+        if (name === 'files:getDownloadUrl') {
+          return 'https://example.com/download/storage-1'
+        }
+        return undefined
+      }) as unknown as typeof useQuery,
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/hr/candidates/cand_1']}>
+        <Routes>
+          <Route
+            path='/hr/candidates/:candidateId'
+            element={<ApplicationReviewPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('ITIN')).toBeInTheDocument()
+    })
+    expect(screen.getByText('999-99-9999')).toBeInTheDocument()
+  })
+
   it('renders combined approve and send offer button for applied status', async () => {
     render(
       <MemoryRouter initialEntries={['/hr/candidates/cand_1']}>

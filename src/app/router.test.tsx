@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { AppRouter } from './router'
 import { getFunctionName } from 'convex/server'
@@ -122,6 +122,97 @@ describe('AppRouter auth routes', () => {
   it('renders SignIn at /sign-in/factor-one', () => {
     render(<TestRouter initialEntries={['/sign-in/factor-one']} />)
     expect(screen.getByTestId('sign-in')).toBeInTheDocument()
+  })
+
+  it('shows "Candidate Portal" when the redirect targets onboarding', () => {
+    render(<TestRouter initialEntries={['/sign-in?redirect=/onboarding']} />)
+    expect(
+      screen.getByText('Candidate Portal', { selector: 'p' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows "Candidate Portal" when the redirect targets the caregiver app', () => {
+    render(
+      <TestRouter initialEntries={['/sign-in?redirect=/caregiver/today']} />,
+    )
+    expect(
+      screen.getByText('Candidate Portal', { selector: 'p' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows "HR Portal" when the redirect targets /hr', () => {
+    render(<TestRouter initialEntries={['/sign-in?redirect=/hr']} />)
+    expect(
+      screen.getByText('HR Portal', { selector: 'p' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows "Staff Portal" when the redirect targets /coordinator', () => {
+    render(<TestRouter initialEntries={['/sign-in?redirect=/coordinator']} />)
+    expect(
+      screen.getByText('Staff Portal', { selector: 'p' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows no product label for the default /select-agency redirect', () => {
+    render(<TestRouter initialEntries={['/sign-in']} />)
+    expect(screen.queryByText(/Portal/, { selector: 'p' })).not.toBeInTheDocument()
+  })
+})
+
+describe('SignInRedirect product tabs', () => {
+  it('renders a tab for each product', () => {
+    render(<TestRouter initialEntries={['/sign-in']} />)
+    expect(
+      screen.getByRole('button', { name: 'Candidate Portal' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'HR Portal' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Staff Portal' }),
+    ).toBeInTheDocument()
+  })
+
+  it('updates the redirect param when a tab is clicked', () => {
+    render(<TestRouter initialEntries={['/sign-in']} />)
+    fireEvent.click(screen.getByRole('button', { name: 'HR Portal' }))
+    expect(
+      screen.getByText('HR Portal', { selector: 'p' }),
+    ).toBeInTheDocument()
+  })
+
+  it('highlights the active tab matching the redirect param', () => {
+    render(<TestRouter initialEntries={['/sign-in?redirect=/hr']} />)
+    expect(screen.getByRole('button', { name: 'HR Portal' }).className).toContain(
+      'bg-atria-accent',
+    )
+    expect(
+      screen.getByRole('button', { name: 'Candidate Portal' }).className,
+    ).not.toContain('bg-atria-accent')
+  })
+
+  it('updates the product label when the tab changes', () => {
+    render(<TestRouter initialEntries={['/sign-in?redirect=/onboarding']} />)
+    expect(
+      screen.getByText('Candidate Portal', { selector: 'p' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Staff Portal' }))
+    expect(
+      screen.getByText('Staff Portal', { selector: 'p' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Candidate Portal', { selector: 'p' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows no active tab for the default /select-agency redirect', () => {
+    render(<TestRouter initialEntries={['/sign-in']} />)
+    for (const name of ['Candidate Portal', 'HR Portal', 'Staff Portal']) {
+      expect(screen.getByRole('button', { name }).className).not.toContain(
+        'bg-atria-accent',
+      )
+    }
   })
 })
 

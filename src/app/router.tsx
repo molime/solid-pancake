@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { SignIn, SignUp } from '@clerk/react'
 import { Suspense, lazy, type ReactNode } from 'react'
 import { AppShell } from './shell/AppShell'
@@ -7,6 +7,7 @@ import { SelectAgencyPage } from './auth/SelectAgencyPage'
 import { SignedInRouteGuard, TenantRoleRouteGuard, TrainingRouteGuard } from './shell/RouteGuard'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
+import { cn } from '@/shared/lib/cn'
 
 const DashboardPage = lazy(() =>
   import('@/features/dashboard/pages/DashboardPage').then((module) => ({
@@ -195,11 +196,62 @@ function useRedirectParam() {
   return redirect ?? '/select-agency'
 }
 
+// Derives a product label from the redirect target so the shared login page
+// tells the user which ATRIA portal they are signing into.
+function deriveProductLabel(redirectUrl: string): string | null {
+  if (redirectUrl.includes('/onboarding') || redirectUrl.includes('/caregiver')) {
+    return 'Candidate Portal'
+  }
+  if (redirectUrl.includes('/hr')) return 'HR Portal'
+  if (redirectUrl.includes('/coordinator')) return 'Staff Portal'
+  return null
+}
+
+// Product tabs let users pick which ATRIA portal they are signing into.
+// Selecting a tab only changes the redirect target — the sign-in form is
+// the same Clerk component underneath.
+const PRODUCT_TABS = [
+  { label: 'Candidate Portal', redirect: '/onboarding' },
+  { label: 'HR Portal', redirect: '/hr' },
+  { label: 'Staff Portal', redirect: '/coordinator/review' },
+]
+
 function SignInRedirect() {
-  const redirectUrl = useRedirectParam()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const redirectUrl = searchParams.get('redirect') ?? '/select-agency'
+  const productLabel = deriveProductLabel(redirectUrl)
+  const activeIndex = PRODUCT_TABS.findIndex((t) => t.redirect === redirectUrl)
+
+  const handleTabChange = (redirect: string) => {
+    setSearchParams({ redirect }, { replace: true })
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-atria-bg p-4">
-      <AtriaLogo />
+      <div className="flex flex-col items-center gap-2">
+        <AtriaLogo />
+        {productLabel && (
+          <p className="text-sm font-medium text-atria-text-secondary">
+            {productLabel}
+          </p>
+        )}
+      </div>
+      <div className="flex gap-2">
+        {PRODUCT_TABS.map((tab, i) => (
+          <button
+            key={tab.redirect}
+            onClick={() => handleTabChange(tab.redirect)}
+            className={cn(
+              'rounded-full px-4 py-2 text-sm font-medium transition-colors',
+              activeIndex === i
+                ? 'bg-atria-accent text-atria-on-accent'
+                : 'border border-atria-border bg-atria-surface text-atria-ink hover:bg-atria-surface-2',
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
       <SignIn
         routing="path"
         path="/sign-in"

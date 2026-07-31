@@ -384,6 +384,7 @@ export default defineSchema({
 
   hrCases: defineTable({
     tenantId: v.id('tenants'),
+    caseNumber: v.optional(v.string()),
     subjectType: v.string(),
     subjectId: v.string(),
     category: v.string(),
@@ -392,6 +393,11 @@ export default defineSchema({
     ownerMemberId: v.optional(v.id('tenantMembers')),
     description: v.optional(v.string()),
     resolvedAt: v.optional(v.string()),
+    // Set on cases created by the automatic flagging crons (checkAndFlagIssues
+    // and checkExpiringCredentials): flagType identifies the flag scenario,
+    // autoCreatedAt the run timestamp.
+    flagType: v.optional(v.string()),
+    autoCreatedAt: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index('by_tenant_status', ['tenantId', 'status'])

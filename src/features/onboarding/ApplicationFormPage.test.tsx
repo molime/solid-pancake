@@ -60,8 +60,8 @@ function clickContinue() {
 }
 
 function fillPersonal() {
-  fireEvent.change(screen.getByLabelText(/ID type/i), { target: { value: 'ssn' } })
   fireEvent.change(screen.getByLabelText(/SSN \/ ITIN/i), { target: { value: '123-45-6789' } })
+  fireEvent.change(screen.getByLabelText(/ID type/i), { target: { value: 'ssn' } })
   fireEvent.change(screen.getByLabelText(/Street address/i), { target: { value: '123 Main St' } })
   fireEvent.change(screen.getByLabelText(/City/i), { target: { value: 'Los Angeles' } })
   fireEvent.change(screen.getByLabelText(/State/i), { target: { value: 'CA' } })

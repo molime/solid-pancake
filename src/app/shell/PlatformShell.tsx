@@ -1,12 +1,18 @@
 import { Outlet, useNavigate } from 'react-router-dom'
 import { SignedInRouteGuard } from './RouteGuard'
 import { useUser, useClerk } from '@clerk/react'
+import { clearSessionData } from '@/shared/lib/clearSession'
 import { LogOut } from 'lucide-react'
 
 export function PlatformShell() {
   const { user } = useUser()
   const { signOut } = useClerk()
   const navigate = useNavigate()
+
+  const handleSignOut = () => {
+    clearSessionData()
+    signOut(() => navigate('/sign-in'))
+  }
 
   return (
     <SignedInRouteGuard>
@@ -45,7 +51,7 @@ export function PlatformShell() {
               </div>
             </div>
             <button
-              onClick={() => signOut(() => navigate('/sign-in'))}
+              onClick={handleSignOut}
               className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-atria-sidebar-text/70 hover:bg-white/5 hover:text-white transition-colors"
             >
               <LogOut className="h-4 w-4" />
@@ -66,7 +72,7 @@ export function PlatformShell() {
             </div>
             <div className="hidden lg:block" />
             <button
-              onClick={() => signOut(() => navigate('/sign-in'))}
+              onClick={handleSignOut}
               className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-atria-muted hover:text-atria-ink hover:bg-atria-bg transition-colors"
             >
               <LogOut className="h-4 w-4" />

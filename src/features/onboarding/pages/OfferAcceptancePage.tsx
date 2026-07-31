@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useClerk } from '@clerk/react'
+import { clearSessionData } from '@/shared/lib/clearSession'
 import { getStoredClerkOrgId, useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
@@ -13,6 +14,11 @@ import { formatDateUS } from '@/shared/format'
 export function OfferAcceptancePage() {
   const navigate = useNavigate()
   const { signOut } = useClerk()
+
+  const handleSignOut = () => {
+    clearSessionData()
+    signOut(() => navigate('/sign-in'))
+  }
   const { clerkOrgId, tenantName } = useTenant()
   // Same effective-org-id fallback as the route guards: a momentary
   // useTenant() blip during a Clerk token refresh must not flip the query
@@ -97,10 +103,10 @@ export function OfferAcceptancePage() {
         <CardContent className='p-8'>
           <div className='mb-6 flex flex-col items-center text-center'>
             <AtriaLogo />
-            <p className='mt-2 text-sm text-atria-text-secondary'>Onboarding</p>
+            <p className='mt-2 text-sm text-atria-text-secondary'>Candidate Portal</p>
             <button
               type='button'
-              onClick={() => signOut(() => navigate('/sign-in'))}
+              onClick={handleSignOut}
               className='mt-2 text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
             >
               Sign out

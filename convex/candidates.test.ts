@@ -2580,6 +2580,215 @@ describe('listCandidateTasks', () => {
   })
 })
 
+describe('skipCandidateTask', () => {
+  async function seedCandidateWithTask(
+    t: ReturnType<typeof createTestConvex>,
+    clerkOrgId: string,
+    adminId: string,
+    candidateUserId: string,
+    taskType: string,
+  ) {
+    await seedTenant(t, clerkOrgId, adminId)
+    let taskId: Id<'candidateTasks'> = 'task_placeholder' as Id<'candidateTasks'>
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        role: 'org:candidate',
+        displayName: 'Skip Candidate',
+        email: 'skip@example.com',
+      })
+      const candidateId = await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        email: 'skip@example.com',
+        displayName: 'Skip Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+      taskId = await ctx.db.insert('candidateTasks', {
+        tenantId: tenant._id,
+        candidateId,
+        type: taskType,
+        status: 'pending',
+        order: 7,
+      })
+    })
+    return taskId
+  }
+
+  it('marks an optional task as skipped', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_skip_task'
+    const candidateUserId = 'user_candidate_skip_task'
+
+    const taskId = await seedCandidateWithTask(
+      t,
+      clerkOrgId,
+      'user_admin_skip_task',
+      candidateUserId,
+      'additional_certifications',
+    )
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.skipCandidateTask,
+      { clerkOrgId, taskId },
+    )
+
+    const task = await t.run(async (ctx) => ctx.db.get(taskId))
+    expect(task?.status).toBe('skipped')
+  })
+
+  it('rejects skipping a required task', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_skip_required'
+    const candidateUserId = 'user_candidate_skip_required'
+
+    const taskId = await seedCandidateWithTask(
+      t,
+      clerkOrgId,
+      'user_admin_skip_required',
+      candidateUserId,
+      'photo_id',
+    )
+
+    await expect(
+      asCandidate(t, candidateUserId, clerkOrgId).mutation(
+        api.candidates.skipCandidateTask,
+        { clerkOrgId, taskId },
+      ),
+    ).rejects.toThrow('Only optional tasks can be skipped.')
+
+    const task = await t.run(async (ctx) => ctx.db.get(taskId))
+    expect(task?.status).toBe('pending')
+  })
+
+  it('rejects skipping another candidate\'s task', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_skip_other'
+    const candidateUserId = 'user_candidate_skip_other'
+    const otherUserId = 'user_candidate_skip_other_2'
+
+    const taskId = await seedCandidateWithTask(
+      t,
+      clerkOrgId,
+      'user_admin_skip_other',
+      candidateUserId,
+      'additional_certifications',
+    )
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: otherUserId,
+        role: 'org:candidate',
+        displayName: 'Other Candidate',
+        email: 'other@example.com',
+      })
+      await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId: otherUserId,
+        email: 'other@example.com',
+        displayName: 'Other Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    await expect(
+      asCandidate(t, otherUserId, clerkOrgId).mutation(
+        api.candidates.skipCandidateTask,
+        { clerkOrgId, taskId },
+      ),
+    ).rejects.toThrow('Candidates can only skip their own tasks.')
+  })
+
+  it('flips a skipped task back to complete when the candidate uploads', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_skip_upload'
+    const candidateUserId = 'user_candidate_skip_upload'
+
+    const taskId = await seedCandidateWithTask(
+      t,
+      clerkOrgId,
+      'user_admin_skip_upload',
+      candidateUserId,
+      'additional_certifications',
+    )
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.skipCandidateTask,
+      { clerkOrgId, taskId },
+    )
+    let task = await t.run(async (ctx) => ctx.db.get(taskId))
+    expect(task?.status).toBe('skipped')
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.attachCandidateDocument,
+      {
+        clerkOrgId,
+        storageId: 'storage-cert',
+        fileName: 'cert.pdf',
+        contentType: 'application/pdf',
+        size: 1024,
+        documentType: 'additional_certifications',
+        label: 'Additional certifications',
+      },
+    )
+
+    task = await t.run(async (ctx) => ctx.db.get(taskId))
+    expect(task?.status).toBe('complete')
+  })
+
+  it('does not regress a completed task back to skipped', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_skip_complete'
+    const candidateUserId = 'user_candidate_skip_complete'
+
+    const taskId = await seedCandidateWithTask(
+      t,
+      clerkOrgId,
+      'user_admin_skip_complete',
+      candidateUserId,
+      'additional_certifications',
+    )
+
+    // Complete the task by uploading a certification first.
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.attachCandidateDocument,
+      {
+        clerkOrgId,
+        storageId: 'storage-cert',
+        fileName: 'cert.pdf',
+        contentType: 'application/pdf',
+        size: 1024,
+        documentType: 'additional_certifications',
+        label: 'Additional certifications',
+      },
+    )
+    let task = await t.run(async (ctx) => ctx.db.get(taskId))
+    expect(task?.status).toBe('complete')
+
+    // Revisiting the multi-upload page and clicking skip must not undo it.
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.skipCandidateTask,
+      { clerkOrgId, taskId },
+    )
+
+    task = await t.run(async (ctx) => ctx.db.get(taskId))
+    expect(task?.status).toBe('complete')
+  })
+})
+
 describe('role guard regression', () => {
   it('blocks org:candidate from calling listShifts', async () => {
     const t = createTestConvex()
@@ -3463,5 +3672,140 @@ describe('getW4ForHR tenant prefill (AC-9)', () => {
 
     expect(result.agencyName).toBe('Test Agency')
     expect(result.agencyEin).toBe('12-3456789')
+  })
+})
+
+describe('attachCandidateDocument flag scheduling', () => {
+  async function seedFlagCandidate(
+    t: ReturnType<typeof createTestConvex>,
+    clerkOrgId: string,
+    candidateUserId: string,
+  ) {
+    const tenantId = await seedTenant(t, clerkOrgId, 'user_admin_attach_flag')
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
+    await t.run(async (ctx) => {
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: candidateUserId,
+        role: 'org:candidate',
+        displayName: 'Flag Candidate',
+        email: 'flag-attach@example.com',
+      })
+      candidateId = await ctx.db.insert('candidates', {
+        tenantId,
+        clerkUserId: candidateUserId,
+        email: 'flag-attach@example.com',
+        displayName: 'Flag Candidate',
+        status: 'applied',
+        createdAt: new Date().toISOString(),
+      })
+      const requiredTypes = [
+        'form_submission',
+        'photo_id',
+        'tax_id_ssn',
+        'cpr_certificate',
+        'health_screen',
+        'employment_agreement',
+      ]
+      for (const [index, type] of requiredTypes.entries()) {
+        await ctx.db.insert('candidateTasks', {
+          tenantId,
+          candidateId,
+          type,
+          status: 'complete',
+          order: index,
+          completedAt: new Date().toISOString(),
+        })
+      }
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
+        type: 'additional_certifications',
+        status: 'pending',
+        order: 7,
+      })
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
+        type: 'car_insurance',
+        status: 'pending',
+        order: 8,
+      })
+    })
+    return { tenantId, candidateId }
+  }
+
+  async function listHrCasesForTenant(
+    t: ReturnType<typeof createTestConvex>,
+    tenantId: Id<'tenants'>,
+  ) {
+    return t.run(async (ctx) =>
+      ctx.db
+        .query('hrCases')
+        .withIndex('by_tenant_status', (q) => q.eq('tenantId', tenantId))
+        .collect(),
+    )
+  }
+
+  it('flags the document immediately when it expires within 30 days', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_attach_flag_near'
+    const candidateUserId = 'user_candidate_attach_flag_near'
+
+    const { tenantId, candidateId } = await seedFlagCandidate(
+      t,
+      clerkOrgId,
+      candidateUserId,
+    )
+
+    vi.useFakeTimers()
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.attachCandidateDocument,
+      {
+        clerkOrgId,
+        storageId: 'storage-flag-near',
+        fileName: 'policy.pdf',
+        contentType: 'application/pdf',
+        size: 2048,
+        documentType: 'car_insurance',
+        label: 'Car Insurance Policy',
+        expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    )
+    await t.finishAllScheduledFunctions(vi.runAllTimers)
+
+    const cases = await listHrCasesForTenant(t, tenantId)
+    expect(cases).toHaveLength(1)
+    expect(cases[0]?.flagType).toBe('expiring_document')
+    expect(cases[0]?.subjectType).toBe('candidate')
+    expect(cases[0]?.subjectId).toBe(candidateId as string)
+    expect(cases[0]?.status).toBe('open')
+  })
+
+  it('does not flag a document expiring beyond 30 days', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_attach_flag_far'
+    const candidateUserId = 'user_candidate_attach_flag_far'
+
+    const { tenantId } = await seedFlagCandidate(t, clerkOrgId, candidateUserId)
+
+    vi.useFakeTimers()
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.attachCandidateDocument,
+      {
+        clerkOrgId,
+        storageId: 'storage-flag-far',
+        fileName: 'policy.pdf',
+        contentType: 'application/pdf',
+        size: 2048,
+        documentType: 'car_insurance',
+        label: 'Car Insurance Policy',
+        expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    )
+    await t.finishAllScheduledFunctions(vi.runAllTimers)
+
+    const cases = await listHrCasesForTenant(t, tenantId)
+    expect(cases).toHaveLength(0)
   })
 })

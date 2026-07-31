@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useClerk } from '@clerk/react'
+import { clearSessionData } from '@/shared/lib/clearSession'
 import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
@@ -8,6 +9,7 @@ import type { Doc } from '../../../../convex/_generated/dataModel'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
+import { AppLoader } from '@/shared/ui/AppLoader'
 import { USDateInput } from '@/shared/ui/USDateInput'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { cn } from '@/shared/lib/cn'
@@ -66,25 +68,42 @@ const MAX_SIZE = 10 * 1024 * 1024
 export function DocumentUploadPage() {
   const navigate = useNavigate()
   const { signOut } = useClerk()
+
+  const handleSignOut = () => {
+    clearSessionData()
+    signOut(() => navigate('/sign-in'))
+  }
   const { taskId = 'required' } = useParams<{ taskId: string }>()
   const { clerkOrgId, tenantName, agencyAddress, isLoading } = useTenant()
+
+  // Sticky mounting: once the page has rendered its content once, it must
+  // never unmount back to a loader during brief Clerk/Convex auth flickers.
+  const hasMountedRef = useRef(false)
+  const lastClerkOrgIdRef = useRef<string | undefined>(undefined)
+  // eslint-disable-next-line react-hooks/refs
+  if (clerkOrgId) lastClerkOrgIdRef.current = clerkOrgId
+  // eslint-disable-next-line react-hooks/refs
+  const effectiveClerkOrgId = clerkOrgId ?? lastClerkOrgIdRef.current
+
   const tasks = useQuery(
     api.candidates.listCandidateTasks,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
   const applicationData = useQuery(
     api.candidates.getMyApplication,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
   const generateUploadUrl = useMutation(api.files.generateUploadUrl)
   const attachDocument = useMutation(api.candidates.attachCandidateDocument)
   const savePrefilledDocument = useMutation(api.candidates.savePrefilledDocument)
   const saveSignedPrefilledDocument = useMutation(api.candidates.saveSignedPrefilledDocument)
+  const skipTask = useMutation(api.candidates.skipCandidateTask)
 
   const [file, setFile] = useState<File | null>(null)
   const [expiresAt, setExpiresAt] = useState('')
   const [error, setError] = useState('')
   const [isUploading, setIsUploading] = useState(false)
+  const [isSkipping, setIsSkipping] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [photoIdType, setPhotoIdType] = useState('')
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([])
@@ -120,7 +139,15 @@ export function DocumentUploadPage() {
   const agencyName = tenantName ?? 'ATRIA-X'
   const todayUs = new Date().toLocaleDateString('en-US')
 
-  if (isLoading || !clerkOrgId) return null
+  // Only show the loader on the very first load; afterwards the page stays
+  // mounted and the last known clerkOrgId covers brief auth flickers.
+  // eslint-disable-next-line react-hooks/refs
+  if (!hasMountedRef.current && (isLoading || !effectiveClerkOrgId)) {
+    return <AppLoader fullScreen />
+  }
+  // eslint-disable-next-line react-hooks/refs
+  hasMountedRef.current = true
+  const orgId = effectiveClerkOrgId as string
 
   const handleFileChange = (selected: File | null) => {
     setError('')
@@ -178,7 +205,6 @@ export function DocumentUploadPage() {
   }
 
   const handleDownloadPrefilled = async () => {
-    if (!clerkOrgId) return
     setIsGenerating(true)
     setError('')
     try {
@@ -192,20 +218,18 @@ export function DocumentUploadPage() {
         ? 'lic_503_health_screen_prefilled.pdf'
         : 'lic_9163_live_scan_prefilled.pdf'
       saveAndDownload(bytes, filename)
-      if (clerkOrgId) {
-        const getUploadUrl = async () => {
-          const { url } = await generateUploadUrl({ clerkOrgId })
-          return url
-        }
-        await saveAndUpload(
-          bytes,
-          filename,
-          isHealthScreen ? 'health_screen' : 'live_scan',
-          clerkOrgId,
-          getUploadUrl,
-          savePrefilledDocument,
-        )
+      const getUploadUrl = async () => {
+        const { url } = await generateUploadUrl({ clerkOrgId: orgId })
+        return url
       }
+      await saveAndUpload(
+        bytes,
+        filename,
+        isHealthScreen ? 'health_screen' : 'live_scan',
+        orgId,
+        getUploadUrl,
+        savePrefilledDocument,
+      )
     } catch (err) {
       setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Failed to generate prefilled form.')
     } finally {
@@ -231,11 +255,11 @@ export function DocumentUploadPage() {
     try {
       const storageId = await uploadFileToConvex({
         generateUploadUrl,
-        clerkOrgId,
+        clerkOrgId: orgId,
         file,
       })
       await attachDocument({
-        clerkOrgId,
+        clerkOrgId: orgId,
         storageId,
         fileName: file.name,
         contentType: file.type,
@@ -247,7 +271,7 @@ export function DocumentUploadPage() {
       })
       if ((isHealthScreen || isBackgroundCheck) && candidateId) {
         await saveSignedPrefilledDocument({
-          clerkOrgId,
+          clerkOrgId: orgId,
           documentType: isHealthScreen ? 'health_screen' : 'live_scan',
           storageId,
         })
@@ -282,10 +306,10 @@ export function DocumentUploadPage() {
 
           <div className='mb-6 flex flex-col items-center text-center'>
             <AtriaLogo />
-            <p className='mt-2 text-sm text-atria-text-secondary'>Onboarding</p>
+            <p className='mt-2 text-sm text-atria-text-secondary'>Candidate Portal</p>
             <button
               type='button'
-              onClick={() => signOut(() => navigate('/sign-in'))}
+              onClick={handleSignOut}
               className='mt-2 text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
             >
               Sign out
@@ -485,7 +509,7 @@ export function DocumentUploadPage() {
             Your documents are encrypted and only seen by your recruiter.
           </p>
 
-          {isMultiUpload && (
+          {isMultiUpload && task?.status !== 'complete' && (
             <div className='mt-6 border-t border-atria-border pt-4'>
               <p className='mb-2 text-center text-xs text-atria-text-muted'>
                 This step is optional. If you don't have additional certifications, you can skip it.
@@ -494,7 +518,20 @@ export function DocumentUploadPage() {
                 variant='secondary'
                 size='md'
                 className='w-full'
-                onClick={() => navigate('/onboarding')}
+                disabled={isSkipping || tasks === undefined}
+                onClick={async () => {
+                  if (task?._id) {
+                    setIsSkipping(true)
+                    try {
+                      await skipTask({ clerkOrgId: orgId, taskId: task._id })
+                    } catch (err) {
+                      // Log but navigate anyway so the candidate is never
+                      // stuck in a skip loop.
+                      console.error('Skip task error:', err)
+                    }
+                  }
+                  navigate('/onboarding')
+                }}
               >
                 Skip this step →
               </Button>
