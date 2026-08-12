@@ -15,7 +15,8 @@ import {
   TableRow,
 } from '@/shared/ui/Table'
 import { ScrollText } from 'lucide-react'
-import { useState } from 'react'
+import { Component, useState } from 'react'
+import type { ErrorInfo, PropsWithChildren } from 'react'
 import { formatDateUS, formatStatusLabel, formatTime } from '@/shared/format'
 
 export function AuditTrailPage() {
@@ -26,19 +27,6 @@ export function AuditTrailPage() {
   const [endDate, setEndDate] = useState('')
   const [action, setAction] = useState('')
   const [actorId, setActorId] = useState('')
-
-  const events = useQuery(
-    api.audit.list,
-    clerkOrgId
-      ? {
-          clerkOrgId,
-          action: action.trim() || undefined,
-          startDate: startDate || undefined,
-          endDate: endDate || undefined,
-          actorId: actorId.trim() || undefined,
-        }
-      : 'skip',
-  )
 
   return (
     <div className="space-y-8">
@@ -97,62 +85,145 @@ export function AuditTrailPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Events</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {events === undefined ? (
-            <p className="py-8 text-center text-sm text-atria-text-secondary">
-              Loading audit events…
-            </p>
-          ) : events.length === 0 ? (
+      <AuditEventsErrorBoundary>
+        <AuditEventsCard
+          clerkOrgId={clerkOrgId}
+          action={action}
+          startDate={startDate}
+          endDate={endDate}
+          actorId={actorId}
+        />
+      </AuditEventsErrorBoundary>
+    </div>
+  )
+}
+
+// A failing audit.list query (e.g. a tenant/role mismatch) throws inside
+// useQuery. Without a boundary here the error bubbles to AppErrorBoundary
+// and blanks the whole app; caught here it degrades to an error state.
+interface AuditEventsErrorBoundaryState {
+  hasError: boolean
+}
+
+class AuditEventsErrorBoundary extends Component<
+  PropsWithChildren,
+  AuditEventsErrorBoundaryState
+> {
+  state: AuditEventsErrorBoundaryState = { hasError: false }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('ATRIA-X audit trail error', error, errorInfo)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>Events</CardTitle>
+          </CardHeader>
+          <CardContent>
             <EmptyState
               icon={<ScrollText className="h-6 w-6" />}
-              title="No audit events"
-              description="Events matching these filters will appear here."
+              title="Audit events unavailable"
+              description="The audit trail could not be loaded. Refresh the page or adjust your filters and try again."
             />
-          ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableHeader>When</TableHeader>
-                  <TableHeader>Action</TableHeader>
-                  <TableHeader>Actor</TableHeader>
-                  <TableHeader>Role</TableHeader>
-                  <TableHeader>Change</TableHeader>
+          </CardContent>
+        </Card>
+      )
+    }
+    return this.props.children
+  }
+}
+
+interface AuditEventsCardProps {
+  clerkOrgId: string | undefined
+  action: string
+  startDate: string
+  endDate: string
+  actorId: string
+}
+
+function AuditEventsCard({
+  clerkOrgId,
+  action,
+  startDate,
+  endDate,
+  actorId,
+}: AuditEventsCardProps) {
+  const events = useQuery(
+    api.audit.list,
+    clerkOrgId
+      ? {
+          clerkOrgId,
+          action: action.trim() || undefined,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+          actorId: actorId.trim() || undefined,
+        }
+      : 'skip',
+  )
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Events</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {events === undefined ? (
+          <p className="py-8 text-center text-sm text-atria-text-secondary">
+            Loading audit events…
+          </p>
+        ) : events.length === 0 ? (
+          <EmptyState
+            icon={<ScrollText className="h-6 w-6" />}
+            title="No audit events"
+            description="Events matching these filters will appear here."
+          />
+        ) : (
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeader>When</TableHeader>
+                <TableHeader>Action</TableHeader>
+                <TableHeader>Actor</TableHeader>
+                <TableHeader>Role</TableHeader>
+                <TableHeader>Change</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {events.map((event) => (
+                <TableRow key={event._id}>
+                  <TableCell className="whitespace-nowrap">
+                    {formatDateUS(event.createdAt)}{' '}
+                    {formatTime(event.createdAt)}
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {formatStatusLabel(event.action)}
+                  </TableCell>
+                  <TableCell>{event.actorName ?? event.actorId}</TableCell>
+                  <TableCell>
+                    {formatStatusLabel(
+                      event.actorRole.replace(/^org:/, ''),
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {event.previousStatus || event.nextStatus
+                      ? `${event.previousStatus ?? '-'} → ${
+                          event.nextStatus ?? '-'
+                        }`
+                      : '-'}
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {events.map((event) => (
-                  <TableRow key={event._id}>
-                    <TableCell className="whitespace-nowrap">
-                      {formatDateUS(event.createdAt)}{' '}
-                      {formatTime(event.createdAt)}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {formatStatusLabel(event.action)}
-                    </TableCell>
-                    <TableCell>{event.actorName ?? event.actorId}</TableCell>
-                    <TableCell>
-                      {formatStatusLabel(
-                        event.actorRole.replace(/^org:/, ''),
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {event.previousStatus || event.nextStatus
-                        ? `${event.previousStatus ?? '-'} → ${
-                            event.nextStatus ?? '-'
-                          }`
-                        : '-'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   )
 }

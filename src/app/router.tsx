@@ -4,7 +4,7 @@ import { Suspense, lazy, type ReactNode } from 'react'
 import { AppShell } from './shell/AppShell'
 import { PlatformShell } from './shell/PlatformShell'
 import { SelectAgencyPage } from './auth/SelectAgencyPage'
-import { SignedInRouteGuard, TenantRoleRouteGuard, TrainingRouteGuard } from './shell/RouteGuard'
+import { PlatformAdminRouteGuard, SignedInRouteGuard, TenantRoleRouteGuard, TrainingRouteGuard } from './shell/RouteGuard'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 import { cn } from '@/shared/lib/cn'
@@ -437,7 +437,13 @@ export function AppRouter() {
           </RouteSuspense>
         }
       />
-      <Route element={<PlatformShell />}>
+      <Route
+        element={
+          <PlatformAdminRouteGuard>
+            <PlatformShell />
+          </PlatformAdminRouteGuard>
+        }
+      >
         <Route
           path="platform"
           element={<Navigate replace to="/platform/subscriptions" />}

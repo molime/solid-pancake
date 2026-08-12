@@ -3120,8 +3120,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "convex_backgroundchecks_test",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 761,
+      "community_name": "backgroundChecks.test.ts",
       "norm_label": "backgroundchecks.test.ts"
     },
     {
@@ -3131,8 +3131,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "convex_backgroundchecks_test_modules",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 761,
+      "community_name": "backgroundChecks.test.ts",
       "norm_label": "modules"
     },
     {
@@ -3142,8 +3142,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "convex_backgroundchecks_test_createtestconvex",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 761,
+      "community_name": "backgroundChecks.test.ts",
       "norm_label": "createtestconvex()"
     },
     {
@@ -3153,8 +3153,8 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "convex_backgroundchecks_test_asadmin",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 761,
+      "community_name": "backgroundChecks.test.ts",
       "norm_label": "asadmin()"
     },
     {
@@ -3164,8 +3164,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "convex_backgroundchecks_test_ascandidate",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 761,
+      "community_name": "backgroundChecks.test.ts",
       "norm_label": "ascandidate()"
     },
     {
@@ -3175,8 +3175,8 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "convex_backgroundchecks_test_seedtenantwithcandidate",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 761,
+      "community_name": "backgroundChecks.test.ts",
       "norm_label": "seedtenantwithcandidate()"
     },
     {
@@ -3186,8 +3186,8 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "convex_backgroundchecks_test_getcheck",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 761,
+      "community_name": "backgroundChecks.test.ts",
       "norm_label": "getcheck()"
     },
     {
@@ -5133,8 +5133,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "convex_documentarchive_test",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "documentarchive.test.ts"
     },
     {
@@ -5144,8 +5144,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "convex_documentarchive_test_modules",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "modules"
     },
     {
@@ -5155,8 +5155,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "convex_documentarchive_test_createtestconvex",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "createtestconvex()"
     },
     {
@@ -5166,8 +5166,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "convex_documentarchive_test_asadmin",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "asadmin()"
     },
     {
@@ -5177,8 +5177,8 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "convex_documentarchive_test_ascaregiver",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "ascaregiver()"
     },
     {
@@ -5188,8 +5188,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "convex_documentarchive_test_seedtenant",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "seedtenant()"
     },
     {
@@ -5199,8 +5199,8 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "convex_documentarchive_test_seedcaregiver",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "seedcaregiver()"
     },
     {
@@ -5210,8 +5210,8 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "convex_documentarchive_test_seedarchiveitem",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "seedarchiveitem()"
     },
     {
@@ -7520,8 +7520,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "convex_members_test",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 12,
+      "community_name": "api.js",
       "norm_label": "members.test.ts"
     },
     {
@@ -7531,8 +7531,8 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "convex_members_test_modules",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 12,
+      "community_name": "api.js",
       "norm_label": "modules"
     },
     {
@@ -7542,8 +7542,8 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "convex_members_test_createtestconvex",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 12,
+      "community_name": "api.js",
       "norm_label": "createtestconvex()"
     },
     {
@@ -7553,8 +7553,8 @@
       "source_location": "L217",
       "_origin": "ast",
       "id": "convex_members_test_seedtenantwithmember",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 12,
+      "community_name": "api.js",
       "norm_label": "seedtenantwithmember()"
     },
     {
@@ -7883,8 +7883,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "convex_onboarding_test",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "onboarding.test.ts"
     },
     {
@@ -7894,8 +7894,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "convex_onboarding_test_modules",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "modules"
     },
     {
@@ -7905,8 +7905,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "convex_onboarding_test_createtestconvex",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "createtestconvex()"
     },
     {
@@ -7916,8 +7916,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "convex_onboarding_test_asadmin",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "asadmin()"
     },
     {
@@ -7927,8 +7927,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "convex_onboarding_test_ascaregiver",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "ascaregiver()"
     },
     {
@@ -7938,8 +7938,8 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "convex_onboarding_test_ascandidate",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "ascandidate()"
     },
     {
@@ -7949,8 +7949,8 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "convex_onboarding_test_seedtenant",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "seedtenant()"
     },
     {
@@ -7960,8 +7960,8 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "convex_onboarding_test_stubclerkmembershipupdate",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "stubclerkmembershipupdate()"
     },
     {
@@ -8015,8 +8015,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "convex_phase2guards_test",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 12,
+      "community_name": "api.js",
       "norm_label": "phase2guards.test.ts"
     },
     {
@@ -8026,8 +8026,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "convex_phase2guards_test_modules",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 12,
+      "community_name": "api.js",
       "norm_label": "modules"
     },
     {
@@ -8037,8 +8037,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "convex_phase2guards_test_createtestconvex",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 12,
+      "community_name": "api.js",
       "norm_label": "createtestconvex()"
     },
     {
@@ -8048,8 +8048,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "convex_phase2guards_test_asadmin",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 12,
+      "community_name": "api.js",
       "norm_label": "asadmin()"
     },
     {
@@ -8917,8 +8917,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "convex_platformbilling_test",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "platformbilling.test.ts"
     },
     {
@@ -8928,8 +8928,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "convex_platformbilling_test_modules",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "modules"
     },
     {
@@ -8939,8 +8939,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "convex_platformbilling_test_createtestconvex",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "createtestconvex()"
     },
     {
@@ -8950,8 +8950,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "convex_platformbilling_test_plans",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "plans"
     },
     {
@@ -8961,8 +8961,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "convex_platformbilling_test_billable_roles",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "billable_roles"
     },
     {
@@ -8972,8 +8972,8 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "convex_platformbilling_test_seedtenantwithsubscription",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "seedtenantwithsubscription()"
     },
     {
@@ -8983,8 +8983,8 @@
       "source_location": "L119",
       "_origin": "ast",
       "id": "convex_platformbilling_test_calculate",
-      "community": 12,
-      "community_name": "api.js",
+      "community": 29,
+      "community_name": "schema.ts",
       "norm_label": "calculate()"
     },
     {
@@ -9357,8 +9357,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "convex_platformtrainingcompletions_test",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 12,
+      "community_name": "api.js",
       "norm_label": "platformtrainingcompletions.test.ts"
     },
     {
@@ -9368,8 +9368,8 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "convex_platformtrainingcompletions_test_modules",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 12,
+      "community_name": "api.js",
       "norm_label": "modules"
     },
     {
@@ -9379,8 +9379,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "convex_platformtrainingcompletions_test_createtestconvex",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 12,
+      "community_name": "api.js",
       "norm_label": "createtestconvex()"
     },
     {
@@ -10523,8 +10523,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "convex_session1phase2integration_test",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 12,
+      "community_name": "api.js",
       "norm_label": "session1phase2integration.test.ts"
     },
     {
@@ -10534,8 +10534,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "convex_session1phase2integration_test_modules",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 12,
+      "community_name": "api.js",
       "norm_label": "modules"
     },
     {
@@ -10545,8 +10545,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "convex_session1phase2integration_test_createtestconvex",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 12,
+      "community_name": "api.js",
       "norm_label": "createtestconvex()"
     },
     {
@@ -10556,8 +10556,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "convex_session1phase2integration_test_asadmin",
-      "community": 29,
-      "community_name": "schema.ts",
+      "community": 12,
+      "community_name": "api.js",
       "norm_label": "asadmin()"
     },
     {
@@ -12206,7 +12206,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "package_dependencies_jspdf",
-      "community": 732,
+      "community": 856,
       "community_name": "buildInvoicePdf",
       "norm_label": "jspdf"
     },
@@ -12217,7 +12217,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "jspdf",
-      "community": 732,
+      "community": 856,
       "community_name": "buildInvoicePdf",
       "norm_label": "jspdf"
     },
@@ -16826,7 +16826,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_features_billing_components_invoicestable",
-      "community": 139,
+      "community": 732,
       "community_name": "InvoicesTable.tsx",
       "norm_label": "invoicestable.tsx"
     },
@@ -16837,7 +16837,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "src_features_billing_components_invoicestable_statusvariant",
-      "community": 139,
+      "community": 732,
       "community_name": "InvoicesTable.tsx",
       "norm_label": "statusvariant"
     },
@@ -16848,7 +16848,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "src_features_billing_components_invoicestable_invoicestableprops",
-      "community": 139,
+      "community": 732,
       "community_name": "InvoicesTable.tsx",
       "norm_label": "invoicestableprops"
     },
@@ -16859,7 +16859,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "src_features_billing_components_invoicestable_invoicestable",
-      "community": 139,
+      "community": 732,
       "community_name": "InvoicesTable.tsx",
       "norm_label": "invoicestable()"
     },
@@ -16914,7 +16914,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "src_features_billing_model_invoiceutils_invoicerow",
-      "community": 139,
+      "community": 732,
       "community_name": "InvoicesTable.tsx",
       "norm_label": "invoicerow"
     },
@@ -16991,7 +16991,7 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "src_features_billing_model_invoiceutils_buildinvoicepdf",
-      "community": 732,
+      "community": 856,
       "community_name": "buildInvoicePdf",
       "norm_label": "buildinvoicepdf()"
     },
@@ -23470,8 +23470,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_features_scheduling_components_coveragerequestspanel_test",
-      "community": 879,
-      "community_name": "CoverageRequestsPanel.test.tsx",
+      "community": 37,
+      "community_name": "useQuery",
       "norm_label": "coveragerequestspanel.test.tsx"
     },
     {
@@ -23481,8 +23481,8 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "src_features_scheduling_components_coveragerequestspanel_test_mocks",
-      "community": 879,
-      "community_name": "CoverageRequestsPanel.test.tsx",
+      "community": 37,
+      "community_name": "useQuery",
       "norm_label": "mocks"
     },
     {
@@ -23492,8 +23492,8 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "src_features_scheduling_components_coveragerequestspanel_test_caregiver",
-      "community": 879,
-      "community_name": "CoverageRequestsPanel.test.tsx",
+      "community": 37,
+      "community_name": "useQuery",
       "norm_label": "caregiver"
     },
     {
@@ -23503,8 +23503,8 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "src_features_scheduling_components_coveragerequestspanel_test_replacement",
-      "community": 879,
-      "community_name": "CoverageRequestsPanel.test.tsx",
+      "community": 37,
+      "community_name": "useQuery",
       "norm_label": "replacement"
     },
     {
@@ -23514,8 +23514,8 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "src_features_scheduling_components_coveragerequestspanel_test_request",
-      "community": 879,
-      "community_name": "CoverageRequestsPanel.test.tsx",
+      "community": 37,
+      "community_name": "useQuery",
       "norm_label": "request"
     },
     {
@@ -23525,8 +23525,8 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "src_features_scheduling_components_coveragerequestspanel_test_mockcoveragestate",
-      "community": 879,
-      "community_name": "CoverageRequestsPanel.test.tsx",
+      "community": 37,
+      "community_name": "useQuery",
       "norm_label": "mockcoveragestate()"
     },
     {
@@ -23701,8 +23701,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_features_scheduling_components_shiftpacketpanel_test",
-      "community": 37,
-      "community_name": "useQuery",
+      "community": 859,
+      "community_name": "ShiftPacketPanel.test.tsx",
       "norm_label": "shiftpacketpanel.test.tsx"
     },
     {
@@ -23712,8 +23712,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "src_features_scheduling_components_shiftpacketpanel_test_mocks",
-      "community": 37,
-      "community_name": "useQuery",
+      "community": 859,
+      "community_name": "ShiftPacketPanel.test.tsx",
       "norm_label": "mocks"
     },
     {
@@ -23723,8 +23723,8 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "src_features_scheduling_components_shiftpacketpanel_test_caregiver",
-      "community": 37,
-      "community_name": "useQuery",
+      "community": 859,
+      "community_name": "ShiftPacketPanel.test.tsx",
       "norm_label": "caregiver"
     },
     {
@@ -23734,8 +23734,8 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "src_features_scheduling_components_shiftpacketpanel_test_client",
-      "community": 37,
-      "community_name": "useQuery",
+      "community": 859,
+      "community_name": "ShiftPacketPanel.test.tsx",
       "norm_label": "client"
     },
     {
@@ -23745,8 +23745,8 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "src_features_scheduling_components_shiftpacketpanel_test_shift",
-      "community": 37,
-      "community_name": "useQuery",
+      "community": 859,
+      "community_name": "ShiftPacketPanel.test.tsx",
       "norm_label": "shift"
     },
     {
@@ -23756,8 +23756,8 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "src_features_scheduling_components_shiftpacketpanel_test_tasks",
-      "community": 37,
-      "community_name": "useQuery",
+      "community": 859,
+      "community_name": "ShiftPacketPanel.test.tsx",
       "norm_label": "tasks"
     },
     {
@@ -23767,8 +23767,8 @@
       "source_location": "L83",
       "_origin": "ast",
       "id": "src_features_scheduling_components_shiftpacketpanel_test_mockpacketstate",
-      "community": 37,
-      "community_name": "useQuery",
+      "community": 859,
+      "community_name": "ShiftPacketPanel.test.tsx",
       "norm_label": "mockpacketstate()"
     },
     {
@@ -67866,8 +67866,8 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_implement_prompt_role_planner_codex",
-      "community": 761,
-      "community_name": "ROLE: PLANNER (codex)",
+      "community": 375,
+      "community_name": "20260625_084642/implement.prompt.md",
       "norm_label": "role: planner (codex)"
     },
     {
@@ -67877,8 +67877,8 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_implement_prompt_project_context_39",
-      "community": 761,
-      "community_name": "ROLE: PLANNER (codex)",
+      "community": 375,
+      "community_name": "20260625_084642/implement.prompt.md",
       "norm_label": "project context"
     },
     {
@@ -67888,8 +67888,8 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_implement_prompt_task",
-      "community": 761,
-      "community_name": "ROLE: PLANNER (codex)",
+      "community": 375,
+      "community_name": "20260625_084642/implement.prompt.md",
       "norm_label": "task"
     },
     {
@@ -67899,8 +67899,8 @@
       "source_location": "L84",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_implement_prompt_your_plan_must_contain",
-      "community": 761,
-      "community_name": "ROLE: PLANNER (codex)",
+      "community": 375,
+      "community_name": "20260625_084642/implement.prompt.md",
       "norm_label": "your plan must contain"
     },
     {
@@ -67943,8 +67943,8 @@
       "source_location": "L3005",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_implement_prompt_frame_today_entry",
-      "community": 354,
-      "community_name": "Caregiver Shift Documentation \u00e2\u20ac\u201d Screen Spec",
+      "community": 889,
+      "community_name": "Frame: Today / Entry",
       "norm_label": "frame: today / entry"
     },
     {
@@ -67954,8 +67954,8 @@
       "source_location": "L3011",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_implement_prompt_layout",
-      "community": 354,
-      "community_name": "Caregiver Shift Documentation \u00e2\u20ac\u201d Screen Spec",
+      "community": 889,
+      "community_name": "Frame: Today / Entry",
       "norm_label": "layout"
     },
     {
@@ -67965,8 +67965,8 @@
       "source_location": "L3016",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_implement_prompt_copy",
-      "community": 354,
-      "community_name": "Caregiver Shift Documentation \u00e2\u20ac\u201d Screen Spec",
+      "community": 889,
+      "community_name": "Frame: Today / Entry",
       "norm_label": "copy"
     },
     {
@@ -67976,8 +67976,8 @@
       "source_location": "L3029",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_implement_prompt_interaction",
-      "community": 354,
-      "community_name": "Caregiver Shift Documentation \u00e2\u20ac\u201d Screen Spec",
+      "community": 889,
+      "community_name": "Frame: Today / Entry",
       "norm_label": "interaction"
     },
     {
@@ -68174,8 +68174,8 @@
       "source_location": "L3271",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_implement_prompt_pipeline_summary_\u00e2_atriax",
-      "community": 375,
-      "community_name": "20260625_084642/implement.prompt.md",
+      "community": 890,
+      "community_name": "Pipeline summary \u00e2\u20ac\u201d atriax",
       "norm_label": "pipeline summary a\u20ac\u201d atriax"
     },
     {
@@ -68185,8 +68185,8 @@
       "source_location": "L3333",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_implement_prompt_stages",
-      "community": 375,
-      "community_name": "20260625_084642/implement.prompt.md",
+      "community": 890,
+      "community_name": "Pipeline summary \u00e2\u20ac\u201d atriax",
       "norm_label": "stages"
     },
     {
@@ -68196,8 +68196,8 @@
       "source_location": "L3351",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_implement_prompt_hermes_authenticated_providers_probe",
-      "community": 375,
-      "community_name": "20260625_084642/implement.prompt.md",
+      "community": 890,
+      "community_name": "Pipeline summary \u00e2\u20ac\u201d atriax",
       "norm_label": "hermes authenticated providers (probe)"
     },
     {
@@ -68207,8 +68207,8 @@
       "source_location": "L3360",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_implement_prompt_next_step",
-      "community": 375,
-      "community_name": "20260625_084642/implement.prompt.md",
+      "community": 890,
+      "community_name": "Pipeline summary \u00e2\u20ac\u201d atriax",
       "norm_label": "next step"
     },
     {
@@ -69384,8 +69384,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_plan_final_role_planner_codex",
-      "community": 890,
-      "community_name": "ROLE: PLANNER (codex)",
+      "community": 356,
+      "community_name": "20260625_084642/plan_final.md",
       "norm_label": "role: planner (codex)"
     },
     {
@@ -69395,8 +69395,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_plan_final_project_context",
-      "community": 890,
-      "community_name": "ROLE: PLANNER (codex)",
+      "community": 356,
+      "community_name": "20260625_084642/plan_final.md",
       "norm_label": "project context"
     },
     {
@@ -69406,8 +69406,8 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_plan_final_task",
-      "community": 890,
-      "community_name": "ROLE: PLANNER (codex)",
+      "community": 356,
+      "community_name": "20260625_084642/plan_final.md",
       "norm_label": "task"
     },
     {
@@ -69417,8 +69417,8 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_plan_final_your_plan_must_contain",
-      "community": 890,
-      "community_name": "ROLE: PLANNER (codex)",
+      "community": 356,
+      "community_name": "20260625_084642/plan_final.md",
       "norm_label": "your plan must contain"
     },
     {
@@ -69692,8 +69692,8 @@
       "source_location": "L3261",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_plan_final_pipeline_summary_\u00e2_atriax",
-      "community": 356,
-      "community_name": "20260625_084642/plan_final.md",
+      "community": 891,
+      "community_name": "Pipeline summary \u00e2\u20ac\u201d atriax",
       "norm_label": "pipeline summary a\u20ac\u201d atriax"
     },
     {
@@ -69703,8 +69703,8 @@
       "source_location": "L3323",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_plan_final_stages",
-      "community": 356,
-      "community_name": "20260625_084642/plan_final.md",
+      "community": 891,
+      "community_name": "Pipeline summary \u00e2\u20ac\u201d atriax",
       "norm_label": "stages"
     },
     {
@@ -69714,8 +69714,8 @@
       "source_location": "L3341",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_plan_final_hermes_authenticated_providers_probe",
-      "community": 356,
-      "community_name": "20260625_084642/plan_final.md",
+      "community": 891,
+      "community_name": "Pipeline summary \u00e2\u20ac\u201d atriax",
       "norm_label": "hermes authenticated providers (probe)"
     },
     {
@@ -69725,8 +69725,8 @@
       "source_location": "L3350",
       "_origin": "ast",
       "id": "hermes_pipeline_20260625_084642_plan_final_next_step",
-      "community": 356,
-      "community_name": "20260625_084642/plan_final.md",
+      "community": 891,
+      "community_name": "Pipeline summary \u00e2\u20ac\u201d atriax",
       "norm_label": "next step"
     },
     {
@@ -82496,7 +82496,7 @@
       "source_location": "L23437",
       "_origin": "ast",
       "id": "hermes_pipeline_20260626_210401_fix_iter3_prompt_2_adp_integration_reference_what_the_flow_needs_23437",
-      "community": 889,
+      "community": 139,
       "community_name": "2. ADP integration reference (what the flow needs)",
       "norm_label": "2. adp integration reference (what the flow needs)"
     },
@@ -82507,7 +82507,7 @@
       "source_location": "L23441",
       "_origin": "ast",
       "id": "hermes_pipeline_20260626_210401_fix_iter3_prompt_2_1_auth_model_stable_\u00e3_\u00e2_\u00e2_build_now_23441",
-      "community": 889,
+      "community": 139,
       "community_name": "2. ADP integration reference (what the flow needs)",
       "norm_label": "2.1 auth model (stable a\u00a2a\u201a\u00aca\u20ac\u009d build now)"
     },
@@ -82518,7 +82518,7 @@
       "source_location": "L23451",
       "_origin": "ast",
       "id": "hermes_pipeline_20260626_210401_fix_iter3_prompt_2_2_worker_apis_stable_\u00e3_\u00e2_\u00e2_build_now_23451",
-      "community": 889,
+      "community": 139,
       "community_name": "2. ADP integration reference (what the flow needs)",
       "norm_label": "2.2 worker apis (stable a\u00a2a\u201a\u00aca\u20ac\u009d build now)"
     },
@@ -82529,7 +82529,7 @@
       "source_location": "L23460",
       "_origin": "ast",
       "id": "hermes_pipeline_20260626_210401_fix_iter3_prompt_2_3_time_punches_isolated_\u00e3_\u00e2_\u00e2_adapter_fill_in_on_confirmation_23460",
-      "community": 889,
+      "community": 139,
       "community_name": "2. ADP integration reference (what the flow needs)",
       "norm_label": "2.3 time punches (isolated a\u00a2a\u201a\u00aca\u20ac\u009d adapter, fill in on confirmation)"
     },
@@ -82540,7 +82540,7 @@
       "source_location": "L23470",
       "_origin": "ast",
       "id": "hermes_pipeline_20260626_210401_fix_iter3_prompt_2_4_credentials_\u00e3_\u00e2_\u00e2_tm_convex_env_vars_set_when_they_arrive_\u00e3_\u00e2_\u00e2_nothing_hardcoded_23470",
-      "community": 889,
+      "community": 139,
       "community_name": "2. ADP integration reference (what the flow needs)",
       "norm_label": "2.4 credentials a\u00a2a\u20ac a\u20actm convex env vars (set when they arrive a\u00a2a\u201a\u00aca\u20ac\u009d nothing hardcoded)"
     },
@@ -82551,7 +82551,7 @@
       "source_location": "L23476",
       "_origin": "ast",
       "id": "hermes_pipeline_20260626_210401_fix_iter3_prompt_2_5_official_docs_to_read_on_credential_day_23476",
-      "community": 889,
+      "community": 139,
       "community_name": "2. ADP integration reference (what the flow needs)",
       "norm_label": "2.5 official docs to read on credential day"
     },
@@ -232932,5 +232932,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "17c633fcab2efdf9a56fa2dc6273eaa5fb93e425"
+  "built_at_commit": "64df4412260b20c263b11febbe9309d702a8d9c6"
 }

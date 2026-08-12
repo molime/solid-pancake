@@ -194,13 +194,6 @@ const navItems: NavItem[] = [
   },
 ]
 
-const platformNavItem: NavItem = {
-  label: 'Platform',
-  path: '/platform',
-  icon: <Globe className="h-4 w-4" />,
-  roles: [],
-}
-
 interface SidebarProps {
   mobileOpen?: boolean
   onMobileClose?: () => void
@@ -215,12 +208,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
   const role = member?.role ?? 'org:caregiver'
 
-  const isPlatformAdmin = useQuery(api.platform.isAdmin)
-
   const visibleItems = navItems.filter((item) => item.roles.includes(role))
-  const itemsWithPlatform = isPlatformAdmin
-    ? [...visibleItems, platformNavItem]
-    : visibleItems
 
   return (
     <>
@@ -230,7 +218,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
           role={role}
           userName={user?.fullName ?? 'User'}
           userInitial={user?.firstName?.[0] ?? 'U'}
-          visibleItems={itemsWithPlatform}
+          visibleItems={visibleItems}
         />
       </aside>
 
@@ -255,7 +243,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               role={role}
               userName={user?.fullName ?? 'User'}
               userInitial={user?.firstName?.[0] ?? 'U'}
-              visibleItems={itemsWithPlatform}
+              visibleItems={visibleItems}
             />
           </aside>
         </div>

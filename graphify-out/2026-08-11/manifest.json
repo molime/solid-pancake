@@ -260,7 +260,7 @@
     "semantic_hash": "06e90a30b65f01449c0818aa7539cd71"
   },
   "convex/_generated/api.d.ts": {
-    "mtime": 1786475310.2546976,
+    "mtime": 1786487207.2944539,
     "ast_hash": "ccfebaea52a5a1c1a458293485d00aca",
     "semantic_hash": ""
   },
@@ -300,8 +300,8 @@
     "semantic_hash": "82a323f3ec9eb123e08a6a2afc13f185"
   },
   "convex/_utils/invitationBypass.ts": {
-    "mtime": 1785971917.3119538,
-    "ast_hash": "f630416c43d0f2c80aa77a28d00a7fc6",
+    "mtime": 1786498769.0905392,
+    "ast_hash": "0d95b8128068b9cda64ee7fec47edabd",
     "semantic_hash": ""
   },
   "convex/_utils/notifications.ts": {
@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "convex/audit.ts": {
-    "mtime": 1786485614.0545895,
-    "ast_hash": "108a32b9573a531746882a9b53281cf3",
+    "mtime": 1786498740.3566997,
+    "ast_hash": "614d9a57c45e72211c0d03da8528776d",
     "semantic_hash": ""
   },
   "convex/auth.config.ts": {
@@ -910,8 +910,8 @@
     "semantic_hash": ""
   },
   "src/features/billing/pages/BillingPage.tsx": {
-    "mtime": 1786058559.616541,
-    "ast_hash": "93e481e71814a90c30b1403ae1fec9cd",
+    "mtime": 1786498776.3955102,
+    "ast_hash": "9fbe2ed6432db34c899bff51c8670e62",
     "semantic_hash": ""
   },
   "src/features/caregiver/components/LocationStatusPanel.tsx": {
@@ -4655,8 +4655,8 @@
     "semantic_hash": ""
   },
   "tests/e2e/qa-logs-access.spec.ts": {
-    "mtime": 1786485984.9522066,
-    "ast_hash": "eb0684c300e59ef352ea7ecd9d13ce96",
+    "mtime": 1786487311.5826602,
+    "ast_hash": "a6ab0f64c40f7080f341006c872a8aba",
     "semantic_hash": ""
   }
 }

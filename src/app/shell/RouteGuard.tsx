@@ -77,6 +77,32 @@ export function SignedInRouteGuard({ children }: PropsWithChildren) {
   return <>{children}</>
 }
 
+// Platform routes (/platform/*) must never be reachable by agency users.
+// SignedInRouteGuard alone lets any signed-in user through, so this guard
+// additionally requires api.platform.isAdmin before rendering children.
+export function PlatformAdminRouteGuard({ children }: PropsWithChildren) {
+  const { isLoaded, isSignedIn } = useAuth()
+  const isPlatformAdmin = useQuery(api.platform.isAdmin)
+
+  if (!isLoaded) {
+    return <AppLoader fullScreen />
+  }
+
+  if (!isSignedIn) {
+    return <Navigate to="/sign-in" replace />
+  }
+
+  if (isPlatformAdmin === undefined) {
+    return <AppLoader fullScreen label="Checking platform access" />
+  }
+
+  if (!isPlatformAdmin) {
+    return <Navigate to="/" replace />
+  }
+
+  return <>{children}</>
+}
+
 // A no-org user's resolved tenant lives in localStorage and is stable
 // across Clerk token refreshes. Role/training guards fall back to it
 // before concluding there is no tenant — a momentary undefined from

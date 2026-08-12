@@ -1,16 +1,16 @@
 # Graph Report - solid-pancake  (2026-08-11)
 
 ## Corpus Check
-- 790 files · ~7,724,968 words
+- 790 files · ~7,725,034 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 9690 nodes · 11267 edges · 886 communities (817 shown, 69 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 64 edges (avg confidence: 0.78)
+- 9690 nodes · 11247 edges · 906 communities (821 shown, 85 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 61 edges (avg confidence: 0.78)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `17c633fc`
+- Built from commit: `64df4412`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -43,7 +43,7 @@
 - ApplicationFormPage.tsx
 - index.ts
 - billing.ts
-- invitationBypass.ts
+- ATRIA-X ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Phase 1 Implementation Plan (Sessions + Prompts)
 - schema.ts
 - ShiftClockOutScreen.tsx
 - dependencies
@@ -68,7 +68,7 @@
 - compilerOptions
 - api.d.ts
 - format.ts
-- requireTenantRole
+- CandidatePipelinePage.tsx
 - agencyConfig.ts
 - Diego's Testing Fixes — 5 Issues
 - compliance.ts
@@ -88,10 +88,10 @@
 - 4. Session order & prompts
 - Final Detail Fixes — 3 Issues
 - 4. Session order & prompts
-- ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)
+- 4. Session order & prompts
 - 4. Session order & prompts
 - trainingCompletion.ts
-- 4. Session order & prompts
+- shiftClock.behavior.test.ts
 - ProgressSteps.tsx
 - ATRIA-X Design System â€” Dark Theme Token Spec (v1)
 - ROLE: PLANNER (codex)
@@ -150,7 +150,7 @@
 - 3. Architecture additions (so every session prompt is consistent)
 - run-smoke.mjs
 - 3. Architecture additions (so every session prompt is consistent)
-- InvoicesTable.tsx
+- documentArchive.test.ts
 - run-smoke2.mjs
 - { chromium }
 - { chromium }
@@ -711,7 +711,7 @@
 - Pipeline summary — atriax
 - E2E HR User Role Resolution Fix
 - W4Section.tsx
-- buildInvoicePdf
+- HRDashboardPage.tsx
 - CLAUDE.md
 - 20260731_093551/fix_iter4.prompt.md
 - ROLE: PLANNER (codex)
@@ -740,6 +740,7 @@
 - Frame: Clock Out
 - Frame: Clock In
 - ROLE: IMPLEMENTER (Kimi)
+- backgroundChecks.test.ts
 - Frame: Clock In
 - Frame: Clock Out
 - phase3.test.ts
@@ -772,6 +773,7 @@
 - Pipeline summary Ã¢â‚¬â€ atriax
 - Pipeline summary Ã¢â‚¬â€ atriax
 - run-smoke3.mjs
+- Pipeline summary â€” atriax
 - 20260731_094528/fix_iter3.prompt.md
 - 20260731_094528/fix_iter4.prompt.md
 - 20260603_165807/review_opus_iter2.md
@@ -802,6 +804,7 @@
 - Implementation Plan — Add "Home" navigation to the HR sidebar
 - forms.ts
 - ROLE: PLANNER (codex)
+- Pipeline summary â€” atriax
 - check-audit.mjs
 - useTenant.test.ts
 - Sidebar.tsx
@@ -828,8 +831,10 @@
 - ROLE: PLANNER (codex)
 - ROLE: PLANNER (opus)
 - Pipeline summary — atriax
+- files.test.ts
 - bootstrap.mjs
 - ApplicationReviewPage.test.tsx
+- ShiftPacketPanel.test.tsx
 - 20260731_093551/plan_codex.md
 - 20260731_093551/review_codex_iter1.md
 - 20260731_093551/review_codex_iter2.md
@@ -848,63 +853,78 @@
 - 20260731_094528/review_opus_iter2.md
 - 20260731_094528/review_opus_iter3.md
 - 20260731_094528/review_opus_iter4.md
-- backgroundChecks.test.ts
+- InviteCandidateModal.tsx
 - CoverageRequestsPanel.test.tsx
+- 3. Architecture additions (so every session prompt is consistent)
 - seed.test.ts
-- ROLE: REVIEWER (codex)
+- 3. Architecture additions (so every session prompt is consistent)
+- package.json
 - AgencyDetailErrorBoundary
 - GeofenceSettingsPage.test.tsx
-- ShiftDocumentationForm.test.tsx
+- CaregiverTodayPage.tsx
 - ROLE: PLANNER (codex)
-- 2. ADP integration reference (what the flow needs)
-- ROLE: PLANNER (codex)
+- ClientsPage.tsx
 - Frame: Today / Entry
 - Pipeline summary â€” atriax
+- Pipeline summary â€” atriax
+- DownloadButton
+- StorageDownloadButton
+- convex-test
+- eslint
+- eslint-plugin-react-hooks
+- prettier
+- @testing-library/jest-dom
+- @testing-library/react
+- @testing-library/user-event
+- @types/node
+- @types/react
+- vite
+- @vitejs/plugin-react
 
 ## God Nodes (most connected - your core abstractions)
 1. `api` - 100 edges
-2. `requireTenantRole()` - 40 edges
+2. `requireTenantRole()` - 38 edges
 3. `internal` - 33 edges
-4. `assertTenantDoc()` - 32 edges
-5. `ROLE: PLANNER (codex)` - 30 edges
-6. `query` - 28 edges
-7. `mutation` - 28 edges
+4. `ROLE: PLANNER (codex)` - 30 edges
+5. `query` - 28 edges
+6. `mutation` - 28 edges
+7. `assertTenantDoc()` - 28 edges
 8. `ROLE: PLANNER (codex)` - 28 edges
 9. `ROLE: PLANNER (codex)` - 28 edges
 10. `usePlatformAdmin()` - 27 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `mockDbTenants()` --indirect_call--> `useQuery()`  [INFERRED]
-  src/app/useTenant.test.ts → src/dev/mockConvexReact.tsx
 - `buildInvoicePdf()` --references--> `jspdf`  [EXTRACTED]
   src/features/billing/model/invoiceUtils.ts → package.json
+- `mockDbTenants()` --indirect_call--> `useQuery()`  [INFERRED]
+  src/app/useTenant.test.ts → src/dev/mockConvexReact.tsx
+- `mockSignedInWithRole()` --indirect_call--> `useQuery()`  [INFERRED]
+  src/app/router.test.tsx → src/dev/mockConvexReact.tsx
+- `mockSignedInWithRoleAndTraining()` --indirect_call--> `useQuery()`  [INFERRED]
+  src/app/router.test.tsx → src/dev/mockConvexReact.tsx
 - `mockClerkState()` --indirect_call--> `useAuth()`  [INFERRED]
-  src/app/auth/SelectAgencyPage.test.tsx → src/dev/mockClerkReact.tsx
-- `mockClerkState()` --indirect_call--> `useOrganization()`  [INFERRED]
-  src/app/auth/SelectAgencyPage.test.tsx → src/dev/mockClerkReact.tsx
-- `mockClerkState()` --indirect_call--> `useUser()`  [INFERRED]
-  src/app/auth/SelectAgencyPage.test.tsx → src/dev/mockClerkReact.tsx
+  src/app/shell/RouteGuard.test.tsx → src/dev/mockClerkReact.tsx
 
 ## Import Cycles
 - 2-file cycle: `tests/e2e/helpers/auth.ts -> tests/e2e/helpers/seed.ts -> tests/e2e/helpers/auth.ts`
 
-## Communities (886 total, 69 thin omitted)
+## Communities (906 total, 85 thin omitted)
 
 ### Community 0 - "auth.ts"
 Cohesion: 0.06
 Nodes (83): callConvex(), ConvexHttpResult, acceptJobDescriptionAndLegalValidity(), completePrecedingTasks(), datePlusDays(), fillAcknowledgments(), fillEmploymentAndReferences(), fillI9AndW4() (+75 more)
 
 ### Community 1 - "ApplicationReviewPage.tsx"
-Cohesion: 0.06
-Nodes (28): HrToast(), InviteCandidateModal(), isValidPhoneOptional(), inviteCandidateMock, HrToast, useHrToast(), CandidateStatus, candidateStatusAccentClass() (+20 more)
+Cohesion: 0.12
+Nodes (9): CarInsuranceStatus, EXPIRING_SOON_DAYS, getCarInsuranceStatus(), NOW, ApplicationReviewPage(), getInitialI9Section2(), getInitialW4EmployerData(), initials() (+1 more)
 
 ### Community 2 - "shifts.ts"
 Cohesion: 0.05
-Nodes (48): assertValidCoordinate(), haversineDistanceMeters(), LatLng, LocationEvidence, LocationInput, resolveShiftServiceTarget(), ServiceTarget, validatePunchLocation() (+40 more)
+Nodes (53): assertTenantDoc(), DatabaseReader, DatabaseWriter, MutationCtx, QueryCtx, assertValidCoordinate(), haversineDistanceMeters(), LatLng (+45 more)
 
 ### Community 3 - "candidates.ts"
 Cohesion: 0.03
-Nodes (60): patchEvent(), acceptOffer, acknowledgeBackgroundCheck, addCandidateDocument, applyPublic, assertPrecedingTasksComplete(), attachCandidateDocument, CANDIDATE_DOCUMENT_TYPES (+52 more)
+Nodes (85): acceptOffer, acknowledgeBackgroundCheck, addCandidateDocument, applyPublic, assertPrecedingTasksComplete(), attachCandidateDocument, CANDIDATE_DOCUMENT_TYPES, CANDIDATE_TASK_TYPES (+77 more)
 
 ### Community 4 - "mockData.ts"
 Cohesion: 0.15
@@ -923,8 +943,8 @@ Cohesion: 0.08
 Nodes (35): DisbursementSection(), DisbursementSectionProps, I9Section(), I9SectionProps, PersonalInfoSection(), PersonalInfoSectionProps, renderSection(), ACCOUNT_TYPE_OPTIONS (+27 more)
 
 ### Community 8 - "SchedulingPage.tsx"
-Cohesion: 0.11
-Nodes (30): CoverageRequest, CoverageRequestsPanel(), CoverageStatus, statusBadgeVariant, formatTimeInput(), ShiftEditorModal(), ShiftEditorModalProps, ShiftPacketPanel() (+22 more)
+Cohesion: 0.13
+Nodes (28): CoverageRequest, CoverageRequestsPanel(), CoverageStatus, statusBadgeVariant, formatTimeInput(), ShiftEditorModal(), ShiftEditorModalProps, addDays() (+20 more)
 
 ### Community 9 - "scheduling.ts"
 Cohesion: 0.06
@@ -939,12 +959,12 @@ Cohesion: 0.15
 Nodes (18): DecisionCard(), DocumentationCard(), formatDateShort(), formatDuration(), formatShiftMeta(), formatTime(), formatTimeString(), getDependencyMessage() (+10 more)
 
 ### Community 12 - "api.js"
-Cohesion: 0.04
-Nodes (23): api, components, modules, modules, modules, modules, modules, statusVariant (+15 more)
+Cohesion: 0.05
+Nodes (18): api, components, modules, modules, statusVariant, computedStatusLabel, computedStatusVariant, typeBadgeVariant (+10 more)
 
 ### Community 13 - "mockClerkReact.tsx"
-Cohesion: 0.10
-Nodes (17): AppRouter(), mockSignedInWithRole(), mockSignedInWithRoleAndTraining(), mockTopbarState(), mockOrganization(), ClerkContext, ClerkProvider(), getRoleFromView() (+9 more)
+Cohesion: 0.08
+Nodes (22): mockClerkState(), AppRouter(), mockSignedInWithRole(), mockSignedInWithRoleAndTraining(), mockSignedInOrgs(), mockTopbarState(), mockOrganization(), ClerkContext (+14 more)
 
 ### Community 14 - "internal"
 Cohesion: 0.08
@@ -963,16 +983,16 @@ Cohesion: 0.13
 Nodes (23): AcknowledgmentsSection(), AcknowledgmentsSectionProps, ABUSE_NOTICE_TEXT, ACKNOWLEDGMENT_DOCUMENTS, AcknowledgmentDoc, EMPLOYEE_CONTRACT_TEXT, EMPLOYEE_RIGHTS_TEXT, HIPAA_TEXT (+15 more)
 
 ### Community 18 - "BillingPage.tsx"
-Cohesion: 0.23
-Nodes (14): BillingInvoicePanel(), BillingInvoicePanelProps, BillingLinesTable(), BillingLinesTableProps, EmptyBillingState(), BillingFilters, BillingLineRow, buildInvoiceCsv() (+6 more)
+Cohesion: 0.17
+Nodes (19): BillingInvoicePanel(), BillingInvoicePanelProps, BillingLinesTable(), BillingLinesTableProps, EmptyBillingState(), InvoicesTable(), InvoicesTableProps, statusVariant (+11 more)
 
 ### Community 19 - "adpSync.ts"
-Cohesion: 0.07
+Cohesion: 0.06
 Nodes (34): adpDrainPendingRows, adpInitialWorkerLoad, adpSyncPunch, adpSyncWorker, exportPayrollToAdp, getAdpPort(), AdpEmployeeSyncStatus, AdpPunchSyncStatus (+26 more)
 
 ### Community 20 - "authHelpers.ts"
-Cohesion: 0.06
-Nodes (46): normalizeEmail(), getActiveClerkOrganizationId(), getAtriaRoleFromMetadata(), getClerkOrganizationRole(), normalizeTenantRole(), requireActiveClerkOrganization(), requireIdentity(), requireMatchingClerkOrganization() (+38 more)
+Cohesion: 0.04
+Nodes (71): normalizeEmail(), getActiveClerkOrganizationId(), getAtriaRoleFromMetadata(), getClerkOrganizationRole(), normalizeTenantRole(), requireActiveClerkOrganization(), requireIdentity(), requireMatchingClerkOrganization() (+63 more)
 
 ### Community 21 - "Caregiver Shift Documentation â€” Screen Spec"
 Cohesion: 0.04
@@ -983,12 +1003,12 @@ Cohesion: 0.05
 Nodes (43): Caregiver Flow â€” Visual Review Artifacts, Caregiver Shift Documentation â€” Screen Spec, cmd: codex exec --ignore-user-config --skip-git-repo-check --color never --sandbox read-only 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_185028\review_codex_iter3.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', codex review (verdict CHANGES_REQUESTED), Common layout, Component-level coverage, Conclusion, Copy (+35 more)
 
 ### Community 23 - "devDependencies"
-Cohesion: 0.04
-Nodes (45): convex-test, eslint, @eslint/js, eslint-plugin-react-hooks, eslint-plugin-react-refresh, globals, jsdom, devDependencies (+37 more)
+Cohesion: 0.09
+Nodes (23): @eslint/js, eslint-plugin-react-refresh, globals, jsdom, devDependencies, @eslint/js, eslint-plugin-react-refresh, globals (+15 more)
 
 ### Community 24 - "ShiftNoteStep.tsx"
 Cohesion: 0.13
-Nodes (13): ShiftTaskList(), ShiftTaskListItem, EMPTY_NOTE_DRAFT, GOAL_OPTIONS, GoalLabel, ISSUE_CHOICE_NO, ISSUE_CHOICE_YES, IssueChoice (+5 more)
+Nodes (14): ShiftTaskList(), ShiftTaskListItem, EMPTY_NOTE_DRAFT, GOAL_OPTIONS, GoalLabel, ISSUE_CHOICE_NO, ISSUE_CHOICE_YES, IssueChoice (+6 more)
 
 ### Community 25 - "ApplicationFormPage.tsx"
 Cohesion: 0.12
@@ -1000,23 +1020,23 @@ Nodes (17): Card(), CardContent(), CardHeader(), CardTitle(), Checkbox(), Dialog
 
 ### Community 27 - "billing.ts"
 Cohesion: 0.05
-Nodes (52): assertTenantDoc(), BILLING_ROLES, completePayrollExport, createExportBatch, createInvoice, createPayPeriod, createPerPatientInvoices, exportBatches (+44 more)
+Nodes (45): BILLING_ROLES, completePayrollExport, createExportBatch, createInvoice, createPayPeriod, createPerPatientInvoices, exportBatches, exportPayroll (+37 more)
 
-### Community 28 - "invitationBypass.ts"
+### Community 28 - "ATRIA-X ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Phase 1 Implementation Plan (Sessions + Prompts)"
 Cohesion: 0.12
-Nodes (28): generateClerkSignInTicketForEmail(), assertEmailDomainAllowed(), clerkErrorMessage(), create, extractEmailDomain(), invitationRedirectUrl(), InviteRole, isAllowListError() (+20 more)
+Nodes (17): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 2.1 Auth model (stable ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â build now), 2.2 Worker APIs (stable ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â build now), 2.3 Time punches (ISOLATED ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â adapter, fill in on confirmation) (+9 more)
 
 ### Community 29 - "schema.ts"
-Cohesion: 0.04
-Nodes (21): modules, assertCanEditProof(), modules, DataModel, Doc, Id, TableNames, modules (+13 more)
+Cohesion: 0.05
+Nodes (16): DataModel, Doc, Id, TableNames, modules, modules, modules, BILLABLE_ROLES (+8 more)
 
 ### Community 30 - "ShiftClockOutScreen.tsx"
-Cohesion: 0.17
-Nodes (15): LocationState, LocationStatusPanel(), CompleteChecklist(), LocationState, MissingChecklist(), LocationState, LocationState, ShiftClockOutScreen() (+7 more)
+Cohesion: 0.16
+Nodes (16): LocationState, LocationStatusPanel(), CompleteChecklist(), LocationState, MissingChecklist(), LocationState, ShiftClockInScreen(), LocationState (+8 more)
 
 ### Community 31 - "dependencies"
-Cohesion: 0.10
-Nodes (21): class-variance-authority, @clerk/react, clsx, convex, lucide-react, dependencies, class-variance-authority, @clerk/react (+13 more)
+Cohesion: 0.09
+Nodes (23): class-variance-authority, @clerk/react, clsx, convex, jspdf, lucide-react, dependencies, class-variance-authority (+15 more)
 
 ### Community 32 - "20260625_165149/screenshot-app/mockConvex.tsx"
 Cohesion: 0.10
@@ -1027,8 +1047,8 @@ Cohesion: 0.10
 Nodes (13): CONFETTI_COLORS, CONFETTI_PIECES, DEFAULT_STEPS, parseQuiz(), QuizQuestion, STEP_COLORS, STEP_ICONS, StepView() (+5 more)
 
 ### Community 34 - "ShiftDocumentationForm.tsx"
-Cohesion: 0.15
-Nodes (17): ShiftClockInScreen(), defaultGeofence(), ShiftDetails, ShiftDocumentationWizard(), TaskDraftList, TaskId, TenantSettings, TERMINAL_STATUSES (+9 more)
+Cohesion: 0.16
+Nodes (16): defaultGeofence(), ShiftDetails, ShiftDocumentationWizard(), TaskDraftList, TaskId, TenantSettings, TERMINAL_STATUSES, ShiftSuccessScreen() (+8 more)
 
 ### Community 35 - "EmployeeProfilePage.tsx"
 Cohesion: 0.14
@@ -1039,8 +1059,8 @@ Cohesion: 0.14
 Nodes (8): App(), AppErrorBoundary, AppErrorBoundaryState, AppProviders(), ClerkProviderFromEnv, convex, isStaleAssetError(), registerStaleAssetReload()
 
 ### Community 37 - "useQuery"
-Cohesion: 0.06
-Nodes (29): getFunctionReferenceName(), useMutation(), useQuery(), defaultGeofence, mockClientsState(), mocks, candidates, mockPipelineState() (+21 more)
+Cohesion: 0.07
+Nodes (27): getFunctionReferenceName(), useMutation(), useQuery(), makeDetails(), mockGetCurrentPosition, mocks, mockState(), defaultGeofence (+19 more)
 
 ### Community 38 - "sharedUi.test.tsx"
 Cohesion: 0.15
@@ -1063,12 +1083,12 @@ Cohesion: 0.11
 Nodes (39): PlatformGate(), PlatformKpiCard(), Tone, toneValueClass, PlatformStatusPill(), statusColorClass, PlatformTable(), PlatformTableBody() (+31 more)
 
 ### Community 43 - "documentationWizard.ts"
-Cohesion: 0.22
-Nodes (14): ShiftNoteStep(), LoadedTask, NoteDraft, validateDocumentationDraft(), buildAutosavePatch(), isStepComplete(), noteFieldsForStep(), stepIndexFor() (+6 more)
+Cohesion: 0.24
+Nodes (13): ShiftNoteStep(), validateDocumentationDraft(), buildAutosavePatch(), isStepComplete(), noteFieldsForStep(), stepIndexFor(), completeNote, completeTaskDrafts (+5 more)
 
 ### Community 44 - "TeamPage.tsx"
-Cohesion: 0.22
-Nodes (16): addCachedInvitation(), adpStatusPill(), cacheClerkInvitations(), CachedInvitation, ClerkInvitation, fromCache(), getCacheKey(), readCachedInvitations() (+8 more)
+Cohesion: 0.28
+Nodes (14): addCachedInvitation(), adpStatusPill(), cacheClerkInvitations(), CachedInvitation, ClerkInvitation, fromCache(), getCacheKey(), readCachedInvitations() (+6 more)
 
 ### Community 45 - "Automatic HR Case Creation — Comprehensive Proactive Flagging"
 Cohesion: 0.18
@@ -1096,15 +1116,15 @@ Nodes (22): compilerOptions, allowJs, allowSyntheticDefaultImports, forceConsist
 
 ### Community 51 - "api.d.ts"
 Cohesion: 0.03
-Nodes (66): list, record, completeScan, getBackgroundCheck, getBackgroundCheckForHR, getBackgroundCheckInternal, getCandidateInternal, initiateBackgroundCheck (+58 more)
+Nodes (67): list, record, completeScan, getBackgroundCheck, getBackgroundCheckForHR, getBackgroundCheckInternal, getCandidateInternal, initiateBackgroundCheck (+59 more)
 
 ### Community 52 - "format.ts"
 Cohesion: 0.20
 Nodes (4): calculateAge(), formatDateUS(), formatDocumentCategoryLabel(), formatStatusLabel()
 
-### Community 53 - "requireTenantRole"
-Cohesion: 0.08
-Nodes (26): requireTenantRole(), deleteShiftChildren(), E2ECandidateFixtureUserIds, E2EFixtureUserIds, generateEmbedding(), hashToken(), resetE2ECandidate, resetE2EShifts (+18 more)
+### Community 53 - "CandidatePipelinePage.tsx"
+Cohesion: 0.24
+Nodes (9): HrToast(), HrToast, useHrToast(), CandidatePipelinePage(), matchesTab(), TABS, TabValue, HireConvertPage() (+1 more)
 
 ### Community 54 - "agencyConfig.ts"
 Cohesion: 0.10
@@ -1127,8 +1147,8 @@ Cohesion: 0.18
 Nodes (10): baseClient, baseNote, baseShift, baseTask, clientId, getState(), shiftId, states (+2 more)
 
 ### Community 59 - "scripts"
-Cohesion: 0.12
-Nodes (16): name, private, scripts, build, dev, e2e, e2e:full, e2e:local (+8 more)
+Cohesion: 0.17
+Nodes (12): scripts, build, dev, e2e, e2e:full, e2e:local, lint, preview (+4 more)
 
 ### Community 60 - "USDateInput.tsx"
 Cohesion: 0.26
@@ -1147,8 +1167,8 @@ Cohesion: 0.05
 Nodes (41): Acceptance criteria, Action buttons, Action buttons (coordinator/admin view), Add window form, Audit history, Backend APIs to use (already implemented), Behaviour, Behaviour (+33 more)
 
 ### Community 65 - "SelectAgencyPage.tsx"
-Cohesion: 0.24
-Nodes (8): getVisibleMemberships(), MembershipLike, PendingOrg, SelectAgencyPage(), mockClerkState(), mocks, mockSignedInOrgs(), useOrganizationList()
+Cohesion: 0.38
+Nodes (5): getVisibleMemberships(), MembershipLike, PendingOrg, SelectAgencyPage(), mocks
 
 ### Community 66 - "RouteGuard.tsx"
 Cohesion: 0.16
@@ -1178,9 +1198,9 @@ Nodes (18): 3a: Manual trigger mutation, 3b: "Check for issues" button on HRCase
 Cohesion: 0.05
 Nodes (40): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 2.1 Auth model (stable â€” build now), 2.2 Worker APIs (stable â€” build now), 2.3 Time punches (ISOLATED â€” adapter, fill in on confirmation) (+32 more)
 
-### Community 73 - "ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)"
-Cohesion: 0.10
-Nodes (21): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 2.1 Auth model (stable Ã¢â‚¬â€ build now), 2.2 Worker APIs (stable Ã¢â‚¬â€ build now), 2.3 Time punches (ISOLATED Ã¢â‚¬â€ adapter, fill in on confirmation) (+13 more)
+### Community 73 - "4. Session order & prompts"
+Cohesion: 0.05
+Nodes (40): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 2.1 Auth model (stable Ã¢â‚¬â€ build now), 2.2 Worker APIs (stable Ã¢â‚¬â€ build now), 2.3 Time punches (ISOLATED Ã¢â‚¬â€ adapter, fill in on confirmation) (+32 more)
 
 ### Community 74 - "4. Session order & prompts"
 Cohesion: 0.05
@@ -1190,9 +1210,9 @@ Nodes (40): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) v
 Cohesion: 0.39
 Nodes (6): clearTrainingCompletedSession(), COMPLETE_STATUSES, isPlatformTrainingComplete(), isTrainingCompletedInSession(), markTrainingCompletedInSession(), PLATFORM_TRAINING_ID
 
-### Community 76 - "4. Session order & prompts"
-Cohesion: 0.11
-Nodes (19): 4. Session order & prompts, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION (+11 more)
+### Community 76 - "shiftClock.behavior.test.ts"
+Cohesion: 0.22
+Nodes (5): DEFAULT_GEOFENCE, FAR_COORDS, HOME_COORDS, modules, NEARBY_COORDS
 
 ### Community 77 - "ProgressSteps.tsx"
 Cohesion: 0.29
@@ -1349,10 +1369,6 @@ Nodes (8): clerkTicket(), e2e, events, local, log(), main(), results, ROUTES
 ### Community 138 - "3. Architecture additions (so every session prompt is consistent)"
 Cohesion: 0.40
 Nodes (5): 3.1 Schema additions (Session 1) Ã¢â‚¬â€ extend, never rename prod tables, 3.2 Clock-in/out + geofence gating (Session 2) Ã¢â‚¬â€ server-enforced, twice, 3.3 ADP port + adapter (Session 3) Ã¢â‚¬â€ the plug-and-play core, 3.4 FE Ã¢â‚¬â€ pixel-faithful to the dark Figma, 3. Architecture additions (so every session prompt is consistent)
-
-### Community 139 - "InvoicesTable.tsx"
-Cohesion: 0.50
-Nodes (4): InvoicesTable(), InvoicesTableProps, statusVariant, InvoiceRow
 
 ### Community 140 - "run-smoke2.mjs"
 Cohesion: 0.25
@@ -1603,8 +1619,8 @@ Cohesion: 0.11
 Nodes (19): 4. Session order & prompts, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION (+11 more)
 
 ### Community 238 - "4. Session order & prompts"
-Cohesion: 0.05
-Nodes (41): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 2.1 Auth model (stable ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â build now), 2.2 Worker APIs (stable ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â build now), 2.3 Time punches (ISOLATED ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â adapter, fill in on confirmation) (+33 more)
+Cohesion: 0.11
+Nodes (19): 4. Session order & prompts, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION (+11 more)
 
 ### Community 239 - "ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)"
 Cohesion: 0.11
@@ -1739,8 +1755,8 @@ Cohesion: 0.18
 Nodes (10): Batch 1: Maria's 5 Original Fixes, Batch 2: HR Cases Enhancement + Agency Branding, Batch 3: Login Product Tabs, Batch 4: Maria's Final Fixes, Batch 5: Diego's Testing Fixes, Batch 6: Auto-Case Creation, Complete List of Features to Test, Comprehensive E2E QA Testing — ALL Uncommitted Work (+2 more)
 
 ### Community 272 - "20260626_210401/fix_iter4.prompt.md"
-Cohesion: 0.12
-Nodes (16): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_210401\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_210401\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', Hermes authenticated providers (probe), Hermes authenticated providers (probe), Hermes authenticated providers (probe), Next step, Next step, Next step (+8 more)
+Cohesion: 0.13
+Nodes (14): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_210401\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_210401\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', Hermes authenticated providers (probe), Latest gate results (for your awareness), main...origin/main [ahead 5], Next step, Pipeline summary â€” atriax, Project context (+6 more)
 
 ### Community 273 - "20260626_210401/review_codex_iter2.md"
 Cohesion: 0.12
@@ -1784,7 +1800,7 @@ Nodes (16): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) v
 
 ### Community 284 - "ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)"
 Cohesion: 0.12
-Nodes (16): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 3.1 Schema additions (Session 1) Ã¢â‚¬â€ extend, never rename prod tables, 3.2 Clock-in/out + geofence gating (Session 2) Ã¢â‚¬â€ server-enforced, twice, 3.3 ADP port + adapter (Session 3) Ã¢â‚¬â€ the plug-and-play core (+8 more)
+Nodes (17): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 2.1 Auth model (stable Ã¢â‚¬â€ build now), 2.2 Worker APIs (stable Ã¢â‚¬â€ build now), 2.3 Time punches (ISOLATED Ã¢â‚¬â€ adapter, fill in on confirmation) (+9 more)
 
 ### Community 285 - "20260604_163200/fix_iter1.prompt.md"
 Cohesion: 0.13
@@ -2072,7 +2088,7 @@ Nodes (11): Caregiver Shift Documentation â€” Screen Spec, Copy, Copy, Fram
 
 ### Community 356 - "20260625_084642/plan_final.md"
 Cohesion: 0.18
-Nodes (10): cmd: codex exec --ignore-user-config --skip-git-repo-check --color never --sandbox read-only 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_185028\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --ignore-user-config --skip-git-repo-check --color never --sandbox read-only 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260625_084642\plan_codex.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', Hermes authenticated providers (probe), Next step, Pipeline summary â€” atriax, Plan from codex (gpt-5.5 (default)), SESSION 6 Figma caregiver wizard screen spec, stage plan_codex (+2 more)
+Nodes (10): cmd: codex exec --ignore-user-config --skip-git-repo-check --color never --sandbox read-only 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_185028\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --ignore-user-config --skip-git-repo-check --color never --sandbox read-only 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260625_084642\plan_codex.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', Plan from codex (gpt-5.5 (default)), Project context, ROLE: PLANNER (codex), SESSION 6 Figma caregiver wizard screen spec, stage plan_codex, stage review_codex_iter4 (+2 more)
 
 ### Community 357 - "Caregiver Shift Documentation â€” Screen Spec"
 Cohesion: 0.18
@@ -3570,9 +3586,9 @@ Nodes (4): E2E HR User Role Resolution Fix, Problem, Root Cause Hypothesis, Task
 Cohesion: 0.50
 Nodes (4): FILING_STATUS_OPTIONS, W4Info, W4Section(), W4SectionProps
 
-### Community 732 - "buildInvoicePdf"
-Cohesion: 0.67
-Nodes (3): jspdf, jspdf, buildInvoicePdf()
+### Community 732 - "HRDashboardPage.tsx"
+Cohesion: 0.46
+Nodes (5): CandidateStatus, candidateStatusAccentClass(), candidateStatusPill(), HRDashboardPage(), initials()
 
 ### Community 733 - "CLAUDE.md"
 Cohesion: 0.50
@@ -3814,6 +3830,10 @@ Nodes (4): Hermes authenticated providers (probe), Next step, Pipeline summary �
 Cohesion: 0.25
 Nodes (7): clerkTicket(), e2e, local, main(), PROBES, results, ROUTES
 
+### Community 794 - "Pipeline summary â€” atriax"
+Cohesion: 0.50
+Nodes (4): Hermes authenticated providers (probe), Next step, Pipeline summary â€” atriax, Stages
+
 ### Community 795 - "20260731_094528/fix_iter3.prompt.md"
 Cohesion: 0.15
 Nodes (12): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_094528\review_codex_iter3.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_094528\review_opus_iter3.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q, codex review (verdict UNKNOWN), Failing/relevant gate output, opus review (verdict APPROVED), Original task, Project context, Requirements (+4 more)
@@ -3842,6 +3862,10 @@ Nodes (20): AuthContext, ALLOWED_STATUSES, DocumentStatus, listDocumentArchive, 
 Cohesion: 0.50
 Nodes (4): Project context, ROLE: PLANNER (codex), Task, Your plan must contain
 
+### Community 829 - "Pipeline summary â€” atriax"
+Cohesion: 0.50
+Nodes (4): Hermes authenticated providers (probe), Next step, Pipeline summary â€” atriax, Stages
+
 ### Community 830 - "check-audit.mjs"
 Cohesion: 0.25
 Nodes (6): e2e, events, headers, local, user, users
@@ -3852,7 +3876,7 @@ Nodes (5): getStoredClerkOrgId(), setSelectedClerkOrgId(), caregiverTenant, mock
 
 ### Community 832 - "Sidebar.tsx"
 Cohesion: 0.15
-Nodes (11): resolveAgencyLogo(), AppShell(), TenantRouteGuard(), NavItem, navItems, platformNavItem, Sidebar(), SidebarProps (+3 more)
+Nodes (10): resolveAgencyLogo(), AppShell(), TenantRouteGuard(), NavItem, navItems, platformNavItem, Sidebar(), SidebarProps (+2 more)
 
 ### Community 833 - "ROLE: REVIEWER (codex)"
 Cohesion: 0.33
@@ -3954,65 +3978,77 @@ Nodes (5): e2e, existing, headers, local, user
 Cohesion: 0.36
 Nodes (6): createDetailResponse(), defaultUseQueryImplementation(), downloadUrlMock, renderWithCarInsurance(), reviewApplicationMock, sendOfferMock
 
+### Community 859 - "ShiftPacketPanel.test.tsx"
+Cohesion: 0.29
+Nodes (6): caregiver, client, mockPacketState(), mocks, shift, tasks
+
+### Community 878 - "InviteCandidateModal.tsx"
+Cohesion: 0.47
+Nodes (3): InviteCandidateModal(), isValidPhoneOptional(), inviteCandidateMock
+
 ### Community 879 - "CoverageRequestsPanel.test.tsx"
 Cohesion: 0.33
 Nodes (5): caregiver, mockCoverageState(), mocks, replacement, request
+
+### Community 880 - "3. Architecture additions (so every session prompt is consistent)"
+Cohesion: 0.40
+Nodes (5): 3.1 Schema additions (Session 1) Ã¢â‚¬â€ extend, never rename prod tables, 3.2 Clock-in/out + geofence gating (Session 2) Ã¢â‚¬â€ server-enforced, twice, 3.3 ADP port + adapter (Session 3) Ã¢â‚¬â€ the plug-and-play core, 3.4 FE Ã¢â‚¬â€ pixel-faithful to the dark Figma, 3. Architecture additions (so every session prompt is consistent)
 
 ### Community 881 - "seed.test.ts"
 Cohesion: 0.38
 Nodes (4): asAdmin(), resetE2EShifts(), runtimeModules, seedE2E()
 
-### Community 882 - "ROLE: REVIEWER (codex)"
-Cohesion: 0.33
-Nodes (6): Latest gate results (for your awareness), main...origin/main [ahead 5], Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (codex), Task
+### Community 882 - "3. Architecture additions (so every session prompt is consistent)"
+Cohesion: 0.40
+Nodes (5): 3.1 Schema additions (Session 1) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â extend, never rename prod tables, 3.2 Clock-in/out + geofence gating (Session 2) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â server-enforced, twice, 3.3 ADP port + adapter (Session 3) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the plug-and-play core, 3.4 FE ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â pixel-faithful to the dark Figma, 3. Architecture additions (so every session prompt is consistent)
+
+### Community 883 - "package.json"
+Cohesion: 0.40
+Nodes (4): name, private, type, version
 
 ### Community 885 - "GeofenceSettingsPage.test.tsx"
 Cohesion: 0.40
 Nodes (4): GeofenceSettingsPage(), defaultGeofence, mocks, mockSettingsState()
 
-### Community 886 - "ShiftDocumentationForm.test.tsx"
-Cohesion: 0.25
-Nodes (5): ShiftDocumentationForm(), makeDetails(), mockGetCurrentPosition, mocks, mockState()
-
 ### Community 887 - "ROLE: PLANNER (codex)"
 Cohesion: 0.50
 Nodes (4): Project context, ROLE: PLANNER (codex), Task, Your plan must contain
 
-### Community 889 - "2. ADP integration reference (what the flow needs)"
-Cohesion: 0.33
-Nodes (6): 2.1 Auth model (stable Ã¢â‚¬â€ build now), 2.2 Worker APIs (stable Ã¢â‚¬â€ build now), 2.3 Time punches (ISOLATED Ã¢â‚¬â€ adapter, fill in on confirmation), 2.4 Credentials Ã¢â€ â€™ Convex env vars (set when they arrive Ã¢â‚¬â€ nothing hardcoded), 2.5 Official docs to read on credential day, 2. ADP integration reference (what the flow needs)
+### Community 888 - "ClientsPage.tsx"
+Cohesion: 0.60
+Nodes (4): caregiverLabel(), CaregiverOption, ClientsPage(), todayInputValue()
 
-### Community 890 - "ROLE: PLANNER (codex)"
-Cohesion: 0.50
-Nodes (4): Project context, ROLE: PLANNER (codex), Task, Your plan must contain
-
-### Community 896 - "Frame: Today / Entry"
+### Community 889 - "Frame: Today / Entry"
 Cohesion: 0.50
 Nodes (4): Copy, Frame: Today / Entry, Interaction, Layout
 
-### Community 897 - "Pipeline summary â€” atriax"
+### Community 890 - "Pipeline summary â€” atriax"
+Cohesion: 0.50
+Nodes (4): Hermes authenticated providers (probe), Next step, Pipeline summary â€” atriax, Stages
+
+### Community 891 - "Pipeline summary â€” atriax"
 Cohesion: 0.50
 Nodes (4): Hermes authenticated providers (probe), Next step, Pipeline summary â€” atriax, Stages
 
 ## Knowledge Gaps
-- **6396 isolated node(s):** `shiftId`, `shiftId`, `tenantId`, `clientId`, `baseShift` (+6391 more)
+- **6396 isolated node(s):** `Project context`, `Original task`, `opus review (verdict APPROVED)`, `stage review_opus_iter1`, `codex review (verdict UNKNOWN)` (+6391 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **69 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **85 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `api` connect `api.js` to `ApplicationReviewPage.tsx`, `shifts.ts`, `candidates.ts`, `CoordinatorReviewPage.tsx`, `generatePrefilledPdf.ts`, `auditReadiness.test.ts`, `billingPhase3.test.ts`, `AuditReadinessPage.tsx`, `scheduling.ts`, `SchedulingPage.tsx`, `InvoicesTable.tsx`, `ReviewDetail.tsx`, `candidates.test.ts`, `legalText.ts`, `BillingPage.tsx`, `authHelpers.ts`, `platform.test.ts`, `ShiftNoteStep.tsx`, `hrCases.test.ts`, `ApplicationFormPage.tsx`, `invitationBypass.ts`, `schema.ts`, `TrainingPage.tsx`, `ShiftDocumentationForm.tsx`, `EmployeeProfilePage.tsx`, `platform.ts`, `usePlatformAdmin`, `TeamPage.tsx`, `ApplicationStatusPage.tsx`, `api.d.ts`, `ApplyEntryPage.test.tsx`, `forms.test.ts`, `useTenant.test.ts`, `Sidebar.tsx`, `SelectAgencyPage.tsx`, `RouteGuard.tsx`, `CandidateOnboardingPage.tsx`, `notifications.test.ts`, `adpSync.test.ts`, `backgroundChecks.test.ts`, `seed.test.ts`, `GeofenceSettingsPage.test.tsx`, `ShiftDocumentationForm.test.tsx`, `phase3.test.ts`?**
+- **Why does `api` connect `api.js` to `ApplicationReviewPage.tsx`, `shifts.ts`, `candidates.ts`, `CoordinatorReviewPage.tsx`, `generatePrefilledPdf.ts`, `auditReadiness.test.ts`, `billingPhase3.test.ts`, `AuditReadinessPage.tsx`, `scheduling.ts`, `SchedulingPage.tsx`, `documentArchive.test.ts`, `ReviewDetail.tsx`, `candidates.test.ts`, `legalText.ts`, `BillingPage.tsx`, `authHelpers.ts`, `platform.test.ts`, `ShiftNoteStep.tsx`, `hrCases.test.ts`, `ApplicationFormPage.tsx`, `schema.ts`, `TrainingPage.tsx`, `ShiftDocumentationForm.tsx`, `EmployeeProfilePage.tsx`, `platform.ts`, `usePlatformAdmin`, `TeamPage.tsx`, `ApplicationStatusPage.tsx`, `api.d.ts`, `CandidatePipelinePage.tsx`, `ApplyEntryPage.test.tsx`, `forms.test.ts`, `useTenant.test.ts`, `Sidebar.tsx`, `SelectAgencyPage.tsx`, `RouteGuard.tsx`, `CandidateOnboardingPage.tsx`, `shiftClock.behavior.test.ts`, `notifications.test.ts`, `files.test.ts`, `adpSync.test.ts`, `HRDashboardPage.tsx`, `InviteCandidateModal.tsx`, `seed.test.ts`, `GeofenceSettingsPage.test.tsx`, `CaregiverTodayPage.tsx`, `ClientsPage.tsx`, `backgroundChecks.test.ts`, `phase3.test.ts`?**
   _High betweenness centrality (0.014) - this node is a cross-community bridge._
-- **Why does `buildInvoicePdf()` connect `buildInvoicePdf` to `BillingPage.tsx`?**
-  _High betweenness centrality (0.006) - this node is a cross-community bridge._
-- **Why does `dependencies` connect `dependencies` to `scripts`, `buildInvoicePdf`?**
-  _High betweenness centrality (0.006) - this node is a cross-community bridge._
-- **What connects `shiftId`, `shiftId`, `tenantId` to the rest of the system?**
+- **Why does `buildInvoicePdf()` connect `BillingPage.tsx` to `dependencies`?**
+  _High betweenness centrality (0.004) - this node is a cross-community bridge._
+- **Why does `jspdf` connect `dependencies` to `BillingPage.tsx`?**
+  _High betweenness centrality (0.004) - this node is a cross-community bridge._
+- **What connects `Project context`, `Original task`, `opus review (verdict APPROVED)` to the rest of the system?**
   _6396 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `auth.ts` be split into smaller, more focused modules?**
   _Cohesion score 0.05853128396211768 - nodes in this community are weakly interconnected._
 - **Should `ApplicationReviewPage.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.05961426066627703 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.11688311688311688 - nodes in this community are weakly interconnected._
 - **Should `shifts.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.05257936507936508 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.04886128364389234 - nodes in this community are weakly interconnected._
