@@ -3,9 +3,20 @@ import { useQuery, useMutation } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/ui/Dialog'
+import { FieldGroup } from '@/shared/ui/FieldGroup'
+import { USDateInput } from '@/shared/ui/USDateInput'
 import { Separator } from '@/shared/ui/Separator'
 import { AppLoader } from '@/shared/ui/AppLoader'
+import { downloadCsv } from '@/shared/lib/downloadCsv'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { BillingInvoicePanel } from '../components/BillingInvoicePanel'
 import { BillingLinesTable } from '../components/BillingLinesTable'
@@ -13,6 +24,7 @@ import { EmptyBillingState } from '../components/EmptyBillingState'
 import { InvoicesTable } from '../components/InvoicesTable'
 import {
   buildInvoiceCsv,
+  buildInvoicePdf,
   defaultInvoiceName,
   filterBillingLines,
   summarizeLines,
@@ -38,6 +50,9 @@ export function BillingPage() {
     clerkOrgId ? { clerkOrgId } : 'skip',
   ) as InvoiceRow[] | undefined
   const createInvoice = useMutation(api.billing.createInvoice)
+  const createPerPatientInvoices = useMutation(
+    api.billing.createPerPatientInvoices,
+  )
 
   const [invoiceName, setInvoiceName] = useState('')
   const [selectedLineIds, setSelectedLineIds] = useState<Id<'billingLines'>[]>(
@@ -53,7 +68,14 @@ export function BillingPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [perPatientOpen, setPerPatientOpen] = useState(false)
+  const [perPatientStart, setPerPatientStart] = useState('')
+  const [perPatientEnd, setPerPatientEnd] = useState('')
+  const [isCreatingPerPatient, setIsCreatingPerPatient] = useState(false)
+  const [perPatientError, setPerPatientError] = useState<string | null>(null)
   const downloadedInvoiceIdRef = useRef<string | null>(null)
+  const pdfDownloadRef = useRef<Id<'exportBatches'> | null>(null)
+  const csvDownloadRef = useRef<Id<'exportBatches'> | null>(null)
 
   const invoiceDetails = useQuery(
     api.billing.invoiceDetails,
@@ -84,13 +106,44 @@ export function BillingPage() {
 
   useEffect(() => {
     if (!invoiceDetails || !downloadInvoiceId) return
+    // CSV download path (explicitly requested via CSV button)
+    if (csvDownloadRef.current === downloadInvoiceId) {
+      downloadCsv(
+        `${invoiceDetails.invoice.invoiceNumber}.csv`,
+        buildInvoiceCsv(invoiceDetails),
+      )
+      csvDownloadRef.current = null
+      downloadedInvoiceIdRef.current = downloadInvoiceId
+      return
+    }
+    // PDF download path (explicitly requested via PDF button)
+    if (pdfDownloadRef.current === downloadInvoiceId) {
+      const blob = buildInvoicePdf(invoiceDetails, organization?.name ?? 'Agency')
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${invoiceDetails.invoice.invoiceNumber}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      pdfDownloadRef.current = null
+      downloadedInvoiceIdRef.current = downloadInvoiceId
+      return
+    }
+    // Default: PDF download for newly created invoices
     if (downloadedInvoiceIdRef.current === downloadInvoiceId) return
-    downloadCsv(
-      `${invoiceDetails.invoice.invoiceNumber}.csv`,
-      buildInvoiceCsv(invoiceDetails),
-    )
+    const blob = buildInvoicePdf(invoiceDetails, organization?.name ?? 'Agency')
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${invoiceDetails.invoice.invoiceNumber}.pdf`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
     downloadedInvoiceIdRef.current = downloadInvoiceId
-  }, [downloadInvoiceId, invoiceDetails])
+  }, [downloadInvoiceId, invoiceDetails, organization?.name])
 
   if (!readyLines || !ledger || !invoices) {
     return <AppLoader label="Loading billing workspace" />
@@ -132,7 +185,7 @@ export function BillingPage() {
 
       setSelectedLineIds([])
       setInvoiceName('')
-      setDownloadInvoiceId(id)
+      setDownloadInvoiceId(id)  // defaults to PDF download in useEffect
       setMessage(
         `Created invoice for ${visibleSelectedLineIds.length} billing line(s).`,
       )
@@ -140,6 +193,34 @@ export function BillingPage() {
       setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Invoice creation failed.')
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  const handleCreatePerPatientInvoices = async () => {
+    if (!clerkOrgId || !perPatientStart || !perPatientEnd) return
+    setIsCreatingPerPatient(true)
+    setPerPatientError(null)
+    try {
+      const result = await createPerPatientInvoices({
+        clerkOrgId,
+        startDate: perPatientStart,
+        endDate: perPatientEnd,
+      })
+      setPerPatientOpen(false)
+      setPerPatientStart('')
+      setPerPatientEnd('')
+      setError(null)
+      setMessage(
+        `Created ${result.count} per-patient invoice(s) for ${perPatientStart} - ${perPatientEnd}.`,
+      )
+    } catch (err) {
+      setPerPatientError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Per-patient invoice creation failed.',
+      )
+    } finally {
+      setIsCreatingPerPatient(false)
     }
   }
 
@@ -153,7 +234,28 @@ export function BillingPage() {
       downloadedInvoiceIdRef.current = id
       return
     }
+    csvDownloadRef.current = id  // mark as CSV download request
     setDownloadInvoiceId(id)
+  }
+
+  const requestInvoicePdfDownload = (id: Id<'exportBatches'>) => {
+    if (invoiceDetails?.invoice._id === id) {
+      const blob = buildInvoicePdf(invoiceDetails, organization?.name ?? 'Agency')
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${invoiceDetails.invoice.invoiceNumber}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      return
+    }
+    // Need to load invoice details first — set downloadInvoiceId,
+    // then the useEffect will fire for CSV. For PDF, we need a separate
+    // ref to track PDF download intent.
+    setDownloadInvoiceId(id)
+    pdfDownloadRef.current = id
   }
 
   return (
@@ -165,15 +267,20 @@ export function BillingPage() {
             Create invoices only from approved, documented shifts.
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-2 text-sm lg:min-w-[360px]">
-          <SummaryTile
-            label="Ready"
-            value={`$${readySummary.amount.toFixed(2)}`}
-          />
-          <SummaryTile
-            label="Selected"
-            value={`$${selectedSummary.amount.toFixed(2)}`}
-          />
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => setPerPatientOpen(true)}>
+            Create per-patient invoices
+          </Button>
+          <div className="grid grid-cols-2 gap-2 text-sm lg:min-w-[360px]">
+            <SummaryTile
+              label="Ready"
+              value={`$${readySummary.amount.toFixed(2)}`}
+            />
+            <SummaryTile
+              label="Selected"
+              value={`$${selectedSummary.amount.toFixed(2)}`}
+            />
+          </div>
         </div>
       </div>
 
@@ -197,7 +304,7 @@ export function BillingPage() {
         onCreateInvoice={handleCreateInvoice}
       />
 
-      <InvoicesTable invoices={invoices} onDownload={requestInvoiceDownload} />
+      <InvoicesTable invoices={invoices} onDownload={requestInvoiceDownload} onDownloadPdf={requestInvoicePdfDownload} />
 
       <Separator />
 
@@ -216,6 +323,51 @@ export function BillingPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={perPatientOpen} onClose={() => setPerPatientOpen(false)}>
+        <DialogHeader>
+          <DialogTitle>Create per-patient invoices</DialogTitle>
+        </DialogHeader>
+        <DialogContent className="space-y-4">
+          <p className="text-sm text-atria-muted">
+            Groups every unbilled, unblocked billing line in the date range into
+            one draft invoice per client.
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FieldGroup label="Start date" htmlFor="perPatientStart" required>
+              <USDateInput
+                id="perPatientStart"
+                value={perPatientStart}
+                onChange={setPerPatientStart}
+              />
+            </FieldGroup>
+            <FieldGroup label="End date" htmlFor="perPatientEnd" required>
+              <USDateInput
+                id="perPatientEnd"
+                value={perPatientEnd}
+                onChange={setPerPatientEnd}
+              />
+            </FieldGroup>
+          </div>
+          {perPatientError && (
+            <p className="text-sm text-atria-danger">{perPatientError}</p>
+          )}
+        </DialogContent>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setPerPatientOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleCreatePerPatientInvoices}
+            disabled={
+              isCreatingPerPatient || !perPatientStart || !perPatientEnd
+            }
+          >
+            {isCreatingPerPatient ? 'Creating…' : 'Create invoices'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   )
 }
@@ -227,16 +379,4 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
       <div className="text-base font-semibold text-atria-ink">{value}</div>
     </div>
   )
-}
-
-function downloadCsv(fileName: string, content: string) {
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = fileName
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
 }

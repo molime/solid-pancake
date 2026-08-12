@@ -1,0 +1,226 @@
+{
+  "findings": [
+    {
+      "severity": "note",
+      "area": "auth",
+      "text": "signed in, landed on http://localhost:5174/select-agency"
+    },
+    {
+      "severity": "PASS",
+      "area": "agencies-list",
+      "text": "\"Create Agency\" button visible"
+    },
+    {
+      "severity": "PASS",
+      "area": "agencies-list",
+      "text": "agencies table rendered, first tenant href: /platform/agencies/kh71kxcqmggcnz0r4r0k9dpcvs871b2w"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-create",
+      "text": "navigated to http://localhost:5174/platform/agencies/create"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-create",
+      "text": "field present: Agency name"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-create",
+      "text": "field present: Slug"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-create",
+      "text": "field present: EIN"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-create",
+      "text": "field present: Address"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-create",
+      "text": "field present: Initial plan"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-create",
+      "text": "field present: Billing emails"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-create",
+      "text": "slug auto-generated: \"qa-test-agency-llc\""
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-detail",
+      "text": "section present: Active seats"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-detail",
+      "text": "section present: Candidates"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-detail",
+      "text": "section present: Shifts this month"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-detail",
+      "text": "section present: MRR"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-detail",
+      "text": "section present: Subscription"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-detail",
+      "text": "section present: Custom Pricing"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-detail",
+      "text": "section present: Limits"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-detail",
+      "text": "section present: Users"
+    },
+    {
+      "severity": "PASS",
+      "area": "agency-detail",
+      "text": "section present: Recent invoices"
+    },
+    {
+      "severity": "note",
+      "area": "agency-detail",
+      "text": "header agency name: \"My Organization Test\""
+    },
+    {
+      "severity": "PASS",
+      "area": "add-user",
+      "text": "action failed gracefully with visible error message (no crash)"
+    },
+    {
+      "severity": "PASS",
+      "area": "custom-rate",
+      "text": "Custom monthly rate row updated: $499.00"
+    },
+    {
+      "severity": "PASS",
+      "area": "custom-rate",
+      "text": "MRR hint \"Custom rate\" visible"
+    },
+    {
+      "severity": "PASS",
+      "area": "custom-rate-persist",
+      "text": "persists after reload: $499.00"
+    },
+    {
+      "severity": "note",
+      "area": "custom-rate",
+      "text": "cleared custom rate (cleanup)"
+    },
+    {
+      "severity": "note",
+      "area": "limits",
+      "text": "current seat count: 2"
+    },
+    {
+      "severity": "PASS",
+      "area": "limits",
+      "text": "\"Over limit\" warning badge shown (seats 2 > max 1)"
+    },
+    {
+      "severity": "PASS",
+      "area": "limits",
+      "text": "progress bars rendered (2 bar segments)"
+    },
+    {
+      "severity": "note",
+      "area": "limits",
+      "text": "cleared limits (cleanup)"
+    },
+    {
+      "severity": "PASS",
+      "area": "edit-info",
+      "text": "Edit Info dialog opened"
+    },
+    {
+      "severity": "note",
+      "area": "cleanup",
+      "text": "QA Noexist member removed (cleanup)"
+    },
+    {
+      "severity": "note",
+      "area": "invalid-id",
+      "text": "body length: 242; excerpt: A |  | ATRIA-X |  | PLATFORM CONTROL |  | Subscriptions | Agencies | Tenant Health | Reports | Support Access | Audit Log | Billing | A |  | ATRIA-X E2E Admin |  | Platform Admin |  | Sign out |  | Agency not found |  | This agency does not exist or the link is invalid. |  | Back to agencies"
+    },
+    {
+      "severity": "note",
+      "area": "invalid-id",
+      "text": "console errors on invalid id page: 1"
+    },
+    {
+      "severity": "note",
+      "area": "invalid-id",
+      "text": "error: %o\n\n%s\n\n%s\n Error: [CONVEX Q(platform:getTenantDetail)] [Request ID: 350964c919a01cc1] Server Error\nArgumentValidationError: Value does not match validator.\nPath: .tenantId\nValue: \"invalid-id\"\nValidator: v.id(\"tenants\")\n\n\n  Called by client\n    at OptimisticQueryResults.queryResult (http://localhost"
+    },
+    {
+      "severity": "PASS",
+      "area": "invalid-id",
+      "text": "graceful \"not found\" state rendered"
+    }
+  ],
+  "consoleLog": {
+    "boot": [
+      {
+        "type": "warning",
+        "text": "Clerk: Clerk has been loaded with development keys. Development instances have strict usage limits and should not be used when deploying your application to production. Learn more: https://clerk.com/docs/deployments/overview"
+      }
+    ],
+    "agencies-list": [
+      {
+        "type": "warning",
+        "text": "Clerk: Clerk has been loaded with development keys. Development instances have strict usage limits and should not be used when deploying your application to production. Learn more: https://clerk.com/docs/deployments/overview"
+      }
+    ],
+    "agency-detail": [
+      {
+        "type": "warning",
+        "text": "Clerk: Clerk has been loaded with development keys. Development instances have strict usage limits and should not be used when deploying your application to production. Learn more: https://clerk.com/docs/deployments/overview"
+      }
+    ],
+    "agency-detail-adduser": [
+      {
+        "type": "error",
+        "text": "[CONVEX A(platform:createUserForTenant)] [Request ID: f029220a0c698e59] Server Error\nUncaught ConvexError: That email address is taken. Please try another.\n    at handler (../convex/platform.ts:1452:4)\n"
+      }
+    ],
+    "agency-detail-customrate": [
+      {
+        "type": "warning",
+        "text": "Clerk: Clerk has been loaded with development keys. Development instances have strict usage limits and should not be used when deploying your application to production. Learn more: https://clerk.com/docs/deployments/overview"
+      }
+    ],
+    "agency-detail-invalid": [
+      {
+        "type": "warning",
+        "text": "Clerk: Clerk has been loaded with development keys. Development instances have strict usage limits and should not be used when deploying your application to production. Learn more: https://clerk.com/docs/deployments/overview"
+      },
+      {
+        "type": "error",
+        "text": "%o\n\n%s\n\n%s\n Error: [CONVEX Q(platform:getTenantDetail)] [Request ID: 350964c919a01cc1] Server Error\nArgumentValidationError: Value does not match validator.\nPath: .tenantId\nValue: \"invalid-id\"\nValidator: v.id(\"tenants\")\n\n\n  Called by client\n    at OptimisticQueryResults.queryResult (http://localhost:5174/node_modules/.vite/deps/convex_react.js?v=8891daa2:817:10)\n    at BaseConvexClient.localQueryResult (http://localhost:5174/node_modules/.vite/deps/convex_react.js?v=8891daa2:2209:38)\n    at Obje"
+      }
+    ]
+  }
+}

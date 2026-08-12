@@ -35,6 +35,18 @@ export default defineSchema({
     // Optional per-tenant email domain allowlist for invitations. When
     // undefined or empty, all domains are allowed (open enrollment).
     allowedEmailDomains: v.optional(v.array(v.string())),
+    // Optional per-tenant custom monthly rate. When set, invoice
+    // auto-calculation uses it as the base price instead of the plan's
+    // basePrice (per-seat overage still applies on top).
+    customMonthlyRate: v.optional(v.number()),
+    // Optional per-tenant usage limits (soft enforcement — warnings only).
+    limits: v.optional(
+      v.object({
+        maxSeats: v.optional(v.number()),
+        maxCandidates: v.optional(v.number()),
+        maxShiftsPerMonth: v.optional(v.number()),
+      }),
+    ),
     billingSettings: v.optional(
       v.object({
         defaultRate: v.number(),
@@ -113,6 +125,7 @@ export default defineSchema({
     ),
     serviceType: v.union(v.literal('SLS'), v.literal('ILS')),
     rate: v.number(),
+    escalatedTo: v.optional(v.string()),
     serviceLocationOverride: v.optional(
       v.object({
         label: v.string(),
@@ -237,6 +250,8 @@ export default defineSchema({
     reviewerId: v.string(),
     decision: v.union(v.literal('approved'), v.literal('correction_requested')),
     comment: v.string(),
+    complianceOverride: v.optional(v.boolean()),
+    complianceOverrideReason: v.optional(v.string()),
     createdAt: v.string(),
   }).index('by_tenant_shift', ['tenantId', 'shiftId']),
 
@@ -247,6 +262,8 @@ export default defineSchema({
     rate: v.number(),
     amount: v.number(),
     exportBatchId: v.optional(v.id('exportBatches')),
+    blockedReason: v.optional(v.string()),
+    blockedAt: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index('by_tenant_export_batch', ['tenantId', 'exportBatchId'])
@@ -265,7 +282,21 @@ export default defineSchema({
     caregiverEmail: v.optional(v.string()),
     lineCount: v.optional(v.number()),
     totalAmount: v.optional(v.number()),
+    clientId: v.optional(v.id('clients')),
+    payerType: v.optional(v.string()),
+    status: v.optional(v.string()),
   }).index('by_tenant', ['tenantId']),
+
+  payPeriods: defineTable({
+    tenantId: v.id('tenants'),
+    startDate: v.string(),
+    endDate: v.string(),
+    status: v.string(),
+    exportedAt: v.optional(v.string()),
+    exportedBy: v.optional(v.string()),
+  })
+    .index('by_tenant_status', ['tenantId', 'status'])
+    .index('by_tenant_dates', ['tenantId', 'startDate']),
 
   complianceDocs: defineTable({
     tenantId: v.id('tenants'),
@@ -474,12 +505,50 @@ export default defineSchema({
     verifiedAt: v.optional(v.string()),
     rejectionReason: v.optional(v.string()),
     photoIdType: v.optional(v.string()),
+    overrideStatus: v.optional(v.string()),
+    overrideReason: v.optional(v.string()),
+    overrideBy: v.optional(v.string()),
+    overrideAt: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index('by_tenant_subject', ['tenantId', 'subjectType', 'subjectId'])
     .index('by_tenant_category_status', ['tenantId', 'category', 'status'])
     .index('by_tenant_expires_at', ['tenantId', 'expiresAt'])
     .index('by_tenant_created', ['tenantId', 'createdAt']),
+
+  credentialRequirements: defineTable({
+    tenantId: v.id('tenants'),
+    role: v.string(),
+    category: v.string(),
+    label: v.string(),
+    isRequired: v.boolean(),
+    expiryMonths: v.optional(v.number()),
+  }).index('by_tenant_role', ['tenantId', 'role']),
+
+  escalations: defineTable({
+    tenantId: v.id('tenants'),
+    subjectType: v.string(),
+    subjectId: v.string(),
+    escalationLevel: v.number(),
+    escalatedTo: v.string(),
+    reason: v.string(),
+    createdAt: v.string(),
+    resolvedAt: v.optional(v.string()),
+  })
+    .index('by_tenant_level', ['tenantId', 'escalationLevel'])
+    .index('by_tenant_unresolved', ['tenantId', 'resolvedAt']),
+
+  notifications: defineTable({
+    tenantId: v.id('tenants'),
+    clerkUserId: v.string(),
+    type: v.string(),
+    message: v.string(),
+    metadata: v.optional(v.any()),
+    read: v.boolean(),
+    createdAt: v.string(),
+  })
+    .index('by_tenant_user', ['tenantId', 'clerkUserId'])
+    .index('by_tenant_user_read', ['tenantId', 'clerkUserId', 'read']),
 
   platformTrainingCompletions: defineTable({
     tenantId: v.id('tenants'),
@@ -582,4 +651,86 @@ export default defineSchema({
   })
     .index('by_tenant_candidate_type', ['tenantId', 'candidateId', 'formType'])
     .index('by_tenant_candidate', ['tenantId', 'candidateId']),
+
+  // Platform pricing plans — seat-based subscription tiers managed by
+  // platform admins (Phase 3 / Platform Admin Dashboard).
+  pricingPlans: defineTable({
+    key: v.string(), // 'starter' | 'professional' | 'enterprise'
+    label: v.string(),
+    basePrice: v.number(), // monthly base USD
+    includedSeats: v.number(),
+    perSeatPrice: v.number(), // per seat above included
+    active: v.boolean(),
+  }).index('by_key', ['key']),
+
+  // Per-tenant platform subscription (one per tenant, keyed by tenantId).
+  tenantSubscriptions: defineTable({
+    tenantId: v.id('tenants'),
+    planKey: v.string(),
+    status: v.union(
+      v.literal('active'),
+      v.literal('trialing'),
+      v.literal('past_due'),
+      v.literal('suspended'),
+      v.literal('canceled'),
+    ),
+    billingEmails: v.array(v.string()),
+    currentPeriodStart: v.string(),
+    currentPeriodEnd: v.string(),
+    renewsAt: v.optional(v.string()),
+    trialEndsAt: v.optional(v.string()),
+    stripeCustomerId: v.optional(v.string()), // Stripe customer ID (cus_xxx)
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index('by_tenant', ['tenantId'])
+    .index('by_status', ['status']),
+
+  // Platform invoices billed to agencies (separate from agency-side billingLines).
+  platformInvoices: defineTable({
+    tenantId: v.id('tenants'),
+    invoiceNumber: v.string(),
+    periodStart: v.string(),
+    periodEnd: v.string(),
+    dueDate: v.string(),
+    lineItems: v.array(
+      v.object({
+        description: v.string(),
+        quantity: v.number(),
+        unitPrice: v.number(),
+        amount: v.number(),
+        source: v.union(v.literal('auto'), v.literal('manual')),
+      }),
+    ),
+    subtotal: v.number(),
+    total: v.number(),
+    status: v.union(
+      v.literal('draft'),
+      v.literal('sent'),
+      v.literal('paid'),
+      v.literal('overdue'),
+      v.literal('void'),
+    ),
+    sentTo: v.optional(v.array(v.string())),
+    sentAt: v.optional(v.string()),
+    paidAt: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    stripeInvoiceId: v.optional(v.string()), // Stripe invoice ID (in_xxx)
+    stripeHostedInvoiceUrl: v.optional(v.string()), // Stripe-hosted payment page
+    paymentMethod: v.optional(v.string()), // 'card' | 'ach' | 'manual'
+    createdBy: v.string(), // clerkUserId of platform admin
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index('by_tenant', ['tenantId'])
+    .index('by_status', ['status'])
+    .index('by_tenant_status', ['tenantId', 'status'])
+    .index('by_stripe_invoice_id', ['stripeInvoiceId']),
+
+  // Stripe webhook events already processed (idempotency guard).
+  stripeWebhookEvents: defineTable({
+    stripeEventId: v.string(), // Stripe event ID (evt_xxx)
+    type: v.string(), // Stripe event type
+    processedAt: v.string(),
+  }).index('by_stripe_event_id', ['stripeEventId']),
 })

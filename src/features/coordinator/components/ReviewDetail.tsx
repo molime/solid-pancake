@@ -5,6 +5,13 @@ import type { Doc, Id } from '../../../../convex/_generated/dataModel'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/ui/Dialog'
 import { Separator } from '@/shared/ui/Separator'
 import { Textarea } from '@/shared/ui/Textarea'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
@@ -14,6 +21,7 @@ import {
   Check,
   Clock,
   Download,
+  Flag,
   MapPin,
   AlertTriangle,
 } from 'lucide-react'
@@ -37,10 +45,22 @@ export function ReviewDetail({
   })
   const approve = useMutation(api.reviews.approve)
   const requestCorrection = useMutation(api.reviews.requestCorrection)
+  const escalateToSupervisor = useMutation(api.reviews.escalateToSupervisor)
+  const member = useQuery(
+    api.members.me,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
+  const isAdmin = member?.role === 'org:admin'
   const [comment, setComment] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [warning, setWarning] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [correctionError, setCorrectionError] = useState(false)
+  const [escalateOpen, setEscalateOpen] = useState(false)
+  const [escalateReason, setEscalateReason] = useState('')
+  const [overrideOpen, setOverrideOpen] = useState(false)
+  const [overrideReason, setOverrideReason] = useState('')
 
   if (!details) {
     return (
@@ -64,13 +84,65 @@ export function ReviewDetail({
 
   const handleApprove = async () => {
     setError(null)
+    setWarning(null)
     setIsSubmitting(true)
     try {
-      await approve({ clerkOrgId, shiftId, comment })
+      const result = await approve({ clerkOrgId, shiftId, comment })
       setComment('')
-      onBack?.()
+      // approve resolves to the shift id on success, or to a human-readable
+      // warning string when the billing line was blocked by compliance.
+      if (typeof result === 'string' && result !== shiftId) {
+        setWarning(result)
+      } else {
+        onBack?.()
+      }
     } catch (err) {
       setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Approval failed.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleOverrideApprove = async () => {
+    setError(null)
+    if (!overrideReason.trim()) return
+    setIsSubmitting(true)
+    try {
+      await approve({
+        clerkOrgId,
+        shiftId,
+        comment,
+        complianceOverride: true,
+        complianceOverrideReason: overrideReason.trim(),
+      })
+      setComment('')
+      setOverrideReason('')
+      setOverrideOpen(false)
+      setWarning(null)
+      onBack?.()
+    } catch (err) {
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Override approval failed.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleEscalate = async () => {
+    setError(null)
+    setMessage(null)
+    if (!escalateReason.trim()) return
+    setIsSubmitting(true)
+    try {
+      await escalateToSupervisor({
+        clerkOrgId,
+        shiftId,
+        reason: escalateReason.trim(),
+      })
+      setEscalateReason('')
+      setEscalateOpen(false)
+      setMessage('Escalated to admin for review.')
+    } catch (err) {
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Escalation failed.')
     } finally {
       setIsSubmitting(false)
     }
@@ -129,6 +201,32 @@ export function ReviewDetail({
         </div>
       )}
 
+      {warning && (
+        <div className="rounded-md border border-atria-warning/20 bg-atria-warning-bg px-4 py-3 text-sm text-atria-warning">
+          <p>{warning}</p>
+          {isAdmin && (
+            <Button
+              className="mt-2"
+              variant="secondary"
+              disabled={isSubmitting}
+              onClick={() => {
+                setOverrideReason('')
+                setOverrideOpen(true)
+              }}
+              data-testid="compliance-override-button"
+            >
+              Approve with compliance override
+            </Button>
+          )}
+        </div>
+      )}
+
+      {message && (
+        <div className="rounded-md border border-atria-success/20 bg-atria-success-bg px-4 py-3 text-sm text-atria-success">
+          {message}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <div className="space-y-6 lg:col-span-3">
           <DocumentationCard
@@ -145,6 +243,7 @@ export function ReviewDetail({
           <DecisionCard
             blockers={blockers}
             canApprove={canApprove}
+            canEscalate={shift.status === 'submitted'}
             canRequestCorrection={canRequestCorrection}
             caregiverName={displayCaregiverName}
             comment={comment}
@@ -155,6 +254,12 @@ export function ReviewDetail({
               setComment(value)
               if (value.trim()) setCorrectionError(false)
             }}
+            onEscalate={() => {
+              setEscalateReason('')
+              setError(null)
+              setMessage(null)
+              setEscalateOpen(true)
+            }}
             onRequestCorrection={handleRequestCorrection}
             reviews={reviews}
             shiftStatus={shift.status}
@@ -163,6 +268,68 @@ export function ReviewDetail({
           />
         </div>
       </div>
+
+      <Dialog open={escalateOpen} onClose={() => setEscalateOpen(false)}>
+        <DialogHeader>
+          <DialogTitle>Escalate to Admin</DialogTitle>
+        </DialogHeader>
+        <DialogContent>
+          <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+            Reason
+          </label>
+          <Textarea
+            className="mt-1.5"
+            onChange={(event) => setEscalateReason(event.target.value)}
+            placeholder="Why does this shift need admin review?"
+            value={escalateReason}
+            data-testid="escalate-reason-input"
+          />
+        </DialogContent>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setEscalateOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            disabled={!escalateReason.trim() || isSubmitting}
+            onClick={handleEscalate}
+            data-testid="escalate-submit-button"
+          >
+            {isSubmitting ? 'Escalating…' : 'Escalate'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+
+      <Dialog open={overrideOpen} onClose={() => setOverrideOpen(false)}>
+        <DialogHeader>
+          <DialogTitle>Approve with compliance override</DialogTitle>
+        </DialogHeader>
+        <DialogContent>
+          <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+            Override reason
+          </label>
+          <Textarea
+            className="mt-1.5"
+            onChange={(event) => setOverrideReason(event.target.value)}
+            placeholder="Why is the compliance block being overridden?"
+            value={overrideReason}
+            data-testid="compliance-override-reason-input"
+          />
+        </DialogContent>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setOverrideOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            disabled={!overrideReason.trim() || isSubmitting}
+            onClick={handleOverrideApprove}
+            data-testid="compliance-override-submit-button"
+          >
+            {isSubmitting ? 'Approving…' : 'Approve with override'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   )
 }
@@ -442,6 +609,7 @@ function TaskReviewItem({
 function DecisionCard({
   blockers,
   canApprove,
+  canEscalate,
   canRequestCorrection,
   caregiverName,
   comment,
@@ -449,6 +617,7 @@ function DecisionCard({
   isSubmitting,
   onApprove,
   onCommentChange,
+  onEscalate,
   onRequestCorrection,
   reviews,
   shiftStatus,
@@ -457,6 +626,7 @@ function DecisionCard({
 }: {
   blockers: string[]
   canApprove: boolean
+  canEscalate: boolean
   canRequestCorrection: boolean
   caregiverName: string
   comment: string
@@ -464,6 +634,7 @@ function DecisionCard({
   isSubmitting: boolean
   onApprove: () => void
   onCommentChange: (value: string) => void
+  onEscalate: () => void
   onRequestCorrection: () => void
   reviews: Array<{ _id: string; createdAt: string; decision: 'approved' | 'correction_requested'; comment: string }>
   shiftStatus: string
@@ -531,6 +702,16 @@ function DecisionCard({
                 Request Correction
               </>
             )}
+          </Button>
+          <Button
+            variant="secondary"
+            className="h-14 w-full rounded-full text-base"
+            disabled={!canEscalate || isSubmitting}
+            onClick={onEscalate}
+            data-testid="escalate-button"
+          >
+            <Flag className="h-5 w-5" />
+            Escalate to Admin
           </Button>
         </div>
 

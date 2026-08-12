@@ -14,6 +14,32 @@ const DashboardPage = lazy(() =>
     default: module.DashboardPage,
   })),
 )
+const AgencyAdminDashboardPage = lazy(() =>
+  import('@/features/dashboard/pages/AgencyAdminDashboardPage').then(
+    (module) => ({
+      default: module.AgencyAdminDashboardPage,
+    }),
+  ),
+)
+const ComplianceOverviewPage = lazy(() =>
+  import('@/features/compliance/pages/ComplianceOverviewPage').then(
+    (module) => ({
+      default: module.ComplianceOverviewPage,
+    }),
+  ),
+)
+const ReportingPage = lazy(() =>
+  import('@/features/reporting/pages/ReportingPage').then((module) => ({
+    default: module.ReportingPage,
+  })),
+)
+const NotificationsPage = lazy(() =>
+  import('@/features/notifications/pages/NotificationsPage').then(
+    (module) => ({
+      default: module.NotificationsPage,
+    }),
+  ),
+)
 const CaregiverTodayPage = lazy(() =>
   import('@/features/caregiver/pages/CaregiverTodayPage').then((module) => ({
     default: module.CaregiverTodayPage,
@@ -31,6 +57,21 @@ const BillingPage = lazy(() =>
     default: module.BillingPage,
   })),
 )
+const PayrollPage = lazy(() =>
+  import('@/features/billing/pages/PayrollPage').then((module) => ({
+    default: module.PayrollPage,
+  })),
+)
+const AuditTrailPage = lazy(() =>
+  import('@/features/reporting/pages/AuditTrailPage').then((module) => ({
+    default: module.AuditTrailPage,
+  })),
+)
+const AuditReadinessPage = lazy(() =>
+  import('@/features/reporting/pages/AuditReadinessPage').then((module) => ({
+    default: module.AuditReadinessPage,
+  })),
+)
 const ClientsPage = lazy(() =>
   import('@/features/clients/pages/ClientsPage').then((module) => ({
     default: module.ClientsPage,
@@ -41,10 +82,77 @@ const TeamPage = lazy(() =>
     default: module.TeamPage,
   })),
 )
-const PlatformAdminPage = lazy(() =>
-  import('@/features/platform/pages/PlatformAdminPage').then((module) => ({
-    default: module.PlatformAdminPage,
+const PlatformSubscriptionsPage = lazy(() =>
+  import('@/features/platform/pages/PlatformSubscriptionsPage').then(
+    (module) => ({
+      default: module.PlatformSubscriptionsPage,
+    }),
+  ),
+)
+const PlatformSubscriptionDetailPage = lazy(() =>
+  import('@/features/platform/pages/PlatformSubscriptionDetailPage').then(
+    (module) => ({
+      default: module.PlatformSubscriptionDetailPage,
+    }),
+  ),
+)
+const PlatformAgenciesPage = lazy(() =>
+  import('@/features/platform/pages/PlatformAgenciesPage').then((module) => ({
+    default: module.PlatformAgenciesPage,
   })),
+)
+const PlatformCreateAgencyPage = lazy(() =>
+  import('@/features/platform/pages/PlatformCreateAgencyPage').then(
+    (module) => ({
+      default: module.PlatformCreateAgencyPage,
+    }),
+  ),
+)
+const PlatformAgencyDetailPage = lazy(() =>
+  import('@/features/platform/pages/PlatformAgencyDetailPage').then(
+    (module) => ({
+      default: module.PlatformAgencyDetailPage,
+    }),
+  ),
+)
+const PlatformHealthPage = lazy(() =>
+  import('@/features/platform/pages/PlatformHealthPage').then((module) => ({
+    default: module.PlatformHealthPage,
+  })),
+)
+const PlatformReportsPage = lazy(() =>
+  import('@/features/platform/pages/PlatformReportsPage').then((module) => ({
+    default: module.PlatformReportsPage,
+  })),
+)
+const PlatformAuditPage = lazy(() =>
+  import('@/features/platform/pages/PlatformAuditPage').then((module) => ({
+    default: module.PlatformAuditPage,
+  })),
+)
+const PlatformSupportPage = lazy(() =>
+  import('@/features/platform/pages/PlatformSupportPage').then((module) => ({
+    default: module.PlatformSupportPage,
+  })),
+)
+const PlatformBillingPage = lazy(() =>
+  import('@/features/platform/pages/PlatformBillingPage').then((module) => ({
+    default: module.PlatformBillingPage,
+  })),
+)
+const PlatformInvoiceCreatePage = lazy(() =>
+  import('@/features/platform/pages/PlatformInvoiceCreatePage').then(
+    (module) => ({
+      default: module.PlatformInvoiceCreatePage,
+    }),
+  ),
+)
+const PlatformInvoiceDetailPage = lazy(() =>
+  import('@/features/platform/pages/PlatformInvoiceDetailPage').then(
+    (module) => ({
+      default: module.PlatformInvoiceDetailPage,
+    }),
+  ),
 )
 const SearchPage = lazy(() =>
   import('@/features/search/pages/SearchPage').then((module) => ({
@@ -332,9 +440,101 @@ export function AppRouter() {
       <Route element={<PlatformShell />}>
         <Route
           path="platform"
+          element={<Navigate replace to="/platform/subscriptions" />}
+        />
+        <Route
+          path="platform/subscriptions"
           element={
             <RouteSuspense>
-              <PlatformAdminPage />
+              <PlatformSubscriptionsPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/subscriptions/:tenantId"
+          element={
+            <RouteSuspense>
+              <PlatformSubscriptionDetailPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/agencies"
+          element={
+            <RouteSuspense>
+              <PlatformAgenciesPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/agencies/create"
+          element={
+            <RouteSuspense>
+              <PlatformCreateAgencyPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/agencies/:tenantId"
+          element={
+            <RouteSuspense>
+              <PlatformAgencyDetailPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/health"
+          element={
+            <RouteSuspense>
+              <PlatformHealthPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/reports"
+          element={
+            <RouteSuspense>
+              <PlatformReportsPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/support"
+          element={
+            <RouteSuspense>
+              <PlatformSupportPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/audit"
+          element={
+            <RouteSuspense>
+              <PlatformAuditPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/billing"
+          element={
+            <RouteSuspense>
+              <PlatformBillingPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/billing/create"
+          element={
+            <RouteSuspense>
+              <PlatformInvoiceCreatePage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/billing/:invoiceId"
+          element={
+            <RouteSuspense>
+              <PlatformInvoiceDetailPage />
             </RouteSuspense>
           }
         />
@@ -348,6 +548,82 @@ export function AppRouter() {
             >
               <RouteSuspense>
                 <DashboardPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="admin"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:admin']}>
+              <RouteSuspense>
+                <AgencyAdminDashboardPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        {/* Alias: /dashboard lands on the Agency Admin Dashboard (role-guarded at /admin). */}
+        <Route
+          path="dashboard"
+          element={<Navigate replace to="/admin" />}
+        />
+        <Route
+          path="compliance"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator', 'org:hr']}
+            >
+              <RouteSuspense>
+                <ComplianceOverviewPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="reports"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator']}
+            >
+              <RouteSuspense>
+                <ReportingPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="audit"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:admin', 'org:hr']}>
+              <RouteSuspense>
+                <AuditReadinessPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="logs"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:admin']}>
+              <RouteSuspense>
+                <AuditTrailPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="notifications"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={[
+                'org:admin',
+                'org:coordinator',
+                'org:hr',
+                'org:caregiver',
+              ]}
+            >
+              <RouteSuspense>
+                <NotificationsPage />
               </RouteSuspense>
             </TenantRoleRouteGuard>
           }
@@ -377,13 +653,25 @@ export function AppRouter() {
           }
         />
         <Route
-          path="coordinator/billing"
+          path="billing"
           element={
             <TenantRoleRouteGuard
               allowedRoles={['org:admin', 'org:coordinator']}
             >
               <RouteSuspense>
                 <BillingPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="billing/payroll"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator']}
+            >
+              <RouteSuspense>
+                <PayrollPage />
               </RouteSuspense>
             </TenantRoleRouteGuard>
           }

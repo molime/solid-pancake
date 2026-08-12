@@ -271,14 +271,14 @@ function candidateWelcomeEmailHtml(args: {
   <head><meta charset="utf-8"></head>
   <body>
     <p>${greeting}</p>
-    <p>Your ATRIA-X caregiver account has been created. Use the information below to sign in for the first time:</p>
+    <p>Your ATRIA-X account has been created. Use the information below to sign in for the first time:</p>
     <ul>
       <li><strong>Email:</strong> ${args.email}</li>
       <li><strong>Temporary password:</strong> ${args.initialPassword}</li>
       <li><strong>Magic sign-in link:</strong> <a href="${args.magicLink}">Sign in</a></li>
     </ul>
     <p>For security, you will be asked to change your password after your first sign-in.</p>
-    <p>If you have trouble, contact your hiring representative.</p>
+    <p>If you have trouble, contact ATRIA-X support at hello@atriaxsolutions.com.</p>
   </body>
 </html>
   `
@@ -294,7 +294,7 @@ function candidateWelcomeEmailText(args: {
   const greeting = args.firstName ? `Hi ${args.firstName},` : 'Hi,'
   return `${greeting}
 
-Your ATRIA-X caregiver account has been created. Use the information below to sign in for the first time:
+Your ATRIA-X account has been created. Use the information below to sign in for the first time:
 
 Email: ${args.email}
 Temporary password: ${args.initialPassword}
@@ -302,6 +302,6 @@ Magic sign-in link: ${args.magicLink}
 
 For security, you will be asked to change your password after your first sign-in.
 
-If you have trouble, contact your hiring representative.
+If you have trouble, contact ATRIA-X support at hello@atriaxsolutions.com.
 `
 }

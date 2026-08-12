@@ -72,6 +72,21 @@ export function SelectAgencyPage() {
     api.candidates.getMyTenant,
     hasNoClerkMemberships && convexAuth.isAuthenticated ? {} : 'skip',
   )
+  // Check if this user is a platform admin — if they have no org memberships
+  // and no tenant records, but ARE a platform admin, redirect to /platform.
+  const isPlatformAdmin = useQuery(
+    api.platform.isAdmin,
+    hasNoClerkMemberships && convexAuth.isAuthenticated ? {} : 'skip',
+  )
+
+  // Platform admin with no org: go straight to /platform
+  useEffect(() => {
+    if (!hasNoClerkMemberships || isPlatformAdmin === undefined) return
+    if (!dbTenants || dbTenants.length > 0) return
+    if (isPlatformAdmin === true) {
+      navigate('/platform/subscriptions', { replace: true })
+    }
+  }, [hasNoClerkMemberships, isPlatformAdmin, dbTenants, navigate])
 
   // Exactly one tenant: pick it and go straight in. Multiple tenants fall
   // through to the picker below so the user can choose their agency.

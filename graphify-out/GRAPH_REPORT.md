@@ -1,22 +1,22 @@
-# Graph Report - solid-pancake  (2026-07-30)
+# Graph Report - solid-pancake  (2026-08-11)
 
 ## Corpus Check
-- 673 files · ~7,497,589 words
+- 790 files · ~7,725,034 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 8834 nodes · 10098 edges · 828 communities (766 shown, 62 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 61 edges (avg confidence: 0.79)
+- 9690 nodes · 11267 edges · 885 communities (817 shown, 68 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 64 edges (avg confidence: 0.78)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `4c022a5e`
+- Built from commit: `17c633fc`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - auth.ts
-- ApplicationReviewPage.test.tsx
+- ApplicationReviewPage.tsx
 - shifts.ts
 - candidates.ts
 - mockData.ts
@@ -29,8 +29,8 @@
 - ReviewDetail.tsx
 - api.js
 - mockClerkReact.tsx
-- requireTenantRole
-- 4. Session order & prompts
+- internal
+- candidates.test.ts
 - adpClient.ts
 - legalText.ts
 - BillingPage.tsx
@@ -42,7 +42,7 @@
 - ShiftNoteStep.tsx
 - ApplicationFormPage.tsx
 - index.ts
-- api.d.ts
+- billing.ts
 - invitationBypass.ts
 - schema.ts
 - ShiftClockOutScreen.tsx
@@ -55,9 +55,9 @@
 - useQuery
 - sharedUi.test.tsx
 - compilerOptions
-- agencyConfig.ts
+- platform.ts
 - Caregiver Shift Documentation â€” Screen Spec
-- ApplicationReviewPage.tsx
+- usePlatformAdmin
 - documentationWizard.ts
 - TeamPage.tsx
 - Automatic HR Case Creation — Comprehensive Proactive Flagging
@@ -66,50 +66,50 @@
 - compilerOptions
 - ROLE: PLANNER (codex)
 - compilerOptions
-- assertTenantDoc
+- api.d.ts
 - format.ts
-- forms.ts
-- forms.test.ts
+- requireTenantRole
+- agencyConfig.ts
 - Diego's Testing Fixes — 5 Issues
-- ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)
+- compliance.ts
 - SESSION 5 — ATRIA-X Scheduling Screens Figma Spec
 - 20260624_185028/screenshot-app/mockConvex.tsx
 - scripts
 - USDateInput.tsx
 - ApplyEntryPage.test.tsx
-- candidates.test.ts
+- forms.test.ts
 - What to Test
 - SESSION 5 — ATRIA-X Scheduling Screens Figma Spec
 - SelectAgencyPage.tsx
 - RouteGuard.tsx
-- Sidebar.tsx
+- verify-subscription-fix.mjs
 - CandidateOnboardingPage.tsx
 - Caregiver Shift Documentation â€” Screen Spec
 - 4. Session order & prompts
 - Final Detail Fixes — 3 Issues
-- ATRIA-X â€” Phase 1 Implementation Plan (Sessions + Prompts)
 - 4. Session order & prompts
+- ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)
 - 4. Session order & prompts
 - trainingCompletion.ts
-- ApplicationStatusPage.tsx
+- 4. Session order & prompts
 - ProgressSteps.tsx
 - ATRIA-X Design System â€” Dark Theme Token Spec (v1)
 - ROLE: PLANNER (codex)
-- ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)
-- useTenant.test.ts
+- Implementation Plan: Add "Home" Nav Item to HR Sidebar
+- mockConvexReact.tsx
 - Caregiver Shift Documentation â€” Screen Spec
 - search/embedding.ts
 - StatusBadge.tsx
 - ATRIA-X Design System â€” Dark Theme Token Spec (v1)
 - 20260625_165149/fix_iter1.prompt.md
 - 20260623_224923/review_codex_iter1.md
-- ShiftDocumentationForm.test.tsx
+- adpSync.test.ts
 - ATRIA-X Design System â€” Dark Theme Token Spec (v1)
 - EmploymentHistorySection.tsx
 - ATRIA-X Session 7 Figma screen spec â€” coordinator review & approval
 - 20260604_163200/fix_iter3.prompt.md
 - 20260624_185028/screenshot-app/main.tsx
-- package.json
+- ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)
 - ATRIA-X Phase 1 Session 8 â€” Implementation Plan
 - CriminalRecordSection.tsx
 - ReferencesSection.tsx
@@ -142,20 +142,21 @@
 - 20260624_185028/screenshot.spec.ts
 - 20260625_165149/screenshot.spec.ts
 - launch.sh
-- adpSync.test.ts
-- prettier
-- tailwindcss
-- @testing-library/jest-dom
-- @testing-library/user-event
-- @types/node
-- @types/react-dom
-- typescript
-- @vitejs/plugin-react
-- vitest
+- ATRIA-X â€” Phase 1 Implementation Plan (Sessions + Prompts)
+- CoordinatorReviewPage.tsx
+- AuditReadinessPage.tsx
+- auditReadiness.test.ts
+- billingPhase3.test.ts
+- 3. Architecture additions (so every session prompt is consistent)
+- run-smoke.mjs
+- 3. Architecture additions (so every session prompt is consistent)
+- InvoicesTable.tsx
+- run-smoke2.mjs
 - { chromium }
 - { chromium }
 - providers.test.tsx
 - vercel.json
+- platform.test.ts
 - 20260623_122350/fix_iter2.prompt.md
 - 20260624_185028/fix_iter1.prompt.md
 - ROLE: PLANNER (codex)
@@ -191,7 +192,7 @@
 - 20260623_224923/plan_final.md
 - ATRIA-X Design System Ã¢â‚¬â€ Dark Theme Token Spec (v1)
 - 20260626_161701/review_codex_iter3.md
-- mockConvexReact.tsx
+- Implementation Plan — Add "Home" navigation to the HR sidebar
 - 20260604_163200/fix_iter2.prompt.md
 - 20260623_224923/plan_codex.md
 - ROLE: PLANNER (codex)
@@ -248,21 +249,21 @@
 - 20260624_185028/review_codex_iter4.md
 - ROLE: REVIEWER (codex)
 - ROLE: REVIEWER (codex)
-- 2. ADP integration reference (what the flow needs)
+- useAction
 - Complete List of Features to Test
 - 20260626_210401/fix_iter4.prompt.md
 - 20260626_210401/review_codex_iter2.md
-- reviews.ts
+- verify-fixes.mjs
 - 20260626_210401/review_codex_iter4.md
 - ROLE: REVIEWER (codex)
 - Caregiver Flow â€” Visual Review Follow-up
 - ATRIA-X â€” Phase 1 Implementation Plan (Sessions + Prompts)
 - ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)
 - 20260626_210401/implement.prompt.md
-- ATRIA-X â€” Phase 1 Implementation Plan (Sessions + Prompts)
+- hrCases.test.ts
 - ATRIA-X â€” Phase 1 Implementation Plan (Sessions + Prompts)
 - ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)
-- ROLE: REVIEWER (codex)
+- ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)
 - 20260604_163200/fix_iter1.prompt.md
 - ROLE: REVIEWER (codex)
 - ROLE: REVIEWER (codex)
@@ -325,7 +326,7 @@
 - Stages
 - 20260626_210401/plan_codex.md
 - Stages
-- CoordinatorReviewPage.tsx
+- Implementation Plan: Add "Home" Nav Item to HR Sidebar
 - REVIEW (opus) — src/shared/format.test.ts
 - REVIEW: Stage 0 foundation — shared design-system primitives (opus, iter 1)
 - 20260624_161335/implement.prompt.md
@@ -363,7 +364,7 @@
 - 20260626_231328/fix_iter3.prompt.md
 - ATRIA-X live Clerk/Convex E2E fix design doc
 - The 5 Issues
-- mappings.ts
+- Implementation Plan — Add "Home" navigation to the HR sidebar
 - REVIEW: Stage 0 foundation — shared design-system primitives (opus, iter 1)
 - ROLE: REVIEWER (codex)
 - Changes made in fix iteration 1
@@ -376,7 +377,7 @@
 - ATRIA-X Session 8 — Document Archive + Forms Renderer Figma Spec
 - Login Page Product Tabs
 - Maria's Final Fixes — 3 Issues
-- ApplicationFormPage.test.tsx
+- 20260731_093551/fix_iter1.prompt.md
 - ROLE: REVIEWER (codex)
 - REVIEW (opus) â€” src/shared/format.test.ts
 - Architecture
@@ -411,7 +412,7 @@
 - ROLE: REVIEWER (codex)
 - ROLE: REVIEWER (codex)
 - HR Cases Enhancement + Dashboard Branding
-- shiftClock.test.ts
+- ApplicationStatusPage.tsx
 - DocumentUploadPage.test.tsx
 - ROLE: PLANNER (codex)
 - ROLE: REVIEWER (codex)
@@ -523,7 +524,7 @@
 - 2. ADP integration reference (what the flow needs)
 - ROLE: REVIEWER (codex)
 - 2. ADP integration reference (what the flow needs)
-- documentArchive.test.ts
+- 20260731_093551/fix_iter2.prompt.md
 - ROLE: REVIEWER (codex)
 - 2. ADP integration reference (what the flow needs)
 - Pipeline summary â€” atriax
@@ -668,8 +669,8 @@
 - ROLE: FIXER (Kimi)
 - ROLE: REVIEWER (codex)
 - ROLE: REVIEWER (codex)
-- hrCases.test.ts
-- Frame: Today / Entry
+- qa-platform-admin/run-qa.mjs
+- SubscriptionDetailErrorBoundary
 - ROLE: FIXER (Kimi)
 - ROLE: PLANNER (codex)
 - Pipeline summary â€” atriax
@@ -687,8 +688,8 @@
 - 3. Architecture additions (so every session prompt is consistent)
 - ROLE: REVIEWER (codex)
 - ROLE: REVIEWER (codex)
-- 3. Architecture additions (so every session prompt is consistent)
-- onboarding.test.ts
+- 20260731_093551/fix_iter3.prompt.md
+- run-qa.mjs
 - ROLE: PLANNER (codex)
 - Pipeline summary â€” atriax
 - ROLE: REVIEWER (codex)
@@ -710,11 +711,11 @@
 - Pipeline summary — atriax
 - E2E HR User Role Resolution Fix
 - W4Section.tsx
-- timePunches.ts
+- buildInvoicePdf
 - CLAUDE.md
-- files.test.ts
+- 20260731_093551/fix_iter4.prompt.md
 - ROLE: PLANNER (codex)
-- 3. Architecture additions (so every session prompt is consistent)
+- 20260731_094528/fix_iter1.prompt.md
 - ROLE: PLANNER (codex)
 - ROLE: REVIEWER (codex)
 - ROLE: PLANNER (codex)
@@ -739,18 +740,18 @@
 - Frame: Clock Out
 - Frame: Clock In
 - ROLE: IMPLEMENTER (Kimi)
-- seed.test.ts
+- ROLE: PLANNER (codex)
 - Frame: Clock In
 - Frame: Clock Out
-- Pipeline summary â€” atriax
+- phase3.test.ts
 - Frames: Step 1 When â€¦ Step 6 Done
 - Frame: Today / Entry
 - Frame: Clock In
-- ROLE: PLANNER (codex)
+- verify-sanitize.mjs
 - Frames: Step 1 When â€¦ Step 6 Done
 - Frame: Today / Entry
 - Frame: Clock In
-- ROLE: PLANNER (codex)
+- 20260731_094528/fix_iter2.prompt.md
 - 1. The two decisions to make BEFORE coding (blockers)
 - Pipeline summary â€” atriax
 - Leave unset to run safely without ADP credentials; sync rows become pending_credentials.
@@ -771,10 +772,10 @@
 - Pipeline summary Ã¢â‚¬â€ atriax
 - Pipeline summary Ã¢â‚¬â€ atriax
 - Pipeline summary Ã¢â‚¬â€ atriax
-- @playwright/test
-- GeofenceSettingsPage.test.tsx
-- ClientsPage.tsx
-- ROLE: IMPLEMENTER (Kimi)
+- run-smoke3.mjs
+- Pipeline summary â€” atriax
+- 20260731_094528/fix_iter3.prompt.md
+- 20260731_094528/fix_iter4.prompt.md
 - 20260603_165807/review_opus_iter2.md
 - 20260604_163200/review_opus_iter2.md
 - 20260604_163200/review_opus_iter3.md
@@ -792,7 +793,7 @@
 - clearSession.ts
 - AGENTS.md
 - CLAUDE.md
-- DownloadButton
+- Implementation Plan: Add "Home" Nav Item to HR Sidebar
 - copilot-instructions.md
 - cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260603_165807\review_opus_iter2.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q
 - cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260604_163200\review_opus_iter3.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q
@@ -800,77 +801,133 @@
 - 20260624_185028/figma_screen_spec.md
 - visual_codex_review.prompt.md
 - PIPELINE_LAUNCH_README.md
-- StorageDownloadButton
-- convex-test
+- Implementation Plan — Add "Home" navigation to the HR sidebar
+- forms.ts
+- ROLE: PLANNER (codex)
+- Pipeline summary â€” atriax
+- check-audit.mjs
+- useTenant.test.ts
+- Sidebar.tsx
+- ROLE: REVIEWER (codex)
+- ROLE: REVIEWER (codex)
+- ROLE: REVIEWER (codex)
+- ROLE: REVIEWER (codex)
+- ROLE: REVIEWER (opus)
+- ROLE: REVIEWER (opus)
+- ROLE: REVIEWER (opus)
+- ROLE: REVIEWER (opus)
+- ROLE: REVIEWER (codex)
+- ROLE: REVIEWER (codex)
+- ROLE: REVIEWER (codex)
+- ROLE: REVIEWER (codex)
+- ROLE: REVIEWER (opus)
+- ROLE: REVIEWER (opus)
+- ROLE: REVIEWER (opus)
+- ROLE: REVIEWER (opus)
+- notifications.test.ts
+- ROLE: PLANNER (codex)
+- ROLE: PLANNER (opus)
+- Pipeline summary — atriax
+- ROLE: PLANNER (codex)
+- ROLE: PLANNER (opus)
+- Pipeline summary — atriax
+- bootstrap.mjs
+- ApplicationReviewPage.test.tsx
+- 20260731_093551/plan_codex.md
+- 20260731_093551/review_codex_iter1.md
+- 20260731_093551/review_codex_iter2.md
+- 20260731_093551/review_codex_iter3.md
+- 20260731_093551/review_codex_iter4.md
+- 20260731_093551/review_opus_iter1.md
+- 20260731_093551/review_opus_iter2.md
+- 20260731_093551/review_opus_iter3.md
+- 20260731_093551/review_opus_iter4.md
+- 20260731_094528/plan_codex.md
+- 20260731_094528/review_codex_iter1.md
+- 20260731_094528/review_codex_iter2.md
+- 20260731_094528/review_codex_iter3.md
+- 20260731_094528/review_codex_iter4.md
+- 20260731_094528/review_opus_iter1.md
+- 20260731_094528/review_opus_iter2.md
+- 20260731_094528/review_opus_iter3.md
+- 20260731_094528/review_opus_iter4.md
+- CoverageRequestsPanel.test.tsx
+- seed.test.ts
+- AgencyDetailErrorBoundary
+- GeofenceSettingsPage.test.tsx
+- ShiftDocumentationForm.test.tsx
+- ROLE: PLANNER (codex)
+- 2. ADP integration reference (what the flow needs)
+- ROLE: PLANNER (codex)
 
 ## God Nodes (most connected - your core abstractions)
-1. `api` - 72 edges
-2. `requireTenantRole()` - 34 edges
-3. `ROLE: PLANNER (codex)` - 30 edges
-4. `assertTenantDoc()` - 28 edges
-5. `ROLE: PLANNER (codex)` - 28 edges
-6. `ROLE: PLANNER (codex)` - 28 edges
-7. `useQuery()` - 25 edges
-8. `signInWithClerk()` - 24 edges
-9. `internal` - 23 edges
-10. `query` - 23 edges
+1. `api` - 100 edges
+2. `requireTenantRole()` - 40 edges
+3. `internal` - 33 edges
+4. `assertTenantDoc()` - 32 edges
+5. `ROLE: PLANNER (codex)` - 30 edges
+6. `query` - 28 edges
+7. `mutation` - 28 edges
+8. `ROLE: PLANNER (codex)` - 28 edges
+9. `ROLE: PLANNER (codex)` - 28 edges
+10. `usePlatformAdmin()` - 27 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `mockDbTenants()` --indirect_call--> `useQuery()`  [INFERRED]
   src/app/useTenant.test.ts → src/dev/mockConvexReact.tsx
-- `mockSignedInWithRole()` --indirect_call--> `useQuery()`  [INFERRED]
-  src/app/router.test.tsx → src/dev/mockConvexReact.tsx
-- `mockSignedInWithRoleAndTraining()` --indirect_call--> `useQuery()`  [INFERRED]
-  src/app/router.test.tsx → src/dev/mockConvexReact.tsx
+- `buildInvoicePdf()` --references--> `jspdf`  [EXTRACTED]
+  src/features/billing/model/invoiceUtils.ts → package.json
 - `mockClerkState()` --indirect_call--> `useAuth()`  [INFERRED]
-  src/app/shell/RouteGuard.test.tsx → src/dev/mockClerkReact.tsx
+  src/app/auth/SelectAgencyPage.test.tsx → src/dev/mockClerkReact.tsx
 - `mockClerkState()` --indirect_call--> `useOrganization()`  [INFERRED]
-  src/app/shell/RouteGuard.test.tsx → src/dev/mockClerkReact.tsx
+  src/app/auth/SelectAgencyPage.test.tsx → src/dev/mockClerkReact.tsx
+- `mockClerkState()` --indirect_call--> `useUser()`  [INFERRED]
+  src/app/auth/SelectAgencyPage.test.tsx → src/dev/mockClerkReact.tsx
 
 ## Import Cycles
 - 2-file cycle: `tests/e2e/helpers/auth.ts -> tests/e2e/helpers/seed.ts -> tests/e2e/helpers/auth.ts`
 
-## Communities (828 total, 62 thin omitted)
+## Communities (885 total, 68 thin omitted)
 
 ### Community 0 - "auth.ts"
 Cohesion: 0.06
-Nodes (82): callConvex(), ConvexHttpResult, acceptJobDescriptionAndLegalValidity(), completePrecedingTasks(), datePlusDays(), fillAcknowledgments(), fillEmploymentAndReferences(), fillI9AndW4() (+74 more)
+Nodes (83): callConvex(), ConvexHttpResult, acceptJobDescriptionAndLegalValidity(), completePrecedingTasks(), datePlusDays(), fillAcknowledgments(), fillEmploymentAndReferences(), fillI9AndW4() (+75 more)
 
-### Community 1 - "ApplicationReviewPage.test.tsx"
-Cohesion: 0.36
-Nodes (6): createDetailResponse(), defaultUseQueryImplementation(), downloadUrlMock, renderWithCarInsurance(), reviewApplicationMock, sendOfferMock
+### Community 1 - "ApplicationReviewPage.tsx"
+Cohesion: 0.06
+Nodes (28): HrToast(), InviteCandidateModal(), isValidPhoneOptional(), inviteCandidateMock, HrToast, useHrToast(), CandidateStatus, candidateStatusAccentClass() (+20 more)
 
 ### Community 2 - "shifts.ts"
-Cohesion: 0.08
-Nodes (33): DatabaseReader, DatabaseWriter, MutationCtx, QueryCtx, assertValidCoordinate(), haversineDistanceMeters(), LatLng, LocationEvidence (+25 more)
+Cohesion: 0.05
+Nodes (48): assertValidCoordinate(), haversineDistanceMeters(), LatLng, LocationEvidence, LocationInput, resolveShiftServiceTarget(), ServiceTarget, validatePunchLocation() (+40 more)
 
 ### Community 3 - "candidates.ts"
 Cohesion: 0.03
-Nodes (59): patchEvent(), acceptOffer, acknowledgeBackgroundCheck, addCandidateDocument, applyPublic, assertPrecedingTasksComplete(), attachCandidateDocument, CANDIDATE_DOCUMENT_TYPES (+51 more)
+Nodes (60): patchEvent(), acceptOffer, acknowledgeBackgroundCheck, addCandidateDocument, applyPublic, assertPrecedingTasksComplete(), attachCandidateDocument, CANDIDATE_DOCUMENT_TYPES (+52 more)
 
 ### Community 4 - "mockData.ts"
-Cohesion: 0.16
-Nodes (19): auditEvents, availabilityWindows, calendarWeekShifts, caregiverIds, caregiverScheduleShifts, clientIds, coordinatorMember, coordinatorUserId (+11 more)
+Cohesion: 0.15
+Nodes (21): auditEvents, availabilityWindows, calendarWeekShifts, caregiverIds, caregivers, caregiverScheduleShifts, clientIds, clients (+13 more)
 
 ### Community 5 - "generatePrefilledPdf.ts"
-Cohesion: 0.18
-Nodes (19): ALLOWED_TYPES, DOCUMENT_LABELS, DocumentUploadPage(), applyWhiteout(), findMappingKey(), generatePrefilledPdf(), GenerateUploadUrl, getOrCreatePage() (+11 more)
+Cohesion: 0.10
+Nodes (31): ALLOWED_TYPES, DOCUMENT_LABELS, DocumentUploadPage(), applyWhiteout(), findMappingKey(), generatePrefilledPdf(), GenerateUploadUrl, getOrCreatePage() (+23 more)
 
 ### Community 6 - "router.tsx"
-Cohesion: 0.06
-Nodes (37): AcknowledgmentPage, AllowedDomainsSettingsPage, ApplicationFormPage, ApplicationReviewPage, ApplicationStatusPage, ApplyEntryPage, AvailabilityPage, BillingPage (+29 more)
+Cohesion: 0.04
+Nodes (55): AcknowledgmentPage, AgencyAdminDashboardPage, AllowedDomainsSettingsPage, ApplicationFormPage, ApplicationReviewPage, ApplicationStatusPage, ApplyEntryPage, AuditReadinessPage (+47 more)
 
 ### Community 7 - "application/types.ts"
 Cohesion: 0.08
 Nodes (35): DisbursementSection(), DisbursementSectionProps, I9Section(), I9SectionProps, PersonalInfoSection(), PersonalInfoSectionProps, renderSection(), ACCOUNT_TYPE_OPTIONS (+27 more)
 
 ### Community 8 - "SchedulingPage.tsx"
-Cohesion: 0.13
-Nodes (28): CoverageRequest, CoverageRequestsPanel(), CoverageStatus, statusBadgeVariant, formatTimeInput(), ShiftEditorModal(), ShiftEditorModalProps, addDays() (+20 more)
+Cohesion: 0.11
+Nodes (30): CoverageRequest, CoverageRequestsPanel(), CoverageStatus, statusBadgeVariant, formatTimeInput(), ShiftEditorModal(), ShiftEditorModalProps, ShiftPacketPanel() (+22 more)
 
 ### Community 9 - "scheduling.ts"
-Cohesion: 0.08
-Nodes (26): ensureTenantMember(), addAvailabilityWindow, assertCaregiverMember(), assignShift, checkAvailabilityWarning(), checkShiftConflict(), createShift, deleteAvailabilityWindow (+18 more)
+Cohesion: 0.06
+Nodes (28): ensureTenantMember(), addAvailabilityWindow, assertCaregiverMember(), assignShift, checkAvailabilityWarning(), checkShiftConflict(), createShift, deleteAvailabilityWindow (+20 more)
 
 ### Community 10 - "shiftRules.ts"
 Cohesion: 0.10
@@ -881,20 +938,20 @@ Cohesion: 0.15
 Nodes (18): DecisionCard(), DocumentationCard(), formatDateShort(), formatDuration(), formatShiftMeta(), formatTime(), formatTimeString(), getDependencyMessage() (+10 more)
 
 ### Community 12 - "api.js"
-Cohesion: 0.06
-Nodes (17): api, components, modules, modules, modules, modules, ChangePasswordSection(), POLICY_SECTIONS (+9 more)
+Cohesion: 0.04
+Nodes (24): modules, api, components, modules, BILLABLE_ROLES, modules, PLANS, modules (+16 more)
 
 ### Community 13 - "mockClerkReact.tsx"
-Cohesion: 0.09
-Nodes (20): mockClerkState(), AppRouter(), mockSignedInWithRole(), mockSignedInWithRoleAndTraining(), mockSignedInOrgs(), mockTopbarState(), mockOrganization(), ClerkContext (+12 more)
+Cohesion: 0.10
+Nodes (17): AppRouter(), mockSignedInWithRole(), mockSignedInWithRoleAndTraining(), mockTopbarState(), mockOrganization(), ClerkContext, ClerkProvider(), getRoleFromView() (+9 more)
 
-### Community 14 - "requireTenantRole"
-Cohesion: 0.04
-Nodes (51): AuthContext, requireTenantRole(), create, get, list, remove, serviceAddressValidator, update (+43 more)
+### Community 14 - "internal"
+Cohesion: 0.08
+Nodes (23): crons, internal, httpAction, http, parseStripeSignatureHeader(), StripeEvent, timingSafeEqual(), toHex() (+15 more)
 
-### Community 15 - "4. Session order & prompts"
+### Community 15 - "candidates.test.ts"
 Cohesion: 0.11
-Nodes (19): 4. Session order & prompts, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION (+11 more)
+Nodes (9): asAdmin(), modules, OfferPrerequisites, seedCandidateForOffer(), seedCandidateWithTask(), seedCandidateWithTasks(), seedFlagCandidate(), seedSubmittableCandidate() (+1 more)
 
 ### Community 16 - "adpClient.ts"
 Cohesion: 0.10
@@ -905,16 +962,16 @@ Cohesion: 0.13
 Nodes (23): AcknowledgmentsSection(), AcknowledgmentsSectionProps, ABUSE_NOTICE_TEXT, ACKNOWLEDGMENT_DOCUMENTS, AcknowledgmentDoc, EMPLOYEE_CONTRACT_TEXT, EMPLOYEE_RIGHTS_TEXT, HIPAA_TEXT (+15 more)
 
 ### Community 18 - "BillingPage.tsx"
-Cohesion: 0.18
-Nodes (18): BillingInvoicePanel(), BillingInvoicePanelProps, BillingLinesTable(), BillingLinesTableProps, EmptyBillingState(), InvoicesTable(), InvoicesTableProps, BillingFilters (+10 more)
+Cohesion: 0.23
+Nodes (14): BillingInvoicePanel(), BillingInvoicePanelProps, BillingLinesTable(), BillingLinesTableProps, EmptyBillingState(), BillingFilters, BillingLineRow, buildInvoiceCsv() (+6 more)
 
 ### Community 19 - "adpSync.ts"
-Cohesion: 0.06
-Nodes (35): adpDrainPendingRows, adpInitialWorkerLoad, adpSyncPunch, adpSyncWorker, getAdpPort(), AdpEmployeeSyncStatus, AdpPunchSyncStatus, adpSyncStatusLiterals (+27 more)
+Cohesion: 0.07
+Nodes (34): adpDrainPendingRows, adpInitialWorkerLoad, adpSyncPunch, adpSyncWorker, exportPayrollToAdp, getAdpPort(), AdpEmployeeSyncStatus, AdpPunchSyncStatus (+26 more)
 
 ### Community 20 - "authHelpers.ts"
 Cohesion: 0.06
-Nodes (41): normalizeEmail(), getActiveClerkOrganizationId(), getAtriaRoleFromMetadata(), getClerkOrganizationRole(), normalizeTenantRole(), requireActiveClerkOrganization(), requireIdentity(), requireMatchingClerkOrganization() (+33 more)
+Nodes (46): normalizeEmail(), getActiveClerkOrganizationId(), getAtriaRoleFromMetadata(), getClerkOrganizationRole(), normalizeTenantRole(), requireActiveClerkOrganization(), requireIdentity(), requireMatchingClerkOrganization() (+38 more)
 
 ### Community 21 - "Caregiver Shift Documentation â€” Screen Spec"
 Cohesion: 0.04
@@ -925,32 +982,32 @@ Cohesion: 0.05
 Nodes (43): Caregiver Flow â€” Visual Review Artifacts, Caregiver Shift Documentation â€” Screen Spec, cmd: codex exec --ignore-user-config --skip-git-repo-check --color never --sandbox read-only 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_185028\review_codex_iter3.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', codex review (verdict CHANGES_REQUESTED), Common layout, Component-level coverage, Conclusion, Copy (+35 more)
 
 ### Community 23 - "devDependencies"
-Cohesion: 0.09
-Nodes (23): eslint, @eslint/js, eslint-plugin-react-hooks, eslint-plugin-react-refresh, globals, jsdom, devDependencies, eslint (+15 more)
+Cohesion: 0.04
+Nodes (45): convex-test, eslint, @eslint/js, eslint-plugin-react-hooks, eslint-plugin-react-refresh, globals, jsdom, devDependencies (+37 more)
 
 ### Community 24 - "ShiftNoteStep.tsx"
 Cohesion: 0.13
 Nodes (13): ShiftTaskList(), ShiftTaskListItem, EMPTY_NOTE_DRAFT, GOAL_OPTIONS, GoalLabel, ISSUE_CHOICE_NO, ISSUE_CHOICE_YES, IssueChoice (+5 more)
 
 ### Community 25 - "ApplicationFormPage.tsx"
-Cohesion: 0.23
-Nodes (20): ApplicationFormData, isNonEmptyString(), ApplicationFormPage(), formatValue(), healthScreenSchedule(), ReviewSection(), splitName(), STEPS (+12 more)
+Cohesion: 0.12
+Nodes (24): candidateProfile, navigateMock, submitMock, ApplicationFormData, isNonEmptyString(), ApplicationFormPage(), formatValue(), healthScreenSchedule() (+16 more)
 
 ### Community 26 - "index.ts"
 Cohesion: 0.15
 Nodes (17): Card(), CardContent(), CardHeader(), CardTitle(), Checkbox(), Dialog(), DialogContent(), DialogFooter() (+9 more)
 
-### Community 27 - "api.d.ts"
+### Community 27 - "billing.ts"
 Cohesion: 0.05
-Nodes (37): list, record, completeScan, getBackgroundCheck, getBackgroundCheckForHR, getBackgroundCheckInternal, getCandidateInternal, initiateBackgroundCheck (+29 more)
+Nodes (52): assertTenantDoc(), BILLING_ROLES, completePayrollExport, createExportBatch, createInvoice, createPayPeriod, createPerPatientInvoices, exportBatches (+44 more)
 
 ### Community 28 - "invitationBypass.ts"
 Cohesion: 0.12
-Nodes (29): generateClerkSignInTicketForEmail(), assertEmailDomainAllowed(), clerkErrorMessage(), create, extractEmailDomain(), invitationRedirectUrl(), InviteRole, isAllowListError() (+21 more)
+Nodes (28): generateClerkSignInTicketForEmail(), assertEmailDomainAllowed(), clerkErrorMessage(), create, extractEmailDomain(), invitationRedirectUrl(), InviteRole, isAllowListError() (+20 more)
 
 ### Community 29 - "schema.ts"
-Cohesion: 0.05
-Nodes (17): modules, DataModel, Doc, Id, TableNames, modules, modules, SeedResult (+9 more)
+Cohesion: 0.04
+Nodes (21): modules, assertCanEditProof(), modules, DataModel, Doc, Id, TableNames, modules (+13 more)
 
 ### Community 30 - "ShiftClockOutScreen.tsx"
 Cohesion: 0.17
@@ -981,8 +1038,8 @@ Cohesion: 0.14
 Nodes (8): App(), AppErrorBoundary, AppErrorBoundaryState, AppProviders(), ClerkProviderFromEnv, convex, isStaleAssetError(), registerStaleAssetReload()
 
 ### Community 37 - "useQuery"
-Cohesion: 0.05
-Nodes (38): getFunctionReferenceName(), useAction(), useMutation(), useQuery(), defaultGeofence, mockClientsState(), mocks, candidates (+30 more)
+Cohesion: 0.06
+Nodes (29): getFunctionReferenceName(), useMutation(), useQuery(), defaultGeofence, mockClientsState(), mocks, candidates, mockPipelineState() (+21 more)
 
 ### Community 38 - "sharedUi.test.tsx"
 Cohesion: 0.15
@@ -992,25 +1049,25 @@ Nodes (12): AgencyBranding(), Button(), ButtonProps, buttonStyles, EmptyState(),
 Cohesion: 0.09
 Nodes (22): vite.config.ts, compilerOptions, allowImportingTsExtensions, erasableSyntaxOnly, lib, module, moduleDetection, moduleResolution (+14 more)
 
-### Community 40 - "agencyConfig.ts"
-Cohesion: 0.11
-Nodes (17): createBranch, createBranchInternal, DEFAULT_PRODUCTS, getPublicAgencyInfo, getTrainingConfig, hasProduct, listAgencyBranches, listAgencyProducts (+9 more)
+### Community 40 - "platform.ts"
+Cohesion: 0.03
+Nodes (79): internalQuery, buildInvoiceEmailHtml(), buildInvoicePdf(), calculateInvoicePreview, createPlatformInvoice, createTenant, createTenantInternal, createUserForTenant (+71 more)
 
 ### Community 41 - "Caregiver Shift Documentation â€” Screen Spec"
 Cohesion: 0.05
 Nodes (43): Automated gates, Blockers resolved, Caregiver Flow â€” Visual Review Follow-up, Caregiver Shift Documentation â€” Screen Spec, cmd: codex exec --ignore-user-config --skip-git-repo-check --color never --sandbox read-only 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260625_084642\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', Common layout, Conclusion, Copy (+35 more)
 
-### Community 42 - "ApplicationReviewPage.tsx"
-Cohesion: 0.07
-Nodes (26): HrToast(), InviteCandidateModal(), isValidPhoneOptional(), inviteCandidateMock, HrToast, useHrToast(), CandidateStatus, candidateStatusAccentClass() (+18 more)
+### Community 42 - "usePlatformAdmin"
+Cohesion: 0.11
+Nodes (39): PlatformGate(), PlatformKpiCard(), Tone, toneValueClass, PlatformStatusPill(), statusColorClass, PlatformTable(), PlatformTableBody() (+31 more)
 
 ### Community 43 - "documentationWizard.ts"
 Cohesion: 0.22
 Nodes (14): ShiftNoteStep(), LoadedTask, NoteDraft, validateDocumentationDraft(), buildAutosavePatch(), isStepComplete(), noteFieldsForStep(), stepIndexFor() (+6 more)
 
 ### Community 44 - "TeamPage.tsx"
-Cohesion: 0.24
-Nodes (15): addCachedInvitation(), adpStatusPill(), cacheClerkInvitations(), CachedInvitation, ClerkInvitation, fromCache(), getCacheKey(), readCachedInvitations() (+7 more)
+Cohesion: 0.22
+Nodes (16): addCachedInvitation(), adpStatusPill(), cacheClerkInvitations(), CachedInvitation, ClerkInvitation, fromCache(), getCacheKey(), readCachedInvitations() (+8 more)
 
 ### Community 45 - "Automatic HR Case Creation — Comprehensive Proactive Flagging"
 Cohesion: 0.18
@@ -1036,25 +1093,29 @@ Nodes (41): 1. Goal & Acceptance Criteria, 1. Goal And Acceptance Criteria, 1. G
 Cohesion: 0.09
 Nodes (22): compilerOptions, allowJs, allowSyntheticDefaultImports, forceConsistentCasingInFileNames, isolatedModules, jsx, lib, module (+14 more)
 
-### Community 51 - "assertTenantDoc"
-Cohesion: 0.11
-Nodes (21): assertTenantDoc(), createExportBatch, createInvoice, exportBatches, invoiceDetails, invoices, ledger, unexported (+13 more)
+### Community 51 - "api.d.ts"
+Cohesion: 0.03
+Nodes (66): list, record, completeScan, getBackgroundCheck, getBackgroundCheckForHR, getBackgroundCheckInternal, getCandidateInternal, initiateBackgroundCheck (+58 more)
 
 ### Community 52 - "format.ts"
 Cohesion: 0.20
 Nodes (4): calculateAge(), formatDateUS(), formatDocumentCategoryLabel(), formatStatusLabel()
 
-### Community 53 - "forms.ts"
-Cohesion: 0.17
-Nodes (9): createFormDefinition, deactivateFormDefinition, getFormSubmission, getOwnCandidate(), listFormDefinitions, listFormSubmissions, normalizeFormEmail(), submitForm (+1 more)
+### Community 53 - "requireTenantRole"
+Cohesion: 0.08
+Nodes (26): requireTenantRole(), deleteShiftChildren(), E2ECandidateFixtureUserIds, E2EFixtureUserIds, generateEmbedding(), hashToken(), resetE2ECandidate, resetE2EShifts (+18 more)
+
+### Community 54 - "agencyConfig.ts"
+Cohesion: 0.10
+Nodes (19): createBranch, createBranchInternal, DEFAULT_PRODUCTS, getPublicAgencyInfo, getTrainingConfig, hasProduct, listAgencyBranches, listAgencyProducts (+11 more)
 
 ### Community 55 - "Diego's Testing Fixes — 5 Issues"
 Cohesion: 0.20
 Nodes (9): Context, Diego's Testing Fixes — 5 Issues, Issue 1: Position not persisted from apply page to job description step, Issue 2: ProgressSteps still overflowing, Issue 3: Skip additional documentation not reflected in checklist, Issue 4: HR portal logo too small, Issue 5: HR Cases modal closing immediately, Style (+1 more)
 
-### Community 56 - "ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)"
-Cohesion: 0.12
-Nodes (16): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 3.1 Schema additions (Session 1) Ã¢â‚¬â€ extend, never rename prod tables, 3.2 Clock-in/out + geofence gating (Session 2) Ã¢â‚¬â€ server-enforced, twice, 3.3 ADP port + adapter (Session 3) Ã¢â‚¬â€ the plug-and-play core (+8 more)
+### Community 56 - "compliance.ts"
+Cohesion: 0.08
+Nodes (26): AUDIT_ROLES, AuditReport, buildCsv(), buildReport(), csvCell(), csvRow(), exportCsv, getReport (+18 more)
 
 ### Community 57 - "SESSION 5 — ATRIA-X Scheduling Screens Figma Spec"
 Cohesion: 0.05
@@ -1065,8 +1126,8 @@ Cohesion: 0.18
 Nodes (10): baseClient, baseNote, baseShift, baseTask, clientId, getState(), shiftId, states (+2 more)
 
 ### Community 59 - "scripts"
-Cohesion: 0.17
-Nodes (12): scripts, build, dev, e2e, e2e:full, e2e:local, lint, preview (+4 more)
+Cohesion: 0.12
+Nodes (16): name, private, scripts, build, dev, e2e, e2e:full, e2e:local (+8 more)
 
 ### Community 60 - "USDateInput.tsx"
 Cohesion: 0.26
@@ -1075,10 +1136,6 @@ Nodes (8): Input(), InputProps, isoToDisplay(), isValidDate(), parseDisplay(), t
 ### Community 61 - "ApplyEntryPage.test.tsx"
 Cohesion: 0.22
 Nodes (6): positionOptionsForBranch(), ApplyEntryPage(), applyPublicMock, singleBranchAgency, twoBranchAgency, updateClerkPasswordMock
-
-### Community 62 - "candidates.test.ts"
-Cohesion: 0.11
-Nodes (9): asAdmin(), modules, OfferPrerequisites, seedCandidateForOffer(), seedCandidateWithTask(), seedCandidateWithTasks(), seedFlagCandidate(), seedSubmittableCandidate() (+1 more)
 
 ### Community 63 - "What to Test"
 Cohesion: 0.11
@@ -1089,16 +1146,16 @@ Cohesion: 0.05
 Nodes (41): Acceptance criteria, Action buttons, Action buttons (coordinator/admin view), Add window form, Audit history, Backend APIs to use (already implemented), Behaviour, Behaviour (+33 more)
 
 ### Community 65 - "SelectAgencyPage.tsx"
-Cohesion: 0.28
-Nodes (7): getVisibleMemberships(), MembershipLike, PendingOrg, SelectAgencyPage(), mockConvexAuth(), mocks, useConvexAuth()
+Cohesion: 0.24
+Nodes (8): getVisibleMemberships(), MembershipLike, PendingOrg, SelectAgencyPage(), mockClerkState(), mocks, mockSignedInOrgs(), useOrganizationList()
 
 ### Community 66 - "RouteGuard.tsx"
-Cohesion: 0.18
-Nodes (14): PlatformShell(), SignedInRouteGuard(), TenantRole, TenantRoleRouteGuard(), TenantRouteGuard(), mockClerkState(), mockMember(), mockMembership() (+6 more)
-
-### Community 67 - "Sidebar.tsx"
 Cohesion: 0.16
-Nodes (10): resolveAgencyLogo(), AppShell(), NavItem, navItems, platformNavItem, Sidebar(), SidebarProps, mockSidebarState() (+2 more)
+Nodes (14): NAV_ITEMS, PlatformShell(), SignedInRouteGuard(), TenantRole, TenantRoleRouteGuard(), mockClerkState(), mockMember(), mockMembership() (+6 more)
+
+### Community 67 - "verify-subscription-fix.mjs"
+Cohesion: 0.25
+Nodes (9): clerkTicket(), consoleLog, e2e, fail(), findings, local, main(), note() (+1 more)
 
 ### Community 68 - "CandidateOnboardingPage.tsx"
 Cohesion: 0.28
@@ -1116,13 +1173,13 @@ Nodes (19): 4. Session order & prompts, COPY/PASTE INTO A NEW HERMES SESSION, CO
 Cohesion: 0.11
 Nodes (18): 3a: Manual trigger mutation, 3b: "Check for issues" button on HRCasesPage, 3c: Real-time flag after document upload, 3d: Tests, Context, Final Detail Fixes — 3 Issues, Fix, Fix (+10 more)
 
-### Community 72 - "ATRIA-X â€” Phase 1 Implementation Plan (Sessions + Prompts)"
-Cohesion: 0.10
-Nodes (21): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 2.1 Auth model (stable â€” build now), 2.2 Worker APIs (stable â€” build now), 2.3 Time punches (ISOLATED â€” adapter, fill in on confirmation) (+13 more)
-
-### Community 73 - "4. Session order & prompts"
+### Community 72 - "4. Session order & prompts"
 Cohesion: 0.05
-Nodes (40): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 2.1 Auth model (stable Ã¢â‚¬â€ build now), 2.2 Worker APIs (stable Ã¢â‚¬â€ build now), 2.3 Time punches (ISOLATED Ã¢â‚¬â€ adapter, fill in on confirmation) (+32 more)
+Nodes (40): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 2.1 Auth model (stable â€” build now), 2.2 Worker APIs (stable â€” build now), 2.3 Time punches (ISOLATED â€” adapter, fill in on confirmation) (+32 more)
+
+### Community 73 - "ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)"
+Cohesion: 0.10
+Nodes (21): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 2.1 Auth model (stable Ã¢â‚¬â€ build now), 2.2 Worker APIs (stable Ã¢â‚¬â€ build now), 2.3 Time punches (ISOLATED Ã¢â‚¬â€ adapter, fill in on confirmation) (+13 more)
 
 ### Community 74 - "4. Session order & prompts"
 Cohesion: 0.05
@@ -1132,9 +1189,9 @@ Nodes (40): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) v
 Cohesion: 0.39
 Nodes (6): clearTrainingCompletedSession(), COMPLETE_STATUSES, isPlatformTrainingComplete(), isTrainingCompletedInSession(), markTrainingCompletedInSession(), PLATFORM_TRAINING_ID
 
-### Community 76 - "ApplicationStatusPage.tsx"
-Cohesion: 0.32
-Nodes (6): ApplicationStatusPage(), formatDate(), STATUS_CONFIG, STEPS, navigateMock, UPLOAD_TYPES
+### Community 76 - "4. Session order & prompts"
+Cohesion: 0.11
+Nodes (19): 4. Session order & prompts, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION, COPY/PASTE INTO A NEW HERMES SESSION (+11 more)
 
 ### Community 77 - "ProgressSteps.tsx"
 Cohesion: 0.29
@@ -1148,13 +1205,13 @@ Nodes (38): 10. Component inventory (built from the tokens above), 11. Light mod
 Cohesion: 0.05
 Nodes (36): 1. Goal & Acceptance Criteria, 1. Goal And Acceptance Criteria, 1. Goal And Acceptance Criteria, 2. Files to Create / Modify, 2. Files To Create Or Modify, 2. Files To Create Or Modify, 3.1 Button `lg` upgrade, 3.2 EmptyState.tsx (+28 more)
 
-### Community 80 - "ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)"
-Cohesion: 0.12
-Nodes (17): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 2.1 Auth model (stable Ã¢â‚¬â€ build now), 2.2 Worker APIs (stable Ã¢â‚¬â€ build now), 2.3 Time punches (ISOLATED Ã¢â‚¬â€ adapter, fill in on confirmation) (+9 more)
+### Community 80 - "Implementation Plan: Add "Home" Nav Item to HR Sidebar"
+Cohesion: 0.11
+Nodes (18): 1. Restated Goal & Acceptance Criteria, 2. Files to Create/Modify, 3. Step-by-Step Implementation, 4. Test Plan, 5. Risks, Security & Edge Cases, 6. Rollback & Verification, Approved plan, cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_093551\plan_codex.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' (+10 more)
 
-### Community 81 - "useTenant.test.ts"
-Cohesion: 0.52
-Nodes (5): getStoredClerkOrgId(), setSelectedClerkOrgId(), caregiverTenant, mockDbTenants(), useTenant()
+### Community 81 - "mockConvexReact.tsx"
+Cohesion: 0.13
+Nodes (15): mockConvexAuth(), resolveQuery(), runMutation(), ScreenshotView, ConvexProviderWithAuth(), getRoleForView(), getViewFromUrl(), MockConvexContext (+7 more)
 
 ### Community 82 - "Caregiver Shift Documentation â€” Screen Spec"
 Cohesion: 0.05
@@ -1180,9 +1237,9 @@ Nodes (33): ATRIA-X Session 7 Figma screen spec â€” coordinator review & ap
 Cohesion: 0.06
 Nodes (32): Build output, cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260623_194138\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260623_224923\review_codex_iter1.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: kimi -p 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260623_224923\implement.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', Convex local cache, Dependencies, feature/session-2-clock-geofence, feature/session-2-clock-geofence (+24 more)
 
-### Community 89 - "ShiftDocumentationForm.test.tsx"
-Cohesion: 0.25
-Nodes (5): ShiftDocumentationForm(), makeDetails(), mockGetCurrentPosition, mocks, mockState()
+### Community 89 - "adpSync.test.ts"
+Cohesion: 0.12
+Nodes (3): modules, modules, resetSharedMockAdp()
 
 ### Community 90 - "ATRIA-X Design System â€” Dark Theme Token Spec (v1)"
 Cohesion: 0.06
@@ -1200,9 +1257,9 @@ Nodes (31): 1. Goal And Acceptance Criteria, 1. Goal And Acceptance Criteria, 2.
 Cohesion: 0.06
 Nodes (30): Build output, Build output, cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260604_163200\review_codex_iter1.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260604_163200\review_codex_iter2.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260604_163200\review_codex_iter3.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260604_163200\review_opus_iter2.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q, cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260604_163200\review_opus_iter3.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q, Convex local cache (+22 more)
 
-### Community 95 - "package.json"
-Cohesion: 0.40
-Nodes (4): name, private, type, version
+### Community 95 - "ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)"
+Cohesion: 0.12
+Nodes (17): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 2.1 Auth model (stable Ã¢â‚¬â€ build now), 2.2 Worker APIs (stable Ã¢â‚¬â€ build now), 2.3 Time punches (ISOLATED Ã¢â‚¬â€ adapter, fill in on confirmation) (+9 more)
 
 ### Community 96 - "ATRIA-X Phase 1 Session 8 â€” Implementation Plan"
 Cohesion: 0.06
@@ -1268,9 +1325,41 @@ Nodes (29): ATRIA-X live Clerk/Convex E2E fix design doc, Chosen solution, cmd: 
 Cohesion: 0.07
 Nodes (29): Approved plan, ATRIA-X live Clerk/Convex E2E fix design doc, Chosen solution, cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_231328\plan_codex.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', Current status, Hermes authenticated providers (probe), Implementation stages, Next step (+21 more)
 
-### Community 131 - "adpSync.test.ts"
+### Community 131 - "ATRIA-X â€” Phase 1 Implementation Plan (Sessions + Prompts)"
 Cohesion: 0.12
-Nodes (3): modules, modules, resetSharedMockAdp()
+Nodes (16): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 2.1 Auth model (stable â€” build now), 2.2 Worker APIs (stable â€” build now), 2.3 Time punches (ISOLATED â€” adapter, fill in on confirmation) (+8 more)
+
+### Community 132 - "CoordinatorReviewPage.tsx"
+Cohesion: 0.23
+Nodes (8): CoordinatorReviewPage(), formatShiftDate(), formatTimeRange(), getInitials(), QueueRow, ReviewFilter, mockQueueState(), mocks
+
+### Community 133 - "AuditReadinessPage.tsx"
+Cohesion: 0.23
+Nodes (11): agencyInfoStatus(), AuditReadinessPage(), AuditReport, backgroundChecksStatus(), CategoryStatus, documentationStatus(), percent(), personnelStatus() (+3 more)
+
+### Community 136 - "3. Architecture additions (so every session prompt is consistent)"
+Cohesion: 0.40
+Nodes (5): 3.1 Schema additions (Session 1) â€” extend, never rename prod tables, 3.2 Clock-in/out + geofence gating (Session 2) â€” server-enforced, twice, 3.3 ADP port + adapter (Session 3) â€” the plug-and-play core, 3.4 FE â€” pixel-faithful to the dark Figma, 3. Architecture additions (so every session prompt is consistent)
+
+### Community 137 - "run-smoke.mjs"
+Cohesion: 0.24
+Nodes (8): clerkTicket(), e2e, events, local, log(), main(), results, ROUTES
+
+### Community 138 - "3. Architecture additions (so every session prompt is consistent)"
+Cohesion: 0.40
+Nodes (5): 3.1 Schema additions (Session 1) Ã¢â‚¬â€ extend, never rename prod tables, 3.2 Clock-in/out + geofence gating (Session 2) Ã¢â‚¬â€ server-enforced, twice, 3.3 ADP port + adapter (Session 3) Ã¢â‚¬â€ the plug-and-play core, 3.4 FE Ã¢â‚¬â€ pixel-faithful to the dark Figma, 3. Architecture additions (so every session prompt is consistent)
+
+### Community 139 - "InvoicesTable.tsx"
+Cohesion: 0.50
+Nodes (4): InvoicesTable(), InvoicesTableProps, statusVariant, InvoiceRow
+
+### Community 140 - "run-smoke2.mjs"
+Cohesion: 0.25
+Nodes (7): clerkTicket(), e2e, local, main(), PROBES, results, ROUTES
+
+### Community 151 - "platform.test.ts"
+Cohesion: 0.24
+Nodes (7): ADMIN, createDraft(), createInvoiceArgs(), modules, NON_ADMIN, seedTenant(), seedTenantWithStarterSubscription()
 
 ### Community 178 - "20260623_122350/fix_iter2.prompt.md"
 Cohesion: 0.07
@@ -1412,9 +1501,9 @@ Nodes (21): 10. Component inventory (built from the tokens above), 11. Light mod
 Cohesion: 0.10
 Nodes (20): ATRIA-X Phase 1 Session 8 â€” Implementation Summary, cmd: codex exec --ignore-user-config --sandbox read-only --color never --ephemeral --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_161701\review_codex_iter3.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --ignore-user-config --sandbox read-only --color never --ephemeral --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_161701\review_codex_iter3.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', E2E Credential Requirement, Files Changed (Fix Iteration 2), Goal, Latest gate results (for your awareness), Latest gate results (for your awareness) (+12 more)
 
-### Community 213 - "mockConvexReact.tsx"
-Cohesion: 0.13
-Nodes (15): resolveQuery(), runMutation(), ScreenshotView, ConvexProviderWithAuth(), getRoleForView(), getViewFromUrl(), MockConvexContext, MockConvexContextValue (+7 more)
+### Community 213 - "Implementation Plan — Add "Home" navigation to the HR sidebar"
+Cohesion: 0.11
+Nodes (18): 1. Restated goal & acceptance criteria, 2. Exact files to create/modify, 3. Step-by-step implementation approach, 4. Test plan, 5. Risks, security, edge cases, 6. Rollback / verification, Approved plan, cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_094528\plan_codex.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' (+10 more)
 
 ### Community 214 - "20260604_163200/fix_iter2.prompt.md"
 Cohesion: 0.10
@@ -1640,25 +1729,25 @@ Nodes (17): 1. Goal And Acceptance Criteria, 1. Goal And Acceptance Criteria, 2.
 Cohesion: 0.12
 Nodes (17): 1. Goal And Acceptance Criteria, 1. Goal And Acceptance Criteria, 2. Files To Modify, 2. Files To Modify, 3. Implementation Approach, 3. Implementation Approach, 4. Test Plan, 4. Test Plan (+9 more)
 
-### Community 270 - "2. ADP integration reference (what the flow needs)"
-Cohesion: 0.33
-Nodes (6): 2.1 Auth model (stable Ã¢â‚¬â€ build now), 2.2 Worker APIs (stable Ã¢â‚¬â€ build now), 2.3 Time punches (ISOLATED Ã¢â‚¬â€ adapter, fill in on confirmation), 2.4 Credentials Ã¢â€ â€™ Convex env vars (set when they arrive Ã¢â‚¬â€ nothing hardcoded), 2.5 Official docs to read on credential day, 2. ADP integration reference (what the flow needs)
+### Community 270 - "useAction"
+Cohesion: 0.50
+Nodes (3): useAction(), mockDashboardState(), mocks
 
 ### Community 271 - "Complete List of Features to Test"
 Cohesion: 0.18
 Nodes (10): Batch 1: Maria's 5 Original Fixes, Batch 2: HR Cases Enhancement + Agency Branding, Batch 3: Login Product Tabs, Batch 4: Maria's Final Fixes, Batch 5: Diego's Testing Fixes, Batch 6: Auto-Case Creation, Complete List of Features to Test, Comprehensive E2E QA Testing — ALL Uncommitted Work (+2 more)
 
 ### Community 272 - "20260626_210401/fix_iter4.prompt.md"
-Cohesion: 0.12
-Nodes (16): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_210401\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_210401\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', Hermes authenticated providers (probe), Hermes authenticated providers (probe), Hermes authenticated providers (probe), Next step, Next step, Next step (+8 more)
+Cohesion: 0.13
+Nodes (14): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_210401\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_210401\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', Hermes authenticated providers (probe), Latest gate results (for your awareness), main...origin/main [ahead 5], Next step, Pipeline summary â€” atriax, Project context (+6 more)
 
 ### Community 273 - "20260626_210401/review_codex_iter2.md"
 Cohesion: 0.12
 Nodes (16): ADP Workforce Now integration (server-side Convex env only)., cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_210401\review_codex_iter2.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_210401\review_codex_iter2.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: kimi -p 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_210401\fix_iter1.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', E2E test accounts (Playwright). All variables are required to run the, Hermes authenticated providers (probe), Leave unset to run safely without ADP credentials; sync rows become pending_credentials., lifecycle/geofence specs in tests/e2e/*. When unset, those specs fail fast. (+8 more)
 
-### Community 274 - "reviews.ts"
-Cohesion: 0.20
-Nodes (13): approve, requestCorrection, calculateDocumentedHours(), DocumentationNote, ExistingTask, mergeTaskUpdates(), minutesSinceMidnight(), roundCurrency() (+5 more)
+### Community 274 - "verify-fixes.mjs"
+Cohesion: 0.12
+Nodes (9): chargeBtn, e2e, emailInput, errMatch, expl, findings, local, markPaid (+1 more)
 
 ### Community 275 - "20260626_210401/review_codex_iter4.md"
 Cohesion: 0.12
@@ -1684,10 +1773,6 @@ Nodes (16): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) v
 Cohesion: 0.12
 Nodes (15): Approved plan, Build output, cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_210401\plan_codex.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', Convex local cache, Dependencies, Local documentation and planning notes, Local environment and secrets, Logs (+7 more)
 
-### Community 281 - "ATRIA-X â€” Phase 1 Implementation Plan (Sessions + Prompts)"
-Cohesion: 0.12
-Nodes (16): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 2.1 Auth model (stable â€” build now), 2.2 Worker APIs (stable â€” build now), 2.3 Time punches (ISOLATED â€” adapter, fill in on confirmation) (+8 more)
-
 ### Community 282 - "ATRIA-X â€” Phase 1 Implementation Plan (Sessions + Prompts)"
 Cohesion: 0.12
 Nodes (16): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 2.1 Auth model (stable â€” build now), 2.2 Worker APIs (stable â€” build now), 2.3 Time punches (ISOLATED â€” adapter, fill in on confirmation) (+8 more)
@@ -1696,9 +1781,9 @@ Nodes (16): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) v
 Cohesion: 0.12
 Nodes (16): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 3.1 Schema additions (Session 1) Ã¢â‚¬â€ extend, never rename prod tables, 3.2 Clock-in/out + geofence gating (Session 2) Ã¢â‚¬â€ server-enforced, twice, 3.3 ADP port + adapter (Session 3) Ã¢â‚¬â€ the plug-and-play core (+8 more)
 
-### Community 284 - "ROLE: REVIEWER (codex)"
-Cohesion: 0.33
-Nodes (6): Latest gate results (for your awareness), main...origin/main [ahead 5], Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (codex), Task
+### Community 284 - "ATRIA-X Ã¢â‚¬â€ Phase 1 Implementation Plan (Sessions + Prompts)"
+Cohesion: 0.12
+Nodes (16): 0. What "Phase 1" is (locked scope), 1.1 Theme: dark (match Figma) vs keep light teal, 1.2 ADP product + time module (the one thing only ADP can confirm), 1.3 Geofence default behavior, 1. The two decisions to make BEFORE coding (blockers), 3.1 Schema additions (Session 1) Ã¢â‚¬â€ extend, never rename prod tables, 3.2 Clock-in/out + geofence gating (Session 2) Ã¢â‚¬â€ server-enforced, twice, 3.3 ADP port + adapter (Session 3) Ã¢â‚¬â€ the plug-and-play core (+8 more)
 
 ### Community 285 - "20260604_163200/fix_iter1.prompt.md"
 Cohesion: 0.13
@@ -1802,7 +1887,7 @@ Nodes (12): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pin
 
 ### Community 310 - "20260624_161802/fix_iter2.prompt.md"
 Cohesion: 0.15
-Nodes (12): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_161802\plan_codex.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_161802\plan_codex.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_161802\review_codex_iter1.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_161802\review_codex_iter2.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', Project context, ROLE: PLANNER (codex), stage plan_codex, stage plan_codex (+4 more)
+Nodes (12): Approved plan, cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_161802\plan_codex.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_161802\plan_codex.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_161802\review_codex_iter1.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_161802\review_codex_iter2.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', Plan from codex (gpt-5.5 (default)), Project context, ROLE: IMPLEMENTER (Kimi) (+4 more)
 
 ### Community 311 - "20260624_161802/review_codex_iter2.md"
 Cohesion: 0.15
@@ -1948,9 +2033,9 @@ Nodes (11): Build output, cmd: codex exec --skip-git-repo-check 'Read the file a
 Cohesion: 0.17
 Nodes (12): Acceptance Criteria, ATRIA-X Phase 1 Session 8 â€” Implementation Plan, Files To Create / Modify, Goal, Risks & Mitigations, Stage 1 â€” Fixtures & selectors, Stage 2 â€” Server-side tests, Stage 3 â€” E2E specs (+4 more)
 
-### Community 347 - "CoordinatorReviewPage.tsx"
-Cohesion: 0.23
-Nodes (8): CoordinatorReviewPage(), formatShiftDate(), formatTimeRange(), getInitials(), QueueRow, ReviewFilter, mockQueueState(), mocks
+### Community 347 - "Implementation Plan: Add "Home" Nav Item to HR Sidebar"
+Cohesion: 0.14
+Nodes (13): 1. Restated Goal & Acceptance Criteria, 2. Files to Create/Modify, 3. Step-by-Step Implementation, 4. Test Plan, 5. Risks, Security & Edge Cases, 6. Rollback & Verification, cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_093551\plan_codex.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_093551\plan_opus.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q (+5 more)
 
 ### Community 348 - "REVIEW (opus) — src/shared/format.test.ts"
 Cohesion: 0.18
@@ -1977,8 +2062,8 @@ Cohesion: 0.18
 Nodes (10): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_161802\review_codex_iter1.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_161802\review_codex_iter1.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_161802\review_codex_iter2.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_161802\review_codex_iter2.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_161802\review_codex_iter3.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', stage review_codex_iter1, stage review_codex_iter1, stage review_codex_iter2 (+2 more)
 
 ### Community 354 - "Caregiver Shift Documentation â€” Screen Spec"
-Cohesion: 0.18
-Nodes (11): Caregiver Shift Documentation â€” Screen Spec, Common layout, Copy, Frame: Submission Success, Frames: Step 1 When â€¦ Step 6 Done, Global tokens, Interaction, Layout (+3 more)
+Cohesion: 0.13
+Nodes (15): Caregiver Shift Documentation â€” Screen Spec, Common layout, Copy, Copy, Frame: Submission Success, Frame: Today / Entry, Frames: Step 1 When â€¦ Step 6 Done, Global tokens (+7 more)
 
 ### Community 355 - "Caregiver Shift Documentation â€” Screen Spec"
 Cohesion: 0.18
@@ -2062,7 +2147,7 @@ Nodes (9): cmd: codex exec --ignore-user-config --skip-git-repo-check --color ne
 
 ### Community 375 - "20260625_084642/implement.prompt.md"
 Cohesion: 0.20
-Nodes (9): cmd: codex exec --ignore-user-config --skip-git-repo-check --color never --sandbox read-only 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_185028\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --ignore-user-config --skip-git-repo-check --color never --sandbox read-only 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260625_084642\plan_codex.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', Project context, ROLE: PLANNER (codex), SESSION 6 Figma caregiver wizard screen spec, stage plan_codex, stage review_codex_iter4, Task (+1 more)
+Nodes (9): cmd: codex exec --ignore-user-config --skip-git-repo-check --color never --sandbox read-only 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260624_185028\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: codex exec --ignore-user-config --skip-git-repo-check --color never --sandbox read-only 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260625_084642\plan_codex.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', Hermes authenticated providers (probe), Next step, Pipeline summary â€” atriax, SESSION 6 Figma caregiver wizard screen spec, stage plan_codex, stage review_codex_iter4 (+1 more)
 
 ### Community 376 - "20260625_084642/plan_codex.md"
 Cohesion: 0.20
@@ -2100,9 +2185,9 @@ Nodes (10): ATRIA-X live Clerk/Convex E2E fix design doc, Chosen solution, Final
 Cohesion: 0.20
 Nodes (9): Constraints, Context, Issue 1: Candidates see admin agency option on Select Agency page, Issue 2: Application stepper out of bounds on small screens, Issue 3: SSN/ITIN field should always indicate which was selected, Issue 4: Skip on optional document upload doesn't let you skip, Issue 5: Login page should indicate which ATRIA product it is, Maria's Feedback Batch — 5 Issues to Fix (+1 more)
 
-### Community 385 - "mappings.ts"
-Cohesion: 0.16
-Nodes (13): CRIMINAL_RECORD_MAPPING, HEALTH_SCREEN_MAPPING, I9_MAPPING, LIVE_SCAN_MAPPING, MAPPINGS, normalizeW4PdfData(), PdfFieldMapping, toPdfY() (+5 more)
+### Community 385 - "Implementation Plan — Add "Home" navigation to the HR sidebar"
+Cohesion: 0.14
+Nodes (13): 1. Restated goal & acceptance criteria, 2. Exact files to create/modify, 3. Step-by-step implementation approach, 4. Test plan, 5. Risks, security, edge cases, 6. Rollback / verification, cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_094528\plan_codex.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_094528\plan_opus.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q (+5 more)
 
 ### Community 386 - "REVIEW: Stage 0 foundation — shared design-system primitives (opus, iter 1)"
 Cohesion: 0.22
@@ -2152,9 +2237,9 @@ Nodes (8): Context, Current Code, Implementation, Login Page Product Tabs, Style
 Cohesion: 0.22
 Nodes (8): Context, Fix, Issue 1: "Onboarding" label → "Candidate Portal", Issue 2: Email domain allowlist — ALREADY FIXED, Issue 3: Stale session data causing wrong redirect, Maria's Final Fixes — 3 Issues, Style, Verify
 
-### Community 398 - "ApplicationFormPage.test.tsx"
+### Community 398 - "20260731_093551/fix_iter1.prompt.md"
 Cohesion: 0.15
-Nodes (3): candidateProfile, navigateMock, submitMock
+Nodes (12): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_093551\review_codex_iter1.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_093551\review_opus_iter1.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q, codex review (verdict UNKNOWN), Failing/relevant gate output, opus review (verdict APPROVED), Original task, Project context, Requirements (+4 more)
 
 ### Community 399 - "ROLE: REVIEWER (codex)"
 Cohesion: 0.25
@@ -2292,9 +2377,9 @@ Nodes (7): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pino
 Cohesion: 0.25
 Nodes (7): Context, Figma Design (node 191:2688 — "HR / Cases"), HR Cases Enhancement + Dashboard Branding, Implementation, Task A: Agency Branding on HR Pages, Task B: HR Cases — Full Case Detail + Click-to-Open, Two Tasks
 
-### Community 433 - "shiftClock.test.ts"
-Cohesion: 0.22
-Nodes (5): locationSource, locationSourcePath, runtimeModules, shiftSource, shiftSourcePath
+### Community 433 - "ApplicationStatusPage.tsx"
+Cohesion: 0.32
+Nodes (6): ApplicationStatusPage(), formatDate(), STATUS_CONFIG, STEPS, navigateMock, UPLOAD_TYPES
 
 ### Community 434 - "DocumentUploadPage.test.tsx"
 Cohesion: 0.25
@@ -2739,6 +2824,10 @@ Nodes (6): Latest gate results (for your awareness), main...origin/main [ahead 5
 ### Community 544 - "2. ADP integration reference (what the flow needs)"
 Cohesion: 0.33
 Nodes (6): 2.1 Auth model (stable â€” build now), 2.2 Worker APIs (stable â€” build now), 2.3 Time punches (ISOLATED â€” adapter, fill in on confirmation), 2.4 Credentials â†’ Convex env vars (set when they arrive â€” nothing hardcoded), 2.5 Official docs to read on credential day, 2. ADP integration reference (what the flow needs)
+
+### Community 545 - "20260731_093551/fix_iter2.prompt.md"
+Cohesion: 0.15
+Nodes (12): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_093551\review_codex_iter2.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_093551\review_opus_iter2.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q, codex review (verdict UNKNOWN), Failing/relevant gate output, opus review (verdict APPROVED), Original task, Project context, Requirements (+4 more)
 
 ### Community 546 - "ROLE: REVIEWER (codex)"
 Cohesion: 0.33
@@ -3316,9 +3405,9 @@ Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: 
 Cohesion: 0.40
 Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (codex), Task
 
-### Community 691 - "Frame: Today / Entry"
-Cohesion: 0.50
-Nodes (4): Copy, Frame: Today / Entry, Interaction, Layout
+### Community 690 - "qa-platform-admin/run-qa.mjs"
+Cohesion: 0.23
+Nodes (9): clerkTicket(), consoleLog, e2e, fail(), findings, local, main(), note() (+1 more)
 
 ### Community 692 - "ROLE: FIXER (Kimi)"
 Cohesion: 0.40
@@ -3388,9 +3477,13 @@ Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: 
 Cohesion: 0.40
 Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (codex), Task
 
-### Community 709 - "3. Architecture additions (so every session prompt is consistent)"
-Cohesion: 0.40
-Nodes (5): 3.1 Schema additions (Session 1) â€” extend, never rename prod tables, 3.2 Clock-in/out + geofence gating (Session 2) â€” server-enforced, twice, 3.3 ADP port + adapter (Session 3) â€” the plug-and-play core, 3.4 FE â€” pixel-faithful to the dark Figma, 3. Architecture additions (so every session prompt is consistent)
+### Community 709 - "20260731_093551/fix_iter3.prompt.md"
+Cohesion: 0.15
+Nodes (12): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_093551\review_codex_iter3.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_093551\review_opus_iter3.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q, codex review (verdict UNKNOWN), Failing/relevant gate output, opus review (verdict APPROVED), Original task, Project context, Requirements (+4 more)
+
+### Community 710 - "run-qa.mjs"
+Cohesion: 0.25
+Nodes (9): clerkTicket(), consoleLog, e2e, finding(), findings, finish(), local, main() (+1 more)
 
 ### Community 711 - "ROLE: PLANNER (codex)"
 Cohesion: 0.40
@@ -3476,21 +3569,25 @@ Nodes (4): E2E HR User Role Resolution Fix, Problem, Root Cause Hypothesis, Task
 Cohesion: 0.50
 Nodes (4): FILING_STATUS_OPTIONS, W4Info, W4Section(), W4SectionProps
 
-### Community 732 - "timePunches.ts"
-Cohesion: 0.29
-Nodes (6): TenantRole, assertPunchAuthorized(), get, PunchActor, source, sourcePath
+### Community 732 - "buildInvoicePdf"
+Cohesion: 0.67
+Nodes (3): jspdf, jspdf, buildInvoicePdf()
 
 ### Community 733 - "CLAUDE.md"
 Cohesion: 0.50
 Nodes (4): CLAUDE.md, Commands, Gotchas, Project
 
+### Community 734 - "20260731_093551/fix_iter4.prompt.md"
+Cohesion: 0.15
+Nodes (12): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_093551\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_093551\review_opus_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q, codex review (verdict UNKNOWN), Failing/relevant gate output, opus review (verdict CHANGES_REQUESTED), Original task, Project context, Requirements (+4 more)
+
 ### Community 735 - "ROLE: PLANNER (codex)"
 Cohesion: 0.50
 Nodes (4): Project context, ROLE: PLANNER (codex), Task, Your plan must contain
 
-### Community 736 - "3. Architecture additions (so every session prompt is consistent)"
-Cohesion: 0.40
-Nodes (5): 3.1 Schema additions (Session 1) Ã¢â‚¬â€ extend, never rename prod tables, 3.2 Clock-in/out + geofence gating (Session 2) Ã¢â‚¬â€ server-enforced, twice, 3.3 ADP port + adapter (Session 3) Ã¢â‚¬â€ the plug-and-play core, 3.4 FE Ã¢â‚¬â€ pixel-faithful to the dark Figma, 3. Architecture additions (so every session prompt is consistent)
+### Community 736 - "20260731_094528/fix_iter1.prompt.md"
+Cohesion: 0.15
+Nodes (12): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_094528\review_codex_iter1.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_094528\review_opus_iter1.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q, codex review (verdict UNKNOWN), Failing/relevant gate output, opus review (verdict APPROVED), Original task, Project context, Requirements (+4 more)
 
 ### Community 737 - "ROLE: PLANNER (codex)"
 Cohesion: 0.50
@@ -3588,9 +3685,9 @@ Nodes (4): Copy, Frame: Clock In, Interaction / states, Layout
 Cohesion: 0.50
 Nodes (4): Approved plan, Plan from codex (gpt-5.5 (default)), Project context, ROLE: IMPLEMENTER (Kimi)
 
-### Community 761 - "seed.test.ts"
-Cohesion: 0.38
-Nodes (4): asAdmin(), resetE2EShifts(), runtimeModules, seedE2E()
+### Community 761 - "ROLE: PLANNER (codex)"
+Cohesion: 0.50
+Nodes (4): Project context, ROLE: PLANNER (codex), Task, Your plan must contain
 
 ### Community 762 - "Frame: Clock In"
 Cohesion: 0.50
@@ -3600,9 +3697,9 @@ Nodes (4): Copy, Frame: Clock In, Interaction / states, Layout
 Cohesion: 0.50
 Nodes (4): Copy, Frame: Clock Out, Interaction / states, Layout
 
-### Community 764 - "Pipeline summary â€” atriax"
-Cohesion: 0.50
-Nodes (4): Hermes authenticated providers (probe), Next step, Pipeline summary â€” atriax, Stages
+### Community 764 - "phase3.test.ts"
+Cohesion: 0.09
+Nodes (6): checkComplianceBlocked(), modules, TestConvex, addCase(), daysAgo(), modules
 
 ### Community 765 - "Frames: Step 1 When â€¦ Step 6 Done"
 Cohesion: 0.50
@@ -3616,9 +3713,9 @@ Nodes (4): Copy, Frame: Today / Entry, Interaction, Layout
 Cohesion: 0.50
 Nodes (4): Copy, Frame: Clock In, Interaction / states, Layout
 
-### Community 768 - "ROLE: PLANNER (codex)"
-Cohesion: 0.50
-Nodes (4): Project context, ROLE: PLANNER (codex), Task, Your plan must contain
+### Community 768 - "verify-sanitize.mjs"
+Cohesion: 0.25
+Nodes (5): e2e, headers, local, page, user
 
 ### Community 769 - "Frames: Step 1 When â€¦ Step 6 Done"
 Cohesion: 0.50
@@ -3632,9 +3729,9 @@ Nodes (4): Copy, Frame: Today / Entry, Interaction, Layout
 Cohesion: 0.50
 Nodes (4): Copy, Frame: Clock In, Interaction / states, Layout
 
-### Community 772 - "ROLE: PLANNER (codex)"
-Cohesion: 0.50
-Nodes (4): Project context, ROLE: PLANNER (codex), Task, Your plan must contain
+### Community 772 - "20260731_094528/fix_iter2.prompt.md"
+Cohesion: 0.15
+Nodes (12): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_094528\review_codex_iter2.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_094528\review_opus_iter2.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q, codex review (verdict UNKNOWN), Failing/relevant gate output, opus review (verdict APPROVED), Original task, Project context, Requirements (+4 more)
 
 ### Community 773 - "1. The two decisions to make BEFORE coding (blockers)"
 Cohesion: 0.50
@@ -3716,41 +3813,205 @@ Nodes (4): Hermes authenticated providers (probe), Next step, Pipeline summary �
 Cohesion: 0.50
 Nodes (4): Hermes authenticated providers (probe), Next step, Pipeline summary Ã¢â‚¬â€ atriax, Stages
 
-### Community 794 - "GeofenceSettingsPage.test.tsx"
-Cohesion: 0.40
-Nodes (4): GeofenceSettingsPage(), defaultGeofence, mocks, mockSettingsState()
+### Community 793 - "run-smoke3.mjs"
+Cohesion: 0.25
+Nodes (7): clerkTicket(), e2e, local, main(), PROBES, results, ROUTES
 
-### Community 795 - "ClientsPage.tsx"
-Cohesion: 0.60
-Nodes (4): caregiverLabel(), CaregiverOption, ClientsPage(), todayInputValue()
-
-### Community 796 - "ROLE: IMPLEMENTER (Kimi)"
+### Community 794 - "Pipeline summary â€” atriax"
 Cohesion: 0.50
-Nodes (4): Approved plan, Plan from codex (gpt-5.5 (default)), Project context, ROLE: IMPLEMENTER (Kimi)
+Nodes (4): Hermes authenticated providers (probe), Next step, Pipeline summary â€” atriax, Stages
+
+### Community 795 - "20260731_094528/fix_iter3.prompt.md"
+Cohesion: 0.15
+Nodes (12): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_094528\review_codex_iter3.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_094528\review_opus_iter3.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q, codex review (verdict UNKNOWN), Failing/relevant gate output, opus review (verdict APPROVED), Original task, Project context, Requirements (+4 more)
+
+### Community 796 - "20260731_094528/fix_iter4.prompt.md"
+Cohesion: 0.15
+Nodes (12): cmd: codex exec --skip-git-repo-check 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_094528\review_codex_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_094528\review_opus_iter4.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q, codex review (verdict UNKNOWN), Failing/relevant gate output, opus review (verdict CHANGES_REQUESTED), Original task, Project context, Requirements (+4 more)
 
 ### Community 810 - "cmd: kimi -p 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_231328\fix_iter2.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.'"
 Cohesion: 0.67
 Nodes (3): cmd: kimi -p 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260626_231328\fix_iter2.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.', Failing/relevant gate output, Requirements
 
+### Community 814 - "Implementation Plan: Add "Home" Nav Item to HR Sidebar"
+Cohesion: 0.20
+Nodes (9): 1. Restated Goal & Acceptance Criteria, 2. Files to Create/Modify, 3. Step-by-Step Implementation, 4. Test Plan, 5. Risks, Security & Edge Cases, 6. Rollback & Verification, cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_093551\plan_opus.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q, Implementation Plan: Add "Home" Nav Item to HR Sidebar (+1 more)
+
+### Community 825 - "Implementation Plan — Add "Home" navigation to the HR sidebar"
+Cohesion: 0.20
+Nodes (9): 1. Restated goal & acceptance criteria, 2. Exact files to create/modify, 3. Step-by-step implementation approach, 4. Test plan, 5. Risks, security, edge cases, 6. Rollback / verification, cmd: hermes chat -q 'Read the file at C:\Users\pinol\Documents\Work\atriax\solid-pancake\.hermes-pipeline\20260731_094528\plan_opus.prompt.md and carry out its instructions completely and autonomously. Do not ask questions; make reasonable decisions and finish the task. Output your final result (plan / review / summary) as your last message.' -m claude-opus-4-8 --provider anthropic --yolo -Q, Implementation Plan — Add "Home" navigation to the HR sidebar (+1 more)
+
+### Community 826 - "forms.ts"
+Cohesion: 0.08
+Nodes (20): AuthContext, ALLOWED_STATUSES, DocumentStatus, listDocumentArchive, updateDocumentArchiveItem, attachProof, generateUploadUrl, getDownloadUrl (+12 more)
+
+### Community 827 - "ROLE: PLANNER (codex)"
+Cohesion: 0.50
+Nodes (4): Project context, ROLE: PLANNER (codex), Task, Your plan must contain
+
+### Community 829 - "Pipeline summary â€” atriax"
+Cohesion: 0.50
+Nodes (4): Hermes authenticated providers (probe), Next step, Pipeline summary â€” atriax, Stages
+
+### Community 830 - "check-audit.mjs"
+Cohesion: 0.25
+Nodes (6): e2e, events, headers, local, user, users
+
+### Community 831 - "useTenant.test.ts"
+Cohesion: 0.52
+Nodes (5): getStoredClerkOrgId(), setSelectedClerkOrgId(), caregiverTenant, mockDbTenants(), useTenant()
+
+### Community 832 - "Sidebar.tsx"
+Cohesion: 0.15
+Nodes (11): resolveAgencyLogo(), AppShell(), TenantRouteGuard(), NavItem, navItems, platformNavItem, Sidebar(), SidebarProps (+3 more)
+
+### Community 833 - "ROLE: REVIEWER (codex)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (codex), Task
+
+### Community 834 - "ROLE: REVIEWER (codex)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (codex), Task
+
+### Community 835 - "ROLE: REVIEWER (codex)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (codex), Task
+
+### Community 836 - "ROLE: REVIEWER (codex)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (codex), Task
+
+### Community 837 - "ROLE: REVIEWER (opus)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (opus), Task
+
+### Community 838 - "ROLE: REVIEWER (opus)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (opus), Task
+
+### Community 839 - "ROLE: REVIEWER (opus)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (opus), Task
+
+### Community 840 - "ROLE: REVIEWER (opus)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (opus), Task
+
+### Community 841 - "ROLE: REVIEWER (codex)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (codex), Task
+
+### Community 842 - "ROLE: REVIEWER (codex)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (codex), Task
+
+### Community 843 - "ROLE: REVIEWER (codex)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (codex), Task
+
+### Community 844 - "ROLE: REVIEWER (codex)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (codex), Task
+
+### Community 845 - "ROLE: REVIEWER (opus)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (opus), Task
+
+### Community 846 - "ROLE: REVIEWER (opus)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (opus), Task
+
+### Community 847 - "ROLE: REVIEWER (opus)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (opus), Task
+
+### Community 848 - "ROLE: REVIEWER (opus)"
+Cohesion: 0.33
+Nodes (5): Latest gate results (for your awareness), Project context, REQUIRED: the FINAL line of your output must be EXACTLY one of:, ROLE: REVIEWER (opus), Task
+
+### Community 849 - "notifications.test.ts"
+Cohesion: 0.29
+Nodes (4): modules, seedBillingData(), seedTenant(), TestConvex
+
+### Community 850 - "ROLE: PLANNER (codex)"
+Cohesion: 0.40
+Nodes (4): Project context, ROLE: PLANNER (codex), Task, Your plan must contain
+
+### Community 851 - "ROLE: PLANNER (opus)"
+Cohesion: 0.40
+Nodes (4): Project context, ROLE: PLANNER (opus), Task, Your plan must contain
+
+### Community 852 - "Pipeline summary — atriax"
+Cohesion: 0.40
+Nodes (4): Hermes authenticated providers (probe), Next step, Pipeline summary — atriax, Stages
+
+### Community 853 - "ROLE: PLANNER (codex)"
+Cohesion: 0.40
+Nodes (4): Project context, ROLE: PLANNER (codex), Task, Your plan must contain
+
+### Community 854 - "ROLE: PLANNER (opus)"
+Cohesion: 0.40
+Nodes (4): Project context, ROLE: PLANNER (opus), Task, Your plan must contain
+
+### Community 855 - "Pipeline summary — atriax"
+Cohesion: 0.40
+Nodes (4): Hermes authenticated providers (probe), Next step, Pipeline summary — atriax, Stages
+
+### Community 857 - "bootstrap.mjs"
+Cohesion: 0.29
+Nodes (5): e2e, existing, headers, local, user
+
+### Community 858 - "ApplicationReviewPage.test.tsx"
+Cohesion: 0.36
+Nodes (6): createDetailResponse(), defaultUseQueryImplementation(), downloadUrlMock, renderWithCarInsurance(), reviewApplicationMock, sendOfferMock
+
+### Community 879 - "CoverageRequestsPanel.test.tsx"
+Cohesion: 0.33
+Nodes (5): caregiver, mockCoverageState(), mocks, replacement, request
+
+### Community 881 - "seed.test.ts"
+Cohesion: 0.38
+Nodes (4): asAdmin(), resetE2EShifts(), runtimeModules, seedE2E()
+
+### Community 885 - "GeofenceSettingsPage.test.tsx"
+Cohesion: 0.40
+Nodes (4): GeofenceSettingsPage(), defaultGeofence, mocks, mockSettingsState()
+
+### Community 886 - "ShiftDocumentationForm.test.tsx"
+Cohesion: 0.25
+Nodes (5): ShiftDocumentationForm(), makeDetails(), mockGetCurrentPosition, mocks, mockState()
+
+### Community 887 - "ROLE: PLANNER (codex)"
+Cohesion: 0.50
+Nodes (4): Project context, ROLE: PLANNER (codex), Task, Your plan must contain
+
+### Community 889 - "2. ADP integration reference (what the flow needs)"
+Cohesion: 0.33
+Nodes (6): 2.1 Auth model (stable Ã¢â‚¬â€ build now), 2.2 Worker APIs (stable Ã¢â‚¬â€ build now), 2.3 Time punches (ISOLATED Ã¢â‚¬â€ adapter, fill in on confirmation), 2.4 Credentials Ã¢â€ â€™ Convex env vars (set when they arrive Ã¢â‚¬â€ nothing hardcoded), 2.5 Official docs to read on credential day, 2. ADP integration reference (what the flow needs)
+
+### Community 890 - "ROLE: PLANNER (codex)"
+Cohesion: 0.50
+Nodes (4): Project context, ROLE: PLANNER (codex), Task, Your plan must contain
+
 ## Knowledge Gaps
-- **5912 isolated node(s):** `shiftId`, `shiftId`, `tenantId`, `clientId`, `baseShift` (+5907 more)
+- **6396 isolated node(s):** `shiftId`, `shiftId`, `tenantId`, `clientId`, `baseShift` (+6391 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **62 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **68 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `api` connect `api.js` to `candidates.ts`, `adpSync.test.ts`, `generatePrefilledPdf.ts`, `SchedulingPage.tsx`, `ReviewDetail.tsx`, `legalText.ts`, `BillingPage.tsx`, `authHelpers.ts`, `ShiftNoteStep.tsx`, `ApplicationFormPage.tsx`, `GeofenceSettingsPage.test.tsx`, `api.d.ts`, `invitationBypass.ts`, `schema.ts`, `ClientsPage.tsx`, `documentArchive.test.ts`, `ShiftDocumentationForm.tsx`, `EmployeeProfilePage.tsx`, `TrainingPage.tsx`, `ApplicationReviewPage.tsx`, `TeamPage.tsx`, `shiftClock.test.ts`, `hrCases.test.ts`, `forms.test.ts`, `ApplyEntryPage.test.tsx`, `candidates.test.ts`, `SelectAgencyPage.tsx`, `RouteGuard.tsx`, `Sidebar.tsx`, `CandidateOnboardingPage.tsx`, `onboarding.test.ts`, `ApplicationStatusPage.tsx`, `useTenant.test.ts`, `ShiftDocumentationForm.test.tsx`, `CoordinatorReviewPage.tsx`, `files.test.ts`, `seed.test.ts`?**
-  _High betweenness centrality (0.010) - this node is a cross-community bridge._
-- **Why does `useQuery()` connect `useQuery` to `RouteGuard.tsx`, `Sidebar.tsx`, `ReviewDetail.tsx`, `mockClerkReact.tsx`, `useTenant.test.ts`, `mockConvexReact.tsx`, `ShiftDocumentationForm.test.tsx`, `GeofenceSettingsPage.test.tsx`, `CoordinatorReviewPage.tsx`?**
-  _High betweenness centrality (0.003) - this node is a cross-community bridge._
-- **Why does `AdpPort` connect `adpClient.ts` to `adpSync.ts`?**
-  _High betweenness centrality (0.002) - this node is a cross-community bridge._
+- **Why does `api` connect `api.js` to `ApplicationReviewPage.tsx`, `shifts.ts`, `candidates.ts`, `CoordinatorReviewPage.tsx`, `generatePrefilledPdf.ts`, `auditReadiness.test.ts`, `billingPhase3.test.ts`, `AuditReadinessPage.tsx`, `scheduling.ts`, `SchedulingPage.tsx`, `InvoicesTable.tsx`, `ReviewDetail.tsx`, `candidates.test.ts`, `legalText.ts`, `BillingPage.tsx`, `authHelpers.ts`, `platform.test.ts`, `ShiftNoteStep.tsx`, `hrCases.test.ts`, `ApplicationFormPage.tsx`, `invitationBypass.ts`, `schema.ts`, `TrainingPage.tsx`, `ShiftDocumentationForm.tsx`, `EmployeeProfilePage.tsx`, `platform.ts`, `usePlatformAdmin`, `TeamPage.tsx`, `ApplicationStatusPage.tsx`, `api.d.ts`, `ApplyEntryPage.test.tsx`, `forms.test.ts`, `useTenant.test.ts`, `Sidebar.tsx`, `SelectAgencyPage.tsx`, `RouteGuard.tsx`, `CandidateOnboardingPage.tsx`, `notifications.test.ts`, `adpSync.test.ts`, `seed.test.ts`, `GeofenceSettingsPage.test.tsx`, `ShiftDocumentationForm.test.tsx`, `phase3.test.ts`?**
+  _High betweenness centrality (0.014) - this node is a cross-community bridge._
+- **Why does `buildInvoicePdf()` connect `buildInvoicePdf` to `BillingPage.tsx`?**
+  _High betweenness centrality (0.006) - this node is a cross-community bridge._
+- **Why does `dependencies` connect `dependencies` to `scripts`, `buildInvoicePdf`?**
+  _High betweenness centrality (0.006) - this node is a cross-community bridge._
 - **What connects `shiftId`, `shiftId`, `tenantId` to the rest of the system?**
-  _5912 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _6396 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `auth.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.05896805896805897 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05853128396211768 - nodes in this community are weakly interconnected._
+- **Should `ApplicationReviewPage.tsx` be split into smaller, more focused modules?**
+  _Cohesion score 0.05961426066627703 - nodes in this community are weakly interconnected._
 - **Should `shifts.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.08246225319396051 - nodes in this community are weakly interconnected._
-- **Should `candidates.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.031659882406151064 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05257936507936508 - nodes in this community are weakly interconnected._

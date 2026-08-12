@@ -546,3 +546,105 @@ export const adpInitialWorkerLoad = internalAction({
     }
   },
 })
+
+export const exportPayrollToAdp = internalAction({
+  args: {
+    tenantId: v.id('tenants'),
+    payPeriodId: v.id('payPeriods'),
+    entries: v.array(
+      v.object({
+        caregiverId: v.string(),
+        caregiverName: v.string(),
+        hours: v.number(),
+      }),
+    ),
+    punches: v.array(
+      v.object({
+        timePunchId: v.id('timePunches'),
+        caregiverId: v.string(),
+        punchType: v.union(v.literal('clock_in'), v.literal('clock_out')),
+        at: v.string(),
+      }),
+    ),
+  },
+  handler: async (ctx: ActionCtx, { tenantId, payPeriodId, entries, punches }) => {
+    const key = idempotencyKey('payroll_export', payPeriodId as string)
+    const claim = await ctx.runMutation(
+      internal.adpSync.claimIntegrationEvent,
+      {
+        tenantId,
+        kind: 'payroll_export',
+        refId: payPeriodId as string,
+        idempotencyKey: key,
+        request: {
+          payPeriodId: payPeriodId as string,
+          caregiverCount: entries.length,
+          punchCount: punches.length,
+        },
+        maxAttempts: MAX_ATTEMPTS,
+      },
+    )
+
+    if (claim.type === 'already_synced') {
+      return { success: true, status: 'already_synced' }
+    }
+
+    if (claim.type === 'in_flight') {
+      return { success: false, error: 'Payroll export already in flight.' }
+    }
+
+    if (claim.type === 'max_attempts') {
+      return {
+        success: false,
+        error: 'Max ADP payroll export attempts exceeded.',
+      }
+    }
+
+    try {
+      const port = await getAdpPort()
+      let posted = 0
+      let skipped = 0
+
+      for (const punch of punches) {
+        const profile = await ctx.runQuery(
+          internal.adpSync.findEmployeeProfileByClerkUserId,
+          { tenantId, clerkUserId: punch.caregiverId },
+        )
+        if (!profile || !profile.adpAssociateOid) {
+          skipped++
+          continue
+        }
+
+        await port.postPunch({
+          idempotencyKey: idempotencyKey(
+            'payroll_punch',
+            punch.timePunchId as string,
+          ),
+          timePunchId: punch.timePunchId as string,
+          associateOID: profile.adpAssociateOid,
+          punchType: punch.punchType,
+          at: punch.at,
+        })
+        posted++
+      }
+
+      await patchEvent(ctx, claim.eventId, {
+        status: 'success',
+        response: { posted, skipped },
+        completedAt: new Date().toISOString(),
+      })
+
+      return { success: true, posted, skipped }
+    } catch (error) {
+      const adpError = sanitizeError(error)
+
+      await patchEvent(ctx, claim.eventId, {
+        status: 'error',
+        response: { error: adpError },
+        completedAt: new Date().toISOString(),
+      })
+
+      return { success: false, error: adpError }
+    }
+  },
+})

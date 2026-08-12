@@ -15,4 +15,10 @@ crons.daily(
   internal.hrCases.checkExpiringCredentials,
 )
 
+crons.daily(
+  'checkEscalations',
+  { hourUTC: 7, minuteUTC: 0 },
+  internal.escalations.checkEscalations,
+)
+
 export default crons

@@ -14,6 +14,12 @@ import {
   Mail,
   Clock,
   Home,
+  ShieldCheck,
+  BadgeCheck,
+  Banknote,
+  BarChart3,
+  Bell,
+  ScrollText,
 } from 'lucide-react'
 import { cn } from '@/shared/lib/cn'
 import { useQuery } from 'convex/react'
@@ -31,10 +37,52 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
+    label: 'HR Home',
+    path: '/hr',
+    icon: <Home className="h-4 w-4" />,
+    roles: ['org:admin', 'org:hr'],
+  },
+  {
     label: 'Dashboard',
     path: '/',
     icon: <LayoutDashboard className="h-4 w-4" />,
     roles: ['org:admin', 'org:coordinator'],
+  },
+  {
+    label: 'Admin',
+    path: '/admin',
+    icon: <ShieldCheck className="h-4 w-4" />,
+    roles: ['org:admin'],
+  },
+  {
+    label: 'Compliance',
+    path: '/compliance',
+    icon: <BadgeCheck className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator', 'org:hr'],
+  },
+  {
+    label: 'Reporting',
+    path: '/reports',
+    icon: <BarChart3 className="h-4 w-4" />,
+    roles: ['org:admin'],
+  },
+  {
+    label: 'Audit Trail',
+    path: '/audit',
+    icon: <ShieldCheck className="h-4 w-4" />,
+    roles: ['org:admin', 'org:hr'],
+  },
+  {
+    label: 'Logs',
+    path: '/logs',
+    icon: <ScrollText className="h-4 w-4" />,
+    roles: ['org:admin'],
+  },
+  {
+    label: 'Notifications',
+    path: '/notifications',
+    icon: <Bell className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator', 'org:hr', 'org:caregiver'],
   },
   {
     label: 'Today',
@@ -74,27 +122,27 @@ const navItems: NavItem[] = [
   },
   {
     label: 'Billing',
-    path: '/coordinator/billing',
+    path: '/billing',
     icon: <FileText className="h-4 w-4" />,
-    roles: ['org:admin', 'org:coordinator'],
+    roles: ['org:admin'],
+  },
+  {
+    label: 'Payroll',
+    path: '/billing/payroll',
+    icon: <Banknote className="h-4 w-4" />,
+    roles: ['org:admin'],
   },
   {
     label: 'Clients',
     path: '/clients',
     icon: <Users className="h-4 w-4" />,
-    roles: ['org:admin', 'org:coordinator'],
+    roles: ['org:admin'],
   },
   {
     label: 'Team',
     path: '/team',
     icon: <Building2 className="h-4 w-4" />,
     roles: ['org:admin'],
-  },
-  {
-    label: 'Home',
-    path: '/hr',
-    icon: <LayoutDashboard className="h-4 w-4" />,
-    roles: ['org:admin', 'org:hr'],
   },
   {
     label: 'Candidates',
@@ -118,7 +166,7 @@ const navItems: NavItem[] = [
     label: 'Settings',
     path: '/settings/geofence',
     icon: <MapPin className="h-4 w-4" />,
-    roles: ['org:admin', 'org:coordinator'],
+    roles: ['org:admin'],
   },
   {
     label: 'Email Domains',

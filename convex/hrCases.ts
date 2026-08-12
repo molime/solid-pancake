@@ -323,6 +323,44 @@ export const checkExpiringCredentials = internalMutation({
           subjectId: doc.subjectId,
           flagType: 'expiring_document',
         })
+
+        // Best-effort caregiver notification for the expiring credential.
+        // subjectId may reference an employeeProfiles/candidates doc id or a
+        // clerkUserId directly (the repo uses both conventions); resolve the
+        // clerkUserId behind it. When no clerkUserId resolves, case creation
+        // is unaffected and no notification is sent.
+        let clerkUserId: string | undefined
+        if (doc.subjectType === 'employee') {
+          const profile = await ctx.db.get(
+            doc.subjectId as Id<'employeeProfiles'>,
+          )
+          clerkUserId = profile?.clerkUserId
+        } else if (doc.subjectType === 'candidate') {
+          const candidate = await ctx.db.get(doc.subjectId as Id<'candidates'>)
+          clerkUserId = candidate?.clerkUserId
+        }
+        if (!clerkUserId) {
+          const member = await ctx.db
+            .query('tenantMembers')
+            .withIndex('by_tenant_user', (q) =>
+              q.eq('tenantId', tenant._id).eq('clerkUserId', doc.subjectId),
+            )
+            .unique()
+          clerkUserId = member?.clerkUserId
+        }
+        if (clerkUserId) {
+          await ctx.scheduler.runAfter(
+            0,
+            internal._utils.notifications.notifyComplianceExpiring,
+            {
+              tenantId: tenant._id,
+              clerkUserId,
+              credentialName: doc.category,
+              category: doc.category,
+              expiresAt: doc.expiresAt,
+            },
+          )
+        }
       }
     }
   },

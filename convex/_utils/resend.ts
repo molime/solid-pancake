@@ -13,6 +13,15 @@ export const sendEmail = internalAction({
     subject: v.string(),
     html: v.string(),
     text: v.optional(v.string()),
+    attachments: v.optional(
+      v.array(
+        v.object({
+          filename: v.string(),
+          content: v.string(), // base64-encoded
+          contentType: v.optional(v.string()),
+        }),
+      ),
+    ),
   },
   handler: async (_ctx, args) => {
     if (process.env.EMAIL_ENABLED !== 'true') {
@@ -26,19 +35,28 @@ export const sendEmail = internalAction({
       throw new Error('Missing RESEND_API_KEY or RESEND_FROM_EMAIL environment variable')
     }
 
+    const body: Record<string, unknown> = {
+      from,
+      to: args.to,
+      subject: args.subject,
+      html: args.html,
+      text: args.text,
+    }
+    if (args.attachments && args.attachments.length > 0) {
+      body.attachments = args.attachments.map((a) => ({
+        filename: a.filename,
+        content: a.content,
+        ...(a.contentType ? { content_type: a.contentType } : {}),
+      }))
+    }
+
     const response = await fetch(RESEND_API_URL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        from,
-        to: args.to,
-        subject: args.subject,
-        html: args.html,
-        text: args.text,
-      }),
+      body: JSON.stringify(body),
     })
 
     const payload = await response.json().catch(() => ({}))

@@ -49,7 +49,9 @@ export function ShiftPacketPanel({
   )
   const auditEvents = useQuery(
     api.audit.list,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    clerkOrgId && (member?.role === 'org:admin' || member?.role === 'org:hr')
+      ? { clerkOrgId }
+      : 'skip',
   )
   const caregivers = useQuery(
     api.members.listCaregivers,

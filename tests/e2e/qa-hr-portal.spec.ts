@@ -213,4 +213,35 @@ test.describe('QA HR portal items 7-11', { tag: '@auth' }, () => {
     await dialog.getByRole('button', { name: 'Close' }).click()
     await expect(dialog).not.toBeVisible({ timeout: 10000 })
   })
+
+  test('HR Home sidebar item navigates back to /hr with correct active state', async ({ page }) => {
+    test.setTimeout(300_000)
+    if (mockE2EEnabled()) {
+      test.skip(true, 'Requires a live Clerk-backed session.')
+    }
+
+    await signInAsHR(page)
+
+    const hrHomeLink = page
+      .locator('aside nav')
+      .getByRole('link', { name: 'HR Home' })
+      .first()
+    await expect(hrHomeLink).toBeVisible({ timeout: 15000 })
+
+    // Navigate away to Cases — HR Home stays highlighted for /hr/* sub-routes.
+    await clickSidebarNav(page, 'Cases')
+    await expect(page).toHaveURL(/\/hr\/cases/, { timeout: 15000 })
+    await expect(
+      page.getByRole('heading', { name: 'HR Cases' }),
+    ).toBeVisible({ timeout: 15000 })
+    await expect(hrHomeLink).toHaveClass(/bg-white\/10/)
+
+    // Click HR Home — returns to /hr and renders the HR dashboard.
+    await hrHomeLink.click()
+    await expect(page).toHaveURL(/\/hr$/, { timeout: 15000 })
+    await expect(
+      page.getByRole('heading', { name: 'People & hiring' }),
+    ).toBeVisible({ timeout: 15000 })
+    await expect(hrHomeLink).toHaveClass(/bg-white\/10/)
+  })
 })
