@@ -2150,6 +2150,46 @@ export const setTenantCustomRate = mutation({
   },
 })
 
+export const setTenantProduct = mutation({
+  args: {
+    tenantId: v.id('tenants'),
+    productKey: v.string(),
+    active: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await requirePlatformAdmin(ctx)
+    const tenant = await ctx.db.get(args.tenantId)
+    if (!tenant) {
+      throw new ConvexError('Tenant not found.')
+    }
+    // Mirrors agencyConfig.setAgencyProduct, but platform-admin scoped so an
+    // agency's products can be managed without a tenant member account.
+    const existing = await ctx.db
+      .query('agencyProducts')
+      .withIndex('by_tenant_product', (q) =>
+        q.eq('tenantId', args.tenantId).eq('productKey', args.productKey),
+      )
+      .first()
+    if (existing) {
+      await ctx.db.patch(existing._id, { active: args.active })
+    } else {
+      await ctx.db.insert('agencyProducts', {
+        tenantId: args.tenantId,
+        productKey: args.productKey,
+        active: args.active,
+      })
+    }
+    await recordPlatformAudit(
+      ctx,
+      identity,
+      args.tenantId,
+      'tenant_product_updated',
+      { productKey: args.productKey, active: args.active },
+    )
+    return args.tenantId
+  },
+})
+
 export const setTenantLimits = mutation({
   args: {
     tenantId: v.id('tenants'),

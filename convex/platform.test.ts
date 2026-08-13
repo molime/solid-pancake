@@ -618,6 +618,60 @@ describe('setTenantCustomRate', () => {
   })
 })
 
+describe('setTenantProduct', () => {
+  it('activates and deactivates a product for a tenant', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    const tenantId = await seedTenant(t)
+
+    await asAdmin.mutation(api.platform.setTenantProduct, {
+      tenantId,
+      productKey: 'full_platform',
+      active: true,
+    })
+    let rows = await t.run(async (ctx) =>
+      ctx.db
+        .query('agencyProducts')
+        .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+        .collect(),
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      productKey: 'full_platform',
+      active: true,
+    })
+
+    await asAdmin.mutation(api.platform.setTenantProduct, {
+      tenantId,
+      productKey: 'full_platform',
+      active: false,
+    })
+    rows = await t.run(async (ctx) =>
+      ctx.db
+        .query('agencyProducts')
+        .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+        .collect(),
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].active).toBe(false)
+  })
+
+  it('rejects non-admin', async () => {
+    const t = createTestConvex()
+    const tenantId = await seedTenant(t)
+    const asUser = t.withIdentity(NON_ADMIN)
+
+    await expect(
+      asUser.mutation(api.platform.setTenantProduct, {
+        tenantId,
+        productKey: 'full_platform',
+        active: true,
+      }),
+    ).rejects.toThrow(/platform admin access required/i)
+  })
+})
+
 describe('setTenantLimits', () => {
   it('sets and clears tenant limits', async () => {
     const t = createTestConvex()
