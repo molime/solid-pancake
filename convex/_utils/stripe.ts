@@ -84,19 +84,28 @@ export const createStripeCustomer = internalAction({
 /**
  * Create a draft Stripe invoice and attach line items.
  * dueDate is an ISO date string; Stripe wants a unix timestamp (seconds).
+ * With collectionMethod 'charge_automatically' the invoice auto-charges the
+ * given default payment method on finalize (due_date is send_invoice-only).
  */
 export const createStripeInvoice = internalAction({
   args: {
     customerId: v.string(),
     dueDate: v.string(),
     lineItems: v.array(invoiceItemValidator),
+    collectionMethod: v.optional(
+      v.union(v.literal('send_invoice'), v.literal('charge_automatically')),
+    ),
+    defaultPaymentMethod: v.optional(v.string()),
   },
   handler: async (_ctx, args) => {
+    const collectionMethod = args.collectionMethod ?? 'send_invoice'
     const dueDateSeconds = Math.floor(new Date(args.dueDate).getTime() / 1000)
     const invoice = await stripeRequest('/invoices', 'POST', {
       customer: args.customerId,
-      collection_method: 'send_invoice',
-      due_date: dueDateSeconds,
+      collection_method: collectionMethod,
+      due_date:
+        collectionMethod === 'send_invoice' ? dueDateSeconds : undefined,
+      default_payment_method: args.defaultPaymentMethod,
     })
     const invoiceId = invoice.id as string
 
@@ -212,5 +221,71 @@ export const createPaymentLink = internalAction({
       'payment_method_types[1]': 'us_bank_account',
     })
     return { id: payload.id as string, url: payload.url as string }
+  },
+})
+
+/**
+ * Create a hosted Checkout Session in setup mode (one-time payment method
+ * collection). payment_method_types is restricted to exactly the allowed
+ * method so the owner cannot swap card ↔ ACH. Returns the hosted page URL.
+ */
+export const createCheckoutSession = internalAction({
+  args: {
+    customerId: v.string(),
+    paymentMethodAllowed: v.union(
+      v.literal('card'),
+      v.literal('us_bank_account'),
+    ),
+    successUrl: v.string(),
+    cancelUrl: v.string(),
+  },
+  handler: async (_ctx, args) => {
+    const payload = await stripeRequest('/checkout/sessions', 'POST', {
+      mode: 'setup',
+      customer: args.customerId,
+      'payment_method_types[0]': args.paymentMethodAllowed,
+      success_url: args.successUrl,
+      cancel_url: args.cancelUrl,
+    })
+    return { id: payload.id as string, url: payload.url as string }
+  },
+})
+
+/**
+ * Retrieve a Checkout Session with its SetupIntent expanded, to read the
+ * payment method the customer just attached.
+ */
+export const retrieveCheckoutSession = internalAction({
+  args: { sessionId: v.string() },
+  handler: async (_ctx, args) => {
+    const payload = await stripeRequest(
+      `/checkout/sessions/${args.sessionId}?expand[]=setup_intent`,
+      'GET',
+    )
+    const setupIntent = payload.setup_intent as
+      | { payment_method?: unknown }
+      | undefined
+    return {
+      id: payload.id as string,
+      customerId: (payload.customer as string) ?? null,
+      paymentMethodId:
+        typeof setupIntent?.payment_method === 'string'
+          ? setupIntent.payment_method
+          : null,
+    }
+  },
+})
+
+/** Set a customer's default payment method for invoice charges. */
+export const setCustomerDefaultPaymentMethod = internalAction({
+  args: {
+    customerId: v.string(),
+    paymentMethodId: v.string(),
+  },
+  handler: async (_ctx, args) => {
+    const payload = await stripeRequest(`/customers/${args.customerId}`, 'POST', {
+      'invoice_settings[default_payment_method]': args.paymentMethodId,
+    })
+    return { id: payload.id as string }
   },
 })

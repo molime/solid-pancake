@@ -481,7 +481,7 @@ describe('Sidebar', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('shows Platform nav item for platform admins', () => {
+  it('does not show Platform nav item for platform admins (item removed)', () => {
     mockSidebarState({
       orgId: 'org_123',
       user: { fullName: 'Admin User', firstName: 'A' },
@@ -495,7 +495,7 @@ describe('Sidebar', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Platform')).toBeInTheDocument()
+    expect(screen.queryByText('Platform')).not.toBeInTheDocument()
   })
 
   it('does not show Platform nav item for non-platform admins', () => {
@@ -530,5 +530,48 @@ describe('Sidebar', () => {
 
     expect(screen.getByText('Coordinator User')).toBeInTheDocument()
     expect(screen.getByText('coordinator')).toBeInTheDocument()
+  })
+
+  it('shows Support for org:admin and org:coordinator only', () => {
+    for (const memberRole of ['org:admin', 'org:coordinator']) {
+      mockSidebarState({
+        orgId: 'org_123',
+        user: { fullName: 'Staff User', firstName: 'S' },
+        memberRole,
+      })
+
+      const { unmount } = render(
+        <MemoryRouter>
+          <Sidebar />
+        </MemoryRouter>,
+      )
+
+      expect(screen.getByRole('link', { name: 'Support' })).toHaveAttribute(
+        'href',
+        '/support',
+      )
+      unmount()
+    }
+  })
+
+  it('hides Support for org:caregiver and org:hr', () => {
+    for (const memberRole of ['org:caregiver', 'org:hr']) {
+      mockSidebarState({
+        orgId: 'org_123',
+        user: { fullName: 'Staff User', firstName: 'S' },
+        memberRole,
+      })
+
+      const { unmount } = render(
+        <MemoryRouter>
+          <Sidebar />
+        </MemoryRouter>,
+      )
+
+      expect(
+        screen.queryByRole('link', { name: 'Support' }),
+      ).not.toBeInTheDocument()
+      unmount()
+    }
   })
 })

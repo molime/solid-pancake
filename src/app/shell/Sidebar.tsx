@@ -19,6 +19,7 @@ import {
   Banknote,
   BarChart3,
   Bell,
+  LifeBuoy,
   ScrollText,
 } from 'lucide-react'
 import { cn } from '@/shared/lib/cn'
@@ -83,6 +84,12 @@ const navItems: NavItem[] = [
     path: '/notifications',
     icon: <Bell className="h-4 w-4" />,
     roles: ['org:admin', 'org:coordinator', 'org:hr', 'org:caregiver'],
+  },
+  {
+    label: 'Support',
+    path: '/support',
+    icon: <LifeBuoy className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator'],
   },
   {
     label: 'Today',

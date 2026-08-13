@@ -1,5 +1,6 @@
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
   mutation,
@@ -12,12 +13,14 @@ import { internal } from './_generated/api'
 import { requireIdentity } from './authHelpers'
 import type { UserIdentity } from 'convex/server'
 import {
+  accountTypeLabel,
   clerkErrorMessage,
   createClerkUserAndJoinOrg,
 } from './_utils/invitationBypass'
 import { requireEnv } from './_utils/env'
 import {
   computeInvoiceLineItems,
+  computeTenantLimitAlerts,
   countActiveSeats,
   generateInvoiceNumber,
   round2,
@@ -294,7 +297,13 @@ async function sendInvoiceNow(
 export const isAdmin = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await requireIdentity(ctx)
+    // No identity yet = the client fired the query before the Clerk token
+    // attached (hard-reload auth race). Return null ("unknown — keep
+    // loading") instead of throwing: a thrown error propagates to the app
+    // error boundary and blanks the page before auth settles. Signed-in
+    // non-admins still get a definitive false.
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) return null
     const existing = await ctx.db
       .query('platformAdmins')
       .withIndex('by_clerk_user_id', (q) =>
@@ -394,6 +403,7 @@ export const listTenantsWithUsage = query({
           seatCount,
           subscription: subscription ?? null,
           mrr,
+          churnedAt: tenant.churnedAt ?? null,
         }
       }),
     )
@@ -548,10 +558,13 @@ export const calculateInvoicePreview = query({
   },
   handler: async (ctx, args) => {
     await requirePlatformAdmin(ctx)
-    // periodStart/periodEnd are accepted for API stability even though the
-    // seat count is point-in-time (current active members).
+    // The period bounds the per_item usage counts; the seat count itself is
+    // point-in-time (current active members).
     const { lineItems, seats, plan, subscription } =
-      await computeInvoiceLineItems(ctx, args.tenantId)
+      await computeInvoiceLineItems(ctx, args.tenantId, {
+        start: args.periodStart,
+        end: args.periodEnd,
+      })
     const subtotal = round2(
       lineItems.reduce((sum, item) => sum + item.amount, 0),
     )
@@ -596,11 +609,13 @@ export const getPlatformStats = query({
       subscriptions.filter((s) => s.status === status).length
 
     return {
-      totalAgencies: tenants.length,
+      // Churned agencies are reported separately, not in the active total.
+      totalAgencies: tenants.filter((t) => t.churnedAt === undefined).length,
       activeCount: countStatus('active'),
       trialingCount: countStatus('trialing'),
       pastDueCount: countStatus('past_due'),
       suspendedCount: countStatus('suspended'),
+      churnedCount: tenants.filter((t) => t.churnedAt !== undefined).length,
       mrr,
       newThisMonth: tenants.filter(
         (t) => t.createdAt >= start && t.createdAt < end,
@@ -614,16 +629,13 @@ export const getTenantHealth = query({
   handler: async (ctx) => {
     await requirePlatformAdmin(ctx)
 
-    const tenants = await ctx.db.query('tenants').collect()
+    const tenants = (await ctx.db.query('tenants').collect()).filter(
+      // Churned agencies are offboarded — not part of tenant health.
+      (tenant) => tenant.churnedAt === undefined,
+    )
 
     return await Promise.all(
       tenants.map(async (tenant) => {
-        const openCases = await ctx.db
-          .query('hrCases')
-          .withIndex('by_tenant_status', (q) =>
-            q.eq('tenantId', tenant._id).eq('status', 'open'),
-          )
-          .collect()
         const errorConnections = (
           await ctx.db
             .query('integrationConnections')
@@ -646,8 +658,8 @@ export const getTenantHealth = query({
           .order('desc')
           .first()
         const subscription = await getTenantSubscriptionDoc(ctx, tenant._id)
+        const limitAlerts = await computeTenantLimitAlerts(ctx, tenant._id)
 
-        const complianceAlerts = openCases.length
         const syncErrors = errorConnections.length + errorPunches.length
         const billingStatus = subscription?.status ?? 'none'
         const lastActive = lastAudit?.createdAt ?? tenant.createdAt
@@ -659,18 +671,18 @@ export const getTenantHealth = query({
           syncErrors > 0
         ) {
           status = 'critical'
-        } else if (complianceAlerts > 0) {
+        } else if (limitAlerts.length > 0) {
           status = 'warning'
         }
 
         return {
           tenantId: tenant._id,
           tenantName: tenant.name,
-          complianceAlerts,
           syncErrors,
           billingStatus,
           lastActive,
           status,
+          limitAlerts,
         }
       }),
     )
@@ -678,9 +690,9 @@ export const getTenantHealth = query({
 })
 
 /**
- * Drill-down for the tenant health page: the actual open HR cases,
- * integration connection errors, and ADP punch sync errors behind the counts
- * returned by getTenantHealth.
+ * Drill-down for the tenant health page: integration connection errors, ADP
+ * punch sync errors, and soft-limit alerts. Technical/platform signals only —
+ * agency business data (e.g. HR cases) is intentionally excluded.
  */
 export const getTenantHealthDetail = query({
   args: { tenantId: v.id('tenants') },
@@ -691,13 +703,6 @@ export const getTenantHealthDetail = query({
     if (!tenant) {
       throw new ConvexError('Tenant not found.')
     }
-
-    const openCases = await ctx.db
-      .query('hrCases')
-      .withIndex('by_tenant_status', (q) =>
-        q.eq('tenantId', args.tenantId).eq('status', 'open'),
-      )
-      .collect()
 
     const errorConnections = (
       await ctx.db
@@ -733,16 +738,10 @@ export const getTenantHealthDetail = query({
       }),
     )
 
+    const limitAlerts = await computeTenantLimitAlerts(ctx, args.tenantId)
+
     return {
       tenant: { _id: tenant._id, name: tenant.name },
-      openCases: openCases.map((c) => ({
-        _id: c._id,
-        category: c.category,
-        title: c.title,
-        flagType: c.flagType ?? null,
-        status: c.status,
-        createdAt: c.createdAt,
-      })),
       integrationErrors: errorConnections.map((c) => ({
         _id: c._id,
         provider: c.provider,
@@ -751,6 +750,7 @@ export const getTenantHealthDetail = query({
         lastCheckedAt: c.lastCheckedAt ?? null,
       })),
       syncErrors,
+      limitAlerts,
     }
   },
 })
@@ -813,9 +813,50 @@ export const upsertPricingPlan = mutation({
     includedSeats: v.number(),
     perSeatPrice: v.number(),
     active: v.boolean(),
+    model: v.optional(
+      v.union(v.literal('flat'), v.literal('per_item'), v.literal('tiered')),
+    ),
+    perItemRates: v.optional(
+      v.object({
+        perCandidate: v.optional(v.number()),
+        perShift: v.optional(v.number()),
+        perApplication: v.optional(v.number()),
+      }),
+    ),
+    tiers: v.optional(
+      v.array(v.object({ upTo: v.number(), monthlyPrice: v.number() })),
+    ),
+    alertThreshold: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await requirePlatformAdmin(ctx)
+
+    // Tiers are matched in ascending order at billing time, so normalize
+    // here: reject invalid bounds and store sorted by upTo regardless of
+    // input order.
+    if (args.tiers !== undefined) {
+      for (const tier of args.tiers) {
+        if (tier.upTo <= 0 || tier.monthlyPrice < 0) {
+          throw new ConvexError(
+            'Tier bounds (upTo) must be positive and prices non-negative.',
+          )
+        }
+      }
+      args.tiers.sort((a, b) => a.upTo - b.upTo)
+    }
+
+    // New pricing-model fields are only written when provided, so callers
+    // that predate them cannot accidentally clear them.
+    const extras = {
+      ...(args.model !== undefined ? { model: args.model } : {}),
+      ...(args.perItemRates !== undefined
+        ? { perItemRates: args.perItemRates }
+        : {}),
+      ...(args.tiers !== undefined ? { tiers: args.tiers } : {}),
+      ...(args.alertThreshold !== undefined
+        ? { alertThreshold: args.alertThreshold }
+        : {}),
+    }
 
     const existing = await getPlanByKey(ctx, args.key)
     if (existing) {
@@ -825,6 +866,7 @@ export const upsertPricingPlan = mutation({
         includedSeats: args.includedSeats,
         perSeatPrice: args.perSeatPrice,
         active: args.active,
+        ...extras,
       })
       return existing._id
     }
@@ -836,6 +878,7 @@ export const upsertPricingPlan = mutation({
       includedSeats: args.includedSeats,
       perSeatPrice: args.perSeatPrice,
       active: args.active,
+      ...extras,
     })
   },
 })
@@ -985,12 +1028,246 @@ export const reactivateTenant = mutation({
   },
 })
 
+/**
+ * Offboards (churns) a tenant: stamps churnedAt/churnReason and cancels the
+ * tenant's subscription. The tenant record itself is kept for reporting.
+ */
+export const offboardTenant = mutation({
+  args: {
+    tenantId: v.id('tenants'),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await requirePlatformAdmin(ctx)
+    const tenant = await ctx.db.get(args.tenantId)
+    if (!tenant) {
+      throw new ConvexError('Tenant not found.')
+    }
+    // Idempotent: a repeat offboard must not overwrite churnedAt or stack
+    // duplicate audit events.
+    if (tenant.churnedAt !== undefined) {
+      return args.tenantId
+    }
+    await ctx.db.patch(args.tenantId, {
+      churnedAt: Date.now(),
+      ...(args.reason !== undefined ? { churnReason: args.reason } : {}),
+    })
+    const subscription = await getTenantSubscriptionDoc(ctx, args.tenantId)
+    if (subscription) {
+      await ctx.db.patch(subscription._id, {
+        status: 'canceled',
+        updatedAt: new Date().toISOString(),
+      })
+    }
+    await recordPlatformAudit(ctx, identity, args.tenantId, 'tenant_churned', {
+      reason: args.reason,
+    })
+    return args.tenantId
+  },
+})
+
+/** Lost agencies: tenants that have been offboarded (churnedAt set). */
+export const listChurnedTenants = query({
+  args: {},
+  handler: async (ctx) => {
+    await requirePlatformAdmin(ctx)
+    const tenants = await ctx.db.query('tenants').collect()
+    return tenants
+      .filter((tenant) => tenant.churnedAt !== undefined)
+      .map((tenant) => ({
+        tenantId: tenant._id,
+        name: tenant.name,
+        slug: tenant.slug,
+        churnedAt: tenant.churnedAt,
+        churnReason: tenant.churnReason ?? null,
+      }))
+  },
+})
+
+/**
+ * Daily soft-limit check (registered in crons.ts): for every active tenant,
+ * notify agency admins in-app when usage reaches a configured limit or the
+ * plan's alertThreshold. Deduped per tenant + alert kind + current billing
+ * period via the notification metadata. Warnings only — never blocks.
+ */
+export const checkLimitAlerts = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const tenants = await ctx.db.query('tenants').collect()
+    let notified = 0
+
+    for (const tenant of tenants) {
+      if (tenant.churnedAt !== undefined) continue
+
+      const alerts = await computeTenantLimitAlerts(ctx, tenant._id)
+      if (alerts.length === 0) continue
+
+      const subscription = await getTenantSubscriptionDoc(ctx, tenant._id)
+      const { start, end } = currentMonthRange()
+      const periodStart = subscription?.currentPeriodStart ?? start
+      const periodEnd = subscription?.currentPeriodEnd ?? end
+
+      const admins = await ctx.db
+        .query('tenantMembers')
+        .withIndex('by_tenant_role', (q) =>
+          q.eq('tenantId', tenant._id).eq('role', 'org:admin'),
+        )
+        .collect()
+
+      for (const admin of admins) {
+        const existing = await ctx.db
+          .query('notifications')
+          .withIndex('by_tenant_user', (q) =>
+            q.eq('tenantId', tenant._id).eq('clerkUserId', admin.clerkUserId),
+          )
+          .collect()
+
+        for (const alert of alerts) {
+          const alreadySent = existing.some(
+            (n) =>
+              n.type === 'limit_warning' &&
+              n.metadata?.kind === alert.kind &&
+              n.metadata?.periodStart === periodStart,
+          )
+          if (alreadySent) continue
+
+          await ctx.db.insert('notifications', {
+            tenantId: tenant._id,
+            clerkUserId: admin.clerkUserId,
+            type: 'limit_warning',
+            message: `Usage alert: your agency has reached its ${alert.kind} limit (${alert.usage} of ${alert.limit}).`,
+            metadata: {
+              kind: alert.kind,
+              limit: alert.limit,
+              usage: alert.usage,
+              periodStart,
+              periodEnd,
+            },
+            read: false,
+            createdAt: new Date().toISOString(),
+          })
+          notified += 1
+        }
+      }
+    }
+
+    return { notified }
+  },
+})
+
 const manualLineItemValidator = v.object({
   description: v.string(),
   quantity: v.number(),
   unitPrice: v.number(),
   amount: v.number(),
 })
+
+type CreatePlatformInvoiceResult =
+  | { ok: true; invoiceId: Id<'platformInvoices'>; invoiceNumber: string }
+  | { ok: false; duplicateInvoiceNumber: string }
+
+/**
+ * Shared invoice-creation core used by createPlatformInvoice (public) and
+ * createMonthlyPlatformInvoice (billing cron). Returns a duplicate result
+ * instead of throwing when a non-void invoice already exists for the same
+ * tenant + period, so cron re-runs stay idempotent.
+ */
+async function createPlatformInvoiceDoc(
+  ctx: MutationCtx,
+  args: {
+    tenantId: Id<'tenants'>
+    periodStart: string
+    periodEnd: string
+    dueDate: string
+    mode: 'auto' | 'manual'
+    lineItems?: Array<{
+      description: string
+      quantity: number
+      unitPrice: number
+      amount: number
+    }>
+    sendTo?: string[]
+    notes?: string
+    actorId: string
+  },
+): Promise<CreatePlatformInvoiceResult> {
+  // Idempotency: a non-void invoice already exists for the same period.
+  const existingInvoices = await ctx.db
+    .query('platformInvoices')
+    .withIndex('by_tenant', (q) => q.eq('tenantId', args.tenantId))
+    .collect()
+  const duplicate = existingInvoices.find(
+    (inv) =>
+      inv.status !== 'void' &&
+      inv.periodStart === args.periodStart &&
+      inv.periodEnd === args.periodEnd,
+  )
+  if (duplicate) {
+    return { ok: false, duplicateInvoiceNumber: duplicate.invoiceNumber }
+  }
+
+  let lineItems: Doc<'platformInvoices'>['lineItems']
+  if (args.mode === 'auto') {
+    const computed = await computeInvoiceLineItems(ctx, args.tenantId, {
+      start: args.periodStart,
+      end: args.periodEnd,
+    })
+    lineItems = computed.lineItems
+  } else {
+    if (!args.lineItems || args.lineItems.length === 0) {
+      throw new ConvexError(
+        'Manual mode requires a non-empty lineItems array.',
+      )
+    }
+    lineItems = args.lineItems.map((item) => ({
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      amount: round2(item.quantity * item.unitPrice),
+      source: 'manual' as const,
+    }))
+  }
+
+  const subtotal = round2(
+    lineItems.reduce((sum, item) => sum + item.amount, 0),
+  )
+  const total = subtotal
+  const invoiceNumber = await generateInvoiceNumber(ctx)
+  const now = new Date().toISOString()
+
+  const invoiceId = await ctx.db.insert('platformInvoices', {
+    tenantId: args.tenantId,
+    invoiceNumber,
+    periodStart: args.periodStart,
+    periodEnd: args.periodEnd,
+    dueDate: args.dueDate,
+    lineItems,
+    subtotal,
+    total,
+    status: 'draft',
+    sentTo: args.sendTo,
+    notes: args.notes,
+    createdBy: args.actorId,
+    createdAt: now,
+    updatedAt: now,
+  })
+
+  await ctx.db.insert('auditEvents', {
+    tenantId: args.tenantId,
+    actorId: args.actorId,
+    actorRole: 'platform_admin',
+    action: 'invoice_created',
+    kind: 'platform',
+    metadata: {
+      invoiceId: invoiceId as string,
+      invoiceNumber,
+      mode: args.mode,
+    },
+    createdAt: now,
+  })
+
+  return { ok: true, invoiceId, invoiceNumber }
+}
 
 export const createPlatformInvoice = mutation({
   args: {
@@ -1013,74 +1290,23 @@ export const createPlatformInvoice = mutation({
       throw new ConvexError('Tenant not found.')
     }
 
-    // Idempotency: reject when a non-void invoice already exists for the same
-    // tenant + period.
-    const existingInvoices = await ctx.db
-      .query('platformInvoices')
-      .withIndex('by_tenant', (q) => q.eq('tenantId', args.tenantId))
-      .collect()
-    const duplicate = existingInvoices.find(
-      (inv) =>
-        inv.status !== 'void' &&
-        inv.periodStart === args.periodStart &&
-        inv.periodEnd === args.periodEnd,
-    )
-    if (duplicate) {
-      throw new ConvexError(
-        `A non-void invoice already exists for this period (${duplicate.invoiceNumber}).`,
-      )
-    }
-
-    let lineItems: Doc<'platformInvoices'>['lineItems']
-    if (args.mode === 'auto') {
-      const computed = await computeInvoiceLineItems(ctx, args.tenantId)
-      lineItems = computed.lineItems
-    } else {
-      if (!args.lineItems || args.lineItems.length === 0) {
-        throw new ConvexError(
-          'Manual mode requires a non-empty lineItems array.',
-        )
-      }
-      lineItems = args.lineItems.map((item) => ({
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        amount: round2(item.quantity * item.unitPrice),
-        source: 'manual' as const,
-      }))
-    }
-
-    const subtotal = round2(
-      lineItems.reduce((sum, item) => sum + item.amount, 0),
-    )
-    const total = subtotal
-    const invoiceNumber = await generateInvoiceNumber(ctx)
-    const now = new Date().toISOString()
-
-    const invoiceId = await ctx.db.insert('platformInvoices', {
+    const result = await createPlatformInvoiceDoc(ctx, {
       tenantId: args.tenantId,
-      invoiceNumber,
       periodStart: args.periodStart,
       periodEnd: args.periodEnd,
       dueDate: args.dueDate,
-      lineItems,
-      subtotal,
-      total,
-      status: 'draft',
-      sentTo: args.sendTo,
+      mode: args.mode,
+      lineItems: args.lineItems,
+      sendTo: args.sendTo,
       notes: args.notes,
-      createdBy: identity.subject,
-      createdAt: now,
-      updatedAt: now,
+      actorId: identity.subject,
     })
-
-    await recordPlatformAudit(
-      ctx,
-      identity,
-      args.tenantId,
-      'invoice_created',
-      { invoiceId: invoiceId as string, invoiceNumber, mode: args.mode },
-    )
+    if (!result.ok) {
+      throw new ConvexError(
+        `A non-void invoice already exists for this period (${result.duplicateInvoiceNumber}).`,
+      )
+    }
+    const invoiceId = result.invoiceId
 
     if (args.sendImmediately) {
       const invoice = await ctx.db.get(invoiceId)
@@ -1114,6 +1340,140 @@ export const createPlatformInvoice = mutation({
     }
 
     return invoiceId
+  },
+})
+
+/**
+ * Monthly billing cron helper: creates the platform invoice for a tenant's
+ * current subscription period (mode 'auto') and then rolls the subscription
+ * forward to the next monthly period (contiguous: the new period starts
+ * where the billed one ends). Idempotent — returns null when a non-void
+ * invoice already exists for the period (period is NOT advanced then).
+ */
+export const createMonthlyPlatformInvoice = internalMutation({
+  args: {
+    tenantId: v.id('tenants'),
+    periodStart: v.string(),
+    periodEnd: v.string(),
+    dueDate: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const result = await createPlatformInvoiceDoc(ctx, {
+      tenantId: args.tenantId,
+      periodStart: args.periodStart,
+      periodEnd: args.periodEnd,
+      dueDate: args.dueDate,
+      mode: 'auto',
+      actorId: 'system',
+    })
+    if (!result.ok) {
+      return null
+    }
+
+    // Advance the subscription to the next monthly period so the next cron
+    // run bills the following month instead of hitting the duplicate-period
+    // guard forever. Only when the stored period still matches the billed
+    // one — a manual period change in between is never clobbered.
+    const subscription = await getTenantSubscriptionDoc(ctx, args.tenantId)
+    if (
+      subscription &&
+      subscription.currentPeriodStart === args.periodStart &&
+      subscription.currentPeriodEnd === args.periodEnd
+    ) {
+      const nextStart = new Date(args.periodEnd)
+      const nextEnd = new Date(
+        Date.UTC(
+          nextStart.getUTCFullYear(),
+          nextStart.getUTCMonth() + 1,
+          nextStart.getUTCDate(),
+        ),
+      )
+      await ctx.db.patch(subscription._id, {
+        currentPeriodStart: nextStart.toISOString(),
+        currentPeriodEnd: nextEnd.toISOString(),
+        renewsAt: nextEnd.toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+    }
+
+    return { invoiceId: result.invoiceId, invoiceNumber: result.invoiceNumber }
+  },
+})
+
+/**
+ * Monthly billing cron: active/trialing subscriptions whose current period
+ * has ended and is therefore due an invoice. Subscriptions already advanced
+ * to a still-running period are excluded, which keeps same-day cron re-runs
+ * idempotent.
+ */
+export const listBillableSubscriptions = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now()
+    const subscriptions = await ctx.db.query('tenantSubscriptions').collect()
+    return subscriptions.filter(
+      (sub) =>
+        (sub.status === 'active' || sub.status === 'trialing') &&
+        new Date(sub.currentPeriodEnd).getTime() <= now,
+    )
+  },
+})
+
+/**
+ * Monthly recurring billing (1st of the month, registered in crons.ts):
+ * creates each due subscription's platform invoice for its just-ended
+ * period — createMonthlyPlatformInvoice then rolls the subscription to the
+ * next monthly period, and listBillableSubscriptions only returns ended
+ * periods, so same-day re-runs skip already-billed subscriptions — then
+ * mirrors it to Stripe. createAndSendStripeInvoice auto-branches:
+ * charge_automatically when a default payment method exists, otherwise the
+ * existing send_invoice email flow. Per-tenant failures are logged and
+ * audited by the Stripe mirror, never abort the run.
+ */
+export const runMonthlyBilling = internalAction({
+  args: {},
+  handler: async (
+    ctx,
+  ): Promise<{ processed: number; created: number; skipped: number }> => {
+    const subscriptions: Array<Doc<'tenantSubscriptions'>> =
+      await ctx.runQuery(internal.platform.listBillableSubscriptions, {})
+    // Net-14: collection falls due two weeks after invoicing.
+    const dueDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10)
+    let created = 0
+    let skipped = 0
+    for (const subscription of subscriptions) {
+      try {
+        const invoice: {
+          invoiceId: Id<'platformInvoices'>
+          invoiceNumber: string
+        } | null = await ctx.runMutation(
+          internal.platform.createMonthlyPlatformInvoice,
+          {
+            tenantId: subscription.tenantId,
+            periodStart: subscription.currentPeriodStart,
+            periodEnd: subscription.currentPeriodEnd,
+            dueDate,
+          },
+        )
+        if (!invoice) {
+          skipped += 1
+          continue
+        }
+        created += 1
+        await ctx.runAction(
+          internal.platformStripe.createAndSendStripeInvoice,
+          { invoiceId: invoice.invoiceId },
+        )
+      } catch (err) {
+        console.warn(
+          `Monthly billing failed for tenant ${subscription.tenantId}:`,
+          err,
+        )
+      }
+    }
+    return { processed: subscriptions.length, created, skipped }
   },
 })
 
@@ -1417,6 +1777,9 @@ export const createTenantInternal = internalMutation({
     planKey: v.string(),
     billingEmails: v.array(v.string()),
     actorId: v.string(),
+    paymentMethodAllowed: v.optional(
+      v.union(v.literal('card'), v.literal('us_bank_account')),
+    ),
   },
   handler: async (ctx, args) => {
     const plan = await getPlanByKey(ctx, args.planKey)
@@ -1439,6 +1802,9 @@ export const createTenantInternal = internalMutation({
       slug: args.slug,
       ein: args.ein,
       address: args.address,
+      ...(args.paymentMethodAllowed
+        ? { paymentMethodAllowed: args.paymentMethodAllowed }
+        : {}),
       createdAt: now.toISOString(),
     })
 
@@ -1517,6 +1883,9 @@ export const createTenant = action({
     billingEmails: v.array(v.string()),
     ownerEmail: v.optional(v.string()),
     ownerDisplayName: v.optional(v.string()),
+    paymentMethodAllowed: v.optional(
+      v.union(v.literal('card'), v.literal('us_bank_account')),
+    ),
   },
   handler: async (ctx, args) => {
     const identity = await requirePlatformAdminAction(ctx)
@@ -1552,6 +1921,7 @@ export const createTenant = action({
         planKey,
         billingEmails: args.billingEmails,
         actorId: identity.subject,
+        paymentMethodAllowed: args.paymentMethodAllowed,
       },
     )
 
@@ -1570,6 +1940,7 @@ export const createTenant = action({
 
     // Auto-create Stripe customer. Use billing email or owner email.
     // Non-blocking: if it fails, the tenant is still usable.
+    let paymentSetupUrl: string | undefined
     const stripeEmail = args.billingEmails[0] ?? args.ownerEmail ?? ''
     if (stripeEmail) {
       try {
@@ -1587,6 +1958,30 @@ export const createTenant = action({
           action: 'stripe_customer_auto_created',
           metadata: { stripeCustomerId: customer.id },
         })
+
+        // One-time payment-setup link for the owner welcome email (Item 3).
+        // Best effort: a failure here never blocks agency creation — the
+        // link can be re-created later via createPaymentSetupSession.
+        try {
+          const session: { url: string } = await ctx.runAction(
+            internal.platformStripe.createPaymentSetupSessionInternal,
+            { tenantId },
+          )
+          paymentSetupUrl = session.url
+        } catch (err) {
+          console.warn('Failed to create payment setup session:', err)
+          await ctx.runMutation(
+            internal.platform.recordPlatformAuditInternal,
+            {
+              tenantId,
+              actorId: identity.subject,
+              action: 'payment_setup_session_failed',
+              metadata: {
+                error: err instanceof Error ? err.message : String(err),
+              },
+            },
+          )
+        }
       } catch (err) {
         // Log the failure as an audit event so it's visible in the platform admin
         await ctx.runMutation(internal.platform.recordPlatformAuditInternal, {
@@ -1612,6 +2007,9 @@ export const createTenant = action({
         displayName: args.ownerDisplayName || args.ownerEmail,
         role: 'org:admin',
         appBaseUrl: requireEnv('APP_URL'),
+        accountType: accountTypeLabel('org:admin'),
+        agencyName: args.name,
+        paymentSetupUrl,
       })
       await ctx.runMutation(internal.members.createManualMember, {
         clerkOrgId: org.id,
@@ -1690,51 +2088,14 @@ export const createUserForTenant = action({
     displayName: v.string(),
     role: tenantStaffRole,
   },
-  handler: async (ctx, args) => {
-    const identity = await requirePlatformAdminAction(ctx)
-    const secretKey = requireClerkSecretKey()
-
-    const tenant = await ctx.runQuery(internal.platform.getTenantInternal, {
-      tenantId: args.tenantId,
-    })
-    if (!tenant) {
-      throw new ConvexError('Tenant not found.')
-    }
-
-    // Creates the Clerk user, verifies their email, disables MFA, joins the
-    // org, and emails them a magic sign-in link + temporary password.
-    const result = await createClerkUserAndJoinOrg({
-      ctx: { scheduler: ctx.scheduler },
-      secretKey,
-      clerkOrgId: tenant.clerkOrgId,
-      emailAddress: args.email,
-      displayName: args.displayName,
-      role: args.role,
-      appBaseUrl: requireEnv('APP_URL'),
-    })
-    const clerkUserId = result.clerkUserId
-
-    await ctx.runMutation(internal.members.createManualMember, {
-      clerkOrgId: tenant.clerkOrgId,
-      clerkUserId,
-      role: args.role,
-      displayName: args.displayName,
-      email: args.email,
-    })
-
-    await ctx.runMutation(internal.platform.recordPlatformAuditInternal, {
-      tenantId: args.tenantId,
-      actorId: identity.subject,
-      action: 'tenant_user_created',
-      metadata: { clerkUserId, email: args.email, role: args.role },
-    })
-
-    return {
-      success: true,
-      clerkUserId,
-      signInUrl: result.magicLink,
-      tempPassword: result.initialPassword,
-    }
+  handler: async (ctx) => {
+    await requirePlatformAdminAction(ctx)
+    // Phase 3 (Maria's review): platform admins no longer manage agency
+    // users. Agency admins invite staff via invitations.create; the owner is
+    // created inside createTenant. This guard-throw (instead of deleting the
+    // action) makes stale callers fail loudly. ConvexError (not Error) so
+    // production clients see the message, not a generic "Server Error".
+    throw new ConvexError('Platform user management is disabled')
   },
 })
 
@@ -1743,28 +2104,10 @@ export const removeUserFromTenant = action({
     tenantId: v.id('tenants'),
     clerkUserId: v.string(),
   },
-  handler: async (ctx, args) => {
-    const identity = await requirePlatformAdminAction(ctx)
-
-    const tenant = await ctx.runQuery(internal.platform.getTenantInternal, {
-      tenantId: args.tenantId,
-    })
-    if (!tenant) {
-      throw new ConvexError('Tenant not found.')
-    }
-
-    await ctx.runAction(internal.candidates.removeClerkOrgMembership, {
-      clerkOrgId: tenant.clerkOrgId,
-      clerkUserId: args.clerkUserId,
-    })
-
-    await ctx.runMutation(internal.platform.removeTenantMemberInternal, {
-      tenantId: args.tenantId,
-      clerkUserId: args.clerkUserId,
-      actorId: identity.subject,
-    })
-
-    return { success: true }
+  handler: async (ctx) => {
+    await requirePlatformAdminAction(ctx)
+    // Disabled — see createUserForTenant.
+    throw new ConvexError('Platform user management is disabled')
   },
 })
 
@@ -1774,26 +2117,10 @@ export const updateTenantMemberRole = mutation({
     clerkUserId: v.string(),
     role: tenantStaffRole,
   },
-  handler: async (ctx, args) => {
-    const identity = await requirePlatformAdmin(ctx)
-    const existing = await ctx.db
-      .query('tenantMembers')
-      .withIndex('by_tenant_user', (q) =>
-        q.eq('tenantId', args.tenantId).eq('clerkUserId', args.clerkUserId),
-      )
-      .unique()
-    if (!existing) {
-      throw new ConvexError('Member not found.')
-    }
-    await ctx.db.patch(existing._id, { role: args.role })
-    await recordPlatformAudit(
-      ctx,
-      identity,
-      args.tenantId,
-      'tenant_member_role_updated',
-      { clerkUserId: args.clerkUserId, role: args.role },
-    )
-    return existing._id
+  handler: async (ctx) => {
+    await requirePlatformAdmin(ctx)
+    // Disabled — see createUserForTenant.
+    throw new ConvexError('Platform user management is disabled')
   },
 })
 

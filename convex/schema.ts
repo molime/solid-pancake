@@ -53,6 +53,14 @@ export default defineSchema({
         exportFormat: v.union(v.literal('csv'), v.literal('json')),
       }),
     ),
+    // Allowed payment method for the one-time Stripe setup link, chosen by
+    // the platform admin at agency creation (Phase 3 — Maria's review).
+    paymentMethodAllowed: v.optional(
+      v.union(v.literal('card'), v.literal('us_bank_account')),
+    ),
+    // Churn/offboarding metadata (soft — set by offboardTenant).
+    churnedAt: v.optional(v.number()),
+    churnReason: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index('by_clerk_org_id', ['clerkOrgId'])
@@ -661,6 +669,25 @@ export default defineSchema({
     includedSeats: v.number(),
     perSeatPrice: v.number(), // per seat above included
     active: v.boolean(),
+    // Pricing model — absent means 'flat' (legacy behavior).
+    model: v.optional(
+      v.union(v.literal('flat'), v.literal('per_item'), v.literal('tiered')),
+    ),
+    // Per billable-item rates (USD), used when model === 'per_item'.
+    perItemRates: v.optional(
+      v.object({
+        perCandidate: v.optional(v.number()),
+        perShift: v.optional(v.number()),
+        perApplication: v.optional(v.number()),
+      }),
+    ),
+    // Volume tiers by active seats, used when model === 'tiered'. Evaluated
+    // in order; first tier whose upTo >= seats wins.
+    tiers: v.optional(
+      v.array(v.object({ upTo: v.number(), monthlyPrice: v.number() })),
+    ),
+    // Optional soft alert threshold (active seats) — warning only, no block.
+    alertThreshold: v.optional(v.number()),
   }).index('by_key', ['key']),
 
   // Per-tenant platform subscription (one per tenant, keyed by tenantId).
@@ -680,6 +707,12 @@ export default defineSchema({
     renewsAt: v.optional(v.string()),
     trialEndsAt: v.optional(v.string()),
     stripeCustomerId: v.optional(v.string()), // Stripe customer ID (cus_xxx)
+    // Default Stripe payment method attached via the one-time setup link
+    // (pm_xxx). When present, monthly invoices auto-charge.
+    stripeDefaultPaymentMethod: v.optional(v.string()),
+    // Dunning state — set on invoice.payment_failed, cleared on invoice.paid.
+    pastDueSince: v.optional(v.number()),
+    graceUntil: v.optional(v.number()),
     createdAt: v.string(),
     updatedAt: v.string(),
   })
@@ -733,4 +766,38 @@ export default defineSchema({
     type: v.string(), // Stripe event type
     processedAt: v.string(),
   }).index('by_stripe_event_id', ['stripeEventId']),
+
+  // Agency support tickets (Phase 3 — Maria's review). Created by agency
+  // admins/coordinators; managed by platform admins in the Support section.
+  supportTickets: defineTable({
+    tenantId: v.id('tenants'),
+    createdByUserId: v.string(), // clerkUserId
+    createdByName: v.string(),
+    subject: v.string(),
+    description: v.string(),
+    category: v.union(
+      v.literal('billing'),
+      v.literal('technical'),
+      v.literal('account'),
+      v.literal('feature'),
+      v.literal('other'),
+    ),
+    priority: v.union(
+      v.literal('low'),
+      v.literal('normal'),
+      v.literal('high'),
+      v.literal('urgent'),
+    ),
+    status: v.union(
+      v.literal('open'),
+      v.literal('in_progress'),
+      v.literal('resolved'),
+      v.literal('closed'),
+    ),
+    platformNotes: v.optional(v.string()),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index('by_tenant', ['tenantId'])
+    .index('by_status', ['status']),
 })

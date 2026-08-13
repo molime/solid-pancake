@@ -11,6 +11,15 @@ import { api, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import { toStripeInvoiceItems } from './platformBilling'
 import { buildInvoiceEmailHtml, buildInvoicePdf } from './platform'
+import { requireEnv } from './_utils/env'
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
 
 /**
  * Platform-admin guard for public actions. Mirrors requirePlatformAdmin in
@@ -66,6 +75,8 @@ export const getTenantBillingInternal = internalQuery({
       tenantName: tenant?.name ?? 'Agency',
       billingEmails: subscription?.billingEmails ?? [],
       stripeCustomerId: subscription?.stripeCustomerId ?? null,
+      stripeDefaultPaymentMethod:
+        subscription?.stripeDefaultPaymentMethod ?? null,
     }
   },
 })
@@ -211,6 +222,20 @@ export const applyStripeInvoicePaid = internalMutation({
       ...(args.paymentMethod ? { paymentMethod: args.paymentMethod } : {}),
       updatedAt: now,
     })
+    // Recovery: a paid invoice exits the dunning state — restore the
+    // subscription to active and clear the grace-period dates.
+    const subscription = await ctx.db
+      .query('tenantSubscriptions')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', invoice.tenantId))
+      .unique()
+    if (subscription?.status === 'past_due') {
+      await ctx.db.patch(subscription._id, {
+        status: 'active',
+        pastDueSince: undefined,
+        graceUntil: undefined,
+        updatedAt: now,
+      })
+    }
     await ctx.db.insert('auditEvents', {
       tenantId: invoice.tenantId,
       actorId: 'stripe_webhook',
@@ -225,6 +250,182 @@ export const applyStripeInvoicePaid = internalMutation({
       createdAt: now,
     })
     return invoice._id
+  },
+})
+
+/**
+ * Webhook: invoice.payment_failed — enter the dunning state. The platform
+ * invoice goes 'overdue'; the subscription goes 'past_due' with a 7-day
+ * grace window. Repeated failures recompute the dates (never stack). A
+ * failure notice email is scheduled for the tenant's billing contacts.
+ */
+export const applyStripeInvoiceFailed = internalMutation({
+  args: { stripeInvoiceId: v.string() },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db
+      .query('platformInvoices')
+      .withIndex('by_stripe_invoice_id', (q) =>
+        q.eq('stripeInvoiceId', args.stripeInvoiceId),
+      )
+      .unique()
+    if (!invoice) {
+      return null
+    }
+    // Out-of-order webhook guard: a redelivered invoice.payment_failed that
+    // arrives after invoice.paid must not re-dun the already-paid invoice —
+    // no overdue flip, no past_due regression, no spurious failure email.
+    if (invoice.status === 'paid') {
+      return null
+    }
+    const now = Date.now()
+    const nowIso = new Date(now).toISOString()
+    if (invoice.status !== 'void') {
+      await ctx.db.patch(invoice._id, {
+        status: 'overdue',
+        updatedAt: nowIso,
+      })
+    }
+    // past_due is entered from active/trialing; repeat failures while already
+    // past_due recompute the grace window (never stack on top of it).
+    const subscription = await ctx.db
+      .query('tenantSubscriptions')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', invoice.tenantId))
+      .unique()
+    const alreadyPastDue = subscription?.status === 'past_due'
+    if (
+      subscription &&
+      (subscription.status === 'active' ||
+        subscription.status === 'trialing' ||
+        subscription.status === 'past_due')
+    ) {
+      await ctx.db.patch(subscription._id, {
+        status: 'past_due',
+        pastDueSince: now,
+        graceUntil: now + 7 * 24 * 60 * 60 * 1000,
+        updatedAt: nowIso,
+      })
+    }
+    await ctx.db.insert('auditEvents', {
+      tenantId: invoice.tenantId,
+      actorId: 'stripe_webhook',
+      actorRole: 'platform_admin',
+      action: 'invoice_payment_failed',
+      kind: 'platform',
+      metadata: {
+        invoiceId: invoice._id as string,
+        invoiceNumber: invoice.invoiceNumber,
+        source: 'stripe_webhook',
+      },
+      createdAt: nowIso,
+    })
+    // Failure email only on the transition into past_due — Stripe retries
+    // re-deliver invoice.payment_failed and the agency should not be emailed
+    // once per retry.
+    if (!alreadyPastDue) {
+      try {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.platformStripe.sendPaymentFailedEmail,
+          {
+            tenantId: invoice.tenantId,
+            invoiceNumber: invoice.invoiceNumber,
+          },
+        )
+      } catch (err) {
+        console.warn('Failed to schedule payment-failed email:', err)
+      }
+    }
+    return invoice._id
+  },
+})
+
+/**
+ * Dunning email: notifies the tenant's billing contacts that a charge failed.
+ * Carries only the agency name + invoice number — no PHI. No-ops when
+ * EMAIL_ENABLED !== 'true' (resend.sendEmail handles the gate).
+ */
+export const sendPaymentFailedEmail = internalAction({
+  args: {
+    tenantId: v.id('tenants'),
+    invoiceNumber: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const billing = await ctx.runQuery(
+      internal.platformStripe.getTenantBillingInternal,
+      { tenantId: args.tenantId },
+    )
+    if (billing.billingEmails.length === 0) {
+      console.warn(
+        `No billing emails for tenant ${args.tenantId}; skipping payment-failed email.`,
+      )
+      return { skipped: true }
+    }
+    const subject = `Payment failed for invoice ${args.invoiceNumber}`
+    const html =
+      `<p>Hi ${escapeHtml(billing.tenantName)},</p>` +
+      `<p>We could not collect payment for invoice <strong>${escapeHtml(args.invoiceNumber)}</strong>. ` +
+      `We will retry automatically over the next few days. To avoid service interruption, ` +
+      `please check that your payment method on file is up to date.</p>` +
+      `<p>— ATRIA-X Platform Billing</p>`
+    for (const to of billing.billingEmails) {
+      try {
+        await ctx.runAction(internal._utils.resend.sendEmail, {
+          to,
+          subject,
+          html,
+        })
+      } catch (err) {
+        console.warn(`Failed to send payment-failed email to ${to}:`, err)
+      }
+    }
+    return { skipped: false }
+  },
+})
+
+/**
+ * Webhook: checkout.session.completed (setup mode) — persist the payment
+ * method the owner just attached as the subscription's default. Looks the
+ * subscription up by Stripe customer id; re-attaching the same method is a
+ * no-op (webhook replay safe).
+ */
+export const saveStripeDefaultPaymentMethod = internalMutation({
+  args: {
+    stripeCustomerId: v.string(),
+    paymentMethodId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const subscriptions = await ctx.db.query('tenantSubscriptions').collect()
+    const subscription = subscriptions.find(
+      (sub) => sub.stripeCustomerId === args.stripeCustomerId,
+    )
+    if (!subscription) {
+      console.warn(
+        `No subscription found for Stripe customer ${args.stripeCustomerId}.`,
+      )
+      return null
+    }
+    if (subscription.stripeDefaultPaymentMethod === args.paymentMethodId) {
+      return subscription._id
+    }
+    const now = new Date().toISOString()
+    await ctx.db.patch(subscription._id, {
+      stripeDefaultPaymentMethod: args.paymentMethodId,
+      updatedAt: now,
+    })
+    await ctx.db.insert('auditEvents', {
+      tenantId: subscription.tenantId,
+      actorId: 'stripe_webhook',
+      actorRole: 'platform_admin',
+      action: 'payment_method_attached',
+      kind: 'platform',
+      metadata: {
+        stripeCustomerId: args.stripeCustomerId,
+        paymentMethodId: args.paymentMethodId,
+        source: 'stripe_webhook',
+      },
+      createdAt: now,
+    })
+    return subscription._id
   },
 })
 
@@ -301,22 +502,36 @@ export const createAndSendStripeInvoice = internalAction({
         })
       }
 
+      // Tenants with a default payment method on file auto-charge on
+      // finalize (zero manual collection); everyone else keeps the
+      // send_invoice email flow.
+      const autoCharge = billing.stripeDefaultPaymentMethod !== null
       const stripeInvoice: { id: string } = await ctx.runAction(
         internal._utils.stripe.createStripeInvoice,
         {
           customerId: stripeCustomerId,
           dueDate: invoice.dueDate,
           lineItems: toStripeInvoiceItems(invoice.lineItems),
+          ...(autoCharge
+            ? {
+                collectionMethod: 'charge_automatically' as const,
+                defaultPaymentMethod:
+                  billing.stripeDefaultPaymentMethod ?? undefined,
+              }
+            : {}),
         },
       )
       const finalized: { hostedInvoiceUrl: string | null } =
         await ctx.runAction(internal._utils.stripe.finalizeStripeInvoice, {
           invoiceId: stripeInvoice.id,
         })
-      const sent: { hostedInvoiceUrl: string | null } = await ctx.runAction(
-        internal._utils.stripe.sendStripeInvoice,
-        { invoiceId: stripeInvoice.id },
-      )
+      // charge_automatically invoices are charged by Stripe on finalize;
+      // /send only applies to the send_invoice flow.
+      const sent: { hostedInvoiceUrl: string | null } = autoCharge
+        ? { hostedInvoiceUrl: null }
+        : await ctx.runAction(internal._utils.stripe.sendStripeInvoice, {
+            invoiceId: stripeInvoice.id,
+          })
 
       await ctx.runMutation(internal.platformStripe.saveStripeInvoiceRefs, {
         invoiceId: args.invoiceId,
@@ -461,6 +676,61 @@ export const voidStripeInvoiceInternal = internalAction({
       )
       return { skipped: true }
     }
+  },
+})
+
+/**
+ * Shared internals for the one-time payment-setup link: builds a hosted
+ * Stripe Checkout Session (mode=setup) for the tenant's Stripe customer,
+ * restricted to exactly the tenant's allowed payment method. Stripe errors
+ * (e.g. ACH not enabled on the account) propagate to the caller.
+ */
+export const createPaymentSetupSessionInternal = internalAction({
+  args: { tenantId: v.id('tenants') },
+  handler: async (ctx, args): Promise<{ url: string }> => {
+    const tenant = await ctx.runQuery(internal.platform.getTenantInternal, {
+      tenantId: args.tenantId,
+    })
+    if (!tenant) {
+      throw new Error('Tenant not found.')
+    }
+    const billing = await ctx.runQuery(
+      internal.platformStripe.getTenantBillingInternal,
+      { tenantId: args.tenantId },
+    )
+    if (!billing.stripeCustomerId) {
+      throw new Error('Tenant has no Stripe customer.')
+    }
+    const appUrl = requireEnv('APP_URL')
+    const session: { url: string } = await ctx.runAction(
+      internal._utils.stripe.createCheckoutSession,
+      {
+        customerId: billing.stripeCustomerId,
+        paymentMethodAllowed: tenant.paymentMethodAllowed ?? 'card',
+        successUrl: `${appUrl}/?payment_setup=success`,
+        cancelUrl: `${appUrl}/?payment_setup=cancelled`,
+      },
+    )
+    return { url: session.url }
+  },
+})
+
+/** Create a one-time payment-setup link for a tenant (platform admin). */
+export const createPaymentSetupSession = action({
+  args: { tenantId: v.id('tenants') },
+  handler: async (ctx, args): Promise<{ url: string }> => {
+    const identity = await requirePlatformAdminAction(ctx)
+    const result: { url: string } = await ctx.runAction(
+      internal.platformStripe.createPaymentSetupSessionInternal,
+      { tenantId: args.tenantId },
+    )
+    await ctx.runMutation(internal.platformStripe.recordStripeAudit, {
+      tenantId: args.tenantId,
+      actorId: identity.subject,
+      action: 'payment_setup_link_created',
+      metadata: {},
+    })
+    return result
   },
 })
 

@@ -40,6 +40,11 @@ const NotificationsPage = lazy(() =>
     }),
   ),
 )
+const SupportPage = lazy(() =>
+  import('@/features/support/SupportPage').then((module) => ({
+    default: module.SupportPage,
+  })),
+)
 const CaregiverTodayPage = lazy(() =>
   import('@/features/caregiver/pages/CaregiverTodayPage').then((module) => ({
     default: module.CaregiverTodayPage,
@@ -630,6 +635,18 @@ export function AppRouter() {
             >
               <RouteSuspense>
                 <NotificationsPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="support"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator']}
+            >
+              <RouteSuspense>
+                <SupportPage />
               </RouteSuspense>
             </TenantRoleRouteGuard>
           }

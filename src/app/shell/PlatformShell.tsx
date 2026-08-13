@@ -3,26 +3,8 @@ import { SignedInRouteGuard } from './RouteGuard'
 import { useUser, useClerk } from '@clerk/react'
 import { clearSessionData } from '@/shared/lib/clearSession'
 import { cn } from '@/shared/lib/cn'
-import {
-  CreditCard,
-  FileText,
-  HeartPulse,
-  Building2,
-  BarChart3,
-  LifeBuoy,
-  LogOut,
-  ScrollText,
-} from 'lucide-react'
-
-const NAV_ITEMS = [
-  { to: '/platform/subscriptions', label: 'Subscriptions', icon: CreditCard },
-  { to: '/platform/agencies', label: 'Agencies', icon: Building2 },
-  { to: '/platform/health', label: 'Tenant Health', icon: HeartPulse },
-  { to: '/platform/reports', label: 'Reports', icon: BarChart3 },
-  { to: '/platform/support', label: 'Support Access', icon: LifeBuoy },
-  { to: '/platform/audit', label: 'Audit Log', icon: ScrollText },
-  { to: '/platform/billing', label: 'Billing', icon: FileText },
-]
+import { LogOut } from 'lucide-react'
+import { NAV_ITEMS } from './platformNavItems'
 
 function Wordmark() {
   return (

@@ -47,6 +47,19 @@ function roleLabel(role: string) {
   return MEMBER_ROLES.find((r) => r.value === role)?.label ?? role
 }
 
+type PlanModel = 'flat' | 'per_item' | 'tiered'
+
+interface TierRow {
+  upTo: string
+  monthlyPrice: string
+}
+
+function parseOptionalNumber(value: string): number | undefined {
+  if (!value.trim()) return undefined
+  const num = Number(value)
+  return Number.isNaN(num) || num < 0 ? undefined : num
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between py-2">
@@ -160,9 +173,8 @@ function PlatformAgencyDetailContent() {
   const updateTenantInfo = useMutation(api.platform.updateTenantInfo)
   const setTenantCustomRate = useMutation(api.platform.setTenantCustomRate)
   const setTenantLimits = useMutation(api.platform.setTenantLimits)
-  const updateTenantMemberRole = useMutation(api.platform.updateTenantMemberRole)
-  const createUserForTenant = useAction(api.platform.createUserForTenant)
-  const removeUserFromTenant = useAction(api.platform.removeUserFromTenant)
+  const offboardTenant = useMutation(api.platform.offboardTenant)
+  const upsertPricingPlan = useMutation(api.platform.upsertPricingPlan)
   const createStripeCustomerForTenant = useAction(
     api.platformStripe.createStripeCustomerForTenant,
   )
@@ -182,18 +194,15 @@ function PlatformAgencyDetailContent() {
   const [maxSeatsInput, setMaxSeatsInput] = useState('')
   const [maxCandidatesInput, setMaxCandidatesInput] = useState('')
   const [maxShiftsInput, setMaxShiftsInput] = useState('')
-  const [addUserDialogOpen, setAddUserDialogOpen] = useState(false)
-  const [newUserEmail, setNewUserEmail] = useState('')
-  const [newUserName, setNewUserName] = useState('')
-  const [newUserRole, setNewUserRole] = useState<string>('org:caregiver')
-  const [userCreated, setUserCreated] = useState<{
-    email: string
-    signInUrl: string
-  } | null>(null)
-  const [removeTarget, setRemoveTarget] = useState<{
-    clerkUserId: string
-    displayName: string
-  } | null>(null)
+  const [offboardDialogOpen, setOffboardDialogOpen] = useState(false)
+  const [offboardReason, setOffboardReason] = useState('')
+  const [planPricingDialogOpen, setPlanPricingDialogOpen] = useState(false)
+  const [planModelInput, setPlanModelInput] = useState<PlanModel>('flat')
+  const [perCandidateRate, setPerCandidateRate] = useState('')
+  const [perShiftRate, setPerShiftRate] = useState('')
+  const [perApplicationRate, setPerApplicationRate] = useState('')
+  const [tierRows, setTierRows] = useState<TierRow[]>([])
+  const [alertThresholdInput, setAlertThresholdInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -203,6 +212,9 @@ function PlatformAgencyDetailContent() {
   const customRate = detail?.tenant.customMonthlyRate ?? null
   const limits = detail?.tenant.limits ?? null
   const mrr = customRate ?? plan?.basePrice ?? 0
+  // Read-only owner contact: the first org:admin member is the agency owner
+  // created by createTenant. Platform user management is disabled (Item 4).
+  const owner = members?.find((member) => member.role === 'org:admin') ?? null
 
   // Keep the custom rate and limits inputs in sync with server state by
   // adjusting state during render (avoids setState-in-effect).
@@ -410,79 +422,113 @@ function PlatformAgencyDetailContent() {
     }
   }
 
-  const handleAddUser = async () => {
-    if (!tenantId || !newUserEmail.trim() || !newUserName.trim()) {
-      setError('Email and name are required.')
+  const handleOffboard = async () => {
+    if (!tenantId) return
+    setBusy(true)
+    setError('')
+    try {
+      await offboardTenant({
+        tenantId: typedTenantId,
+        reason: offboardReason.trim() || undefined,
+      })
+      setOffboardDialogOpen(false)
+      setOffboardReason('')
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Failed to offboard agency.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const openPlanPricingDialog = () => {
+    if (!plan) return
+    setPlanModelInput(plan.model ?? 'flat')
+    setPerCandidateRate(
+      plan.perItemRates?.perCandidate !== undefined
+        ? String(plan.perItemRates.perCandidate)
+        : '',
+    )
+    setPerShiftRate(
+      plan.perItemRates?.perShift !== undefined
+        ? String(plan.perItemRates.perShift)
+        : '',
+    )
+    setPerApplicationRate(
+      plan.perItemRates?.perApplication !== undefined
+        ? String(plan.perItemRates.perApplication)
+        : '',
+    )
+    setTierRows(
+      plan.tiers && plan.tiers.length > 0
+        ? plan.tiers.map((tier) => ({
+            upTo: String(tier.upTo),
+            monthlyPrice: String(tier.monthlyPrice),
+          }))
+        : [{ upTo: '', monthlyPrice: '' }],
+    )
+    setAlertThresholdInput(
+      plan.alertThreshold !== undefined ? String(plan.alertThreshold) : '',
+    )
+    setError('')
+    setPlanPricingDialogOpen(true)
+  }
+
+  const handleSavePlanPricing = async () => {
+    if (!plan) return
+    const alertThreshold = parseOptionalNumber(alertThresholdInput)
+    if (alertThresholdInput.trim() && alertThreshold === undefined) {
+      setError('Enter a valid alert threshold (seats).')
+      return
+    }
+    const tiers = tierRows
+      .map((row) => ({
+        upTo: parseOptionalNumber(row.upTo),
+        monthlyPrice: parseOptionalNumber(row.monthlyPrice),
+      }))
+      .filter(
+        (row): row is { upTo: number; monthlyPrice: number } =>
+          row.upTo !== undefined && row.monthlyPrice !== undefined,
+      )
+    if (planModelInput === 'tiered' && tiers.length === 0) {
+      setError('Add at least one tier (seats up to + monthly price).')
       return
     }
     setBusy(true)
     setError('')
     try {
-      const result = await createUserForTenant({
-        tenantId: typedTenantId,
-        email: newUserEmail.trim(),
-        displayName: newUserName.trim(),
-        role: newUserRole as
-          | 'org:admin'
-          | 'org:coordinator'
-          | 'org:hr'
-          | 'org:caregiver',
+      const perItemRates = {
+        perCandidate: parseOptionalNumber(perCandidateRate),
+        perShift: parseOptionalNumber(perShiftRate),
+        perApplication: parseOptionalNumber(perApplicationRate),
+      }
+      await upsertPricingPlan({
+        key: plan.key,
+        label: plan.label,
+        basePrice: plan.basePrice,
+        includedSeats: plan.includedSeats,
+        perSeatPrice: plan.perSeatPrice,
+        active: plan.active,
+        model: planModelInput,
+        ...(planModelInput === 'per_item' &&
+        Object.values(perItemRates).some((rate) => rate !== undefined)
+          ? { perItemRates }
+          : {}),
+        ...(planModelInput === 'tiered' ? { tiers } : {}),
+        ...(alertThreshold !== undefined ? { alertThreshold } : {}),
       })
-      setUserCreated({
-        email: newUserEmail.trim(),
-        signInUrl: result.signInUrl,
-      })
-      setAddUserDialogOpen(false)
-      setNewUserEmail('')
-      setNewUserName('')
-      setNewUserRole('org:caregiver')
+      setPlanPricingDialogOpen(false)
     } catch (err) {
       setError(
         err instanceof Error
           ? sanitizeConvexError(err.message)
-          : 'Failed to add user.',
+          : 'Failed to save plan pricing.',
       )
     } finally {
       setBusy(false)
-    }
-  }
-
-  const handleRemoveUser = async () => {
-    if (!tenantId || !removeTarget) return
-    setBusy(true)
-    setError('')
-    try {
-      await removeUserFromTenant({
-        tenantId: typedTenantId,
-        clerkUserId: removeTarget.clerkUserId,
-      })
-      setRemoveTarget(null)
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? sanitizeConvexError(err.message)
-          : 'Failed to remove user.',
-      )
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const handleChangeRole = async (clerkUserId: string, role: string) => {
-    if (!tenantId) return
-    setError('')
-    try {
-      await updateTenantMemberRole({
-        tenantId: typedTenantId,
-        clerkUserId,
-        role: role as 'org:admin' | 'org:coordinator' | 'org:hr' | 'org:caregiver',
-      })
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? sanitizeConvexError(err.message)
-          : 'Failed to change role.',
-      )
     }
   }
 
@@ -512,10 +558,36 @@ function PlatformAgencyDetailContent() {
                 </p>
               </div>
               <PlatformStatusPill status={subscription?.status ?? 'none'} />
+              {detail.tenant.churnedAt !== undefined && (
+                <PlatformStatusPill status="churned" />
+              )}
               <button onClick={openEditDialog} className={ghostButtonClass}>
                 Edit Info
               </button>
+              {detail.tenant.churnedAt === undefined && (
+                <button
+                  onClick={() => {
+                    setOffboardReason('')
+                    setError('')
+                    setOffboardDialogOpen(true)
+                  }}
+                  className={dangerButtonClass}
+                >
+                  Offboard agency
+                </button>
+              )}
             </div>
+
+            {detail.tenant.churnedAt !== undefined && (
+              <div className="rounded-2xl border border-[#2a3437] bg-[#151b1d] p-4 text-sm text-[#9aa6a8]">
+                <span className="font-semibold text-[#f5f7f6]">
+                  Churned {formatDateUS(new Date(detail.tenant.churnedAt))}.
+                </span>{' '}
+                {detail.tenant.churnReason
+                  ? `Reason: ${detail.tenant.churnReason}`
+                  : 'No churn reason recorded.'}
+              </div>
+            )}
 
             {error && <p className="text-sm text-[#ef4444]">{error}</p>}
 
@@ -553,6 +625,18 @@ function PlatformAgencyDetailContent() {
                     value={plan ? formatCurrency(plan.basePrice) : '—'}
                   />
                   <DetailRow
+                    label="Pricing model"
+                    value={
+                      plan
+                        ? plan.model === 'per_item'
+                          ? 'Per item'
+                          : plan.model === 'tiered'
+                            ? 'Tiered'
+                            : 'Flat'
+                        : '—'
+                    }
+                  />
+                  <DetailRow
                     label="Current period start"
                     value={
                       formatDateUS(subscription?.currentPeriodStart) || '—'
@@ -578,6 +662,13 @@ function PlatformAgencyDetailContent() {
                 <div className="mt-4 flex flex-wrap gap-3 border-t border-[#2a3437] pt-4">
                   <button onClick={openPlanDialog} className={primaryButtonClass}>
                     Change plan
+                  </button>
+                  <button
+                    onClick={openPlanPricingDialog}
+                    disabled={!plan}
+                    className={ghostButtonClass}
+                  >
+                    Edit plan pricing
                   </button>
                   {subscription?.status === 'suspended' ? (
                     <button
@@ -725,91 +816,25 @@ function PlatformAgencyDetailContent() {
               </div>
             </div>
 
-            <div>
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-[#f5f7f6]">Users</h2>
-                <button
-                  onClick={() => {
-                    setError('')
-                    setUserCreated(null)
-                    setAddUserDialogOpen(true)
-                  }}
-                  className={primaryButtonClass}
-                >
-                  Add User
-                </button>
-              </div>
-              {userCreated && (
-                <div className="mb-3 rounded-2xl border border-[#2a3437] bg-[#151b1d] p-4 text-sm text-[#f5f7f6]">
-                  <p>
-                    User created. An invite email has been sent to{' '}
-                    {userCreated.email}.
-                  </p>
-                  <p className="mt-1 break-all text-[#9aa6a8]">
-                    Sign-in link: {userCreated.signInUrl}
-                  </p>
-                </div>
-              )}
+            <div className={cardClass}>
+              <h2 className="text-lg font-bold text-[#f5f7f6]">
+                Agency Owner
+              </h2>
+              <p className="mt-2 text-sm text-[#9aa6a8]">
+                Read-only. User management is handled by the agency itself.
+              </p>
               {!members ? (
-                <p className="rounded-2xl border border-[#2a3437] bg-[#151b1d] py-12 text-center text-sm text-[#9aa6a8]">
-                  Loading users…
-                </p>
-              ) : members.length === 0 ? (
-                <p className="rounded-2xl border border-[#2a3437] bg-[#151b1d] py-12 text-center text-sm text-[#9aa6a8]">
-                  No users yet.
+                <p className="mt-3 text-sm text-[#9aa6a8]">Loading owner…</p>
+              ) : !owner ? (
+                <p className="mt-3 text-sm text-[#9aa6a8]">
+                  No owner record found.
                 </p>
               ) : (
-                <PlatformTable>
-                  <PlatformTableHead>
-                    <PlatformTableHeader>Name</PlatformTableHeader>
-                    <PlatformTableHeader>Email</PlatformTableHeader>
-                    <PlatformTableHeader>Role</PlatformTableHeader>
-                    <PlatformTableHeader />
-                  </PlatformTableHead>
-                  <PlatformTableBody>
-                    {members.map((member) => (
-                      <PlatformTableRow key={member.clerkUserId}>
-                        <PlatformTableCell className="font-medium">
-                          {member.displayName}
-                        </PlatformTableCell>
-                        <PlatformTableCell className="text-[#9aa6a8]">
-                          {member.email}
-                        </PlatformTableCell>
-                        <PlatformTableCell>
-                          <span className="mr-3 inline-flex items-center rounded-[15px] bg-[rgba(59,130,246,0.16)] px-3 py-1 text-[13px] font-semibold text-[#3b82f6]">
-                            {roleLabel(member.role)}
-                          </span>
-                          <select
-                            value={member.role}
-                            onChange={(e) =>
-                              handleChangeRole(member.clerkUserId, e.target.value)
-                            }
-                            className="rounded-lg border border-[#2a3437] bg-[#1e2629] px-2 py-1 text-sm text-[#f5f7f6] outline-none focus:border-[#22c55e]"
-                          >
-                            {MEMBER_ROLES.map((role) => (
-                              <option key={role.value} value={role.value}>
-                                {role.label}
-                              </option>
-                            ))}
-                          </select>
-                        </PlatformTableCell>
-                        <PlatformTableCell>
-                          <button
-                            onClick={() =>
-                              setRemoveTarget({
-                                clerkUserId: member.clerkUserId,
-                                displayName: member.displayName,
-                              })
-                            }
-                            className="text-sm font-medium text-[#ef4444] hover:underline"
-                          >
-                            Remove
-                          </button>
-                        </PlatformTableCell>
-                      </PlatformTableRow>
-                    ))}
-                  </PlatformTableBody>
-                </PlatformTable>
+                <div className="mt-3 divide-y divide-[#2a3437]">
+                  <DetailRow label="Name" value={owner.displayName} />
+                  <DetailRow label="Email" value={owner.email} />
+                  <DetailRow label="Role" value={roleLabel(owner.role)} />
+                </div>
               )}
             </div>
 
@@ -1033,94 +1058,203 @@ function PlatformAgencyDetailContent() {
         </Dialog>
 
         <Dialog
-          open={addUserDialogOpen}
-          onClose={() => setAddUserDialogOpen(false)}
+          open={offboardDialogOpen}
+          onClose={() => setOffboardDialogOpen(false)}
           className="border-[#2a3437] bg-[#151b1d]"
         >
           <div className="border-b border-[#2a3437] px-6 py-5">
-            <h3 className="text-lg font-bold text-[#f5f7f6]">Add user</h3>
+            <h3 className="text-lg font-bold text-[#f5f7f6]">
+              Offboard agency
+            </h3>
           </div>
           <div className="space-y-4 p-6">
+            <p className="text-[15px] text-[#9aa6a8]">
+              Offboard {detail?.tenant.name ?? 'this agency'}? The agency will
+              be marked as churned and its subscription canceled. The record
+              is kept for reporting.
+            </p>
             <div>
-              <label className={labelClass}>Email</label>
-              <input
-                value={newUserEmail}
-                onChange={(e) => setNewUserEmail(e.target.value)}
-                placeholder="user@agency.com"
+              <label className={labelClass}>Churn reason (optional)</label>
+              <textarea
+                value={offboardReason}
+                onChange={(e) => setOffboardReason(e.target.value)}
+                rows={3}
+                placeholder="Why is this agency leaving?"
                 className={inputClass}
               />
-            </div>
-            <div>
-              <label className={labelClass}>Name</label>
-              <input
-                value={newUserName}
-                onChange={(e) => setNewUserName(e.target.value)}
-                placeholder="Jane Doe"
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Role</label>
-              <select
-                value={newUserRole}
-                onChange={(e) => setNewUserRole(e.target.value)}
-                className={inputClass}
-              >
-                {MEMBER_ROLES.map((role) => (
-                  <option key={role.value} value={role.value}>
-                    {role.label}
-                  </option>
-                ))}
-              </select>
             </div>
             {error && <p className="text-sm text-[#ef4444]">{error}</p>}
           </div>
           <div className="flex justify-end gap-2 border-t border-[#2a3437] px-6 py-5">
             <button
-              onClick={() => setAddUserDialogOpen(false)}
+              onClick={() => setOffboardDialogOpen(false)}
               className={ghostButtonClass}
             >
               Cancel
             </button>
             <button
-              onClick={handleAddUser}
-              disabled={busy || !newUserEmail.trim() || !newUserName.trim()}
-              className={primaryButtonClass}
+              onClick={handleOffboard}
+              disabled={busy}
+              className={dangerButtonClass}
             >
-              {busy ? 'Adding…' : 'Add User'}
+              {busy ? 'Working…' : 'Offboard agency'}
             </button>
           </div>
         </Dialog>
 
         <Dialog
-          open={removeTarget !== null}
-          onClose={() => setRemoveTarget(null)}
+          open={planPricingDialogOpen}
+          onClose={() => setPlanPricingDialogOpen(false)}
           className="border-[#2a3437] bg-[#151b1d]"
         >
           <div className="border-b border-[#2a3437] px-6 py-5">
-            <h3 className="text-lg font-bold text-[#f5f7f6]">Remove user</h3>
+            <h3 className="text-lg font-bold text-[#f5f7f6]">
+              Edit plan pricing — {plan?.label ?? ''}
+            </h3>
           </div>
-          <div className="p-6">
-            <p className="text-[15px] text-[#9aa6a8]">
-              Remove {removeTarget?.displayName ?? 'this user'} from{' '}
-              {detail?.tenant.name ?? 'this agency'}? Their access will be
-              revoked immediately.
+          <div className="space-y-4 overflow-y-auto p-6">
+            <p className="text-sm text-[#9aa6a8]">
+              Changes apply to the plan itself and affect every agency on it.
             </p>
-            {error && <p className="mt-3 text-sm text-[#ef4444]">{error}</p>}
+            <div>
+              <label className={labelClass}>Pricing model</label>
+              <select
+                value={planModelInput}
+                onChange={(e) => setPlanModelInput(e.target.value as PlanModel)}
+                className={inputClass}
+              >
+                <option value="flat">Flat monthly fee</option>
+                <option value="per_item">Per item (usage-based)</option>
+                <option value="tiered">Tiered by seats</option>
+              </select>
+            </div>
+
+            {planModelInput === 'per_item' && (
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <label className={labelClass}>Per candidate (USD)</label>
+                  <input
+                    value={perCandidateRate}
+                    onChange={(e) => setPerCandidateRate(e.target.value)}
+                    placeholder="Optional"
+                    inputMode="decimal"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Per shift (USD)</label>
+                  <input
+                    value={perShiftRate}
+                    onChange={(e) => setPerShiftRate(e.target.value)}
+                    placeholder="Optional"
+                    inputMode="decimal"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Per application (USD)</label>
+                  <input
+                    value={perApplicationRate}
+                    onChange={(e) => setPerApplicationRate(e.target.value)}
+                    placeholder="Optional"
+                    inputMode="decimal"
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+            )}
+
+            {planModelInput === 'tiered' && (
+              <div>
+                <label className={labelClass}>Tiers</label>
+                <div className="space-y-2">
+                  {tierRows.map((row, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <input
+                        value={row.upTo}
+                        onChange={(e) =>
+                          setTierRows((rows) =>
+                            rows.map((r, i) =>
+                              i === index ? { ...r, upTo: e.target.value } : r,
+                            ),
+                          )
+                        }
+                        placeholder="Up to seats"
+                        inputMode="numeric"
+                        className={inputClass}
+                      />
+                      <input
+                        value={row.monthlyPrice}
+                        onChange={(e) =>
+                          setTierRows((rows) =>
+                            rows.map((r, i) =>
+                              i === index
+                                ? { ...r, monthlyPrice: e.target.value }
+                                : r,
+                            ),
+                          )
+                        }
+                        placeholder="Monthly price (USD)"
+                        inputMode="decimal"
+                        className={inputClass}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setTierRows((rows) =>
+                            rows.filter((_, i) => i !== index),
+                          )
+                        }
+                        disabled={tierRows.length === 1}
+                        className={ghostButtonClass}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setTierRows((rows) => [
+                      ...rows,
+                      { upTo: '', monthlyPrice: '' },
+                    ])
+                  }
+                  className={`${ghostButtonClass} mt-2`}
+                >
+                  Add tier
+                </button>
+              </div>
+            )}
+
+            <div>
+              <label className={labelClass}>
+                Alert threshold (seats, optional)
+              </label>
+              <input
+                value={alertThresholdInput}
+                onChange={(e) => setAlertThresholdInput(e.target.value)}
+                placeholder="No alert"
+                inputMode="numeric"
+                className={inputClass}
+              />
+            </div>
+            {error && <p className="text-sm text-[#ef4444]">{error}</p>}
           </div>
           <div className="flex justify-end gap-2 border-t border-[#2a3437] px-6 py-5">
             <button
-              onClick={() => setRemoveTarget(null)}
+              onClick={() => setPlanPricingDialogOpen(false)}
               className={ghostButtonClass}
             >
               Cancel
             </button>
             <button
-              onClick={handleRemoveUser}
+              onClick={handleSavePlanPricing}
               disabled={busy}
-              className={dangerButtonClass}
+              className={primaryButtonClass}
             >
-              {busy ? 'Working…' : 'Remove'}
+              {busy ? 'Saving…' : 'Save'}
             </button>
           </div>
         </Dialog>

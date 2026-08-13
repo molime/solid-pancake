@@ -64,6 +64,7 @@ import type * as shiftLifecycle from "../shiftLifecycle.js";
 import type * as shiftQueries from "../shiftQueries.js";
 import type * as shiftValidation from "../shiftValidation.js";
 import type * as shifts from "../shifts.js";
+import type * as supportTickets from "../supportTickets.js";
 import type * as tenantSettings from "../tenantSettings.js";
 import type * as tenants from "../tenants.js";
 import type * as timePunches from "../timePunches.js";
@@ -131,6 +132,7 @@ declare const fullApi: ApiFromModules<{
   shiftQueries: typeof shiftQueries;
   shiftValidation: typeof shiftValidation;
   shifts: typeof shifts;
+  supportTickets: typeof supportTickets;
   tenantSettings: typeof tenantSettings;
   tenants: typeof tenants;
   timePunches: typeof timePunches;

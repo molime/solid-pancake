@@ -151,8 +151,44 @@ http.route({
         })
       }
     } else if (event.type === 'invoice.payment_failed') {
-      // Keep the platform invoice in 'sent'; the admin can resend or sync.
-      console.warn(`Stripe invoice payment failed: ${stripeInvoiceId}`)
+      if (stripeInvoiceId) {
+        // Dunning: platform invoice → overdue, subscription → past_due with
+        // a 7-day grace window, plus a failure notice email to the agency.
+        await ctx.runMutation(
+          internal.platformStripe.applyStripeInvoiceFailed,
+          { stripeInvoiceId },
+        )
+      }
+    } else if (event.type === 'checkout.session.completed') {
+      // One-time payment-setup link completed: persist the attached payment
+      // method as the customer's default so monthly invoices auto-charge.
+      const sessionId =
+        typeof object.id === 'string' ? object.id : undefined
+      if (object.mode === 'setup' && sessionId) {
+        const session: {
+          customerId: string | null
+          paymentMethodId: string | null
+        } = await ctx.runAction(
+          internal._utils.stripe.retrieveCheckoutSession,
+          { sessionId },
+        )
+        if (session.customerId && session.paymentMethodId) {
+          await ctx.runAction(
+            internal._utils.stripe.setCustomerDefaultPaymentMethod,
+            {
+              customerId: session.customerId,
+              paymentMethodId: session.paymentMethodId,
+            },
+          )
+          await ctx.runMutation(
+            internal.platformStripe.saveStripeDefaultPaymentMethod,
+            {
+              stripeCustomerId: session.customerId,
+              paymentMethodId: session.paymentMethodId,
+            },
+          )
+        }
+      }
     } else if (event.type === 'invoice.finalized') {
       const hostedUrl =
         typeof object.hosted_invoice_url === 'string'

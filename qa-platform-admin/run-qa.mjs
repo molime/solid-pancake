@@ -135,7 +135,7 @@ async function main() {
   if (tenantHref) {
     await go('agency-detail', tenantHref)
     body = await bodyText()
-    for (const section of ['Active seats', 'Candidates', 'Shifts this month', 'MRR', 'Subscription', 'Custom Pricing', 'Limits', 'Users', 'Recent invoices']) {
+    for (const section of ['Active seats', 'Candidates', 'Shifts this month', 'MRR', 'Subscription', 'Custom Pricing', 'Limits', 'Agency Owner', 'Recent invoices']) {
       if (body.includes(section)) pass('agency-detail', `section present: ${section}`)
       else fail('agency-detail', `section missing: ${section}`)
     }
@@ -144,35 +144,15 @@ async function main() {
       note('agency-detail', `header agency name: "${h1}"`)
     }
 
-    // ---------- 4. Add User graceful failure ----------
-    currentPage = 'agency-detail-adduser'
+    // ---------- 4. Add User removed ----------
+    // Platform-side user management was removed in Phase 3 (Item 4): the
+    // agency detail page now shows a read-only "Agency Owner" card only.
+    currentPage = 'agency-detail-noadduser'
     const addUserBtn = page.getByRole('button', { name: 'Add User' })
     if (await addUserBtn.isVisible().catch(() => false)) {
-      await addUserBtn.click()
-      await page.waitForTimeout(500)
-      await page.locator('input[placeholder="user@agency.com"]').fill('qa-noexist@example.com')
-      await page.locator('input[placeholder="Jane Doe"]').fill('QA Noexist')
-      await shot('agency-detail-adduser-dialog')
-      // click the dialog's primary submit button (last "Add User" button = dialog submit)
-      const dialogSubmit = page.locator('button', { hasText: /^Add User$/ }).last()
-      await dialogSubmit.click()
-      await page.waitForTimeout(4000)
-      await shot('agency-detail-adduser-result')
-      body = await bodyText()
-      const h1still = await page.locator('h1').first().innerText().catch(() => '')
-      if (h1still && !/something went wrong/i.test(body)) {
-        // look for an error message in the dialog
-        const errVisible = await page.locator('text=/failed|error|unable|not configured|secret|taken/i').first().isVisible().catch(() => false)
-        if (errVisible) pass('add-user', 'action failed gracefully with visible error message (no crash)')
-        else fail('add-user', `no error message visible after failed Add User. body excerpt: ${body.slice(0, 400)}`)
-      } else {
-        fail('add-user', 'page appears to have crashed after Add User failure')
-      }
-      // close dialog
-      await page.getByRole('button', { name: 'Cancel' }).first().click().catch(() => {})
-      await page.waitForTimeout(400)
+      fail('no-add-user', 'Add User button is visible but platform user management was removed')
     } else {
-      fail('add-user', 'Add User button not visible')
+      pass('no-add-user', 'no Add User button (platform user management removed)')
     }
 
     // ---------- 5. custom rate ----------
@@ -256,20 +236,6 @@ async function main() {
       fail('edit-info', 'Edit Info button not visible')
     }
 
-    // ---------- cleanup: remove leftover QA member if present ----------
-    currentPage = 'agency-detail-cleanup'
-    const qaRow = page.locator('tr', { hasText: 'QA Noexist' }).first()
-    if (await qaRow.isVisible().catch(() => false)) {
-      await qaRow.getByRole('button', { name: 'Remove' }).click()
-      await page.waitForTimeout(500)
-      await page.getByRole('button', { name: 'Remove', exact: true }).last().click()
-      await page.waitForTimeout(3000)
-      const stillThere = await page.locator('tr', { hasText: 'QA Noexist' }).first().isVisible().catch(() => false)
-      note('cleanup', stillThere ? 'QA Noexist member still present after remove attempt' : 'QA Noexist member removed (cleanup)')
-      await shot('agency-detail-cleanup')
-    } else {
-      note('cleanup', 'no QA Noexist member to clean up')
-    }
   }
 
   // ---------- 8b. invalid tenant id ----------

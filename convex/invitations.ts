@@ -1,6 +1,10 @@
 import { ConvexError, v } from 'convex/values'
 import { action } from './_generated/server'
 import { api, internal } from './_generated/api'
+import {
+  accountTypeLabel,
+  createClerkUserAndJoinOrg,
+} from './_utils/invitationBypass'
 
 declare const process: { env: Record<string, string | undefined> }
 
@@ -177,6 +181,36 @@ export const create = action({
       internal.tenants.getAllowedEmailDomainsInternal,
       { clerkOrgId: args.clerkOrgId },
     )
+
+    // Staff roles (coordinator/caregiver) go through the direct Clerk user
+    // creation + Resend welcome email path so the email can name the account
+    // type — Clerk's own invitation email copy is not controllable in code.
+    // Candidate/admin/hr invites keep the Clerk invitation email flow.
+    if (args.role === 'org:coordinator' || args.role === 'org:caregiver') {
+      const tenant = await ctx.runQuery(api.tenants.get, {
+        clerkOrgId: args.clerkOrgId,
+      })
+      const result = await createClerkUserAndJoinOrg({
+        ctx: { scheduler: ctx.scheduler },
+        secretKey,
+        clerkOrgId: args.clerkOrgId,
+        emailAddress: args.emailAddress,
+        displayName: args.emailAddress,
+        role: args.role,
+        appBaseUrl: args.appBaseUrl,
+        allowedEmailDomains,
+        accountType: accountTypeLabel(args.role),
+        agencyName: tenant.name,
+      })
+      return {
+        id: result.invitationId,
+        emailAddress: args.emailAddress.trim(),
+        role: toClerkRole(args.role),
+        roleName: toClerkRole(args.role),
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      }
+    }
 
     return sendClerkInvitation({
       secretKey,

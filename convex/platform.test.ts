@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { convexTest } from 'convex-test'
 import schema from './schema'
-import { api } from './_generated/api'
+import { api, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 
 const modules = import.meta.glob('./**/*.*s')
@@ -665,8 +665,8 @@ describe('setTenantLimits', () => {
   })
 })
 
-describe('listTenantMembers / updateTenantMemberRole', () => {
-  it('lists members and updates a member role', async () => {
+describe('listTenantMembers', () => {
+  it('lists members for a tenant', async () => {
     const t = createTestConvex()
     await seedAdmin(t)
     const asAdmin = t.withIdentity(ADMIN)
@@ -680,26 +680,657 @@ describe('listTenantMembers / updateTenantMemberRole', () => {
       clerkUserId: 'member_0',
       role: 'org:caregiver',
     })
+  })
+})
 
-    await asAdmin.mutation(api.platform.updateTenantMemberRole, {
-      tenantId,
-      clerkUserId: 'member_0',
-      role: 'org:coordinator',
-    })
+describe('disabled platform user management', () => {
+  it('createUserForTenant throws for platform admins', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    const tenantId = await seedTenant(t)
 
-    const updated = await asAdmin.query(api.platform.listTenantMembers, {
-      tenantId,
-    })
-    expect(updated.find((m) => m.clerkUserId === 'member_0')?.role).toBe(
-      'org:coordinator',
-    )
+    await expect(
+      asAdmin.action(api.platform.createUserForTenant, {
+        tenantId,
+        email: 'new@example.com',
+        displayName: 'New User',
+        role: 'org:caregiver',
+      }),
+    ).rejects.toThrow(/platform user management is disabled/i)
+  })
+
+  it('removeUserFromTenant throws for platform admins', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    const tenantId = await seedTenant(t)
+
+    await expect(
+      asAdmin.action(api.platform.removeUserFromTenant, {
+        tenantId,
+        clerkUserId: 'member_0',
+      }),
+    ).rejects.toThrow(/platform user management is disabled/i)
+  })
+
+  it('updateTenantMemberRole throws for platform admins', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    const tenantId = await seedTenantWithStarterSubscription(t, 1)
 
     await expect(
       asAdmin.mutation(api.platform.updateTenantMemberRole, {
         tenantId,
-        clerkUserId: 'missing_user',
+        clerkUserId: 'member_0',
+        role: 'org:coordinator',
+      }),
+    ).rejects.toThrow(/platform user management is disabled/i)
+  })
+
+  it('still rejects non-admins before the disabled guard', async () => {
+    const t = createTestConvex()
+    const tenantId = await seedTenant(t)
+    const asUser = t.withIdentity(NON_ADMIN)
+
+    await expect(
+      asUser.mutation(api.platform.updateTenantMemberRole, {
+        tenantId,
+        clerkUserId: 'member_0',
         role: 'org:hr',
       }),
-    ).rejects.toThrow(/member not found/i)
+    ).rejects.toThrow(/platform admin access required/i)
+  })
+})
+
+describe('upsertPricingPlan — pricing model fields', () => {
+  it('persists model, perItemRates, tiers, and alertThreshold', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+
+    await asAdmin.mutation(api.platform.upsertPricingPlan, {
+      key: 'usage',
+      label: 'Usage Based',
+      basePrice: 0,
+      includedSeats: 0,
+      perSeatPrice: 0,
+      active: true,
+      model: 'per_item',
+      perItemRates: { perCandidate: 50, perShift: 2, perApplication: 25 },
+      alertThreshold: 40,
+    })
+
+    let plans = await asAdmin.query(api.platform.getPricingPlans, {})
+    let plan = plans.find((p) => p.key === 'usage')
+    expect(plan).toMatchObject({
+      model: 'per_item',
+      perItemRates: { perCandidate: 50, perShift: 2, perApplication: 25 },
+      alertThreshold: 40,
+    })
+
+    await asAdmin.mutation(api.platform.upsertPricingPlan, {
+      key: 'tiered-pro',
+      label: 'Tiered Pro',
+      basePrice: 499,
+      includedSeats: 25,
+      perSeatPrice: 18,
+      active: true,
+      model: 'tiered',
+      tiers: [
+        { upTo: 10, monthlyPrice: 199 },
+        { upTo: 25, monthlyPrice: 499 },
+      ],
+    })
+
+    plans = await asAdmin.query(api.platform.getPricingPlans, {})
+    plan = plans.find((p) => p.key === 'tiered-pro')
+    expect(plan).toMatchObject({
+      model: 'tiered',
+      tiers: [
+        { upTo: 10, monthlyPrice: 199 },
+        { upTo: 25, monthlyPrice: 499 },
+      ],
+    })
+  })
+
+  it('keeps existing model fields when an update omits them', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+
+    await asAdmin.mutation(api.platform.upsertPricingPlan, {
+      key: 'usage',
+      label: 'Usage Based',
+      basePrice: 0,
+      includedSeats: 0,
+      perSeatPrice: 0,
+      active: true,
+      model: 'per_item',
+      perItemRates: { perShift: 2 },
+    })
+    await asAdmin.mutation(api.platform.upsertPricingPlan, {
+      key: 'usage',
+      label: 'Usage Based v2',
+      basePrice: 0,
+      includedSeats: 0,
+      perSeatPrice: 0,
+      active: true,
+    })
+
+    const plans = await asAdmin.query(api.platform.getPricingPlans, {})
+    const plan = plans.find((p) => p.key === 'usage')
+    expect(plan).toMatchObject({
+      label: 'Usage Based v2',
+      model: 'per_item',
+      perItemRates: { perShift: 2 },
+    })
+  })
+
+  it('rejects non-admins', async () => {
+    const t = createTestConvex()
+    const asUser = t.withIdentity(NON_ADMIN)
+
+    await expect(
+      asUser.mutation(api.platform.upsertPricingPlan, {
+        key: 'usage',
+        label: 'Usage Based',
+        basePrice: 0,
+        includedSeats: 0,
+        perSeatPrice: 0,
+        active: true,
+      }),
+    ).rejects.toThrow(/platform admin access required/i)
+  })
+})
+
+describe('offboardTenant / listChurnedTenants', () => {
+  it('sets churn fields, cancels the subscription, and audits', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    const tenantId = await seedTenantWithStarterSubscription(t)
+
+    await asAdmin.mutation(api.platform.offboardTenant, {
+      tenantId,
+      reason: 'Switched to a competitor',
+    })
+
+    const tenant = await t.run((ctx) => ctx.db.get(tenantId))
+    expect(tenant?.churnedAt).toBeDefined()
+    expect(tenant?.churnReason).toBe('Switched to a competitor')
+
+    const { subscription } = await asAdmin.query(
+      api.platform.getTenantSubscription,
+      { tenantId },
+    )
+    expect(subscription?.status).toBe('canceled')
+
+    const audit = await t.run(async (ctx) =>
+      ctx.db
+        .query('auditEvents')
+        .withIndex('by_tenant_created_at', (q) => q.eq('tenantId', tenantId))
+        .collect(),
+    )
+    const churnEvent = audit.find((e) => e.action === 'tenant_churned')
+    expect(churnEvent).toBeDefined()
+    expect(churnEvent?.metadata).toMatchObject({
+      reason: 'Switched to a competitor',
+    })
+
+    const churned = await asAdmin.query(api.platform.listChurnedTenants, {})
+    expect(churned).toHaveLength(1)
+    expect(churned[0]).toMatchObject({
+      tenantId,
+      name: 'Test Agency',
+      slug: 'test-agency',
+      churnReason: 'Switched to a competitor',
+    })
+
+    const stats = await asAdmin.query(api.platform.getPlatformStats, {})
+    expect(stats.churnedCount).toBe(1)
+  })
+
+  it('works without a reason and without a subscription', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    const tenantId = await seedTenant(t)
+
+    await asAdmin.mutation(api.platform.offboardTenant, { tenantId })
+
+    const churned = await asAdmin.query(api.platform.listChurnedTenants, {})
+    expect(churned).toHaveLength(1)
+    expect(churned[0].churnReason).toBeNull()
+    expect(churned[0].churnedAt).toBeDefined()
+  })
+
+  it('rejects non-admins', async () => {
+    const t = createTestConvex()
+    const tenantId = await seedTenant(t)
+    const asUser = t.withIdentity(NON_ADMIN)
+
+    await expect(
+      asUser.mutation(api.platform.offboardTenant, { tenantId }),
+    ).rejects.toThrow(/platform admin access required/i)
+  })
+})
+
+describe('tenant health — technical signals + limit alerts only', () => {
+  async function seedBreachingTenant(t: ReturnType<typeof createTestConvex>) {
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    const tenantId = await seedTenantWithStarterSubscription(t, 3)
+    await asAdmin.mutation(api.platform.setTenantLimits, {
+      tenantId,
+      limits: { maxSeats: 2 },
+    })
+    return { asAdmin, tenantId }
+  }
+
+  it('getTenantHealth returns limit alerts and no HR-case counts', async () => {
+    const t = createTestConvex()
+    const { asAdmin, tenantId } = await seedBreachingTenant(t)
+
+    const rows = await asAdmin.query(api.platform.getTenantHealth, {})
+    expect(rows).toHaveLength(1)
+    expect(rows[0].tenantId).toBe(tenantId)
+    expect(rows[0]).not.toHaveProperty('complianceAlerts')
+    expect(rows[0].limitAlerts).toEqual([
+      { kind: 'seats', limit: 2, usage: 3 },
+    ])
+    expect(rows[0].status).toBe('warning')
+  })
+
+  it('getTenantHealthDetail drops openCases and includes limit alerts', async () => {
+    const t = createTestConvex()
+    const { asAdmin, tenantId } = await seedBreachingTenant(t)
+
+    const detail = await asAdmin.query(api.platform.getTenantHealthDetail, {
+      tenantId,
+    })
+    expect(detail).not.toHaveProperty('openCases')
+    expect(detail).toHaveProperty('integrationErrors')
+    expect(detail).toHaveProperty('syncErrors')
+    expect(detail.limitAlerts).toEqual([{ kind: 'seats', limit: 2, usage: 3 }])
+  })
+
+  it('reports no alerts when usage is below the limits', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    const tenantId = await seedTenantWithStarterSubscription(t, 3)
+    await asAdmin.mutation(api.platform.setTenantLimits, {
+      tenantId,
+      limits: { maxSeats: 10 },
+    })
+
+    const rows = await asAdmin.query(api.platform.getTenantHealth, {})
+    expect(rows[0].limitAlerts).toEqual([])
+    expect(rows[0].status).toBe('healthy')
+  })
+})
+
+describe('checkLimitAlerts', () => {
+  it('notifies agency admins once per tenant + kind + billing period', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    const tenantId = await seedTenantWithStarterSubscription(t, 1)
+    await t.run(async (ctx) => {
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: 'agency_admin',
+        role: 'org:admin',
+        displayName: 'Agency Admin',
+        email: 'admin@example.com',
+      })
+    })
+    await asAdmin.mutation(api.platform.setTenantLimits, {
+      tenantId,
+      limits: { maxSeats: 2 },
+    })
+
+    const first = await t.mutation(internal.platform.checkLimitAlerts, {})
+    expect(first).toEqual({ notified: 1 })
+
+    let notifications = await t.run(async (ctx) =>
+      ctx.db
+        .query('notifications')
+        .withIndex('by_tenant_user', (q) =>
+          q.eq('tenantId', tenantId).eq('clerkUserId', 'agency_admin'),
+        )
+        .collect(),
+    )
+    expect(notifications).toHaveLength(1)
+    expect(notifications[0]).toMatchObject({
+      type: 'limit_warning',
+      read: false,
+    })
+    expect(notifications[0].metadata).toMatchObject({
+      kind: 'seats',
+      limit: 2,
+      usage: 2,
+      periodStart: '2026-07-01',
+      periodEnd: '2026-07-31',
+    })
+
+    // Second run in the same billing period is deduped.
+    const second = await t.mutation(internal.platform.checkLimitAlerts, {})
+    expect(second).toEqual({ notified: 0 })
+    notifications = await t.run(async (ctx) =>
+      ctx.db
+        .query('notifications')
+        .withIndex('by_tenant_user', (q) =>
+          q.eq('tenantId', tenantId).eq('clerkUserId', 'agency_admin'),
+        )
+        .collect(),
+    )
+    expect(notifications).toHaveLength(1)
+  })
+
+  it('skips churned tenants', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    const tenantId = await seedTenantWithStarterSubscription(t, 3)
+    await asAdmin.mutation(api.platform.setTenantLimits, {
+      tenantId,
+      limits: { maxSeats: 2 },
+    })
+    await asAdmin.mutation(api.platform.offboardTenant, { tenantId })
+
+    const result = await t.mutation(internal.platform.checkLimitAlerts, {})
+    expect(result).toEqual({ notified: 0 })
+  })
+})
+
+describe('upsertPricingPlan — tier normalization', () => {
+  it('sorts tiers ascending by upTo before storing', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+
+    await asAdmin.mutation(api.platform.upsertPricingPlan, {
+      key: 'tiered-pro',
+      label: 'Tiered Pro',
+      basePrice: 499,
+      includedSeats: 25,
+      perSeatPrice: 18,
+      active: true,
+      model: 'tiered',
+      tiers: [
+        { upTo: 25, monthlyPrice: 499 },
+        { upTo: 10, monthlyPrice: 199 },
+      ],
+    })
+
+    const plans = await asAdmin.query(api.platform.getPricingPlans, {})
+    const plan = plans.find((p) => p.key === 'tiered-pro')
+    expect(plan?.tiers).toEqual([
+      { upTo: 10, monthlyPrice: 199 },
+      { upTo: 25, monthlyPrice: 499 },
+    ])
+  })
+
+  it('rejects non-positive tier bounds', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+
+    await expect(
+      asAdmin.mutation(api.platform.upsertPricingPlan, {
+        key: 'tiered-bad',
+        label: 'Tiered Bad',
+        basePrice: 0,
+        includedSeats: 0,
+        perSeatPrice: 0,
+        active: true,
+        model: 'tiered',
+        tiers: [{ upTo: 0, monthlyPrice: 100 }],
+      }),
+    ).rejects.toThrow(/tier bounds/i)
+  })
+})
+
+describe('offboardTenant — idempotency', () => {
+  it('keeps churnedAt and does not duplicate the audit event on repeat calls', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    const tenantId = await seedTenantWithStarterSubscription(t)
+
+    await asAdmin.mutation(api.platform.offboardTenant, {
+      tenantId,
+      reason: 'Switched to a competitor',
+    })
+    const first = await t.run((ctx) => ctx.db.get(tenantId))
+
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    await asAdmin.mutation(api.platform.offboardTenant, {
+      tenantId,
+      reason: 'Different reason',
+    })
+    const second = await t.run((ctx) => ctx.db.get(tenantId))
+
+    expect(second?.churnedAt).toBe(first?.churnedAt)
+    expect(second?.churnReason).toBe('Switched to a competitor')
+
+    const churnEvents = await t.run(async (ctx) =>
+      (
+        await ctx.db.query('auditEvents').collect()
+      ).filter((e) => e.action === 'tenant_churned'),
+    )
+    expect(churnEvents).toHaveLength(1)
+  })
+})
+
+describe('monthly recurring billing (period advancement)', () => {
+  /** Last calendar month — a period that has always ended. */
+  function endedMonthRange() {
+    const now = new Date()
+    const start = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
+    )
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    return { start: start.toISOString(), end: end.toISOString() }
+  }
+
+  /** The period createMonthlyPlatformInvoice should roll forward to. */
+  function expectedNextPeriod(periodEndIso: string) {
+    const nextStart = new Date(periodEndIso)
+    const nextEnd = new Date(
+      Date.UTC(
+        nextStart.getUTCFullYear(),
+        nextStart.getUTCMonth() + 1,
+        nextStart.getUTCDate(),
+      ),
+    )
+    return {
+      start: nextStart.toISOString(),
+      end: nextEnd.toISOString(),
+    }
+  }
+
+  async function seedBillableSubscription(
+    t: ReturnType<typeof createTestConvex>,
+    period: { start: string; end: string },
+  ) {
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    await asAdmin.mutation(api.platform.seedPricingPlans, {})
+    const tenantId = await seedTenant(t)
+    await t.run(async (ctx) => {
+      await ctx.db.insert('tenantSubscriptions', {
+        tenantId,
+        planKey: 'starter',
+        status: 'active',
+        billingEmails: ['billing@example.com'],
+        currentPeriodStart: period.start,
+        currentPeriodEnd: period.end,
+        renewsAt: period.end,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+    })
+    return tenantId
+  }
+
+  async function getSubscription(
+    t: ReturnType<typeof createTestConvex>,
+    tenantId: Id<'tenants'>,
+  ) {
+    return t.run(async (ctx) =>
+      ctx.db
+        .query('tenantSubscriptions')
+        .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+        .unique(),
+    )
+  }
+
+  it('creates the invoice for the ended period and advances the subscription', async () => {
+    const t = createTestConvex()
+    const period = endedMonthRange()
+    const tenantId = await seedBillableSubscription(t, period)
+
+    // The ended period is due: it shows up in the cron feed.
+    const due = await t.query(internal.platform.listBillableSubscriptions, {})
+    expect(due.map((s) => s.tenantId)).toContain(tenantId)
+
+    const invoice = await t.mutation(
+      internal.platform.createMonthlyPlatformInvoice,
+      {
+        tenantId,
+        periodStart: period.start,
+        periodEnd: period.end,
+        dueDate: period.end.slice(0, 10),
+      },
+    )
+    expect(invoice).not.toBeNull()
+
+    const doc = await t.run((ctx) => ctx.db.get(invoice!.invoiceId))
+    expect(doc?.periodStart).toBe(period.start)
+    expect(doc?.periodEnd).toBe(period.end)
+    expect(doc?.status).toBe('draft')
+
+    const next = expectedNextPeriod(period.end)
+    const subscription = await getSubscription(t, tenantId)
+    expect(subscription?.currentPeriodStart).toBe(next.start)
+    expect(subscription?.currentPeriodEnd).toBe(next.end)
+    expect(subscription?.renewsAt).toBe(next.end)
+  })
+
+  it('same-day re-run skips the subscription (period advanced, duplicate guard)', async () => {
+    const t = createTestConvex()
+    const period = endedMonthRange()
+    const tenantId = await seedBillableSubscription(t, period)
+
+    const first = await t.mutation(
+      internal.platform.createMonthlyPlatformInvoice,
+      {
+        tenantId,
+        periodStart: period.start,
+        periodEnd: period.end,
+        dueDate: period.end.slice(0, 10),
+      },
+    )
+    expect(first).not.toBeNull()
+
+    // The subscription was rolled to the still-running next period, so the
+    // cron feed no longer includes it.
+    const due = await t.query(internal.platform.listBillableSubscriptions, {})
+    expect(due.map((s) => s.tenantId)).not.toContain(tenantId)
+
+    // A stale caller re-using the old period hits the duplicate-period guard.
+    const duplicate = await t.mutation(
+      internal.platform.createMonthlyPlatformInvoice,
+      {
+        tenantId,
+        periodStart: period.start,
+        periodEnd: period.end,
+        dueDate: period.end.slice(0, 10),
+      },
+    )
+    expect(duplicate).toBeNull()
+
+    const invoices = await t.run(async (ctx) =>
+      ctx.db.query('platformInvoices').collect(),
+    )
+    expect(invoices).toHaveLength(1)
+  })
+
+  it('bills the next period on the following month run', async () => {
+    const t = createTestConvex()
+    const period = endedMonthRange()
+    const tenantId = await seedBillableSubscription(t, period)
+
+    const first = await t.mutation(
+      internal.platform.createMonthlyPlatformInvoice,
+      {
+        tenantId,
+        periodStart: period.start,
+        periodEnd: period.end,
+        dueDate: period.end.slice(0, 10),
+      },
+    )
+
+    // Month 2: the cron reads the (advanced) subscription period.
+    const subscription = await getSubscription(t, tenantId)
+    const second = await t.mutation(
+      internal.platform.createMonthlyPlatformInvoice,
+      {
+        tenantId,
+        periodStart: subscription!.currentPeriodStart,
+        periodEnd: subscription!.currentPeriodEnd,
+        dueDate: subscription!.currentPeriodEnd.slice(0, 10),
+      },
+    )
+    expect(second).not.toBeNull()
+    expect(second!.invoiceNumber).not.toBe(first!.invoiceNumber)
+
+    const invoices = await t.run(async (ctx) =>
+      ctx.db.query('platformInvoices').collect(),
+    )
+    expect(invoices).toHaveLength(2)
+
+    // And the subscription advanced again, contiguously.
+    const next = expectedNextPeriod(subscription!.currentPeriodEnd)
+    const after = await getSubscription(t, tenantId)
+    expect(after?.currentPeriodStart).toBe(subscription!.currentPeriodEnd)
+    expect(after?.currentPeriodEnd).toBe(next.end)
+  })
+
+  it('does not clobber a manually changed period', async () => {
+    const t = createTestConvex()
+    const period = endedMonthRange()
+    const tenantId = await seedBillableSubscription(t, period)
+
+    // Admin manually moves the subscription to a different period before the
+    // cron mutation for the old period lands.
+    const asAdmin = t.withIdentity(ADMIN)
+    await asAdmin.mutation(api.platform.setTenantSubscription, {
+      tenantId,
+      planKey: 'starter',
+      status: 'active',
+      billingEmails: ['billing@example.com'],
+      currentPeriodStart: '2030-01-01',
+      currentPeriodEnd: '2030-02-01',
+    })
+
+    const invoice = await t.mutation(
+      internal.platform.createMonthlyPlatformInvoice,
+      {
+        tenantId,
+        periodStart: period.start,
+        periodEnd: period.end,
+        dueDate: period.end.slice(0, 10),
+      },
+    )
+    expect(invoice).not.toBeNull()
+
+    const subscription = await getSubscription(t, tenantId)
+    expect(subscription?.currentPeriodStart).toBe('2030-01-01')
+    expect(subscription?.currentPeriodEnd).toBe('2030-02-01')
   })
 })

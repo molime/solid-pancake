@@ -1,11 +1,9 @@
 import { useState } from 'react'
-import { useAction, useQuery } from 'convex/react'
+import { useAction, useMutation } from 'convex/react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { api } from '../../../../convex/_generated/api'
-import { formatCurrency } from '@/shared/format'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
-import { usePlatformAdmin } from '../usePlatformAdmin'
 import { PlatformGate } from '../components/PlatformGate'
 
 const primaryButtonClass =
@@ -26,30 +24,46 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, '')
 }
 
+type PlanModel = 'flat' | 'per_item' | 'tiered'
+
+interface TierRow {
+  upTo: string
+  monthlyPrice: string
+}
+
+function parseOptionalNumber(value: string): number | undefined {
+  if (!value.trim()) return undefined
+  const num = Number(value)
+  return Number.isNaN(num) || num < 0 ? undefined : num
+}
+
 export function PlatformCreateAgencyPage() {
   const navigate = useNavigate()
-  const isAdmin = usePlatformAdmin()
-  const plans = useQuery(api.platform.getPricingPlans, isAdmin ? {} : 'skip')
   const createTenant = useAction(api.platform.createTenant)
+  const upsertPricingPlan = useMutation(api.platform.upsertPricingPlan)
 
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
   const [slugEdited, setSlugEdited] = useState(false)
   const [ein, setEin] = useState('')
   const [address, setAddress] = useState('')
-  const [planKey, setPlanKey] = useState('')
+  const [planModel, setPlanModel] = useState<PlanModel>('flat')
+  const [flatFeeInput, setFlatFeeInput] = useState('')
+  const [perCandidateRate, setPerCandidateRate] = useState('')
+  const [perShiftRate, setPerShiftRate] = useState('')
+  const [perApplicationRate, setPerApplicationRate] = useState('')
+  const [tierRows, setTierRows] = useState<TierRow[]>([
+    { upTo: '', monthlyPrice: '' },
+  ])
+  const [alertThresholdInput, setAlertThresholdInput] = useState('')
+  const [paymentMethodAllowed, setPaymentMethodAllowed] = useState<
+    'card' | 'us_bank_account'
+  >('card')
   const [billingEmailsInput, setBillingEmailsInput] = useState('')
   const [ownerEmail, setOwnerEmail] = useState('')
   const [ownerDisplayName, setOwnerDisplayName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-
-  const activePlans = (plans ?? []).filter((p) => p.active)
-  const effectivePlanKey =
-    planKey ||
-    activePlans.find((p) => p.key === 'starter')?.key ||
-    activePlans[0]?.key ||
-    ''
 
   const handleNameChange = (value: string) => {
     setName(value)
@@ -61,17 +75,67 @@ export function PlatformCreateAgencyPage() {
       setError('Agency name and slug are required.')
       return
     }
-    if (!effectivePlanKey) {
-      setError('Select an initial plan.')
-      return
-    }
     if (!ownerEmail.trim()) {
       setError('Agency owner email is required.')
+      return
+    }
+    const flatFee =
+      planModel === 'flat' ? parseOptionalNumber(flatFeeInput) : undefined
+    if (planModel === 'flat' && (flatFee === undefined || flatFee <= 0)) {
+      setError('Enter a valid monthly flat fee (USD).')
+      return
+    }
+    const perItemRates = {
+      perCandidate: parseOptionalNumber(perCandidateRate),
+      perShift: parseOptionalNumber(perShiftRate),
+      perApplication: parseOptionalNumber(perApplicationRate),
+    }
+    if (
+      planModel === 'per_item' &&
+      !Object.values(perItemRates).some((rate) => rate !== undefined)
+    ) {
+      setError('Set at least one per-item rate (USD).')
+      return
+    }
+    const alertThreshold = parseOptionalNumber(alertThresholdInput)
+    if (alertThresholdInput.trim() && alertThreshold === undefined) {
+      setError('Enter a valid alert threshold (seats).')
+      return
+    }
+    const tiers = tierRows
+      .map((row) => ({
+        upTo: parseOptionalNumber(row.upTo),
+        monthlyPrice: parseOptionalNumber(row.monthlyPrice),
+      }))
+      .filter(
+        (row): row is { upTo: number; monthlyPrice: number } =>
+          row.upTo !== undefined && row.monthlyPrice !== undefined,
+      )
+    if (planModel === 'tiered' && tiers.length === 0) {
+      setError('Add at least one tier (seats up to + monthly price).')
       return
     }
     setBusy(true)
     setError('')
     try {
+      // Each agency gets its own pricing plan (keyed by its slug) carrying the
+      // model/rates/tiers chosen here — shared plans are never rewritten at
+      // creation time, and later edits on the agency detail page only affect
+      // this agency. The plan is upserted before the tenant exists so the
+      // subscription never references a missing plan.
+      const agencyPlanKey = `agency-${slug.trim()}`
+      await upsertPricingPlan({
+        key: agencyPlanKey,
+        label: `${name.trim()} plan`,
+        basePrice: flatFee ?? 0,
+        includedSeats: 0,
+        perSeatPrice: 0,
+        active: true,
+        model: planModel,
+        ...(planModel === 'per_item' ? { perItemRates } : {}),
+        ...(planModel === 'tiered' ? { tiers } : {}),
+        ...(alertThreshold !== undefined ? { alertThreshold } : {}),
+      })
       const billingEmails = billingEmailsInput
         .split(',')
         .map((email) => email.trim())
@@ -81,10 +145,11 @@ export function PlatformCreateAgencyPage() {
         slug: slug.trim(),
         ein: ein.trim() || undefined,
         address: address.trim() || undefined,
-        planKey: effectivePlanKey,
+        planKey: agencyPlanKey,
         billingEmails,
         ownerEmail: ownerEmail.trim(),
         ownerDisplayName: ownerDisplayName.trim() || undefined,
+        paymentMethodAllowed,
       })
       navigate(`/platform/agencies/${tenantId}`)
     } catch (err) {
@@ -162,22 +227,190 @@ export function PlatformCreateAgencyPage() {
             </div>
 
             <div>
-              <label className={labelClass}>Initial plan</label>
+              <label className={labelClass}>Pricing model</label>
               <select
-                value={effectivePlanKey}
-                onChange={(e) => setPlanKey(e.target.value)}
+                value={planModel}
+                onChange={(e) => setPlanModel(e.target.value as PlanModel)}
                 className={inputClass}
               >
-                {activePlans.length === 0 && (
-                  <option value="">No active plans</option>
-                )}
-                {activePlans.map((p) => (
-                  <option key={p.key} value={p.key}>
-                    {p.label} — {formatCurrency(p.basePrice)}/mo ·{' '}
-                    {p.includedSeats} seats
-                  </option>
-                ))}
+                <option value="flat">Flat monthly fee</option>
+                <option value="per_item">Per item (usage-based)</option>
+                <option value="tiered">Tiered by seats</option>
               </select>
+              <p className="mt-1.5 text-sm text-[#687173]">
+                Saved as this agency&apos;s own pricing plan when the agency
+                is created.
+              </p>
+            </div>
+
+            {planModel === 'flat' && (
+              <div>
+                <label className={labelClass}>Monthly flat fee (USD)</label>
+                <input
+                  value={flatFeeInput}
+                  onChange={(e) => setFlatFeeInput(e.target.value)}
+                  placeholder="1500"
+                  inputMode="decimal"
+                  className={inputClass}
+                />
+                <p className="mt-1.5 text-sm text-[#687173]">
+                  The agency is charged this amount every month.
+                </p>
+              </div>
+            )}
+
+            {planModel === 'per_item' && (
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <label className={labelClass}>Per candidate (USD)</label>
+                  <input
+                    value={perCandidateRate}
+                    onChange={(e) => setPerCandidateRate(e.target.value)}
+                    placeholder="Optional"
+                    inputMode="decimal"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Per shift (USD)</label>
+                  <input
+                    value={perShiftRate}
+                    onChange={(e) => setPerShiftRate(e.target.value)}
+                    placeholder="Optional"
+                    inputMode="decimal"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Per application (USD)</label>
+                  <input
+                    value={perApplicationRate}
+                    onChange={(e) => setPerApplicationRate(e.target.value)}
+                    placeholder="Optional"
+                    inputMode="decimal"
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+            )}
+
+            {planModel === 'tiered' && (
+              <div>
+                <label className={labelClass}>Tiers</label>
+                <div className="space-y-2">
+                  {tierRows.map((row, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <input
+                        value={row.upTo}
+                        onChange={(e) =>
+                          setTierRows((rows) =>
+                            rows.map((r, i) =>
+                              i === index ? { ...r, upTo: e.target.value } : r,
+                            ),
+                          )
+                        }
+                        placeholder="Up to seats"
+                        inputMode="numeric"
+                        className={inputClass}
+                      />
+                      <input
+                        value={row.monthlyPrice}
+                        onChange={(e) =>
+                          setTierRows((rows) =>
+                            rows.map((r, i) =>
+                              i === index
+                                ? { ...r, monthlyPrice: e.target.value }
+                                : r,
+                            ),
+                          )
+                        }
+                        placeholder="Monthly price (USD)"
+                        inputMode="decimal"
+                        className={inputClass}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setTierRows((rows) =>
+                            rows.filter((_, i) => i !== index),
+                          )
+                        }
+                        disabled={tierRows.length === 1}
+                        className={ghostButtonClass}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setTierRows((rows) => [
+                      ...rows,
+                      { upTo: '', monthlyPrice: '' },
+                    ])
+                  }
+                  className={`${ghostButtonClass} mt-2`}
+                >
+                  Add tier
+                </button>
+                <p className="mt-1.5 text-sm text-[#687173]">
+                  The first tier whose seat cap covers the active seat count
+                  applies; the last tier is the catch-all.
+                </p>
+              </div>
+            )}
+
+            <div>
+              <label className={labelClass}>
+                Alert threshold (seats, optional)
+              </label>
+              <input
+                value={alertThresholdInput}
+                onChange={(e) => setAlertThresholdInput(e.target.value)}
+                placeholder="No alert"
+                inputMode="numeric"
+                className={inputClass}
+              />
+              <p className="mt-1.5 text-sm text-[#687173]">
+                Soft alert shown to you and the agency when active seats reach
+                this number. Never blocks usage.
+              </p>
+            </div>
+
+            <div>
+              <label className={labelClass}>Allowed payment method</label>
+              <div className="space-y-2">
+                <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#2a3437] bg-[#1e2629] px-4 py-3">
+                  <input
+                    type="radio"
+                    name="paymentMethodAllowed"
+                    checked={paymentMethodAllowed === 'card'}
+                    onChange={() => setPaymentMethodAllowed('card')}
+                    className="accent-[#22c55e]"
+                  />
+                  <span className="text-[15px] font-medium text-[#f5f7f6]">
+                    Card
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#2a3437] bg-[#1e2629] px-4 py-3">
+                  <input
+                    type="radio"
+                    name="paymentMethodAllowed"
+                    checked={paymentMethodAllowed === 'us_bank_account'}
+                    onChange={() => setPaymentMethodAllowed('us_bank_account')}
+                    className="accent-[#22c55e]"
+                  />
+                  <span className="text-[15px] font-medium text-[#f5f7f6]">
+                    ACH bank debit
+                  </span>
+                </label>
+              </div>
+              <p className="mt-1.5 text-sm text-[#687173]">
+                The owner&apos;s payment-setup link will only offer this
+                method.
+              </p>
             </div>
 
             <div>
@@ -227,7 +460,7 @@ export function PlatformCreateAgencyPage() {
               </Link>
               <button
                 onClick={handleCreate}
-                disabled={busy || !name.trim() || !effectivePlanKey || !ownerEmail.trim()}
+                disabled={busy || !name.trim() || !ownerEmail.trim()}
                 className={primaryButtonClass}
               >
                 {busy ? 'Creating…' : 'Create Agency'}

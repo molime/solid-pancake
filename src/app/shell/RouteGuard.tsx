@@ -92,7 +92,7 @@ export function PlatformAdminRouteGuard({ children }: PropsWithChildren) {
     return <Navigate to="/sign-in" replace />
   }
 
-  if (isPlatformAdmin === undefined) {
+  if (isPlatformAdmin === undefined || isPlatformAdmin === null) {
     return <AppLoader fullScreen label="Checking platform access" />
   }
 

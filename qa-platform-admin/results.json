@@ -3,7 +3,7 @@
     {
       "severity": "note",
       "area": "auth",
-      "text": "signed in, landed on http://localhost:5174/select-agency"
+      "text": "signed in, landed on http://localhost:5180/"
     },
     {
       "severity": "PASS",
@@ -18,7 +18,7 @@
     {
       "severity": "PASS",
       "area": "agency-create",
-      "text": "navigated to http://localhost:5174/platform/agencies/create"
+      "text": "navigated to http://localhost:5180/platform/agencies/create"
     },
     {
       "severity": "PASS",
@@ -93,7 +93,7 @@
     {
       "severity": "PASS",
       "area": "agency-detail",
-      "text": "section present: Users"
+      "text": "section present: Agency Owner"
     },
     {
       "severity": "PASS",
@@ -107,8 +107,8 @@
     },
     {
       "severity": "PASS",
-      "area": "add-user",
-      "text": "action failed gracefully with visible error message (no crash)"
+      "area": "no-add-user",
+      "text": "no Add User button (platform user management removed)"
     },
     {
       "severity": "PASS",
@@ -133,12 +133,12 @@
     {
       "severity": "note",
       "area": "limits",
-      "text": "current seat count: 2"
+      "text": "current seat count: 1"
     },
     {
       "severity": "PASS",
       "area": "limits",
-      "text": "\"Over limit\" warning badge shown (seats 2 > max 1)"
+      "text": "\"Over limit\" warning badge shown (seats 1 > max 0)"
     },
     {
       "severity": "PASS",
@@ -157,13 +157,8 @@
     },
     {
       "severity": "note",
-      "area": "cleanup",
-      "text": "QA Noexist member removed (cleanup)"
-    },
-    {
-      "severity": "note",
       "area": "invalid-id",
-      "text": "body length: 242; excerpt: A |  | ATRIA-X |  | PLATFORM CONTROL |  | Subscriptions | Agencies | Tenant Health | Reports | Support Access | Audit Log | Billing | A |  | ATRIA-X E2E Admin |  | Platform Admin |  | Sign out |  | Agency not found |  | This agency does not exist or the link is invalid. |  | Back to agencies"
+      "text": "body length: 235; excerpt: A |  | ATRIA-X |  | PLATFORM CONTROL |  | Subscriptions | Agencies | Tenant Health | Reports | Support | Audit Log | Billing | A |  | ATRIA-X E2E Admin |  | Platform Admin |  | Sign out |  | Agency not found |  | This agency does not exist or the link is invalid. |  | Back to agencies"
     },
     {
       "severity": "note",
@@ -173,7 +168,7 @@
     {
       "severity": "note",
       "area": "invalid-id",
-      "text": "error: %o\n\n%s\n\n%s\n Error: [CONVEX Q(platform:getTenantDetail)] [Request ID: 350964c919a01cc1] Server Error\nArgumentValidationError: Value does not match validator.\nPath: .tenantId\nValue: \"invalid-id\"\nValidator: v.id(\"tenants\")\n\n\n  Called by client\n    at OptimisticQueryResults.queryResult (http://localhost"
+      "text": "error: %o\n\n%s\n\n%s\n Error: [CONVEX Q(platform:getTenantDetail)] [Request ID: f1ec8b2935fa9e71] Server Error\nArgumentValidationError: Value does not match validator.\nPath: .tenantId\nValue: \"invalid-id\"\nValidator: v.id(\"tenants\")\n\n\n  Called by client\n    at OptimisticQueryResults.queryResult (http://localhost"
     },
     {
       "severity": "PASS",
@@ -200,12 +195,6 @@
         "text": "Clerk: Clerk has been loaded with development keys. Development instances have strict usage limits and should not be used when deploying your application to production. Learn more: https://clerk.com/docs/deployments/overview"
       }
     ],
-    "agency-detail-adduser": [
-      {
-        "type": "error",
-        "text": "[CONVEX A(platform:createUserForTenant)] [Request ID: f029220a0c698e59] Server Error\nUncaught ConvexError: That email address is taken. Please try another.\n    at handler (../convex/platform.ts:1452:4)\n"
-      }
-    ],
     "agency-detail-customrate": [
       {
         "type": "warning",
@@ -219,7 +208,7 @@
       },
       {
         "type": "error",
-        "text": "%o\n\n%s\n\n%s\n Error: [CONVEX Q(platform:getTenantDetail)] [Request ID: 350964c919a01cc1] Server Error\nArgumentValidationError: Value does not match validator.\nPath: .tenantId\nValue: \"invalid-id\"\nValidator: v.id(\"tenants\")\n\n\n  Called by client\n    at OptimisticQueryResults.queryResult (http://localhost:5174/node_modules/.vite/deps/convex_react.js?v=8891daa2:817:10)\n    at BaseConvexClient.localQueryResult (http://localhost:5174/node_modules/.vite/deps/convex_react.js?v=8891daa2:2209:38)\n    at Obje"
+        "text": "%o\n\n%s\n\n%s\n Error: [CONVEX Q(platform:getTenantDetail)] [Request ID: f1ec8b2935fa9e71] Server Error\nArgumentValidationError: Value does not match validator.\nPath: .tenantId\nValue: \"invalid-id\"\nValidator: v.id(\"tenants\")\n\n\n  Called by client\n    at OptimisticQueryResults.queryResult (http://localhost:5180/node_modules/.vite/deps/convex_react.js?v=63b29a6b:817:10)\n    at BaseConvexClient.localQueryResult (http://localhost:5180/node_modules/.vite/deps/convex_react.js?v=63b29a6b:2209:38)\n    at Obje"
       }
     ]
   }

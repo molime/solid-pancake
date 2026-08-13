@@ -14,6 +14,13 @@ interface CreateClerkUserAndJoinOrgArgs {
   role: string
   appBaseUrl: string
   allowedEmailDomains?: string[] | null
+  // Optional role-aware welcome email overrides. When accountType is set the
+  // subject/body name the account type; absent keeps the legacy generic copy.
+  accountType?: string
+  agencyName?: string
+  // One-time payment-setup link (owners at agency creation) — when present a
+  // setup paragraph/button is added to the welcome email.
+  paymentSetupUrl?: string
 }
 
 interface CreateClerkUserAndJoinOrgResult {
@@ -79,6 +86,14 @@ export function clerkErrorMessage(payload: unknown) {
 
 function toClerkRole(role: string) {
   return role === 'org:admin' ? 'org:admin' : 'org:member'
+}
+
+/** Human label for the account type named in role-aware welcome emails. */
+export function accountTypeLabel(role: string): string {
+  if (role === 'org:admin' || role === 'owner') return 'owner'
+  if (role === 'org:coordinator') return 'coordinator'
+  if (role === 'org:caregiver') return 'employee'
+  return 'ATRIA-X'
 }
 
 function parseName(displayName: string) {
@@ -164,15 +179,22 @@ export async function createClerkUserAndJoinOrg(
   const magicLink = `${url.origin}/sign-in?__clerk_ticket=${ticket}`
   const invitationId = `manual:${clerkUserId}`
 
+  const subject = args.accountType
+    ? `Your ${args.accountType} account is ready`
+    : 'Your ATRIA-X account is ready'
+
   await args.ctx.scheduler.runAfter(0, internal._utils.resend.sendEmail, {
     to: args.emailAddress,
-    subject: 'Your ATRIA-X account is ready',
+    subject,
     html: candidateWelcomeEmailHtml({
       firstName,
       email: args.emailAddress,
       magicLink,
       initialPassword,
       appUrl: url.origin,
+      accountType: args.accountType,
+      agencyName: args.agencyName,
+      paymentSetupUrl: args.paymentSetupUrl,
     }),
     text: candidateWelcomeEmailText({
       firstName,
@@ -180,6 +202,9 @@ export async function createClerkUserAndJoinOrg(
       magicLink,
       initialPassword,
       appUrl: url.origin,
+      accountType: args.accountType,
+      agencyName: args.agencyName,
+      paymentSetupUrl: args.paymentSetupUrl,
     }),
   })
 
@@ -258,25 +283,42 @@ export function isDevInvitationBypassEnabled(): boolean {
   return false
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
 function candidateWelcomeEmailHtml(args: {
   firstName?: string
   email: string
   magicLink: string
   initialPassword: string
   appUrl: string
+  accountType?: string
+  agencyName?: string
+  paymentSetupUrl?: string
 }): string {
-  const greeting = args.firstName ? `Hi ${args.firstName},` : 'Hi,'
+  const greeting = args.firstName ? `Hi ${escapeHtml(args.firstName)},` : 'Hi,'
+  const accountLine = args.accountType
+    ? `\n    <p>Your ${escapeHtml(args.accountType)} account${args.agencyName ? ` for ${escapeHtml(args.agencyName)}` : ''} is ready.</p>`
+    : ''
+  const paymentSetup = args.paymentSetupUrl
+    ? `\n    <p>To finish setting up your agency, <a href="${escapeHtml(args.paymentSetupUrl)}">set up your payment method</a> (one-time, secure Stripe page).</p>`
+    : ''
   return `<!DOCTYPE html>
 <html>
   <head><meta charset="utf-8"></head>
   <body>
-    <p>${greeting}</p>
+    <p>${greeting}</p>${accountLine}
     <p>Your ATRIA-X account has been created. Use the information below to sign in for the first time:</p>
     <ul>
-      <li><strong>Email:</strong> ${args.email}</li>
-      <li><strong>Temporary password:</strong> ${args.initialPassword}</li>
-      <li><strong>Magic sign-in link:</strong> <a href="${args.magicLink}">Sign in</a></li>
-    </ul>
+      <li><strong>Email:</strong> ${escapeHtml(args.email)}</li>
+      <li><strong>Temporary password:</strong> ${escapeHtml(args.initialPassword)}</li>
+      <li><strong>Magic sign-in link:</strong> <a href="${escapeHtml(args.magicLink)}">Sign in</a></li>
+    </ul>${paymentSetup}
     <p>For security, you will be asked to change your password after your first sign-in.</p>
     <p>If you have trouble, contact ATRIA-X support at hello@atriaxsolutions.com.</p>
   </body>
@@ -290,16 +332,25 @@ function candidateWelcomeEmailText(args: {
   magicLink: string
   initialPassword: string
   appUrl: string
+  accountType?: string
+  agencyName?: string
+  paymentSetupUrl?: string
 }): string {
   const greeting = args.firstName ? `Hi ${args.firstName},` : 'Hi,'
+  const accountLine = args.accountType
+    ? `\nYour ${args.accountType} account${args.agencyName ? ` for ${args.agencyName}` : ''} is ready.\n`
+    : ''
+  const paymentSetup = args.paymentSetupUrl
+    ? `\nTo finish setting up your agency, set up your payment method here: ${args.paymentSetupUrl}\n`
+    : ''
   return `${greeting}
-
+${accountLine}
 Your ATRIA-X account has been created. Use the information below to sign in for the first time:
 
 Email: ${args.email}
 Temporary password: ${args.initialPassword}
 Magic sign-in link: ${args.magicLink}
-
+${paymentSetup}
 For security, you will be asked to change your password after your first sign-in.
 
 If you have trouble, contact ATRIA-X support at hello@atriaxsolutions.com.
