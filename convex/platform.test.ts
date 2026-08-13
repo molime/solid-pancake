@@ -672,6 +672,66 @@ describe('setTenantProduct', () => {
   })
 })
 
+describe('setTenantBranchActive', () => {
+  it('toggles a branch and rejects cross-tenant branches', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    const tenantId = await seedTenant(t)
+    const otherTenantId = await seedTenant(t)
+    const branchId = await t.run(async (ctx) =>
+      ctx.db.insert('agencyBranches', {
+        tenantId,
+        branchType: 'Daycare',
+        label: 'Daycare',
+        isPredefined: true,
+        order: 2,
+        active: true,
+      }),
+    )
+
+    await asAdmin.mutation(api.platform.setTenantBranchActive, {
+      tenantId,
+      branchId,
+      active: false,
+    })
+    const branch = await t.run((ctx) => ctx.db.get(branchId))
+    expect(branch?.active).toBe(false)
+
+    await expect(
+      asAdmin.mutation(api.platform.setTenantBranchActive, {
+        tenantId: otherTenantId,
+        branchId,
+        active: true,
+      }),
+    ).rejects.toThrow(/branch not found/i)
+  })
+
+  it('rejects non-admin', async () => {
+    const t = createTestConvex()
+    const tenantId = await seedTenant(t)
+    const branchId = await t.run(async (ctx) =>
+      ctx.db.insert('agencyBranches', {
+        tenantId,
+        branchType: 'Daycare',
+        label: 'Daycare',
+        isPredefined: true,
+        order: 2,
+        active: true,
+      }),
+    )
+    const asUser = t.withIdentity(NON_ADMIN)
+
+    await expect(
+      asUser.mutation(api.platform.setTenantBranchActive, {
+        tenantId,
+        branchId,
+        active: false,
+      }),
+    ).rejects.toThrow(/platform admin access required/i)
+  })
+})
+
 describe('setTenantLimits', () => {
   it('sets and clears tenant limits', async () => {
     const t = createTestConvex()

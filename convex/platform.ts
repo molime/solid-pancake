@@ -2190,6 +2190,32 @@ export const setTenantProduct = mutation({
   },
 })
 
+export const setTenantBranchActive = mutation({
+  args: {
+    tenantId: v.id('tenants'),
+    branchId: v.id('agencyBranches'),
+    active: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await requirePlatformAdmin(ctx)
+    // Mirrors agencyConfig.toggleBranch, but platform-admin scoped so an
+    // agency's branches can be managed without a tenant member account.
+    const branch = await ctx.db.get(args.branchId)
+    if (!branch || branch.tenantId !== args.tenantId) {
+      throw new ConvexError('Branch not found for this tenant.')
+    }
+    await ctx.db.patch(args.branchId, { active: args.active })
+    await recordPlatformAudit(
+      ctx,
+      identity,
+      args.tenantId,
+      'tenant_branch_updated',
+      { branchId: args.branchId, active: args.active },
+    )
+    return args.tenantId
+  },
+})
+
 export const setTenantLimits = mutation({
   args: {
     tenantId: v.id('tenants'),
