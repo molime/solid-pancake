@@ -4,11 +4,12 @@ import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { ShiftDocumentationForm } from '../components/ShiftDocumentationForm'
-import { CalendarDays, ChevronLeft, Clock, MapPin } from 'lucide-react'
+import { CalendarDays, ChevronLeft, Clock, MapPin, AlertTriangle } from 'lucide-react'
 import { formatTime, formatWeekdayDate, formatDurationHours, formatStreetAddress } from '@/shared/format'
 import { cn } from '@/shared/lib/cn'
 
@@ -64,6 +65,13 @@ export function CaregiverTodayPage() {
         <p className="text-base text-atria-text-secondary">
           {formatWeekdayDate(new Date())}
         </p>
+        <Link
+          to="/incidents/new"
+          className="inline-flex items-center gap-1.5 pt-1 text-sm font-medium text-atria-accent hover:underline"
+        >
+          <AlertTriangle className="h-4 w-4" />
+          Report an incident
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

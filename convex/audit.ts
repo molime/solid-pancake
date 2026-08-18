@@ -63,34 +63,42 @@ export const list = query({
           : args.endDate
         : undefined
 
-    const baseQuery = ctx.db
-      .query('auditEvents')
-      .withIndex('by_tenant_created_at', (q) => {
-        const base = q.eq('tenantId', tenantId)
-        if (args.startDate && endBound) {
-          return base.gte('createdAt', args.startDate).lte('createdAt', endBound)
-        }
-        if (args.startDate) return base.gte('createdAt', args.startDate)
-        if (endBound) return base.lte('createdAt', endBound)
-        return base
-      })
-      .order('desc')
-
-    // Page through the date-bounded index scan until 200 matching events are
-    // collected (or the window is exhausted). Filtering action/actorId after
-    // a single .take(500) could silently drop older matching events.
+    // Scan the date-bounded index in 500-row batches until 200 matching
+    // events are collected (or the window is exhausted). Filtering
+    // action/actorId after a single .take(500) could silently drop older
+    // matching events. Convex allows only one .paginate() call per function,
+    // so each batch is a fresh range query that walks the inclusive upper
+    // bound backwards; `seen` skips the previous batch's boundary row.
     const events: Doc<'auditEvents'>[] = []
-    let cursor: string | null = null
-    while (events.length < 200) {
-      const page = await baseQuery.paginate({ cursor, numItems: 500 })
-      for (const event of page.page) {
+    const seen = new Set<string>()
+    let upperBound = endBound
+    // The iteration cap guards the pathological case where more than 500
+    // rows share the exact same createdAt and the bound cannot advance.
+    for (let batch = 0; events.length < 200 && batch < 20; batch++) {
+      const rows = await ctx.db
+        .query('auditEvents')
+        .withIndex('by_tenant_created_at', (q) => {
+          const base = q.eq('tenantId', tenantId)
+          if (args.startDate && upperBound) {
+            return base.gte('createdAt', args.startDate).lte('createdAt', upperBound)
+          }
+          if (args.startDate) return base.gte('createdAt', args.startDate)
+          if (upperBound) return base.lte('createdAt', upperBound)
+          return base
+        })
+        .order('desc')
+        .take(500)
+      if (rows.length === 0) break
+      for (const event of rows) {
+        if (seen.has(event._id)) continue
+        seen.add(event._id)
         if (args.action && event.action !== args.action) continue
         if (args.actorId && event.actorId !== args.actorId) continue
         events.push(event)
         if (events.length === 200) break
       }
-      if (page.isDone) break
-      cursor = page.continueCursor
+      if (rows.length < 500) break
+      upperBound = rows[rows.length - 1].createdAt
     }
 
     // Resolve actorId (Clerk user ID) to display name for the UI.

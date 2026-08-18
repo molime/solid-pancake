@@ -366,3 +366,284 @@ describe('updateDocumentArchiveItem', () => {
     ).rejects.toThrow()
   })
 })
+
+describe('computeRetentionUntil', () => {
+  it('adds five calendar years to the creation timestamp', async () => {
+    const { computeRetentionUntil } = await import('./documentArchive')
+    expect(computeRetentionUntil('2026-08-18T00:00:00.000Z')).toBe(
+      '2031-08-18T00:00:00.000Z',
+    )
+  })
+})
+
+describe('setLegalHold', () => {
+  it('sets and clears legalHold on an archive item and writes an audit event', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_hold_set'
+    const adminId = 'user_admin_hold_set'
+    await seedTenant(t, clerkOrgId, adminId)
+    const { itemId } = await seedArchiveItem(t, clerkOrgId)
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.documentArchive.setLegalHold,
+      {
+        clerkOrgId,
+        table: 'documentArchiveItems',
+        recordId: itemId as string,
+        legalHold: true,
+      },
+    )
+
+    const item = await t.run(async (ctx) =>
+      ctx.db.get(itemId as Id<'documentArchiveItems'>),
+    )
+    expect(item?.legalHold).toBe(true)
+
+    const events = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      return ctx.db
+        .query('auditEvents')
+        .withIndex('by_tenant_created_at', (q) =>
+          q.eq('tenantId', tenant?._id as Id<'tenants'>),
+        )
+        .collect()
+    })
+    const event = events.find((e) => e.action === 'legal_hold_updated')
+    expect(event).toBeDefined()
+    expect(event?.metadata?.table).toBe('documentArchiveItems')
+    expect(event?.metadata?.recordId).toBe(itemId as string)
+    expect(event?.metadata?.legalHold).toBe(true)
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.documentArchive.setLegalHold,
+      {
+        clerkOrgId,
+        table: 'documentArchiveItems',
+        recordId: itemId as string,
+        legalHold: false,
+      },
+    )
+    const cleared = await t.run(async (ctx) =>
+      ctx.db.get(itemId as Id<'documentArchiveItems'>),
+    )
+    expect(cleared?.legalHold).toBe(false)
+  })
+
+  it('supports specialIncidents and progressReports records', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_hold_tables'
+    const adminId = 'user_admin_hold_tables'
+    await seedTenant(t, clerkOrgId, adminId)
+
+    const { incidentId, reportId } = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      const tenantId = tenant?._id as Id<'tenants'>
+      const clientId = await ctx.db.insert('clients', {
+        tenantId,
+        displayName: 'Client One',
+        serviceType: 'SLS',
+        authorizationHours: 20,
+        riskFlags: [],
+      })
+      const incidentId = await ctx.db.insert('specialIncidents', {
+        tenantId,
+        clientId,
+        category: 'medication_error',
+        occurredAt: new Date().toISOString(),
+        learnedAt: new Date().toISOString(),
+        location: 'Client home',
+        description: 'Missed dose',
+        actionsTaken: 'Notified nurse',
+        agenciesNotified: [],
+        status: 'draft',
+        createdBy: adminId,
+        createdAt: new Date().toISOString(),
+      })
+      const reportId = await ctx.db.insert('progressReports', {
+        tenantId,
+        clientId,
+        periodType: 'quarterly',
+        periodStart: '2026-01-01',
+        periodEnd: '2026-03-31',
+        entries: [],
+        status: 'draft',
+        generatedBy: adminId,
+        createdAt: new Date().toISOString(),
+      })
+      return { incidentId, reportId }
+    })
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.documentArchive.setLegalHold,
+      {
+        clerkOrgId,
+        table: 'specialIncidents',
+        recordId: incidentId as string,
+        legalHold: true,
+      },
+    )
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.documentArchive.setLegalHold,
+      {
+        clerkOrgId,
+        table: 'progressReports',
+        recordId: reportId as string,
+        legalHold: true,
+      },
+    )
+
+    const { incident, report } = await t.run(async (ctx) => ({
+      incident: await ctx.db.get(incidentId),
+      report: await ctx.db.get(reportId),
+    }))
+    expect(incident?.legalHold).toBe(true)
+    expect(report?.legalHold).toBe(true)
+  })
+
+  it('is blocked for org:hr (admin only)', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_hold_hr_block'
+    const adminId = 'user_admin_hold_hr_block'
+    const hrId = 'user_hr_hold_hr_block'
+    await seedTenant(t, clerkOrgId, adminId)
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant?._id as Id<'tenants'>,
+        clerkUserId: hrId,
+        role: 'org:hr',
+        displayName: 'HR',
+        email: 'hr@example.com',
+      })
+    })
+    const { itemId } = await seedArchiveItem(t, clerkOrgId)
+
+    await expect(
+      t
+        .withIdentity({ subject: hrId, org_id: clerkOrgId, org_role: 'org:hr' })
+        .mutation(api.documentArchive.setLegalHold, {
+          clerkOrgId,
+          table: 'documentArchiveItems',
+          recordId: itemId as string,
+          legalHold: true,
+        }),
+    ).rejects.toThrow()
+  })
+
+  it('rejects records from another tenant', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_hold_tenant_a'
+    const otherOrgId = 'org_hold_tenant_b'
+    const adminId = 'user_admin_hold_tenant'
+    await seedTenant(t, clerkOrgId, adminId)
+    const { itemId } = await seedArchiveItem(t, clerkOrgId)
+
+    // The same admin user is also an admin of a second tenant.
+    await t.run(async (ctx) => {
+      const otherTenantId = await ctx.db.insert('tenants', {
+        clerkOrgId: otherOrgId,
+        name: 'Other Agency',
+        slug: 'other-agency',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('tenantMembers', {
+        tenantId: otherTenantId,
+        clerkUserId: adminId,
+        role: 'org:admin',
+        displayName: 'Admin',
+        email: 'admin@example.com',
+      })
+    })
+
+    await expect(
+      asAdmin(t, adminId, otherOrgId).mutation(
+        api.documentArchive.setLegalHold,
+        {
+          clerkOrgId: otherOrgId,
+          table: 'documentArchiveItems',
+          recordId: itemId as string,
+          legalHold: true,
+        },
+      ),
+    ).rejects.toThrow()
+  })
+})
+
+describe('getRetentionReport', () => {
+  it('counts records approaching retention expiry and under legal hold per type', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_retention_report'
+    const adminId = 'user_admin_retention_report'
+    await seedTenant(t, clerkOrgId, adminId)
+
+    const DAY = 24 * 60 * 60 * 1000
+    // createdAt ~5 years ago minus/plus slack so createdAt + 5y lands inside
+    // or outside the 90-day window via the legacy fallback path.
+    const createdExpiring = new Date(
+      Date.now() - 5 * 365 * DAY + 30 * DAY,
+    ).toISOString()
+    const createdNotExpiring = new Date(
+      Date.now() - 5 * 365 * DAY - 30 * DAY,
+    ).toISOString()
+
+    await seedArchiveItem(t, clerkOrgId, { createdAt: createdExpiring })
+    await seedArchiveItem(t, clerkOrgId, { createdAt: createdNotExpiring })
+    const { itemId: holdItemId } = await seedArchiveItem(t, clerkOrgId, {
+      createdAt: new Date().toISOString(),
+    })
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.documentArchive.setLegalHold,
+      {
+        clerkOrgId,
+        table: 'documentArchiveItems',
+        recordId: holdItemId as string,
+        legalHold: true,
+      },
+    )
+
+    const report = await asAdmin(t, adminId, clerkOrgId).query(
+      api.documentArchive.getRetentionReport,
+      { clerkOrgId },
+    )
+
+    expect(report.windowDays).toBe(90)
+    const archive = report.recordTypes.find(
+      (rt) => rt.key === 'documentArchiveItems',
+    )
+    expect(archive?.total).toBe(3)
+    expect(archive?.expiringSoon).toBe(1)
+    expect(archive?.legalHold).toBe(1)
+    expect(
+      report.recordTypes.find((rt) => rt.key === 'specialIncidents')?.total,
+    ).toBe(0)
+    expect(
+      report.recordTypes.find((rt) => rt.key === 'progressReports')?.total,
+    ).toBe(0)
+  })
+
+  it('is blocked for org:caregiver', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_retention_block'
+    const adminId = 'user_admin_retention_block'
+    const caregiverId = 'user_cg_retention_block'
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedCaregiver(t, clerkOrgId, caregiverId)
+
+    await expect(
+      asCaregiver(t, caregiverId, clerkOrgId).query(
+        api.documentArchive.getRetentionReport,
+        { clerkOrgId },
+      ),
+    ).rejects.toThrow()
+  })
+})

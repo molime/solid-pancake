@@ -112,7 +112,81 @@ export default defineSchema({
         longitude: v.optional(v.number()),
       }),
     ),
+    // Client master-record depth (docs/07 §3.1/§3.4, gap row B1). All optional
+    // — existing client rows remain valid without them.
+    uci: v.optional(v.string()), // Unique Client Identifier (regional center)
+    dob: v.optional(v.string()), // ISO date-only (yyyy-mm-dd)
+    conservatorName: v.optional(v.string()),
+    conservatorPhone: v.optional(v.string()),
+    emergencyContacts: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          phone: v.string(),
+          relationship: v.string(),
+        }),
+      ),
+    ),
+    regionalCenter: v.optional(v.string()),
+    serviceCoordinatorName: v.optional(v.string()),
+    serviceCoordinatorEmail: v.optional(v.string()),
+    vendorNumber: v.optional(v.string()),
+    serviceCode: v.optional(v.string()), // e.g. '520' (ILS), '896' (SLS)
   }).index('by_tenant', ['tenantId']),
+
+  // IPP/ISP objectives per client (docs/07 §3.4, gap row B2). Quarterly SLS /
+  // semi-annual ILS progress reports are built from shift documentation tagged
+  // to these objectives (progressNotes.objectiveId / shiftTasks.objectiveId).
+  clientObjectives: defineTable({
+    tenantId: v.id('tenants'),
+    clientId: v.id('clients'),
+    title: v.string(),
+    description: v.optional(v.string()),
+    source: v.union(v.literal('ipp'), v.literal('isp')),
+    targetDate: v.optional(v.string()), // ISO date-only (yyyy-mm-dd)
+    hoursPerMonth: v.optional(v.number()),
+    status: v.union(
+      v.literal('active'),
+      v.literal('achieved'),
+      v.literal('discontinued'),
+    ),
+    createdAt: v.string(),
+  })
+    .index('by_tenant_client', ['tenantId', 'clientId'])
+    .index('by_tenant_status', ['tenantId', 'status']),
+
+  // Quarterly SLS / semi-annual ILS progress reports toward IPP/ISP objectives
+  // (docs/07 §3.4, gap row B3; 17 CCR §58680 + regional-center contract). One
+  // report per client+periodStart: generating for an existing draft period
+  // refreshes its entries; submitted reports are locked. Entries are prefilled
+  // deterministically from objective-linked shift documentation (see
+  // convex/progressReports.ts).
+  progressReports: defineTable({
+    tenantId: v.id('tenants'),
+    clientId: v.id('clients'),
+    periodType: v.union(v.literal('quarterly'), v.literal('semiannual')),
+    periodStart: v.string(), // ISO date-only (yyyy-mm-dd)
+    periodEnd: v.string(), // ISO date-only (yyyy-mm-dd)
+    entries: v.array(
+      v.object({
+        objectiveId: v.id('clientObjectives'),
+        objectiveTitle: v.string(),
+        servicesSummary: v.string(),
+        progressSummary: v.string(),
+        barriers: v.string(),
+        planForward: v.string(),
+        hoursDelivered: v.number(),
+      }),
+    ),
+    status: v.union(v.literal('draft'), v.literal('submitted')),
+    generatedBy: v.string(), // clerkUserId
+    submittedTo: v.optional(v.string()), // service coordinator name/email
+    submittedAt: v.optional(v.string()), // ISO
+    // Legal hold suspends the retention window (17 CCR §54326(a)(3) audit-hold
+    // extension) — records under hold must never be deleted.
+    legalHold: v.optional(v.boolean()),
+    createdAt: v.string(),
+  }).index('by_tenant_client_period', ['tenantId', 'clientId', 'periodStart']),
 
   shifts: defineTable({
     tenantId: v.id('tenants'),
@@ -238,6 +312,7 @@ export default defineSchema({
     servicesProvided: v.string(),
     clientResponse: v.string(),
     narrative: v.string(),
+    objectiveId: v.optional(v.id('clientObjectives')),
     submittedBy: v.optional(v.string()),
     submittedAt: v.optional(v.string()),
   }).index('by_tenant_shift', ['tenantId', 'shiftId']),
@@ -250,6 +325,7 @@ export default defineSchema({
     status: v.union(v.literal('pending'), v.literal('complete')),
     proofUrl: v.optional(v.string()),
     proofName: v.optional(v.string()),
+    objectiveId: v.optional(v.id('clientObjectives')),
   }).index('by_tenant_shift', ['tenantId', 'shiftId']),
 
   reviewEvents: defineTable({
@@ -508,6 +584,9 @@ export default defineSchema({
     status: v.string(),
     expiresAt: v.optional(v.string()),
     retentionUntil: v.optional(v.string()),
+    // Legal hold suspends the retention window (17 CCR §54326(a)(3) audit-hold
+    // extension) — records under hold must never be deleted.
+    legalHold: v.optional(v.boolean()),
     source: v.optional(v.string()),
     verifiedBy: v.optional(v.string()),
     verifiedAt: v.optional(v.string()),
@@ -532,6 +611,33 @@ export default defineSchema({
     isRequired: v.boolean(),
     expiryMonths: v.optional(v.number()),
   }).index('by_tenant_role', ['tenantId', 'role']),
+
+  // Agency-level recurring compliance obligations (vendor-file items from
+  // docs/07 §3.5: DS 1891, DS 1896, insurance certificates, CPA audit/review,
+  // COI statements, whistleblower policy, program design). Completing an
+  // obligation rolls dueAt forward by cadenceMonths; evidenceItemId links an
+  // uploaded documentArchiveItems row as proof.
+  agencyObligations: defineTable({
+    tenantId: v.id('tenants'),
+    key: v.union(
+      v.literal('ds1891_disclosure'),
+      v.literal('hcbs_agreement_ds1896'),
+      v.literal('insurance_general_liability'),
+      v.literal('insurance_workers_comp'),
+      v.literal('insurance_auto'),
+      v.literal('cpa_audit_or_review'),
+      v.literal('conflict_of_interest'),
+      v.literal('whistleblower_policy'),
+      v.literal('program_design'),
+    ),
+    label: v.string(),
+    cadenceMonths: v.number(),
+    dueAt: v.string(),
+    completedAt: v.optional(v.string()),
+    evidenceItemId: v.optional(v.id('documentArchiveItems')),
+    notes: v.optional(v.string()),
+    createdAt: v.string(),
+  }).index('by_tenant_due', ['tenantId', 'dueAt']),
 
   escalations: defineTable({
     tenantId: v.id('tenants'),
@@ -766,6 +872,142 @@ export default defineSchema({
     type: v.string(), // Stripe event type
     processedAt: v.string(),
   }).index('by_stripe_event_id', ['stripeEventId']),
+
+  // Special Incident Reports (17 CCR §54327, operative 2026-05-01). The
+  // initial narrative is immutable: there is no update mutation for these
+  // fields — follow-up information is appended via specialIncidentUpdates.
+  // Only verbalReportedAt/writtenSubmittedAt/status ever change, via the
+  // dedicated transition mutations in convex/incidents.ts.
+  specialIncidents: defineTable({
+    tenantId: v.id('tenants'),
+    clientId: v.id('clients'),
+    category: v.union(
+      v.literal('death'),
+      v.literal('serious_injury'),
+      v.literal('hospitalization'),
+      v.literal('emergency_room_visit'),
+      v.literal('medication_error'),
+      v.literal('suspected_abuse'),
+      v.literal('suspected_exploitation'),
+      v.literal('suspected_neglect'),
+      v.literal('victim_of_crime'),
+      v.literal('missing_person'),
+      v.literal('unauthorized_absence'),
+      v.literal('aggressive_act'),
+      v.literal('rights_violation'),
+      v.literal('other'),
+    ),
+    occurredAt: v.string(), // ISO — when the incident happened
+    learnedAt: v.string(), // ISO — when the agency learned of it (SLA anchor)
+    location: v.string(),
+    description: v.string(),
+    treatmentProvided: v.optional(v.string()),
+    witnesses: v.optional(v.string()),
+    allegedPerpetrator: v.optional(v.string()),
+    actionsTaken: v.string(),
+    agenciesNotified: v.array(
+      v.union(
+        v.literal('aps'),
+        v.literal('cps'),
+        v.literal('ccl'),
+        v.literal('law_enforcement'),
+        v.literal('ombudsman'),
+        v.literal('dph'),
+        v.literal('other'),
+      ),
+    ),
+    familyContacted: v.optional(
+      v.object({
+        who: v.string(),
+        at: v.string(), // ISO
+      }),
+    ),
+    verbalReportedAt: v.optional(v.string()), // ISO — the 24h report
+    writtenSubmittedAt: v.optional(v.string()), // ISO — the 48h report
+    // Legal hold suspends the retention window (17 CCR §54326(a)(3) audit-hold
+    // extension) — records under hold must never be deleted.
+    legalHold: v.optional(v.boolean()),
+    status: v.union(
+      v.literal('draft'),
+      v.literal('verbal_reported'),
+      v.literal('written_submitted'),
+      v.literal('closed'),
+    ),
+    createdBy: v.string(), // clerkUserId
+    createdAt: v.string(),
+  })
+    .index('by_tenant_created', ['tenantId', 'createdAt'])
+    .index('by_tenant_client', ['tenantId', 'clientId'])
+    .index('by_tenant_status', ['tenantId', 'status']),
+
+  // Append-only SIR follow-ups (Title 17 requires follow-up information to be
+  // added, not overwritten — no update/delete mutations exist for this table).
+  specialIncidentUpdates: defineTable({
+    tenantId: v.id('tenants'),
+    incidentId: v.id('specialIncidents'),
+    note: v.string(),
+    addedBy: v.string(), // clerkUserId
+    createdAt: v.string(),
+  }).index('by_tenant_incident', ['tenantId', 'incidentId']),
+
+  // Client grievances (WIC §4705; 17 CCR §58615(b)(6), §58631(d) — docs/07 §3.3,
+  // gap row A5). SLA: a resolution must be proposed within 5 business days of
+  // filedAt (computed in convex/grievances.ts, never stored).
+  grievances: defineTable({
+    tenantId: v.id('tenants'),
+    clientId: v.id('clients'),
+    filedAt: v.string(), // ISO
+    filedBy: v.string(), // free-text: client, authorized rep, etc.
+    description: v.string(),
+    status: v.union(
+      v.literal('open'),
+      v.literal('resolution_proposed'),
+      v.literal('resolved'),
+      v.literal('escalated'),
+    ),
+    resolutionNote: v.optional(v.string()),
+    proposedAt: v.optional(v.string()), // ISO
+    resolvedAt: v.optional(v.string()), // ISO
+    createdAt: v.string(),
+  })
+    .index('by_tenant_client', ['tenantId', 'clientId'])
+    .index('by_tenant_status', ['tenantId', 'status']),
+
+  // Corrective action plans from audit findings (docs/07 §3.6, gap row E3;
+  // 17 CCR §58851 analog — typically 30-day cycles). 'overdue' is computed
+  // (dueAt < now && status === 'open'), never stored.
+  correctiveActions: defineTable({
+    tenantId: v.id('tenants'),
+    source: v.union(
+      v.literal('regional_center'),
+      v.literal('dds'),
+      v.literal('internal'),
+    ),
+    finding: v.string(),
+    dueAt: v.string(), // ISO — defaults to finding date + 30 days
+    evidenceItemId: v.optional(v.id('documentArchiveItems')),
+    status: v.union(
+      v.literal('open'),
+      v.literal('submitted'),
+      v.literal('verified'),
+    ),
+    verifiedBy: v.optional(v.string()), // clerkUserId
+    verifiedAt: v.optional(v.string()), // ISO
+    createdAt: v.string(),
+  }).index('by_tenant_due', ['tenantId', 'dueAt']),
+
+  // Supervision notes + annual employee performance evaluations (17 CCR
+  // §58615(b)(5) — docs/07 §3.2, gap row C4). Append-only: no update/delete
+  // mutations; new entries are new rows.
+  supervisionRecords: defineTable({
+    tenantId: v.id('tenants'),
+    employeeProfileId: v.id('employeeProfiles'),
+    kind: v.union(v.literal('supervision'), v.literal('annual_evaluation')),
+    occurredAt: v.string(), // ISO
+    summary: v.string(),
+    recordedBy: v.string(), // clerkUserId
+    createdAt: v.string(),
+  }).index('by_tenant_employee', ['tenantId', 'employeeProfileId']),
 
   // Agency support tickets (Phase 3 — Maria's review). Created by agency
   // admins/coordinators; managed by platform admins in the Support section.

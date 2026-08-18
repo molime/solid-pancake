@@ -80,6 +80,16 @@ export const listHrCases = query({
     const candidateById = new Map(candidates.map((c) => [c._id as string, c]))
     const memberById = new Map(members.map((m) => [m._id as string, m]))
 
+    const obligationIds = cases
+      .filter((c) => c.subjectType === 'agency')
+      .map((c) => c.subjectId as Id<'agencyObligations'>)
+    const obligations = await Promise.all(
+      obligationIds.map((id) => ctx.db.get(id)),
+    )
+    const obligationById = new Map(
+      obligations.filter(Boolean).map((o) => [o!._id as string, o!]),
+    )
+
     return cases.map((c) => {
       let subjectName = 'Unknown'
       if (c.subjectType === 'employee') {
@@ -88,6 +98,9 @@ export const listHrCases = query({
       } else if (c.subjectType === 'candidate') {
         const candidate = candidateById.get(c.subjectId)
         if (candidate) subjectName = candidate.displayName
+      } else if (c.subjectType === 'agency') {
+        const obligation = obligationById.get(c.subjectId)
+        subjectName = obligation ? obligation.label : 'Agency'
       }
 
       const owner = c.ownerMemberId ? memberById.get(c.ownerMemberId as string) : undefined
@@ -132,6 +145,11 @@ export const getHrCase = query({
     } else if (hrCase.subjectType === 'candidate') {
       const candidate = await ctx.db.get(hrCase.subjectId as Id<'candidates'>)
       if (candidate) subjectName = candidate.displayName
+    } else if (hrCase.subjectType === 'agency') {
+      const obligation = await ctx.db.get(
+        hrCase.subjectId as Id<'agencyObligations'>,
+      )
+      subjectName = obligation ? obligation.label : 'Agency'
     }
 
     // Resolve owner name
@@ -663,6 +681,46 @@ async function checkShiftIssues(
   return drafts
 }
 
+/**
+ * Agency-level obligations (docs/07 §3.5, gap row D2): flag obligations due
+ * within 30 days or already overdue. subjectId is the agencyObligations doc
+ * id, so the shared hasOpenFlag dedup keeps one open case per obligation.
+ */
+async function checkObligationsDue(
+  ctx: MutationCtx,
+  tenantId: Id<'tenants'>,
+  existingOpenCases: OpenCaseRef[],
+): Promise<CaseDraft[]> {
+  const now = Date.now()
+  const thirtyDaysFromNow = new Date(now + 30 * DAY_MS).toISOString()
+  const drafts: CaseDraft[] = []
+
+  const obligations = await ctx.db
+    .query('agencyObligations')
+    .withIndex('by_tenant_due', (q) =>
+      q.eq('tenantId', tenantId).lte('dueAt', thirtyDaysFromNow),
+    )
+    .collect()
+
+  for (const obligation of obligations) {
+    if (hasOpenFlag(existingOpenCases, obligation._id, 'obligation_due')) {
+      continue
+    }
+
+    const isOverdue = obligation.dueAt < new Date(now).toISOString()
+    drafts.push({
+      subjectType: 'agency',
+      subjectId: obligation._id,
+      category: 'compliance',
+      title: `Agency obligation ${isOverdue ? 'overdue' : 'due soon'}: ${obligation.label}`,
+      description: `The agency obligation "${obligation.label}" ${isOverdue ? 'was due' : 'is due'} on ${obligation.dueAt} (renews every ${obligation.cadenceMonths} months). Complete it on the Compliance page, attaching evidence if available.`,
+      flagType: 'obligation_due',
+    })
+  }
+
+  return drafts
+}
+
 async function checkUnverifiedDocuments(
   ctx: MutationCtx,
   tenantId: Id<'tenants'>,
@@ -720,7 +778,12 @@ async function flagIssuesForTenant(
     ...(await checkApplicationRejections(ctx, tenantId, openCases)),
     ...(await checkShiftIssues(ctx, tenantId, openCases)),
     ...(await checkUnverifiedDocuments(ctx, tenantId, openCases)),
+    ...(await checkObligationsDue(ctx, tenantId, openCases)),
   ]
+
+  // obligation_due cases also notify org:admin members directly (same
+  // notification-insert pattern as incidents.checkOverdueIncidents).
+  let obligationAdmins: Doc<'tenantMembers'>[] | null = null
 
   let sequence = allCases.length
   const autoCreatedAt = new Date().toISOString()
@@ -745,6 +808,28 @@ async function flagIssuesForTenant(
       flagType: draft.flagType,
     })
     created += 1
+
+    if (draft.flagType === 'obligation_due') {
+      if (!obligationAdmins) {
+        obligationAdmins = await ctx.db
+          .query('tenantMembers')
+          .withIndex('by_tenant_role', (q) =>
+            q.eq('tenantId', tenantId).eq('role', 'org:admin'),
+          )
+          .collect()
+      }
+      for (const member of obligationAdmins) {
+        await ctx.db.insert('notifications', {
+          tenantId,
+          clerkUserId: member.clerkUserId,
+          type: 'obligation_due',
+          message: draft.title,
+          metadata: { obligationId: draft.subjectId },
+          read: false,
+          createdAt: autoCreatedAt,
+        })
+      }
+    }
   }
 
   return created

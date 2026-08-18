@@ -33,6 +33,7 @@ interface BillingLinesTableProps {
   onToggleAll?: (checked: boolean) => void
   selectable?: boolean
   showStatus?: boolean
+  onViewEvidence?: (line: BillingLineRow) => void
 }
 
 export function BillingLinesTable({
@@ -42,6 +43,7 @@ export function BillingLinesTable({
   onToggleAll,
   selectable = false,
   showStatus = false,
+  onViewEvidence,
 }: BillingLinesTableProps) {
   const { organization } = useOrganization()
   const clerkOrgId = organization?.id
@@ -114,6 +116,7 @@ export function BillingLinesTable({
             <TableHeader>Rate</TableHeader>
             <TableHeader className="text-right">Amount</TableHeader>
             {showStatus && <TableHeader>Status</TableHeader>}
+            {onViewEvidence && <TableHeader>Evidence</TableHeader>}
           </TableRow>
         </TableHead>
         <TableBody>
@@ -178,6 +181,17 @@ export function BillingLinesTable({
                   ) : (
                     <Badge variant="warning">Ready</Badge>
                   )}
+                </TableCell>
+              )}
+              {onViewEvidence && (
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onViewEvidence(line)}
+                  >
+                    View evidence
+                  </Button>
                 </TableCell>
               )}
             </TableRow>

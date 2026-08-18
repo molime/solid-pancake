@@ -25,8 +25,52 @@ export function formatDocumentCategoryLabel(category: string): string {
     employment_agreement: 'Employment agreement',
     form_submission: 'Application form',
     car_insurance: 'Car insurance policy',
+    live_in_attestation: 'Live-in caregiver attestation',
   }
   return labels[category] ?? formatStatusLabel(category)
+}
+
+export function formatIncidentCategoryLabel(category: string): string {
+  const labels: Record<string, string> = {
+    death: 'Death',
+    serious_injury: 'Serious injury',
+    hospitalization: 'Hospitalization',
+    emergency_room_visit: 'Emergency room visit',
+    medication_error: 'Medication error',
+    suspected_abuse: 'Suspected abuse',
+    suspected_exploitation: 'Suspected exploitation',
+    suspected_neglect: 'Suspected neglect',
+    victim_of_crime: 'Victim of crime',
+    missing_person: 'Missing person',
+    unauthorized_absence: 'Unauthorized absence',
+    aggressive_act: 'Aggressive act',
+    rights_violation: 'Rights violation',
+    other: 'Other',
+  }
+  return labels[category] ?? formatStatusLabel(category)
+}
+
+export function formatIncidentStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    draft: 'Report pending',
+    verbal_reported: 'Verbal reported',
+    written_submitted: 'Written submitted',
+    closed: 'Closed',
+  }
+  return labels[status] ?? formatStatusLabel(status)
+}
+
+export function formatAgencyNotifiedLabel(agency: string): string {
+  const labels: Record<string, string> = {
+    aps: 'Adult Protective Services',
+    cps: 'Child Protective Services',
+    ccl: 'Community Care Licensing',
+    law_enforcement: 'Law enforcement',
+    ombudsman: 'Ombudsman',
+    dph: 'Dept. of Public Health',
+    other: 'Other',
+  }
+  return labels[agency] ?? formatStatusLabel(agency)
 }
 
 export function formatTimeRange(scheduledStart: string, scheduledEnd: string): string {

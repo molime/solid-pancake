@@ -1,5 +1,5 @@
 import { useOrganization } from '@clerk/react'
-import { useQuery, useMutation } from 'convex/react'
+import { useConvex, useQuery, useMutation } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -21,6 +21,7 @@ import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { BillingInvoicePanel } from '../components/BillingInvoicePanel'
 import { BillingLinesTable } from '../components/BillingLinesTable'
 import { EmptyBillingState } from '../components/EmptyBillingState'
+import { EvidenceLineageDialog } from '../components/EvidenceLineageDialog'
 import { InvoicesTable } from '../components/InvoicesTable'
 import {
   buildInvoiceCsv,
@@ -37,6 +38,7 @@ import {
 export function BillingPage() {
   const { organization } = useOrganization()
   const clerkOrgId = organization?.id
+  const convex = useConvex()
   const readyLines = useQuery(
     api.billing.unexported,
     clerkOrgId ? { clerkOrgId } : 'skip',
@@ -73,6 +75,12 @@ export function BillingPage() {
   const [perPatientEnd, setPerPatientEnd] = useState('')
   const [isCreatingPerPatient, setIsCreatingPerPatient] = useState(false)
   const [perPatientError, setPerPatientError] = useState<string | null>(null)
+  const [evidenceLineId, setEvidenceLineId] = useState<Id<'billingLines'> | null>(
+    null,
+  )
+  const [evidenceStart, setEvidenceStart] = useState('')
+  const [evidenceEnd, setEvidenceEnd] = useState('')
+  const [isExportingEvidence, setIsExportingEvidence] = useState(false)
   const downloadedInvoiceIdRef = useRef<string | null>(null)
   const pdfDownloadRef = useRef<Id<'exportBatches'> | null>(null)
   const csvDownloadRef = useRef<Id<'exportBatches'> | null>(null)
@@ -224,8 +232,30 @@ export function BillingPage() {
     }
   }
 
-  const requestInvoiceDownload = (id: Id<'exportBatches'>) => {
-    downloadedInvoiceIdRef.current = null
+  const handleEvidenceExport = async () => {
+    if (!clerkOrgId) return
+    setIsExportingEvidence(true)
+    setError(null)
+    try {
+      const csv = await convex.query(api.evidence.exportEvidenceCsv, {
+        clerkOrgId,
+        ...(evidenceStart ? { startDate: evidenceStart } : {}),
+        ...(evidenceEnd ? { endDate: evidenceEnd } : {}),
+      })
+      const date = new Date().toISOString().slice(0, 10)
+      downloadCsv(`evidence-lineage-${date}.csv`, csv)
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Evidence export failed.',
+      )
+    } finally {
+      setIsExportingEvidence(false)
+    }
+  }
+
+  const requestInvoiceDownload = (id: Id<'exportBatches'>) => {    downloadedInvoiceIdRef.current = null
     if (invoiceDetails?.invoice._id === id) {
       downloadCsv(
         `${invoiceDetails.invoice.invoiceNumber}.csv`,
@@ -312,17 +342,50 @@ export function BillingPage() {
         <CardHeader>
           <CardTitle>Billing Line Ledger</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-end gap-2">
+            <FieldGroup label="Evidence from" htmlFor="evidenceStart">
+              <USDateInput
+                id="evidenceStart"
+                value={evidenceStart}
+                onChange={setEvidenceStart}
+              />
+            </FieldGroup>
+            <FieldGroup label="Evidence to" htmlFor="evidenceEnd">
+              <USDateInput
+                id="evidenceEnd"
+                value={evidenceEnd}
+                onChange={setEvidenceEnd}
+              />
+            </FieldGroup>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={isExportingEvidence}
+              onClick={handleEvidenceExport}
+            >
+              {isExportingEvidence ? 'Preparing…' : 'Download evidence CSV'}
+            </Button>
+          </div>
           {ledger.length === 0 ? (
             <EmptyBillingState
               title="No billing history"
               detail="Approved shifts and created invoices will appear here."
             />
           ) : (
-            <BillingLinesTable lines={ledger} showStatus />
+            <BillingLinesTable
+              lines={ledger}
+              showStatus
+              onViewEvidence={(line) => setEvidenceLineId(line._id)}
+            />
           )}
         </CardContent>
       </Card>
+
+      <EvidenceLineageDialog
+        billingLineId={evidenceLineId}
+        onClose={() => setEvidenceLineId(null)}
+      />
 
       <Dialog open={perPatientOpen} onClose={() => setPerPatientOpen(false)}>
         <DialogHeader>

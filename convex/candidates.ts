@@ -24,6 +24,7 @@ import {
   isAllowListError,
   assertEmailDomainAllowed,
 } from './invitations'
+import { computeRetentionUntil } from './documentArchive'
 import {
   createClerkUserAndJoinOrg,
   generateClerkSignInTicket,
@@ -1686,6 +1687,8 @@ export const addCandidateDocument = mutation({
       category: args.documentType,
       status: 'active',
       expiresAt: args.expiresAt,
+      // 17 CCR §54326(a)(3): retain service records at least 5 years.
+      retentionUntil: computeRetentionUntil(new Date().toISOString()),
       source: args.label,
       createdAt: new Date().toISOString(),
     })
@@ -2362,6 +2365,8 @@ export const attachCandidateDocument = mutation({
         category: args.documentType,
         status: 'active',
         expiresAt: args.expiresAt,
+        // 17 CCR §54326(a)(3): retain service records at least 5 years.
+        retentionUntil: computeRetentionUntil(new Date().toISOString()),
         source: args.label,
         createdAt: new Date().toISOString(),
         ...photoIdTypeMeta,

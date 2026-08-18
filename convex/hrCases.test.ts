@@ -204,6 +204,42 @@ describe('listHrCases', () => {
     expect(cases[0]?.ownerName).toBe('HR Person')
     expect(cases[0]?.ownerMemberId).toBe(hrMember?._id)
   })
+
+  it('resolves agency obligation labels for obligation_due cases', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_list_agency_cases'
+    const adminId = 'user_admin_agency_cases'
+    const hrId = 'user_hr_agency_cases'
+
+    const tenantId = await seedTenant(t, clerkOrgId, adminId)
+    await seedHR(t, clerkOrgId, hrId)
+
+    const obligationId = await t.run(async (ctx) =>
+      ctx.db.insert('agencyObligations', {
+        tenantId,
+        key: 'ds1891_disclosure',
+        label: 'DS 1891 applicant/vendor disclosure statement',
+        cadenceMonths: 24,
+        dueAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      }),
+    )
+
+    await asHR(t, hrId, clerkOrgId).mutation(api.hrCases.createHrCase, {
+      clerkOrgId,
+      subjectType: 'agency',
+      subjectId: obligationId,
+      category: 'compliance',
+      title: 'Agency obligation overdue: DS 1891',
+    })
+
+    const cases = await asHR(t, hrId, clerkOrgId).query(api.hrCases.listHrCases, {
+      clerkOrgId,
+    })
+
+    expect(cases).toHaveLength(1)
+    expect(cases[0]?.subjectName).toBe('DS 1891 applicant/vendor disclosure statement')
+  })
 })
 
 describe('updateHrCase', () => {

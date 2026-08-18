@@ -36,6 +36,7 @@ import { formatStreetAddress } from '@/shared/format'
 
 type ShiftDetails = FunctionReturnType<typeof api.shiftQueries.getWithDetails>
 type TenantSettings = FunctionReturnType<typeof api.tenantSettings.get>
+type ClientObjectives = FunctionReturnType<typeof api.clientObjectives.listByClient>
 type TaskId = ShiftDetails['tasks'][number]['_id']
 type TaskDraftList = TaskDraft<TaskId>[]
 
@@ -69,6 +70,12 @@ export function ShiftDocumentationForm({
     shiftId,
   })
   const settings = useQuery(api.tenantSettings.get, { clerkOrgId })
+  const objectives = useQuery(
+    api.clientObjectives.listByClient,
+    details?.client?._id
+      ? { clerkOrgId, clientId: details.client._id }
+      : 'skip',
+  )
 
   if (!details || !settings) {
     return (
@@ -86,6 +93,7 @@ export function ShiftDocumentationForm({
       shiftId={shiftId}
       firstName={firstName}
       onDone={onDone}
+      objectives={objectives}
     />
   )
 }
@@ -97,6 +105,7 @@ function ShiftDocumentationWizard({
   shiftId,
   firstName,
   onDone,
+  objectives,
 }: {
   clerkOrgId: string
   details: ShiftDetails
@@ -104,11 +113,15 @@ function ShiftDocumentationWizard({
   shiftId: Id<'shifts'>
   firstName?: string
   onDone?: () => void
+  objectives?: ClientObjectives
 }) {
   const [note, setNote] = useState<NoteDraft>(() => noteDraftFromNote(details.note))
   const [taskDrafts, setTaskDrafts] = useState<TaskDraftList>(() =>
     createTaskDrafts(details.tasks),
   )
+  const [selectedObjectiveId, setSelectedObjectiveId] = useState<
+    string | undefined
+  >(details.note?.objectiveId)
   const [selectedServices, setSelectedServices] = useState<ServiceLabel[]>(() =>
     parseSelectedServices(details.note?.servicesProvided),
   )
@@ -196,6 +209,36 @@ function ShiftDocumentationWizard({
     const next = { ...note, clientResponse }
     setNote(next)
     autosave({ clientResponse })
+  }
+
+  // Optional IPP/ISP objective tagging (docs/07 gap row B2). Saved directly
+  // (no debounce) since it is a single-select, not a typing field.
+  const activeObjectives = useMemo(
+    () => objectives?.filter((o) => o.status === 'active') ?? [],
+    [objectives],
+  )
+
+  const handleObjectiveChange = async (objectiveId: string) => {
+    setSelectedObjectiveId(objectiveId)
+    setSaved(false)
+    setIsSaving(true)
+    setSaveError(null)
+    try {
+      await updateProgressNote({
+        clerkOrgId,
+        shiftId,
+        objectiveId: objectiveId as Id<'clientObjectives'>,
+      })
+      setSaved(true)
+    } catch (err) {
+      setSaveError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Autosave failed',
+      )
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleClockIn = async () => {
@@ -327,32 +370,46 @@ function ShiftDocumentationWizard({
 
   if (view === 'clockIn') {
     return (
-      <ShiftClockInScreen
-        scheduledStart={details.shift.scheduledStart}
-        scheduledEnd={details.shift.scheduledEnd}
-        clientName={clientName}
-        address={address}
-        geofence={geofence}
-        locationState={locationState}
-        isLoading={isPunchLoading}
-        onClockIn={handleClockIn}
-      />
+      <>
+        {saveError && (
+          <div className="mb-4 rounded-[var(--radius-atria-md)] border border-atria-danger/30 bg-atria-danger-bg p-3 text-sm text-atria-danger" data-testid="save-error">
+            {saveError}
+          </div>
+        )}
+        <ShiftClockInScreen
+          scheduledStart={details.shift.scheduledStart}
+          scheduledEnd={details.shift.scheduledEnd}
+          clientName={clientName}
+          address={address}
+          geofence={geofence}
+          locationState={locationState}
+          isLoading={isPunchLoading}
+          onClockIn={handleClockIn}
+        />
+      </>
     )
   }
 
   if (view === 'clockOut') {
     return (
-      <ShiftClockOutScreen
-        scheduledStart={details.shift.scheduledStart}
-        clientName={clientName}
-        actualClockInAt={details.shift.clockInAt}
-        actualClockOutAt={details.shift.clockOutAt}
-        blockers={blockers}
-        geofence={geofence}
-        locationState={locationState}
-        isLoading={isPunchLoading}
-        onClockOut={handleClockOut}
-      />
+      <>
+        {saveError && (
+          <div className="mb-4 rounded-[var(--radius-atria-md)] border border-atria-danger/30 bg-atria-danger-bg p-3 text-sm text-atria-danger" data-testid="save-error">
+            {saveError}
+          </div>
+        )}
+        <ShiftClockOutScreen
+          scheduledStart={details.shift.scheduledStart}
+          clientName={clientName}
+          actualClockInAt={details.shift.clockInAt}
+          actualClockOutAt={details.shift.clockOutAt}
+          blockers={blockers}
+          geofence={geofence}
+          locationState={locationState}
+          isLoading={isPunchLoading}
+          onClockOut={handleClockOut}
+        />
+      </>
     )
   }
 
@@ -385,6 +442,11 @@ function ShiftDocumentationWizard({
           onEditStep={editStep}
           isSaving={isSaving}
           saved={saved}
+          objectives={activeObjectives}
+          selectedObjectiveId={selectedObjectiveId}
+          onObjectiveChange={(objectiveId) => {
+            void handleObjectiveChange(objectiveId)
+          }}
         />
       </div>
 

@@ -8,6 +8,7 @@ import {
   computeComplianceGaps,
   EXPIRING_SOON_DAYS,
 } from './compliance'
+import { loadLineEvidence } from './evidence'
 
 const AUDIT_ROLES: ('org:admin' | 'org:hr')[] = ['org:admin', 'org:hr']
 
@@ -28,7 +29,7 @@ function isBlank(value: string | undefined | null) {
  * is derived from progressNotes (a shift counts as documented when it has at
  * least one progress note with a non-blank narrative).
  */
-async function buildReport(
+export async function buildReport(
   ctx: QueryCtx,
   tenantId: Id<'tenants'>,
   tenant: Doc<'tenants'>,
@@ -110,6 +111,16 @@ async function buildReport(
     (line) => !isBlank(line.blockedReason),
   ).length
 
+  // Lineage spot check (docs/07 gap row B7): how many billing lines have a
+  // complete evidence chain (clock-in + clock-out punches, a non-blank
+  // progress note, and a review event). Shared definition with
+  // evidence.loadLineEvidence so the dashboard and the lineage view agree.
+  let evidenceCompleteLines = 0
+  for (const line of lines) {
+    const evidence = await loadLineEvidence(ctx, tenantId, line)
+    if (evidence.complete) evidenceCompleteLines += 1
+  }
+
   const events = await ctx.db
     .query('auditEvents')
     .withIndex('by_tenant_created_at', (q) => q.eq('tenantId', tenantId))
@@ -143,6 +154,10 @@ async function buildReport(
       withoutNotes: shifts.length - withNotes,
     },
     blockedBillingLines,
+    evidence: {
+      complete: evidenceCompleteLines,
+      total: lines.length,
+    },
     auditEvents: {
       total: events.length,
       last30Days: recentEvents,
@@ -250,6 +265,12 @@ function buildCsv(report: AuditReport, generatedAt: string) {
   rows.push(csvRow(['Billing']))
   rows.push(csvRow(['Metric', 'Count']))
   rows.push(csvRow(['Blocked Billing Lines', report.blockedBillingLines]))
+  rows.push(
+    csvRow([
+      'Evidence-Complete Billing Lines',
+      `${report.evidence.complete} of ${report.evidence.total}`,
+    ]),
+  )
   rows.push('')
 
   rows.push(csvRow(['Compliance Gaps']))
@@ -285,5 +306,195 @@ export const exportCsv = query({
 
     const report = await buildReport(ctx, tenantId, tenant)
     return buildCsv(report, new Date().toISOString())
+  },
+})
+
+// ---------------------------------------------------------------------------
+// Annual program evaluation (docs/07 §3.4, gap row B4; 17 CCR §58671(c)):
+// a read-only aggregate of one fiscal year (CA state FY: July 1 – June 30,
+// addressed by its end year). Computed on demand — never stored — so it can
+// never go stale.
+// ---------------------------------------------------------------------------
+
+function shiftHours(shift: Doc<'shifts'>) {
+  const start = shift.clockInAt ?? shift.scheduledStart
+  const end = shift.clockOutAt ?? shift.scheduledEnd
+  const hours = (new Date(end).getTime() - new Date(start).getTime()) / 3_600_000
+  return hours > 0 ? hours : 0
+}
+
+/** Current fiscal-year end year: FY runs July 1 – June 30. */
+export function currentFiscalYearEnd(now: Date) {
+  return now.getMonth() >= 6 ? now.getFullYear() + 1 : now.getFullYear()
+}
+
+function fiscalYearWindow(fiscalYearEnd: number) {
+  return {
+    startDate: `${fiscalYearEnd - 1}-07-01`,
+    endDate: `${fiscalYearEnd}-06-30`,
+  }
+}
+
+async function buildAnnualEvaluation(
+  ctx: QueryCtx,
+  tenantId: Id<'tenants'>,
+  fiscalYearEnd: number,
+) {
+  const { startDate, endDate } = fiscalYearWindow(fiscalYearEnd)
+  const startBound = `${startDate}T00:00:00.000Z`
+  const endBound = `${endDate}T23:59:59.999Z`
+
+  const shifts: Doc<'shifts'>[] = []
+  for (const status of ['approved', 'billing_ready'] as const) {
+    const batch = await ctx.db
+      .query('shifts')
+      .withIndex('by_tenant_status_start', (q) =>
+        q
+          .eq('tenantId', tenantId)
+          .eq('status', status)
+          .gte('scheduledStart', startBound)
+          .lte('scheduledStart', endBound),
+      )
+      .collect()
+    shifts.push(...batch)
+  }
+
+  const servedClientIds = new Set<string>()
+  let hoursDelivered = 0
+  let withNotes = 0
+  for (const shift of shifts) {
+    servedClientIds.add(shift.clientId as string)
+    hoursDelivered += shiftHours(shift)
+    const notes = await ctx.db
+      .query('progressNotes')
+      .withIndex('by_tenant_shift', (q) =>
+        q.eq('tenantId', tenantId).eq('shiftId', shift._id),
+      )
+      .collect()
+    if (notes.some((note) => !isBlank(note.narrative))) withNotes += 1
+  }
+
+  const objectives = await ctx.db
+    .query('clientObjectives')
+    .withIndex('by_tenant_status', (q) => q.eq('tenantId', tenantId))
+    .collect()
+  const objectiveCounts = { active: 0, achieved: 0, discontinued: 0 }
+  for (const objective of objectives) {
+    objectiveCounts[objective.status] += 1
+  }
+
+  const incidents = await ctx.db
+    .query('specialIncidents')
+    .withIndex('by_tenant_created', (q) => q.eq('tenantId', tenantId))
+    .collect()
+  const incidentsByCategory: Record<string, number> = {}
+  let incidentTotal = 0
+  for (const incident of incidents) {
+    const occurredDate = incident.occurredAt.slice(0, 10)
+    if (occurredDate < startDate || occurredDate > endDate) continue
+    incidentTotal += 1
+    incidentsByCategory[incident.category] =
+      (incidentsByCategory[incident.category] ?? 0) + 1
+  }
+
+  return {
+    fiscalYearEnd,
+    periodStart: startDate,
+    periodEnd: endDate,
+    clientsServed: servedClientIds.size,
+    objectives: {
+      ...objectiveCounts,
+      total: objectives.length,
+    },
+    hoursDelivered: Math.round(hoursDelivered * 100) / 100,
+    incidents: {
+      total: incidentTotal,
+      byCategory: incidentsByCategory,
+    },
+    documentation: {
+      total: shifts.length,
+      withNotes,
+      withoutNotes: shifts.length - withNotes,
+    },
+  }
+}
+
+export const getAnnualEvaluation = query({
+  args: { clerkOrgId: v.string(), fiscalYearEnd: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(
+      ctx,
+      args.clerkOrgId,
+      AUDIT_ROLES,
+    )
+    const fiscalYearEnd = args.fiscalYearEnd ?? currentFiscalYearEnd(new Date())
+    return buildAnnualEvaluation(ctx, tenantId, fiscalYearEnd)
+  },
+})
+
+type AnnualEvaluation = Awaited<ReturnType<typeof buildAnnualEvaluation>>
+
+function buildAnnualEvaluationCsv(
+  evaluation: AnnualEvaluation,
+  generatedAt: string,
+) {
+  const rows: string[] = []
+
+  rows.push(csvRow(['ATRIA-X Annual Program Evaluation (17 CCR §58671(c))']))
+  rows.push(csvRow(['Generated', generatedAt]))
+  rows.push(
+    csvRow([
+      'Fiscal Year',
+      `FY ${evaluation.fiscalYearEnd - 1}-${String(evaluation.fiscalYearEnd).slice(2)}`,
+      'Period',
+      `${evaluation.periodStart} to ${evaluation.periodEnd}`,
+    ]),
+  )
+  rows.push('')
+
+  rows.push(csvRow(['Service Delivery']))
+  rows.push(csvRow(['Metric', 'Value']))
+  rows.push(csvRow(['Clients Served', evaluation.clientsServed]))
+  rows.push(csvRow(['Hours Delivered', evaluation.hoursDelivered]))
+  rows.push('')
+
+  rows.push(csvRow(['IPP/ISP Objectives']))
+  rows.push(csvRow(['Status', 'Count']))
+  rows.push(csvRow(['Active', evaluation.objectives.active]))
+  rows.push(csvRow(['Achieved', evaluation.objectives.achieved]))
+  rows.push(csvRow(['Discontinued', evaluation.objectives.discontinued]))
+  rows.push(csvRow(['Total', evaluation.objectives.total]))
+  rows.push('')
+
+  rows.push(csvRow(['Special Incident Reports']))
+  rows.push(csvRow(['Category', 'Count']))
+  for (const category of Object.keys(evaluation.incidents.byCategory).sort()) {
+    rows.push(csvRow([category, evaluation.incidents.byCategory[category]]))
+  }
+  rows.push(csvRow(['Total', evaluation.incidents.total]))
+  rows.push('')
+
+  rows.push(csvRow(['Documentation']))
+  rows.push(csvRow(['Metric', 'Count']))
+  rows.push(csvRow(['Total Shifts', evaluation.documentation.total]))
+  rows.push(csvRow(['Shifts With Notes', evaluation.documentation.withNotes]))
+  rows.push(
+    csvRow(['Shifts Without Notes', evaluation.documentation.withoutNotes]),
+  )
+
+  return rows.join('\r\n')
+}
+
+export const exportAnnualEvaluationCsv = query({
+  args: { clerkOrgId: v.string(), fiscalYearEnd: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(
+      ctx,
+      args.clerkOrgId,
+      AUDIT_ROLES,
+    )
+    const fiscalYearEnd = args.fiscalYearEnd ?? currentFiscalYearEnd(new Date())
+    const evaluation = await buildAnnualEvaluation(ctx, tenantId, fiscalYearEnd)
+    return buildAnnualEvaluationCsv(evaluation, new Date().toISOString())
   },
 })

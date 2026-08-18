@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { getFunctionName } from 'convex/server'
 
 const mocks = {
@@ -112,7 +113,7 @@ describe('ClientsPage', () => {
       ],
     })
 
-    render(<ClientsPage />)
+    render(<MemoryRouter><ClientsPage /></MemoryRouter>)
 
     fireEvent.click(screen.getAllByRole('button', { name: /^schedule$/i })[0])
 
@@ -143,7 +144,7 @@ describe('ClientsPage', () => {
       ],
     })
 
-    render(<ClientsPage />)
+    render(<MemoryRouter><ClientsPage /></MemoryRouter>)
 
     await user.click(screen.getAllByRole('button', { name: /^address$/i })[0])
 
@@ -210,7 +211,7 @@ describe('ClientsPage', () => {
       },
     })
 
-    render(<ClientsPage />)
+    render(<MemoryRouter><ClientsPage /></MemoryRouter>)
 
     expect(
       screen.getByText(/Geofence is enabled, but some clients are missing latitude\/longitude/i),
@@ -246,7 +247,7 @@ describe('ClientsPage', () => {
       },
     })
 
-    render(<ClientsPage />)
+    render(<MemoryRouter><ClientsPage /></MemoryRouter>)
 
     expect(
       screen.queryByText(/Geofence is enabled, but some clients are missing latitude\/longitude/i),

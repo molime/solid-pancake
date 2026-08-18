@@ -21,6 +21,8 @@ import {
   Bell,
   LifeBuoy,
   ScrollText,
+  AlertTriangle,
+  FileCheck2,
 } from 'lucide-react'
 import { cn } from '@/shared/lib/cn'
 import { useQuery } from 'convex/react'
@@ -59,6 +61,18 @@ const navItems: NavItem[] = [
     label: 'Compliance',
     path: '/compliance',
     icon: <BadgeCheck className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator', 'org:hr'],
+  },
+  {
+    label: 'Incidents',
+    path: '/incidents',
+    icon: <AlertTriangle className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator', 'org:hr'],
+  },
+  {
+    label: 'EVV Export',
+    path: '/evv',
+    icon: <FileCheck2 className="h-4 w-4" />,
     roles: ['org:admin', 'org:coordinator', 'org:hr'],
   },
   {

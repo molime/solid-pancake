@@ -12,6 +12,138 @@ function isValidStatus(status: string): status is DocumentStatus {
   return (ALLOWED_STATUSES as readonly string[]).includes(status)
 }
 
+// ---------------------------------------------------------------------------
+// Record retention (17 CCR §54326(a)(3)): service records must be retained at
+// least 5 years, longer when under audit/legal hold. New archive items get
+// retentionUntil = createdAt + 5 years at creation (see candidates.ts); the
+// legalHold flag suspends the window for audits or litigation.
+// ---------------------------------------------------------------------------
+
+export const RETENTION_YEARS = 5
+export const RETENTION_REPORT_WINDOW_DAYS = 90
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** Calendar-year addition on an ISO timestamp (UTC). */
+export function computeRetentionUntil(createdAtIso: string): string {
+  const date = new Date(createdAtIso)
+  date.setUTCFullYear(date.getUTCFullYear() + RETENTION_YEARS)
+  return date.toISOString()
+}
+
+const legalHoldTableValidator = v.union(
+  v.literal('documentArchiveItems'),
+  v.literal('specialIncidents'),
+  v.literal('progressReports'),
+)
+
+/**
+ * Sets or clears the legal-hold flag on a retention-governed record
+ * (org:admin only). Records under hold must never be deleted; any future
+ * delete path for these tables must refuse deletion while legalHold is set or
+ * retentionUntil is in the future.
+ */
+export const setLegalHold = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    table: legalHoldTableValidator,
+    recordId: v.string(),
+    legalHold: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+    ])
+
+    const recordId = ctx.db.normalizeId(args.table, args.recordId)
+    if (!recordId) {
+      throw new ConvexError('Record not found.')
+    }
+    const record = await ctx.db.get(recordId)
+    if (!record) {
+      throw new ConvexError('Record not found.')
+    }
+    assertTenantDoc(record, tenantId)
+
+    await ctx.db.patch(recordId, { legalHold: args.legalHold })
+
+    await ctx.runMutation(internal.audit.record, {
+      clerkOrgId: args.clerkOrgId,
+      action: 'legal_hold_updated',
+      metadata: {
+        table: args.table,
+        recordId,
+        legalHold: args.legalHold,
+      },
+    })
+
+    return recordId
+  },
+})
+
+/**
+ * Retention report for the audit dashboard: per record type, how many records
+ * are under legal hold and how many approach their retention deadline
+ * (retentionUntil, or createdAt + 5 years for records that predate the
+ * field) within the next 90 days.
+ */
+export const getRetentionReport = query({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+    ])
+
+    const now = Date.now()
+    const nowIso = new Date(now).toISOString()
+    const windowEndIso = new Date(
+      now + RETENTION_REPORT_WINDOW_DAYS * DAY_MS,
+    ).toISOString()
+
+    const archiveItems = await ctx.db
+      .query('documentArchiveItems')
+      .withIndex('by_tenant_created', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    const incidents = await ctx.db
+      .query('specialIncidents')
+      .withIndex('by_tenant_created', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    const progressReports = await ctx.db
+      .query('progressReports')
+      .withIndex('by_tenant_client_period', (q) => q.eq('tenantId', tenantId))
+      .collect()
+
+    const summarize = (
+      key: string,
+      label: string,
+      records: {
+        createdAt: string
+        retentionUntil?: string
+        legalHold?: boolean
+      }[],
+    ) => {
+      let expiringSoon = 0
+      let legalHold = 0
+      for (const record of records) {
+        if (record.legalHold) legalHold += 1
+        const deadline = record.retentionUntil ?? computeRetentionUntil(record.createdAt)
+        if (deadline > nowIso && deadline <= windowEndIso) expiringSoon += 1
+      }
+      return { key, label, total: records.length, expiringSoon, legalHold }
+    }
+
+    return {
+      windowDays: RETENTION_REPORT_WINDOW_DAYS,
+      recordTypes: [
+        summarize('documentArchiveItems', 'Archived documents', archiveItems),
+        summarize('specialIncidents', 'Special incident reports', incidents),
+        summarize('progressReports', 'Progress reports', progressReports),
+      ],
+    }
+  },
+})
+
 export const listDocumentArchive = query({
   args: {
     clerkOrgId: v.string(),

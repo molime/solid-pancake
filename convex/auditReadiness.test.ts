@@ -565,3 +565,261 @@ describe('auditReadiness.exportCsv', () => {
     expect(csv).not.toContain('"=SUM(A1:A2)"')
   })
 })
+
+
+describe('auditReadiness.getAnnualEvaluation', () => {
+  async function seedEvaluationData(t: TestConvex, tenantId: Id<'tenants'>) {
+    return t.run(async (ctx) => {
+      const clientA = await ctx.db.insert('clients', {
+        tenantId,
+        displayName: 'Client A',
+        serviceType: 'SLS',
+        authorizationHours: 40,
+        riskFlags: [],
+      })
+      const clientB = await ctx.db.insert('clients', {
+        tenantId,
+        displayName: 'Client B',
+        serviceType: 'ILS',
+        authorizationHours: 20,
+        riskFlags: [],
+      })
+
+      // FY ending 2026 = 2025-07-01 → 2026-06-30.
+      const makeShift = (
+        clientId: Id<'clients'>,
+        start: string,
+        end: string,
+        status: 'submitted' | 'approved' | 'billing_ready',
+      ) =>
+        ctx.db.insert('shifts', {
+          tenantId,
+          clientId,
+          caregiverId: CAREGIVER_ID,
+          scheduledStart: start,
+          scheduledEnd: end,
+          status,
+          serviceType: 'SLS',
+          rate: 25,
+        })
+
+      // In FY: approved 4h shift with a narrative note.
+      const shiftA = await makeShift(
+        clientA,
+        '2026-01-10T09:00:00.000Z',
+        '2026-01-10T13:00:00.000Z',
+        'approved',
+      )
+      await ctx.db.insert('progressNotes', {
+        tenantId,
+        shiftId: shiftA,
+        startTime: '',
+        endTime: '',
+        servicesProvided: 'Personal care',
+        clientResponse: '',
+        narrative: 'Documented shift.',
+      })
+      // In FY: billing_ready 2h shift without a note.
+      await makeShift(
+        clientB,
+        '2025-12-01T09:00:00.000Z',
+        '2025-12-01T11:00:00.000Z',
+        'billing_ready',
+      )
+      // Outside FY (after June 30) — excluded.
+      await makeShift(
+        clientA,
+        '2026-08-01T09:00:00.000Z',
+        '2026-08-01T17:00:00.000Z',
+        'approved',
+      )
+      // In FY but not approved — excluded.
+      await makeShift(
+        clientA,
+        '2026-02-01T09:00:00.000Z',
+        '2026-02-01T17:00:00.000Z',
+        'submitted',
+      )
+
+      for (const status of [
+        'active',
+        'active',
+        'achieved',
+        'discontinued',
+      ] as const) {
+        await ctx.db.insert('clientObjectives', {
+          tenantId,
+          clientId: clientA,
+          title: `Objective ${status}`,
+          source: 'ipp',
+          status,
+          createdAt: new Date().toISOString(),
+        })
+      }
+
+      const makeIncident = (
+        category: 'medication_error' | 'death' | 'hospitalization',
+        occurredAt: string,
+      ) =>
+        ctx.db.insert('specialIncidents', {
+          tenantId,
+          clientId: clientA,
+          category,
+          occurredAt,
+          learnedAt: occurredAt,
+          location: 'Client home',
+          description: 'Incident',
+          actionsTaken: 'Actions',
+          agenciesNotified: [],
+          status: 'closed',
+          createdBy: ADMIN_ID,
+          createdAt: occurredAt,
+        })
+      // In FY (incl. first-day boundary).
+      await makeIncident('medication_error', '2026-02-01T10:00:00.000Z')
+      await makeIncident('death', '2025-07-01T10:00:00.000Z')
+      // Out of FY.
+      await makeIncident('hospitalization', '2026-08-01T10:00:00.000Z')
+    })
+  }
+
+  it('aggregates the fiscal year for a seeded dataset', async () => {
+    const t = createTestConvex()
+    const tenantId = await seedTenant(t, CLERK_ORG_ID, 'Audit Agency')
+    await seedEvaluationData(t, tenantId)
+
+    const evaluation = await asAdmin(t).query(
+      api.auditReadiness.getAnnualEvaluation,
+      { clerkOrgId: CLERK_ORG_ID, fiscalYearEnd: 2026 },
+    )
+
+    expect(evaluation).toMatchObject({
+      fiscalYearEnd: 2026,
+      periodStart: '2025-07-01',
+      periodEnd: '2026-06-30',
+      clientsServed: 2,
+      hoursDelivered: 6,
+      objectives: { active: 2, achieved: 1, discontinued: 1, total: 4 },
+      documentation: { total: 2, withNotes: 1, withoutNotes: 1 },
+    })
+    expect(evaluation.incidents.total).toBe(2)
+    expect(evaluation.incidents.byCategory).toEqual({
+      death: 1,
+      medication_error: 1,
+    })
+  })
+
+  it('returns zero service metrics for a fiscal year with no activity', async () => {
+    const t = createTestConvex()
+    const tenantId = await seedTenant(t, CLERK_ORG_ID, 'Audit Agency')
+    await seedEvaluationData(t, tenantId)
+
+    const evaluation = await asAdmin(t).query(
+      api.auditReadiness.getAnnualEvaluation,
+      { clerkOrgId: CLERK_ORG_ID, fiscalYearEnd: 2024 },
+    )
+
+    expect(evaluation.clientsServed).toBe(0)
+    expect(evaluation.hoursDelivered).toBe(0)
+    expect(evaluation.incidents.total).toBe(0)
+    expect(evaluation.documentation.total).toBe(0)
+    // Objectives are a current-status snapshot regardless of fiscal year.
+    expect(evaluation.objectives.total).toBe(4)
+  })
+
+  it('rejects coordinator and caregiver roles', async () => {
+    const t = createTestConvex()
+    await seedTenant(t, CLERK_ORG_ID, 'Audit Agency')
+
+    await expect(
+      asCoordinator(t).query(api.auditReadiness.getAnnualEvaluation, {
+        clerkOrgId: CLERK_ORG_ID,
+      }),
+    ).rejects.toThrow('Forbidden')
+    await expect(
+      asCaregiver(t).query(api.auditReadiness.getAnnualEvaluation, {
+        clerkOrgId: CLERK_ORG_ID,
+      }),
+    ).rejects.toThrow('Forbidden')
+  })
+
+  it('exports the evaluation as CSV with the shared conventions', async () => {
+    const t = createTestConvex()
+    const tenantId = await seedTenant(t, CLERK_ORG_ID, 'Audit Agency')
+    await seedEvaluationData(t, tenantId)
+
+    const csv = await asHr(t).query(
+      api.auditReadiness.exportAnnualEvaluationCsv,
+      { clerkOrgId: CLERK_ORG_ID, fiscalYearEnd: 2026 },
+    )
+
+    expect(csv).toContain('"ATRIA-X Annual Program Evaluation')
+    expect(csv).toContain('"FY 2025-26"')
+    expect(csv).toContain('"2025-07-01 to 2026-06-30"')
+    expect(csv).toContain('"Clients Served","2"')
+    expect(csv).toContain('"Hours Delivered","6"')
+    expect(csv).toContain('"Active","2"')
+    expect(csv).toContain('"Achieved","1"')
+    expect(csv).toContain('"death","1"')
+    expect(csv).toContain('"medication_error","1"')
+    expect(csv).toContain('"Shifts With Notes","1"')
+  })
+})
+
+describe('auditReadiness.getReport — evidence lineage counts', () => {
+  it('counts billing lines with a complete evidence chain', async () => {
+    const t = createTestConvex()
+    const tenantId = await seedTenant(t, CLERK_ORG_ID, 'Audit Agency')
+    const { shiftWithNote } = await seedFullAgency(t, tenantId)
+
+    // Neither seeded billing line has punches or review events yet.
+    const before = await asAdmin(t).query(api.auditReadiness.getReport, {
+      clerkOrgId: CLERK_ORG_ID,
+    })
+    expect(before.evidence).toEqual({ complete: 0, total: 2 })
+
+    // Complete the chain for the line tied to shiftWithNote: clock-in and
+    // clock-out GPS punches plus a review event (the note already exists).
+    await t.run(async (ctx) => {
+      const now = new Date().toISOString()
+      await ctx.db.insert('timePunches', {
+        tenantId,
+        shiftId: shiftWithNote,
+        caregiverId: CAREGIVER_ID,
+        punchType: 'clock_in',
+        at: '2026-01-01T08:00:00.000Z',
+        source: 'atriax',
+        adpSyncStatus: 'queued',
+        createdAt: now,
+      })
+      await ctx.db.insert('timePunches', {
+        tenantId,
+        shiftId: shiftWithNote,
+        caregiverId: CAREGIVER_ID,
+        punchType: 'clock_out',
+        at: '2026-01-01T16:00:00.000Z',
+        source: 'atriax',
+        adpSyncStatus: 'queued',
+        createdAt: now,
+      })
+      await ctx.db.insert('reviewEvents', {
+        tenantId,
+        shiftId: shiftWithNote,
+        reviewerId: COORDINATOR_ID,
+        decision: 'approved',
+        comment: 'ok',
+        createdAt: now,
+      })
+    })
+
+    const after = await asAdmin(t).query(api.auditReadiness.getReport, {
+      clerkOrgId: CLERK_ORG_ID,
+    })
+    expect(after.evidence).toEqual({ complete: 1, total: 2 })
+
+    const csv = await asAdmin(t).query(api.auditReadiness.exportCsv, {
+      clerkOrgId: CLERK_ORG_ID,
+    })
+    expect(csv).toContain('"Evidence-Complete Billing Lines","1 of 2"')
+  })
+})

@@ -1,10 +1,15 @@
 import { useOrganization } from '@clerk/react'
-import { useQuery } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { Badge } from '@/shared/ui/Badge'
+import { Button } from '@/shared/ui/Button'
+import { Select } from '@/shared/ui/Select'
+import { USDateInput } from '@/shared/ui/USDateInput'
+import { Textarea } from '@/shared/ui/Textarea'
+import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import {
   Table,
   TableBody,
@@ -13,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/ui/Table'
-import { ArrowLeft, User, FileText, ClipboardCheck } from 'lucide-react'
+import { ArrowLeft, User, FileText, ClipboardCheck, ClipboardList } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import type { Id } from '../../../../convex/_generated/dataModel'
@@ -27,6 +32,7 @@ const TABS = [
   { value: 'profile', label: 'Profile', icon: User },
   { value: 'documents', label: 'Documents', icon: FileText },
   { value: 'cases', label: 'Cases', icon: ClipboardCheck },
+  { value: 'supervision', label: 'Supervision', icon: ClipboardList },
 ] as const
 
 type TabValue = (typeof TABS)[number]['value']
@@ -206,6 +212,145 @@ function CasesTab({
   )
 }
 
+function SupervisionTab({
+  employeeProfileId,
+  clerkOrgId,
+}: {
+  employeeProfileId: Id<'employeeProfiles'>
+  clerkOrgId: string
+}) {
+  const records = useQuery(
+    api.supervisionRecords.listSupervisionRecords,
+    clerkOrgId ? { clerkOrgId, employeeProfileId } : 'skip',
+  )
+  const addRecord = useMutation(api.supervisionRecords.addSupervisionRecord)
+
+  const [kind, setKind] = useState<'supervision' | 'annual_evaluation'>(
+    'supervision',
+  )
+  const [occurredAt, setOccurredAt] = useState(
+    () => new Date().toISOString().slice(0, 10),
+  )
+  const [summary, setSummary] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const handleAdd = async () => {
+    setError(null)
+    try {
+      await addRecord({
+        clerkOrgId,
+        employeeProfileId,
+        kind,
+        occurredAt: new Date(`${occurredAt}T00:00:00.000Z`).toISOString(),
+        summary,
+      })
+      setKind('supervision')
+      setOccurredAt(new Date().toISOString().slice(0, 10))
+      setSummary('')
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Failed to add the record.',
+      )
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {!records ? (
+        <p className="text-sm text-atria-text-secondary">Loading records…</p>
+      ) : records.length === 0 ? (
+        <EmptyState
+          icon={<ClipboardList className="h-6 w-6" />}
+          title="No supervision records"
+          description="Supervision notes and annual performance evaluations (17 CCR §58615(b)(5)) will appear here."
+        />
+      ) : (
+        <ul className="space-y-3">
+          {records.map((record) => (
+            <li
+              key={record._id}
+              className="rounded-[var(--radius-atria-md)] border border-atria-border p-4"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  variant={
+                    record.kind === 'annual_evaluation' ? 'success' : 'default'
+                  }
+                >
+                  {record.kind === 'annual_evaluation'
+                    ? 'Annual evaluation'
+                    : 'Supervision'}
+                </Badge>
+                <span className="text-sm text-atria-text-secondary">
+                  {formatDateUS(record.occurredAt)} · Recorded by{' '}
+                  {record.recordedByName}
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-atria-ink">{record.summary}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="space-y-3 rounded-[var(--radius-atria-md)] border border-atria-border p-4">
+        <p className="text-sm font-medium text-atria-ink">Add a record</p>
+        {error && <p className="text-sm text-atria-danger">{error}</p>}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="text-xs font-medium uppercase tracking-wider text-atria-text-muted">
+              Kind
+            </label>
+            <Select
+              aria-label="Kind"
+              value={kind}
+              onChange={(e) =>
+                setKind(e.target.value as 'supervision' | 'annual_evaluation')
+              }
+              className="mt-1"
+            >
+              <option value="supervision">Supervision</option>
+              <option value="annual_evaluation">Annual evaluation</option>
+            </Select>
+          </div>
+          <div>
+            <label className="text-xs font-medium uppercase tracking-wider text-atria-text-muted">
+              Date
+            </label>
+            <USDateInput
+              value={occurredAt}
+              onChange={setOccurredAt}
+              className="mt-1"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-medium uppercase tracking-wider text-atria-text-muted">
+            Summary
+          </label>
+          <Textarea
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            aria-label="Summary"
+            className="mt-1"
+          />
+        </div>
+        <div>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={!occurredAt || !summary.trim()}
+            onClick={handleAdd}
+          >
+            Add record
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function EmployeeProfilePage() {
   const { memberId } = useParams<{ memberId: string }>()
   const { organization } = useOrganization()
@@ -309,6 +454,12 @@ export function EmployeeProfilePage() {
           )}
           {activeTab === 'cases' && profile?.clerkUserId && clerkOrgId && (
             <CasesTab clerkUserId={profile.clerkUserId} clerkOrgId={clerkOrgId} />
+          )}
+          {activeTab === 'supervision' && profile && clerkOrgId && (
+            <SupervisionTab
+              employeeProfileId={profile._id}
+              clerkOrgId={clerkOrgId}
+            />
           )}
         </CardContent>
       </Card>

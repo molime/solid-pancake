@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from '@/shared/ui/Dialog'
 import { Textarea } from '@/shared/ui/Textarea'
+import { Select } from '@/shared/ui/Select'
 import { USDateInput } from '@/shared/ui/USDateInput'
 import {
   Table,
@@ -43,6 +44,31 @@ const computedStatusLabel: Record<string, string> = {
   expired: 'Expired',
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+const OBLIGATION_DUE_SOON_DAYS = 30
+
+type ObligationStatus = 'ok' | 'due_soon' | 'overdue'
+
+function computeObligationStatus(dueAt: string): ObligationStatus {
+  const dueMs = new Date(dueAt).getTime()
+  const now = Date.now()
+  if (dueMs < now) return 'overdue'
+  if (dueMs <= now + OBLIGATION_DUE_SOON_DAYS * DAY_MS) return 'due_soon'
+  return 'ok'
+}
+
+const obligationStatusVariant: Record<ObligationStatus, StatusBadgeVariant> = {
+  ok: 'success',
+  due_soon: 'warning',
+  overdue: 'danger',
+}
+
+const obligationStatusLabel: Record<ObligationStatus, string> = {
+  ok: 'On track',
+  due_soon: 'Due soon',
+  overdue: 'Overdue',
+}
+
 export function ComplianceOverviewPage() {
   const { organization } = useOrganization()
   const clerkOrgId = organization?.id
@@ -65,6 +91,50 @@ export function ComplianceOverviewPage() {
   const exportReport = useMutation(api.reporting.exportReport)
 
   const canOverride = member?.role === 'org:admin' || member?.role === 'org:hr'
+
+  // Stage 2 — seeded CA ILS/SLS credential pack + agency obligations.
+  const requirements = useQuery(
+    api.compliance.listCredentialRequirements,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
+  const obligations = useQuery(
+    api.agencyObligations.listObligations,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
+  const applyCredentialPack = useMutation(
+    api.credentialPacks.applyCredentialPack,
+  )
+  const seedObligations = useMutation(api.agencyObligations.seedObligations)
+  const completeObligation = useMutation(
+    api.agencyObligations.completeObligation,
+  )
+
+  const isAdmin = member?.role === 'org:admin'
+  const canManageObligations = isAdmin || member?.role === 'org:hr'
+  const caregiverRequirements = (requirements ?? []).filter(
+    (requirement) => requirement.role === 'org:caregiver',
+  )
+  const showPackCard =
+    isAdmin && requirements !== undefined && caregiverRequirements.length === 0
+
+  const [isApplyingPack, setIsApplyingPack] = useState(false)
+  const [isSeedingObligations, setIsSeedingObligations] = useState(false)
+  const [completeTarget, setCompleteTarget] = useState<{
+    obligationId: Id<'agencyObligations'>
+    label: string
+  } | null>(null)
+  const [evidenceItemId, setEvidenceItemId] = useState('')
+  const [obligationNotes, setObligationNotes] = useState('')
+  const [isCompleting, setIsCompleting] = useState(false)
+
+  // listDocumentArchive is admin/hr-only; only fetch it while the Complete
+  // dialog is open so coordinators viewing the page never trigger it.
+  const archiveItems = useQuery(
+    api.documentArchive.listDocumentArchive,
+    clerkOrgId && completeTarget && canManageObligations
+      ? { clerkOrgId }
+      : 'skip',
+  )
 
   const [overrideItem, setOverrideItem] = useState<{
     itemId: Id<'documentArchiveItems'>
@@ -164,6 +234,88 @@ export function ComplianceOverviewPage() {
       )
     } finally {
       setIsExporting(false)
+    }
+  }
+
+  const handleApplyPack = async () => {
+    if (!clerkOrgId) return
+    setError(null)
+    setMessage(null)
+    setIsApplyingPack(true)
+    try {
+      const result = await applyCredentialPack({ clerkOrgId })
+      setMessage(result.message)
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Could not apply the credential pack.',
+      )
+    } finally {
+      setIsApplyingPack(false)
+    }
+  }
+
+  const handleSeedObligations = async () => {
+    if (!clerkOrgId) return
+    setError(null)
+    setMessage(null)
+    setIsSeedingObligations(true)
+    try {
+      const result = await seedObligations({ clerkOrgId })
+      setMessage(result.message)
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Could not seed obligations.',
+      )
+    } finally {
+      setIsSeedingObligations(false)
+    }
+  }
+
+  const openComplete = (obligation: {
+    _id: Id<'agencyObligations'>
+    label: string
+    evidenceItemId?: Id<'documentArchiveItems'>
+    notes?: string
+  }) => {
+    setCompleteTarget({ obligationId: obligation._id, label: obligation.label })
+    setEvidenceItemId(obligation.evidenceItemId ?? '')
+    setObligationNotes(obligation.notes ?? '')
+    setError(null)
+    setMessage(null)
+  }
+
+  const handleCompleteSubmit = async () => {
+    if (!completeTarget || !clerkOrgId) return
+    setError(null)
+    setMessage(null)
+    setIsCompleting(true)
+    try {
+      await completeObligation({
+        clerkOrgId,
+        obligationId: completeTarget.obligationId,
+        ...(evidenceItemId
+          ? { evidenceItemId: evidenceItemId as Id<'documentArchiveItems'> }
+          : {}),
+        ...(obligationNotes.trim() ? { notes: obligationNotes.trim() } : {}),
+      })
+      setMessage(
+        `Obligation completed: ${completeTarget.label}. Due date rolled forward.`,
+      )
+      setCompleteTarget(null)
+      setEvidenceItemId('')
+      setObligationNotes('')
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Could not complete the obligation.',
+      )
+    } finally {
+      setIsCompleting(false)
     }
   }
 
@@ -369,6 +521,169 @@ export function ComplianceOverviewPage() {
           )}
         </CardContent>
       </Card>
+
+      {showPackCard && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Get started with CA ILS/SLS requirements</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-atria-text-secondary">
+                No caregiver credential requirements are configured yet. Apply
+                the standard California ILS/SLS pack (Live Scan, CPR & First
+                Aid, TB screening, mandated reporter, zero-tolerance, HIPAA,
+                SIR training, and more) to make the compliance matrix
+                meaningful immediately. Safe to re-apply — existing
+                requirements are never duplicated.
+              </p>
+              <Button
+                variant="primary"
+                disabled={!clerkOrgId || isApplyingPack}
+                onClick={handleApplyPack}
+              >
+                {isApplyingPack
+                  ? 'Applying…'
+                  : 'Apply CA ILS/SLS credential pack'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Agency obligations</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {obligations === undefined ? (
+            <p className="py-8 text-center text-sm text-atria-text-secondary">
+              Loading agency obligations…
+            </p>
+          ) : obligations.length === 0 ? (
+            <div className="space-y-4">
+              <EmptyState
+                title="No agency obligations"
+                description="Recurring agency-level items (DS 1891 disclosure, insurance certificates, CPA audit/review, and more) will appear here once seeded."
+              />
+              {isAdmin && (
+                <div className="flex justify-center">
+                  <Button
+                    variant="secondary"
+                    disabled={!clerkOrgId || isSeedingObligations}
+                    onClick={handleSeedObligations}
+                  >
+                    {isSeedingObligations
+                      ? 'Seeding…'
+                      : 'Seed standard CA obligations'}
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableHeader>Obligation</TableHeader>
+                  <TableHeader>Due date</TableHeader>
+                  <TableHeader>Cadence</TableHeader>
+                  <TableHeader>Status</TableHeader>
+                  <TableHeader>Actions</TableHeader>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {obligations.map((obligation) => {
+                  const status = computeObligationStatus(obligation.dueAt)
+                  return (
+                    <TableRow key={obligation._id}>
+                      <TableCell className="font-medium">
+                        {obligation.label}
+                      </TableCell>
+                      <TableCell>{formatDateUS(obligation.dueAt)}</TableCell>
+                      <TableCell>
+                        Every {obligation.cadenceMonths} months
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge variant={obligationStatusVariant[status]}>
+                          {obligationStatusLabel[status]}
+                        </StatusBadge>
+                      </TableCell>
+                      <TableCell>
+                        {canManageObligations ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => openComplete(obligation)}
+                          >
+                            Complete
+                          </Button>
+                        ) : (
+                          '—'
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={completeTarget !== null}
+        onClose={() => setCompleteTarget(null)}
+      >
+        <DialogHeader>
+          <DialogTitle>Complete obligation</DialogTitle>
+        </DialogHeader>
+        <DialogContent className="space-y-4">
+          <p className="text-sm text-atria-text-secondary">
+            {completeTarget?.label}
+          </p>
+          <div>
+            <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+              Evidence document (optional)
+            </label>
+            <Select
+              className="mt-1.5"
+              onChange={(event) => setEvidenceItemId(event.target.value)}
+              value={evidenceItemId}
+            >
+              <option value="">No evidence</option>
+              {(archiveItems ?? []).map((item) => (
+                <option key={item._id} value={item._id}>
+                  {formatDocumentCategoryLabel(item.category)}
+                  {item.file?.fileName ? ` — ${item.file.fileName}` : ''}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+              Notes (optional)
+            </label>
+            <Textarea
+              className="mt-1.5"
+              onChange={(event) => setObligationNotes(event.target.value)}
+              placeholder="Renewal details, certificate number, …"
+              value={obligationNotes}
+            />
+          </div>
+        </DialogContent>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setCompleteTarget(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            disabled={isCompleting}
+            onClick={handleCompleteSubmit}
+          >
+            {isCompleting ? 'Completing…' : 'Mark complete'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
 
       <Dialog open={overrideItem !== null} onClose={() => setOverrideItem(null)}>
         <DialogHeader>

@@ -28,6 +28,26 @@ const ComplianceOverviewPage = lazy(() =>
     }),
   ),
 )
+const IncidentsPage = lazy(() =>
+  import('@/features/incidents/pages/IncidentsPage').then((module) => ({
+    default: module.IncidentsPage,
+  })),
+)
+const EvvExportPage = lazy(() =>
+  import('@/features/evv/pages/EvvExportPage').then((module) => ({
+    default: module.EvvExportPage,
+  })),
+)
+const IncidentFormPage = lazy(() =>
+  import('@/features/incidents/pages/IncidentFormPage').then((module) => ({
+    default: module.IncidentFormPage,
+  })),
+)
+const IncidentDetailPage = lazy(() =>
+  import('@/features/incidents/pages/IncidentDetailPage').then((module) => ({
+    default: module.IncidentDetailPage,
+  })),
+)
 const ReportingPage = lazy(() =>
   import('@/features/reporting/pages/ReportingPage').then((module) => ({
     default: module.ReportingPage,
@@ -80,6 +100,11 @@ const AuditReadinessPage = lazy(() =>
 const ClientsPage = lazy(() =>
   import('@/features/clients/pages/ClientsPage').then((module) => ({
     default: module.ClientsPage,
+  })),
+)
+const ClientDetailPage = lazy(() =>
+  import('@/features/clients/pages/ClientDetailPage').then((module) => ({
+    default: module.ClientDetailPage,
   })),
 )
 const TeamPage = lazy(() =>
@@ -591,6 +616,60 @@ export function AppRouter() {
           }
         />
         <Route
+          path="incidents"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator', 'org:hr']}
+            >
+              <RouteSuspense>
+                <IncidentsPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        {/* Caregivers can file an incident but never see the log or detail. */}
+        <Route
+          path="incidents/new"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={[
+                'org:admin',
+                'org:coordinator',
+                'org:hr',
+                'org:caregiver',
+              ]}
+            >
+              <RouteSuspense>
+                <IncidentFormPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="incidents/:incidentId"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator', 'org:hr']}
+            >
+              <RouteSuspense>
+                <IncidentDetailPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="evv"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator', 'org:hr']}
+            >
+              <RouteSuspense>
+                <EvvExportPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
           path="reports"
           element={
             <TenantRoleRouteGuard
@@ -707,6 +786,18 @@ export function AppRouter() {
             >
               <RouteSuspense>
                 <ClientsPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="clients/:clientId"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator', 'org:hr']}
+            >
+              <RouteSuspense>
+                <ClientDetailPage />
               </RouteSuspense>
             </TenantRoleRouteGuard>
           }
