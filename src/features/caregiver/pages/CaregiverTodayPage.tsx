@@ -48,6 +48,13 @@ export function CaregiverTodayPage() {
           <p className="mt-1 text-sm text-atria-text-secondary">
             You have no shifts for today in {tenantName}. Check back later or contact your coordinator.
           </p>
+          <Link
+            to="/incidents/new"
+            className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-atria-accent hover:underline"
+          >
+            <AlertTriangle className="h-4 w-4" />
+            Report an incident
+          </Link>
         </div>
       </div>
     )

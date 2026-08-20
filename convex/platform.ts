@@ -767,10 +767,12 @@ export const listAuditEvents = query({
     const actorIds = new Set(events.map((e) => e.actorId))
     const actorNames = new Map<string, string>()
     for (const actorId of actorIds) {
+      // first() not unique(): users can belong to multiple tenants, and this
+      // view spans tenants — any membership row yields the same displayName.
       const member = await ctx.db
         .query('tenantMembers')
         .withIndex('by_clerk_user_id', (q) => q.eq('clerkUserId', actorId))
-        .unique()
+        .first()
       if (member) {
         actorNames.set(actorId, member.displayName)
         continue

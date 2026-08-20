@@ -18,12 +18,13 @@ import {
 } from '@/shared/ui/Table'
 import { downloadCsv } from '@/shared/lib/downloadCsv'
 import { CorrectiveActionsCard } from '@/features/reporting/components/CorrectiveActionsCard'
+import { AuditSimpleView } from '@/features/reporting/components/AuditSimpleView'
 import { Select } from '@/shared/ui/Select'
 import { USDateInput } from '@/shared/ui/USDateInput'
 import { formatHours, formatStatusLabel } from '@/shared/format'
-import { Download, ScrollText } from 'lucide-react'
+import { ChevronLeft, Download, ScrollText } from 'lucide-react'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
 type AuditReport = FunctionReturnType<typeof api.auditReadiness.getReport>
 type Obligations = FunctionReturnType<typeof api.agencyObligations.listObligations>
@@ -189,7 +190,21 @@ function fiscalYearLabel(fiscalYearEnd: number) {
   return `FY ${fiscalYearEnd - 1}–${String(fiscalYearEnd).slice(2)}`
 }
 
+/**
+ * Layered audit views (docs/design-audit-simplification.md): the simple
+ * traffic-light view is the default front door; the full auditor-facing view
+ * below is unchanged and lives one level down at the bookmarkable
+ * /audit?view=full. Both derive from the same backend computations.
+ */
 export function AuditReadinessPage() {
+  const [searchParams] = useSearchParams()
+  if (searchParams.get('view') === 'full') {
+    return <AuditFullView />
+  }
+  return <AuditSimpleView />
+}
+
+function AuditFullView() {
   const { organization } = useOrganization()
   const clerkOrgId = organization?.id
   const convex = useConvex()
@@ -368,6 +383,13 @@ export function AuditReadinessPage() {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
+          <Link
+            to="/audit"
+            className="mb-1 inline-flex items-center gap-1 text-sm text-atria-text-secondary hover:text-atria-ink"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Back to overview
+          </Link>
           <h1 className="text-2xl font-bold text-atria-ink">Audit Trail</h1>
           <p className="text-base text-atria-text-secondary">
             Audit-readiness tool for California ILS/SLS compliance
