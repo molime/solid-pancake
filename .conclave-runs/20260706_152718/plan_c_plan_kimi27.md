@@ -1,4 +1,0 @@
-# http://localhost:11434/api/chat
-# model=kimi-k2.7-code:cloud status=200
-
-We need produce a premium implementation plan. We are an agentic CLI (Claude/Codex). Must open and read actual relevant files before writing plan. We need inspect repo. We have context: ATRIA-X repo. Need read files: Figma spec, existing router, sidebar, documents features, forms features, shared UI components, Convex functions related to documents/forms, auth helpers, etc. We need use tool to read files. We need plan only, no code. We need be thorough. Let's start by exploring repo structure and relevant files. We'll use bash and file read. Need be careful with paths. The repo likely at some location? Context doesn't specify repo path. We need infer maybe current working directory? We can list. Let's run pwd and ls.

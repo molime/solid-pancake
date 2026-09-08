@@ -1,4 +1,0 @@
-# http://localhost:11434/api/chat
-# model=kimi-k2.7-code:cloud status=200
-
-We need produce a premium implementation plan. We are an agentic CLI? The prompt says "If your backend is an agentic CLI (kimi, codex, claude), you MUST open and read the actual relevant files before writing the plan — do not reason from the context description alone." We are Claude? We can read files via tool. Need to inspect repo files. We have context: ATRIA-X repo, task fix unit test in convex/candidates.test.ts. Need read actual file. Use read tool. Also maybe package.json? But minimal. Need verify lines 260-275. Let's read file.

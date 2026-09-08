@@ -1,4 +1,0 @@
-# http://localhost:11434/api/chat
-# model=kimi-k2.7-code:cloud status=200
-
-We need produce a premium implementation plan. We are backend? We are Kimi? The instruction says if backend is agentic CLI (kimi, codex, claude), MUST open and read actual relevant files before writing plan. We are Kimi agentic CLI? We can use tools to read files. Need inspect repo at ~/Documents/Work/conclave? Wait repo context ATRIA-X. The shared memory says Conclave at ~/Documents/Work/conclave. But task is ATRIA-X repo. We need discover actual files. We need use tools to list/read files. We need be careful not to edit repo outside pipeline. We need produce plan only, not code. Need read relevant files: convex/onboarding, scheduling, forms, documents, authHelpers, seed, tests/e2e maybe. Also package.json scripts. Need actual function/type names. Let's start by exploring repo. Use shell to find root? We don't know path. Could be current working directory. Let's list.

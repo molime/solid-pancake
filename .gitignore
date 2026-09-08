@@ -54,4 +54,38 @@ playwright-report/
 *.sln
 *.sw?
 
-.conclave-runs
+# AI tooling artifacts and output
+.conclave-runs/
+.hermes-pipeline/
+.hermes-pipeline*/
+.pixel-check/
+.qa-audit-sim/
+.training_extract_output/
+.training_extract_venv/
+graphify-out/
+
+# AI assistant instruction documents
+CLAUDE.md
+
+# Temporary working directories
+.tmp_docx_venv/
+.tmp_images/
+
+# Malformed / tool-generated screenshot directories
+*hermes-pipeline*screenshots/
+
+# Local debug / temp files generated during AI-assisted work
+.tmp_*
+_tmp_*
+debug*.py
+debug*.tsx
+extract_training.py
+fix_*.py
+fix_*.tsx
+function_spec_*.json
+fresh-signin-links*.txt
+scripts/*-error.png
+scripts/verify-*.png
+verify-*.png
+.wmic_out.txt
+src-test-results.txt
