@@ -283,7 +283,7 @@ export function CandidateOnboardingPage() {
                   key={task._id}
                   onClick={() => {
                     if (isLocked) return
-                    navigate(getTaskRoute(task))
+                    navigate(getTaskRoute(task, hasTrainingProduct))
                   }}
                   disabled={isLocked}
                   className={cn(
@@ -388,7 +388,7 @@ export function CandidateOnboardingPage() {
                       <Button
                         variant='secondary'
                         size='sm'
-                        onClick={() => navigate(getTaskRoute(task))}
+                        onClick={() => navigate(getTaskRoute(task, hasTrainingProduct))}
                       >
                         Upload now
                       </Button>
