@@ -49,9 +49,9 @@ async function setPasswordAndContinue(page: import('@playwright/test').Page) {
 async function acceptJobDescriptionAndLegalValidity(page: import('@playwright/test').Page) {
   // Golden Ages: disclaimer card and agency-specific JD must be visible.
   await expect(page.getByText('Important notice before you apply')).toBeVisible({ timeout: 15000 })
-  await page.locator('#jdPositionApplyingFor').selectOption('Caregiver')
+  await page.locator('#jdPositionApplyingFor').selectOption('Affiliated Home Care Aide (HCA)')
   await expect(page.getByText('Golden Ages Home Care', { exact: false }).first()).toBeVisible({ timeout: 10000 })
-  await expect(page.getByText(/Morning: 9:00 AM/i)).toBeVisible()
+  await expect(page.getByText(/Affiliated Home Care Aide \(HCA\) Position Description/i)).toBeVisible()
   await page.getByLabel(/I have read and understand the job description/i).check()
   await page.getByLabel(/I understand that typing my name/i).check()
   await page.getByRole('button', { name: /Save and continue/i }).click()
@@ -190,7 +190,7 @@ test.describe('Golden Ages built-in application flow', { tag: '@no-auth' }, () =
     await page.goto(`${BASE_URL}/onboarding/upload/background_check`)
     await page.waitForLoadState('networkidle')
     await expect(page.getByText(/Complete DOJ background check/i)).toBeVisible({ timeout: 15000 })
-    const dojLink = page.locator('a[href="https://oag.ca.gov/fingerprints/locations"]')
+    const dojLink = page.locator('a[href="https://guardian.dss.ca.gov/applicant"]')
     await expect(dojLink).toBeVisible()
   })
 })
