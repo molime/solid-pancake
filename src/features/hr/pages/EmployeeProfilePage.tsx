@@ -18,18 +18,21 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/ui/Table'
-import { ArrowLeft, User, FileText, ClipboardCheck, ClipboardList } from 'lucide-react'
+import { ArrowLeft, User, FileText, ClipboardCheck, ClipboardList, UserCheck } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { adpStatusPill } from '../lib/adpStatus'
 import { CaseDetailModal } from '../components/CaseDetailModal'
+import { HiringTab } from '../components/HiringTab'
+import { De34EmployeeSection } from '../components/De34EmployeeSection'
 import { caseStatusVariant } from '../lib/caseStatus'
 import { cn } from '@/shared/lib/cn'
 import { formatDateUS } from '@/shared/format'
 
 const TABS = [
   { value: 'profile', label: 'Profile', icon: User },
+  { value: 'hiring', label: 'Hiring', icon: UserCheck },
   { value: 'documents', label: 'Documents', icon: FileText },
   { value: 'cases', label: 'Cases', icon: ClipboardCheck },
   { value: 'supervision', label: 'Supervision', icon: ClipboardList },
@@ -410,6 +413,13 @@ export function EmployeeProfilePage() {
         </CardContent>
       </Card>
 
+      {profile?.clerkUserId && clerkOrgId && (
+        <De34EmployeeSection
+          clerkOrgId={clerkOrgId}
+          clerkUserId={profile.clerkUserId}
+        />
+      )}
+
       <div className="flex flex-wrap gap-2">
         {TABS.map((tab) => {
           const Icon = tab.icon
@@ -448,6 +458,9 @@ export function EmployeeProfilePage() {
               }}
               profile={profile}
             />
+          )}
+          {activeTab === 'hiring' && profile?.clerkUserId && clerkOrgId && (
+            <HiringTab clerkOrgId={clerkOrgId} clerkUserId={profile.clerkUserId} />
           )}
           {activeTab === 'documents' && profile?.clerkUserId && clerkOrgId && (
             <DocumentsTab clerkUserId={profile.clerkUserId} clerkOrgId={clerkOrgId} />

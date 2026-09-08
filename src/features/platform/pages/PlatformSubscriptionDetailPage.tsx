@@ -1,9 +1,8 @@
-import { Component, useState, type ReactNode } from "react";
+import { Component, useEffect, useState, type ReactNode } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
-import type { Id } from "../../../../convex/_generated/dataModel";
 import { Dialog } from "@/shared/ui/Dialog";
 import { formatCurrency, formatDateUS } from "@/shared/format";
 import { sanitizeConvexError } from "@/shared/lib/sanitizeConvexError";
@@ -42,12 +41,16 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 // crashing the whole page.
 class SubscriptionDetailErrorBoundary extends Component<
   { children: ReactNode },
-  { failed: boolean }
+  { failed: boolean; error?: Error | null }
 > {
-  state = { failed: false };
+  state: { failed: boolean; error?: Error | null } = { failed: false, error: null };
 
-  static getDerivedStateFromError() {
-    return { failed: true };
+  static getDerivedStateFromError(error: Error) {
+    return { failed: true, error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('PlatformSubscriptionDetailPage error boundary:', error, info);
   }
 
   render() {
@@ -58,6 +61,11 @@ class SubscriptionDetailErrorBoundary extends Component<
           <p className="mt-1 text-sm text-[#9aa6a8]">
             This agency does not exist or the link is invalid.
           </p>
+          {this.state.error && (
+            <p className="mt-2 text-xs text-[#687173]">
+              {this.state.error.message}
+            </p>
+          )}
           <Link
             to="/platform/subscriptions"
             className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[#22c55e] hover:underline"
@@ -83,19 +91,43 @@ export function PlatformSubscriptionDetailPage() {
 }
 
 function PlatformSubscriptionDetailContent() {
-  const { tenantId } = useParams();
+  const { tenantSlug } = useParams();
   const isAdmin = usePlatformAdmin();
   const detail = useQuery(
-    api.platform.getTenantDetail,
-    isAdmin && tenantId ? { tenantId: tenantId as Id<"tenants"> } : "skip",
+    api.platform.getTenantDetailBySlug,
+    isAdmin && tenantSlug ? { slug: tenantSlug } : "skip",
+  );
+  const tenantId = detail?.tenant._id;
+  const tenantProducts = useQuery(
+    api.platform.getTenantProducts,
+    isAdmin && tenantId ? { tenantId } : "skip",
   );
   const plans = useQuery(api.platform.getPricingPlans, isAdmin ? {} : "skip");
   const setTenantSubscription = useMutation(api.platform.setTenantSubscription);
+  const setTenantProduct = useMutation(api.platform.setTenantProduct);
+  const ensureDefaultProductsExist = useMutation(
+    api.platform.ensureDefaultProductsExist,
+  );
   const suspendTenant = useMutation(api.platform.suspendTenant);
   const reactivateTenant = useMutation(api.platform.reactivateTenant);
+  const seedAgencyPreset = useMutation(api.platform.seedAgencyPreset);
+  const disableDynamicApplicationForms = useMutation(
+    api.platform.disableDynamicApplicationForms,
+  );
+  const deleteUserTrainingProgress = useMutation(
+    api.platform.deleteUserTrainingProgress,
+  );
   const createStripeCustomerForTenant = useAction(
     api.platformStripe.createStripeCustomerForTenant,
   );
+
+  useEffect(() => {
+    if (isAdmin) {
+      ensureDefaultProductsExist({}).catch((err) => {
+        console.error('Failed to ensure default products exist:', err)
+      })
+    }
+  }, [isAdmin, ensureDefaultProductsExist])
 
   const [planDialogOpen, setPlanDialogOpen] = useState(false);
   const [selectedPlanKey, setSelectedPlanKey] = useState("");
@@ -104,6 +136,11 @@ function PlatformSubscriptionDetailContent() {
     "suspend" | "reactivate" | null
   >(null);
   const [busy, setBusy] = useState(false);
+  const [productBusy, setProductBusy] = useState<Record<string, boolean>>({});
+  const [seedMessage, setSeedMessage] = useState("");
+  const [disableFormsMessage, setDisableFormsMessage] = useState("");
+  const [deleteTrainingEmail, setDeleteTrainingEmail] = useState("");
+  const [deleteTrainingMessage, setDeleteTrainingMessage] = useState("");
   const [error, setError] = useState("");
 
   const subscription = detail?.subscription ?? null;
@@ -129,7 +166,7 @@ function PlatformSubscriptionDetailContent() {
         .map((email) => email.trim())
         .filter(Boolean);
       await setTenantSubscription({
-        tenantId: tenantId as Id<"tenants">,
+        tenantId,
         planKey: selectedPlanKey,
         status: subscription?.status ?? "active",
         billingEmails,
@@ -158,9 +195,9 @@ function PlatformSubscriptionDetailContent() {
     setError("");
     try {
       if (confirmAction === "suspend") {
-        await suspendTenant({ tenantId: tenantId as Id<"tenants"> });
+        await suspendTenant({ tenantId });
       } else {
-        await reactivateTenant({ tenantId: tenantId as Id<"tenants"> });
+        await reactivateTenant({ tenantId });
       }
       setConfirmAction(null);
     } catch (err) {
@@ -180,13 +217,103 @@ function PlatformSubscriptionDetailContent() {
     setError("");
     try {
       await createStripeCustomerForTenant({
-        tenantId: tenantId as Id<"tenants">,
+        tenantId,
       });
     } catch (err) {
       setError(
         err instanceof Error
           ? sanitizeConvexError(err.message)
           : "Failed to set up Stripe customer.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleToggleProduct = async (productKey: string, active: boolean) => {
+    if (!tenantId) return;
+    setProductBusy((prev) => ({ ...prev, [productKey]: true }));
+    setError("");
+    try {
+      await setTenantProduct({
+        tenantId,
+        productKey,
+        active,
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : "Failed to update product.",
+      );
+    } finally {
+      setProductBusy((prev) => ({ ...prev, [productKey]: false }));
+    }
+  };
+
+  const handleSeedPreset = async (
+    preset: 'golden_ages' | 'individuals_choice',
+  ) => {
+    if (!tenantId) return;
+    setBusy(true);
+    setSeedMessage("");
+    setError("");
+    try {
+      const result = await seedAgencyPreset({
+        tenantId,
+        preset,
+      });
+      setSeedMessage(result.message);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : "Failed to seed agency preset.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDisableDynamicApplicationForms = async () => {
+    if (!tenantId) return;
+    setBusy(true);
+    setDisableFormsMessage("");
+    setError("");
+    try {
+      const result = await disableDynamicApplicationForms({ tenantId });
+      setDisableFormsMessage(
+        `Disabled ${result.deactivated} dynamic application form(s). Applicants will now use the built-in flow.`,
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : "Failed to disable dynamic application forms.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDeleteTrainingProgress = async () => {
+    if (!deleteTrainingEmail.trim()) return;
+    setBusy(true);
+    setDeleteTrainingMessage("");
+    setError("");
+    try {
+      const result = await deleteUserTrainingProgress({
+        email: deleteTrainingEmail.trim().toLowerCase(),
+      });
+      setDeleteTrainingMessage(
+        `Deleted ${result.platformCount} platform completion(s) and ${result.stepCount} step completion(s).`,
+      );
+      setDeleteTrainingEmail("");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : "Failed to delete training progress.",
       );
     } finally {
       setBusy(false);
@@ -203,7 +330,24 @@ function PlatformSubscriptionDetailContent() {
         Back to subscriptions
       </Link>
 
-      {!detail ? (
+      {detail === null ? (
+        <div className="py-12 text-center">
+          <p className="text-lg font-bold text-[#f5f7f6]">Agency not found</p>
+          <p className="mt-1 text-sm text-[#9aa6a8]">
+            This agency does not exist or the link is invalid.
+          </p>
+          <p className="mt-2 text-xs text-[#687173]">
+            Slug: {tenantSlug}
+          </p>
+          <Link
+            to="/platform/subscriptions"
+            className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[#22c55e] hover:underline"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to subscriptions
+          </Link>
+        </div>
+      ) : !detail ? (
         <p className="py-12 text-center text-sm text-[#9aa6a8]">
           Loading agency…
         </p>
@@ -332,6 +476,118 @@ function PlatformSubscriptionDetailContent() {
                   label="Stripe customer"
                   value={subscription.stripeCustomerId}
                 />
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-[#2a3437] bg-[#151b1d] p-5">
+            <h2 className="text-lg font-bold text-[#f5f7f6]">Testing presets</h2>
+            <p className="mt-1 text-sm text-[#687173]">
+              One-click seed content for QA. Use with care on production tenants.
+            </p>
+            {seedMessage && (
+              <p className="mt-3 text-sm text-[#22c55e]">{seedMessage}</p>
+            )}
+            {disableFormsMessage && (
+              <p className="mt-3 text-sm text-[#22c55e]">{disableFormsMessage}</p>
+            )}
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                onClick={() => handleSeedPreset('golden_ages')}
+                disabled={busy}
+                className={ghostButtonClass}
+              >
+                {busy ? 'Working…' : 'Seed Golden Ages preset'}
+              </button>
+              <button
+                onClick={() => handleSeedPreset('individuals_choice')}
+                disabled={busy}
+                className={ghostButtonClass}
+              >
+                {busy ? 'Working…' : 'Seed Individuals Choice preset'}
+              </button>
+              <button
+                onClick={handleDisableDynamicApplicationForms}
+                disabled={busy || !tenantId}
+                className={ghostButtonClass}
+              >
+                {busy ? 'Working…' : 'Use built-in application flow'}
+              </button>
+            </div>
+
+            <div className="mt-6 border-t border-[#2a3437] pt-5">
+              <p className="text-sm font-medium text-[#f5f7f6]">
+                Delete training progress
+              </p>
+              <p className="mt-1 text-sm text-[#687173]">
+                Enter a user email to wipe their training completions across all
+                agencies.
+              </p>
+              {deleteTrainingMessage && (
+                <p className="mt-3 text-sm text-[#22c55e]">
+                  {deleteTrainingMessage}
+                </p>
+              )}
+              <div className="mt-3 flex flex-wrap gap-3">
+                <input
+                  type="email"
+                  value={deleteTrainingEmail}
+                  onChange={(e) => setDeleteTrainingEmail(e.target.value)}
+                  placeholder="user@example.com"
+                  className="min-w-[240px] rounded-lg border border-[#2a3437] bg-[#1e2629] px-3 py-2 text-[15px] text-[#f5f7f6] outline-none focus:border-[#22c55e]"
+                />
+                <button
+                  onClick={handleDeleteTrainingProgress}
+                  disabled={busy || !deleteTrainingEmail.trim()}
+                  className={dangerButtonClass}
+                >
+                  {busy ? 'Working…' : 'Delete progress'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#2a3437] bg-[#151b1d] p-5">
+            <h2 className="text-lg font-bold text-[#f5f7f6]">Modules</h2>
+            <p className="mt-1 text-sm text-[#687173]">
+              Enable or disable platform modules for this agency.
+            </p>
+            {!tenantProducts ? (
+              <p className="mt-4 text-sm text-[#9aa6a8]">Loading modules…</p>
+            ) : tenantProducts === null ? (
+              <p className="mt-4 text-sm text-[#9aa6a8]">
+                Unable to load modules for this agency.
+              </p>
+            ) : tenantProducts.products.length === 0 ? (
+              <p className="mt-4 text-sm text-[#9aa6a8]">
+                No modules available.
+              </p>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {tenantProducts.products.map((product) => (
+                  <label
+                    key={product.key}
+                    className="flex cursor-pointer items-center justify-between rounded-lg border border-[#2a3437] bg-[#1e2629] px-4 py-3"
+                  >
+                    <span>
+                      <span className="block text-[15px] font-medium text-[#f5f7f6]">
+                        {product.label}
+                      </span>
+                      <span className="mt-0.5 block text-sm text-[#687173]">
+                        {product.description}
+                      </span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={product.active}
+                      disabled={productBusy[product.key]}
+                      onChange={(e) =>
+                        handleToggleProduct(product.key, e.target.checked)
+                      }
+                      className="h-5 w-5 accent-[#22c55e] disabled:opacity-50"
+                    />
+                  </label>
+                ))}
               </div>
             )}
           </div>

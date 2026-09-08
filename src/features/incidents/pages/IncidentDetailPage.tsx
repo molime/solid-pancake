@@ -17,7 +17,9 @@ import {
   formatTime,
 } from '@/shared/format'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
+import { cn } from '@/shared/lib/cn'
 import { incidentSlaBadges } from '../lib/incidentSlaBadges'
+import { incidentSlaSummary } from '../lib/incidentSlaSummary'
 
 function ReportField({ label, value }: { label: string; value?: string }) {
   return (
@@ -62,6 +64,7 @@ export function IncidentDetailPage() {
 
   const isClosed = incident.status === 'closed'
   const slaBadges = incidentSlaBadges(incident)
+  const slaSummary = incidentSlaSummary(incident)
 
   const runTransition = async (
     transition: (args: {
@@ -145,6 +148,22 @@ export function IncidentDetailPage() {
       {error && (
         <div className="rounded-md border border-atria-danger/20 bg-atria-danger-bg px-4 py-3 text-sm text-atria-danger">
           {error}
+        </div>
+      )}
+
+      {!isClosed && (
+        <div
+          className={cn(
+            'rounded-[var(--radius-atria-md)] border px-4 py-3 text-base font-medium',
+            slaSummary.tone === 'danger' &&
+              'border-atria-danger/30 bg-atria-danger-bg text-atria-danger',
+            slaSummary.tone === 'warning' &&
+              'border-atria-warning/30 bg-atria-warning-bg text-atria-warning',
+            slaSummary.tone === 'success' &&
+              'border-atria-success/30 bg-atria-success-bg text-atria-success',
+          )}
+        >
+          {slaSummary.message}
         </div>
       )}
 

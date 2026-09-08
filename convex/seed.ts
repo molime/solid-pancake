@@ -1,5 +1,5 @@
 import { v } from 'convex/values'
-import { mutation, type MutationCtx } from './_generated/server'
+import { internalMutation, mutation, type MutationCtx } from './_generated/server'
 import { requireTenantRole } from './authHelpers'
 import type { Id } from './_generated/dataModel'
 import { DEFAULT_SHIFT_GEOFENCE } from './tenantSettings'
@@ -1438,5 +1438,188 @@ export const seedCandidateOffer = mutation({
     }
 
     return { status: 'seeded' as const, candidateId: candidateId as string, applicationId: applicationId as string }
+  },
+})
+
+/**
+ * E2E/QA helper: move a candidate to the exact post-hire state (status
+ * 'hired' + tenantMembers row as org:caregiver) WITHOUT running the full
+ * offer/accept/hire pipeline. Used by qa-hire-gate to exercise the
+ * post-hire HCS 501 personnel-record gate through the real UI.
+ */
+export const hireCandidateForGate = internalMutation({
+  args: { clerkOrgId: v.string(), email: v.string() },
+  handler: async (ctx, args) => {
+    const tenant = await ctx.db
+      .query('tenants')
+      .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', args.clerkOrgId))
+      .unique()
+    if (!tenant) throw new Error('Tenant not found.')
+
+    const candidate = await ctx.db
+      .query('candidates')
+      .withIndex('by_tenant_email', (q) =>
+        q.eq('tenantId', tenant._id).eq('email', args.email.toLowerCase()),
+      )
+      .first()
+    if (!candidate) throw new Error('Candidate not found for email.')
+    if (!candidate.clerkUserId) throw new Error('Candidate has no clerkUserId.')
+
+    await ctx.db.patch(candidate._id, { status: 'hired' })
+
+    const existing = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', tenant._id).eq('clerkUserId', candidate.clerkUserId as string),
+      )
+      .first()
+    let memberId: Id<'tenantMembers'>
+    if (!existing) {
+      memberId = await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: candidate.clerkUserId as string,
+        role: 'org:caregiver',
+        displayName: candidate.displayName,
+        email: candidate.email,
+      })
+    } else {
+      memberId = existing._id
+      if (existing.role !== 'org:caregiver') {
+        await ctx.db.patch(existing._id, { role: 'org:caregiver' })
+      }
+    }
+
+    // EmployeesPage lists employeeProfiles rows, so create one to match the
+    // real hireCandidate output.
+    const existingProfile = await ctx.db
+      .query('employeeProfiles')
+      .withIndex('by_tenant_clerk_user', (q) =>
+        q.eq('tenantId', tenant._id).eq('clerkUserId', candidate.clerkUserId as string),
+      )
+      .first()
+    if (!existingProfile) {
+      await ctx.db.insert('employeeProfiles', {
+        tenantId: tenant._id,
+        clerkUserId: candidate.clerkUserId as string,
+        tenantMemberId: memberId,
+        displayName: candidate.displayName,
+        email: candidate.email,
+        adpSyncStatus: 'pending_credentials',
+        createdAt: new Date().toISOString(),
+      })
+    }
+
+    // Same post-hire HCS 501 checklist task hireCandidate creates.
+    const existingPrTask = await ctx.db
+      .query('candidateTasks')
+      .withIndex('by_tenant_candidate_order', (q) =>
+        q.eq('tenantId', tenant._id).eq('candidateId', candidate._id),
+      )
+      .filter((q) => q.eq(q.field('type'), 'personnel_record'))
+      .first()
+    if (!existingPrTask) {
+      const lastTask = await ctx.db
+        .query('candidateTasks')
+        .withIndex('by_tenant_candidate_order', (q) =>
+          q.eq('tenantId', tenant._id).eq('candidateId', candidate._id),
+        )
+        .order('desc')
+        .first()
+      await ctx.db.insert('candidateTasks', {
+        tenantId: tenant._id,
+        candidateId: candidate._id,
+        type: 'personnel_record',
+        status: 'pending',
+        order: (lastTask?.order ?? -1) + 1,
+      })
+    }
+
+    return { status: 'hired', clerkUserId: candidate.clerkUserId }
+  },
+})
+
+/**
+ * One-off production provisioning for a new agency tenant whose Clerk org
+ * already exists (created via the Clerk API). Mirrors the data side of
+ * platform.createTenantInternal — tenant + subscription + audit event — but
+ * skips the plans-table lookup (empty in production) and seeds the products
+ * catalog + a full_platform agencyProduct so the tenant is fully usable.
+ * Idempotent by clerkOrgId. Follow up with the seedGoldenAges* internals.
+ */
+export const createAgencyTenant = internalMutation({
+  args: {
+    clerkOrgId: v.string(),
+    name: v.string(),
+    slug: v.string(),
+    address: v.string(),
+    billingEmail: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query('tenants')
+      .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', args.clerkOrgId))
+      .unique()
+    if (existing) return { tenantId: existing._id, created: false }
+
+    const now = new Date()
+    const tenantId = await ctx.db.insert('tenants', {
+      clerkOrgId: args.clerkOrgId,
+      name: args.name,
+      slug: args.slug,
+      address: args.address,
+      createdAt: now.toISOString(),
+    })
+
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    await ctx.db.insert('tenantSubscriptions', {
+      tenantId,
+      planKey: 'starter',
+      status: 'active',
+      billingEmails: [args.billingEmail],
+      currentPeriodStart: periodStart.toISOString(),
+      currentPeriodEnd: periodEnd.toISOString(),
+      renewsAt: periodEnd.toISOString(),
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    })
+
+    await ctx.db.insert('auditEvents', {
+      tenantId,
+      actorId: 'provision-script',
+      actorRole: 'platform_admin',
+      action: 'tenant_created',
+      kind: 'platform',
+      metadata: {
+        clerkOrgId: args.clerkOrgId,
+        name: args.name,
+        slug: args.slug,
+        planKey: 'starter',
+      },
+      createdAt: now.toISOString(),
+    })
+
+    // Products catalog + full_platform subscription (seedGoldenAges internals
+    // cover hiring/training).
+    const fullPlatform = await ctx.db
+      .query('products')
+      .withIndex('by_key', (q) => q.eq('key', 'full_platform'))
+      .first()
+    if (!fullPlatform) {
+      await ctx.db.insert('products', {
+        key: 'full_platform',
+        label: 'Full Platform',
+        description:
+          'Hiring + shift management + documentation + scheduling + billing.',
+        active: true,
+      })
+    }
+    await ctx.db.insert('agencyProducts', {
+      tenantId,
+      productKey: 'full_platform',
+      active: true,
+    })
+
+    return { tenantId, created: true }
   },
 })

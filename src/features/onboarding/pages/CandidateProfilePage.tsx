@@ -1,4 +1,5 @@
 import { useTenant } from '@/app/useTenant'
+import { SignedInApplyFlowBranding } from '../components/application/ApplyFlowBranding'
 import { useQuery } from 'convex/react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useClerk } from '@clerk/react'
@@ -128,15 +129,7 @@ export function CandidateProfilePage() {
           </div>
         </CardContent>
       </Card>
-      <div className='mt-6 flex flex-col items-center gap-2'>
-        {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
-        <img
-          src="/agency-logo-individualschoice.jpeg"
-          alt="Agency logo"
-          className='h-10 w-auto object-contain opacity-70'
-        />
-        <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
-      </div>
+      <SignedInApplyFlowBranding />
     </div>
   )
 }

@@ -1,0 +1,355 @@
+{
+  "admin /incidents": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/incidents",
+    "bodyLength": 664,
+    "bodyExcerpt": "HR Home | Dashboard | Admin | Compliance | Incidents | EVV Export | Reporting | Audit Trail | Logs | Notifications | Support | Schedule | Review | Knowledge | Billing | Payroll | Clients | Team | Candidates | Employees | Cases | Settings | Email Domains | A | ATRIA-X E2E Admin | admin | Incidents | Diego's Agency | admin | Sign out | A | Special Incident Reports | 17 CCR §54327 incident log — verbal report within 24 hours, written within 48. | New incident | Incident log | STATUS | All statuses | Report pending | Verbal reported | Written submitted | Closed | CLIENT | All ",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "heading": true,
+      "csv": true,
+      "newBtn": true
+    }
+  },
+  "admin /incidents/new": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/incidents/new",
+    "bodyLength": 1202,
+    "bodyExcerpt": "HR Home | Dashboard | Admin | Compliance | Incidents | EVV Export | Reporting | Audit Trail | Logs | Notifications | Support | Schedule | Review | Knowledge | Billing | Payroll | Clients | Team | Candidates | Employees | Cases | Settings | Email Domains | A | ATRIA-X E2E Admin | admin | Incidents › New | Diego's Agency | admin | Sign out | A | File a special incident report | 17 CCR §54327 — the regional center must be notified verbally within 24 hours and in writing within 48 hours of learning of the incident. | Incident details | CLIENT * | Select a client | ",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "category": true,
+      "occurred": false,
+      "description": true
+    }
+  },
+  "admin /compliance": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/compliance",
+    "bodyLength": 623,
+    "bodyExcerpt": "HR Home | Dashboard | Admin | Compliance | Incidents | EVV Export | Reporting | Audit Trail | Logs | Notifications | Support | Schedule | Review | Knowledge | Billing | Payroll | Clients | Team | Candidates | Employees | Cases | Settings | Email Domains | A | ATRIA-X E2E Admin | admin | Compliance | Diego's Agency | admin | Sign out | A | Compliance | Credential and document compliance across your workforce. | Export CSV | COMPLIANT | 0 | Verified and current | EXPIRING (30 DAYS) | 0 | Renewal needed soon | EXPIRED | 0 | Past expiration date | BLOCKED | 0 | Rejected or expired | C",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "obligations": true,
+      "credential": true
+    }
+  },
+  "admin /audit": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/audit",
+    "bodyLength": 377,
+    "bodyExcerpt": "HR Home | Dashboard | Admin | Compliance | Incidents | EVV Export | Reporting | Audit Trail | Logs | Notifications | Support | Schedule | Review | Knowledge | Billing | Payroll | Clients | Team | Candidates | Employees | Cases | Settings | Email Domains | A | ATRIA-X E2E Admin | admin | Audit | Diego's Agency | admin | Sign out | A | Audit Trail | Audit-readiness tool for California ILS/SLS compliance | Loading audit-readiness report…",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "pillar1": false,
+      "pillar2": false,
+      "pillar3": false,
+      "pillar4": false,
+      "pillar5": false,
+      "packet": false,
+      "retention": false,
+      "checklist": false,
+      "cap": false
+    }
+  },
+  "admin /evv": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/evv",
+    "bodyLength": 1111,
+    "bodyExcerpt": "HR Home | Dashboard | Admin | Compliance | Incidents | EVV Export | Reporting | Audit Trail | Logs | Notifications | Support | Schedule | Review | Knowledge | Billing | Payroll | Clients | Team | Candidates | Employees | Cases | Settings | Email Domains | A | ATRIA-X E2E Admin | admin | Evv | Diego's Agency | admin | Sign out | A | EVV Export | Electronic Visit Verification for SLS (service code 896) — the six federal data elements per visit (21st Century Cures Act §12006) | EVV visit export | Download CSV | Alternate-EVV submission aid for an approved alter",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "evv": true,
+      "export": true
+    }
+  },
+  "admin /clients": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/clients",
+    "bodyLength": 496,
+    "bodyExcerpt": "HR Home | Dashboard | Admin | Compliance | Incidents | EVV Export | Reporting | Audit Trail | Logs | Notifications | Support | Schedule | Review | Knowledge | Billing | Payroll | Clients | Team | Candidates | Employees | Cases | Settings | Email Domains | A | ATRIA-X E2E Admin | admin | Clients | Diego's Agency | admin | Sign out | A | Clients | 3 clients | Bulk schedule | Add Client | \tNAME\tSERVICE\tAUTH HOURS\tRISK FLAGS\tACTION | \tSam Lee\tILS\t30\t | \t | Address | Schedule | \tMaya Torres\tSLS\t40\t | mobility | \t | Address | Schedule | \tPhase 2 Client\tSLS\t40\t | \t | Address | Schedule",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "clients": true
+    }
+  },
+  "admin /hr/employees": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/hr/employees",
+    "bodyLength": 3150,
+    "bodyExcerpt": "HR Home | Dashboard | Admin | Compliance | Incidents | EVV Export | Reporting | Audit Trail | Logs | Notifications | Support | Schedule | Review | Knowledge | Billing | Payroll | Clients | Team | Candidates | Employees | Cases | Settings | Email Domains | A | ATRIA-X E2E Admin | admin | Hr › Employees | Diego's Agency | admin | Sign out | A | Employees | Active caregivers and their ADP sync status. | NAME\tEMAIL\tADP SYNC STATUS\tACTIONS | Hugo Sanchez\tdiego.molina.sieiro+09072611@gmail.com\t | Pending credentials\t | View | Juan Carlos Osorio\tdiego.molina.sieiro+090",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "employees": true
+    }
+  },
+  "admin /hr/cases": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/hr/cases",
+    "bodyLength": 476,
+    "bodyExcerpt": "HR Home | Dashboard | Admin | Compliance | Incidents | EVV Export | Reporting | Audit Trail | Logs | Notifications | Support | Schedule | Review | Knowledge | Billing | Payroll | Clients | Team | Candidates | Employees | Cases | Settings | Email Domains | A | ATRIA-X E2E Admin | admin | Hr › Cases | Diego's Agency | admin | Sign out | A | HR Cases | Track discrepancies, disputes, and open issues requiring HR resolution. | Check for issues | New case | No cases yet | Open a case to track an HR issue. | Powered by ATRIA-X Digital Solutions",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "cases": true
+    }
+  },
+  "admin /reports": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/reports",
+    "bodyLength": 546,
+    "bodyExcerpt": "HR Home | Dashboard | Admin | Compliance | Incidents | EVV Export | Reporting | Audit Trail | Logs | Notifications | Support | Schedule | Review | Knowledge | Billing | Payroll | Clients | Team | Candidates | Employees | Cases | Settings | Email Domains | A | ATRIA-X E2E Admin | admin | Reports | Diego's Agency | admin | Sign out | A | Reporting | Agency activity and revenue for the current month. | Export CSV | VISITS THIS MONTH | 0 | vs 0 last month | REVENUE THIS MONTH | $0.00 | vs $0.00 last month | COMPLIANCE RATE | 0% | Verified credentials | ACTIVE CAREGIVERS | 0 | Caregi",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "report": true
+    }
+  },
+  "coordinator /incidents": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/incidents",
+    "bodyLength": 543,
+    "bodyExcerpt": "Dashboard | Compliance | Incidents | EVV Export | Notifications | Support | Schedule | Review | Knowledge | U | User | coordinator | Incidents | Diego's Agency | coordinator | Sign out | U | Special Incident Reports | 17 CCR §54327 incident log — verbal report within 24 hours, written within 48. | New incident | Incident log | STATUS | All statuses | Report pending | Verbal reported | Written submitted | Closed | CLIENT | All clients | Sam Lee | Maya Torres | Phase 2 Client | EXPORT FROM | EXPORT TO | Download SIR log (CSV) | No incidents | Special incident re",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "heading": true,
+      "csv": true,
+      "newBtn": true
+    }
+  },
+  "coordinator /incidents/new": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/incidents/new",
+    "bodyLength": 1081,
+    "bodyExcerpt": "Dashboard | Compliance | Incidents | EVV Export | Notifications | Support | Schedule | Review | Knowledge | U | User | coordinator | Incidents › New | Diego's Agency | coordinator | Sign out | U | File a special incident report | 17 CCR §54327 — the regional center must be notified verbally within 24 hours and in writing within 48 hours of learning of the incident. | Incident details | CLIENT * | Select a client | Sam Lee | Maya Torres | Phase 2 Client | CATEGORY * | Select a category | Death | Serious injury | Hospitalization | Emergency room visit",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "category": true,
+      "occurred": false,
+      "description": true
+    }
+  },
+  "coordinator /compliance": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/compliance",
+    "bodyLength": 502,
+    "bodyExcerpt": "Dashboard | Compliance | Incidents | EVV Export | Notifications | Support | Schedule | Review | Knowledge | U | User | coordinator | Compliance | Diego's Agency | coordinator | Sign out | U | Compliance | Credential and document compliance across your workforce. | Export CSV | COMPLIANT | 0 | Verified and current | EXPIRING (30 DAYS) | 0 | Renewal needed soon | EXPIRED | 0 | Past expiration date | BLOCKED | 0 | Rejected or expired | Compliance items | Loading compliance items… | Gaps | Loading credential gaps… | Agency obligations | Loading agency obligation",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "obligations": true,
+      "credential": true
+    }
+  },
+  "coordinator /audit": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/",
+    "bodyLength": 738,
+    "bodyExcerpt": "Dashboard | Compliance | Incidents | EVV Export | Notifications | Support | Schedule | Review | Knowledge | U | User | coordinator | Dashboard | Diego's Agency | coordinator | Sign out | U | Good afternoon | Here's what needs your attention today. | Total Caregivers | 35 | Active caregivers | Compliance Rate | — | No compliance data available | Pending Documents | 0 | 0 need review now | Training Due | 0 | Need correction | Employee Compliance Status | View all → | Compliance tracking is not available yet. | Employee credentials and certificati",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "pillar1": false,
+      "pillar2": false,
+      "pillar3": false,
+      "pillar4": false,
+      "pillar5": false,
+      "packet": false,
+      "retention": false,
+      "checklist": false,
+      "cap": false
+    }
+  },
+  "coordinator /evv": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/evv",
+    "bodyLength": 1693,
+    "bodyExcerpt": "Dashboard | Compliance | Incidents | EVV Export | Notifications | Support | Schedule | Review | Knowledge | U | User | coordinator | Evv | Diego's Agency | coordinator | Sign out | U | EVV Export | Electronic Visit Verification for SLS (service code 896) — the six federal data elements per visit (21st Century Cures Act §12006) | EVV visit export | Download CSV | Alternate-EVV submission aid for an approved alternate EVV system — this is not a live Sandata/CalEVV integration. Each row carries the six required elements: service type",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "evv": true,
+      "export": true
+    }
+  },
+  "coordinator /clients": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/clients",
+    "bodyLength": 375,
+    "bodyExcerpt": "Dashboard | Compliance | Incidents | EVV Export | Notifications | Support | Schedule | Review | Knowledge | U | User | coordinator | Clients | Diego's Agency | coordinator | Sign out | U | Clients | 3 clients | Bulk schedule | Add Client | \tNAME\tSERVICE\tAUTH HOURS\tRISK FLAGS\tACTION | \tSam Lee\tILS\t30\t | \t | Address | Schedule | \tMaya Torres\tSLS\t40\t | mobility | \t | Address | Schedule | \tPhase 2 Client\tSLS\t40\t | \t | Address | Schedule",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "clients": true
+    }
+  },
+  "hr /incidents": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/incidents",
+    "bodyLength": 528,
+    "bodyExcerpt": "HR Home | Compliance | Incidents | EVV Export | Audit Trail | Notifications | Candidates | Employees | Cases | U | User | hr | Incidents | Diego's Agency | hr | Sign out | U | Special Incident Reports | 17 CCR §54327 incident log — verbal report within 24 hours, written within 48. | New incident | Incident log | STATUS | All statuses | Report pending | Verbal reported | Written submitted | Closed | CLIENT | All clients | Sam Lee | Maya Torres | Phase 2 Client | EXPORT FROM | EXPORT TO | Download SIR log (CSV) | No incidents | Special incident reports will appe",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "heading": true,
+      "csv": true,
+      "newBtn": true
+    }
+  },
+  "hr /compliance": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/compliance",
+    "bodyLength": 487,
+    "bodyExcerpt": "HR Home | Compliance | Incidents | EVV Export | Audit Trail | Notifications | Candidates | Employees | Cases | U | User | hr | Compliance | Diego's Agency | hr | Sign out | U | Compliance | Credential and document compliance across your workforce. | Export CSV | COMPLIANT | 0 | Verified and current | EXPIRING (30 DAYS) | 0 | Renewal needed soon | EXPIRED | 0 | Past expiration date | BLOCKED | 0 | Rejected or expired | Compliance items | Loading compliance items… | Gaps | Loading credential gaps… | Agency obligations | Loading agency obligations…",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "obligations": true,
+      "credential": true
+    }
+  },
+  "hr /audit": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/audit",
+    "bodyLength": 241,
+    "bodyExcerpt": "HR Home | Compliance | Incidents | EVV Export | Audit Trail | Notifications | Candidates | Employees | Cases | U | User | hr | Audit | Diego's Agency | hr | Sign out | U | Audit Trail | Audit-readiness tool for California ILS/SLS compliance | Loading audit-readiness report…",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "pillar1": false,
+      "pillar2": false,
+      "pillar3": false,
+      "pillar4": false,
+      "pillar5": false,
+      "packet": false,
+      "retention": false,
+      "checklist": false,
+      "cap": false
+    }
+  },
+  "hr /evv": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/evv",
+    "bodyLength": 975,
+    "bodyExcerpt": "HR Home | Compliance | Incidents | EVV Export | Audit Trail | Notifications | Candidates | Employees | Cases | U | User | hr | Evv | Diego's Agency | hr | Sign out | U | EVV Export | Electronic Visit Verification for SLS (service code 896) — the six federal data elements per visit (21st Century Cures Act §12006) | EVV visit export | Download CSV | Alternate-EVV submission aid for an approved alternate EVV system — this is not a live Sandata/CalEVV integration. Each row carries the six required elements: service type, recipient, da",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "evv": true,
+      "export": true
+    }
+  },
+  "hr /hr/employees": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/hr/employees",
+    "bodyLength": 3014,
+    "bodyExcerpt": "HR Home | Compliance | Incidents | EVV Export | Audit Trail | Notifications | Candidates | Employees | Cases | U | User | hr | Hr › Employees | Diego's Agency | hr | Sign out | U | Employees | Active caregivers and their ADP sync status. | NAME\tEMAIL\tADP SYNC STATUS\tACTIONS | Hugo Sanchez\tdiego.molina.sieiro+09072611@gmail.com\t | Pending credentials\t | View | Juan Carlos Osorio\tdiego.molina.sieiro+09072613@gmail.com\t | Pending credentials\t | View | Serena Williams\tdiego.molina.sieiro+12072601@gmail.com\t | Pending credentials\t | View | Lionel Me",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "employees": true
+    }
+  },
+  "hr /hr/cases": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/hr/cases",
+    "bodyLength": 18538,
+    "bodyExcerpt": "HR Home | Compliance | Incidents | EVV Export | Audit Trail | Notifications | Candidates | Employees | Cases | U | User | hr | Hr › Cases | Diego's Agency | hr | Sign out | U | HR Cases | Track discrepancies, disputes, and open issues requiring HR resolution. | Check for issues | New case | CASE ID\tSUBJECT\tTITLE\tKIND\tSTATUS\tASSIGNED\tCREATED\tACTIONS | HR-2026-171\tQA Apply Candidate\tCandidate stuck in 'application_draft' for 15 days\trecruitment\t | open\tUnassigned\t08/16/2026\tView → | HR-2026-170\tQA Apply Candidate\tCandidate stuck in 'applic",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "cases": true
+    }
+  },
+  "caregiver /incidents": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/caregiver/today",
+    "bodyLength": 431,
+    "bodyExcerpt": "Notifications | Today | Schedule | Availability | Knowledge | Training | U | User | caregiver | Caregiver › Today | Diego's Agency | caregiver | Sign out | U | Good morning, Caregiver 👋 | Monday, August 17 | Report an incident | Your visit today | UPCOMING | Phase 2 Client | 10:00 AM – 2:00 PM · 4 hours | No address | ⚠ | Shift notes not started yet | Clock in & start | → | It only takes a few minutes. We'll guide you step by step. | Need help? Call your coordinator",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "heading": true,
+      "csv": false,
+      "newBtn": true
+    }
+  },
+  "caregiver /incidents/new": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/incidents/new",
+    "bodyLength": 1013,
+    "bodyExcerpt": "Notifications | Today | Schedule | Availability | Knowledge | Training | U | User | caregiver | Incidents › New | Diego's Agency | caregiver | Sign out | U | File a special incident report | 17 CCR §54327 — the regional center must be notified verbally within 24 hours and in writing within 48 hours of learning of the incident. | Incident details | CLIENT * | Select a client | CATEGORY * | Select a category | Death | Serious injury | Hospitalization | Emergency room visit | Medication error | Suspected abuse | Suspected exploitation | Suspected n",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "category": true,
+      "occurred": false,
+      "description": true
+    }
+  },
+  "caregiver /audit": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/caregiver/today",
+    "bodyLength": 431,
+    "bodyExcerpt": "Notifications | Today | Schedule | Availability | Knowledge | Training | U | User | caregiver | Caregiver › Today | Diego's Agency | caregiver | Sign out | U | Good morning, Caregiver 👋 | Monday, August 17 | Report an incident | Your visit today | UPCOMING | Phase 2 Client | 10:00 AM – 2:00 PM · 4 hours | No address | ⚠ | Shift notes not started yet | Clock in & start | → | It only takes a few minutes. We'll guide you step by step. | Need help? Call your coordinator",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "pillar1": false,
+      "pillar2": false,
+      "pillar3": false,
+      "pillar4": false,
+      "pillar5": false,
+      "packet": false,
+      "retention": false,
+      "checklist": false,
+      "cap": false
+    }
+  },
+  "caregiver /compliance": {
+    "events": [],
+    "httpStatus": 200,
+    "finalUrl": "http://localhost:5180/caregiver/today",
+    "bodyLength": 150,
+    "bodyExcerpt": "Notifications | Today | Schedule | Availability | Knowledge | Training | U | User | caregiver | Caregiver › Today | Diego's Agency | caregiver | Sign out | U | Loading shifts…",
+    "stillLoading": false,
+    "blank": false,
+    "probes": {
+      "obligations": false,
+      "credential": false
+    }
+  }
+}

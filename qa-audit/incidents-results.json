@@ -1,0 +1,164 @@
+[
+  {
+    "flow": "flow1",
+    "name": "submit button enabled after filling form",
+    "pass": true,
+    "evidence": "enabled=true"
+  },
+  {
+    "flow": "flow1",
+    "name": "submit navigates to incident detail",
+    "pass": true,
+    "evidence": "http://localhost:5180/incidents/qx73z3jmamcyv2g4v19mgszc5n8cp984"
+  },
+  {
+    "flow": "flow1",
+    "name": "incident appears in log",
+    "pass": true,
+    "evidence": "client=\"Sam Lee\" in table=true"
+  },
+  {
+    "flow": "flow1",
+    "name": "24h pending badge shown",
+    "pass": true,
+    "evidence": "badges: 24h report pending, 48h report pending, 24h report pending, 48h report pending, 24h report overdue, 48h report overdue, 24h report overdue, 48h report overdue, 24h report pending, 48h report pending"
+  },
+  {
+    "flow": "flow1",
+    "name": "48h pending badge shown",
+    "pass": true,
+    "evidence": ""
+  },
+  {
+    "flow": "flow2",
+    "name": "detail shows immutable initial report",
+    "pass": true,
+    "evidence": "description present=true"
+  },
+  {
+    "flow": "flow2",
+    "name": "initial narrative is read-only (no edit affordance)",
+    "pass": true,
+    "evidence": "editable controls in card=0"
+  },
+  {
+    "flow": "flow2",
+    "name": "mark verbal reported flips status/badge",
+    "pass": true,
+    "evidence": "status badges: Verbal reported"
+  },
+  {
+    "flow": "flow2",
+    "name": "verbal button gone after transition",
+    "pass": true,
+    "evidence": ""
+  },
+  {
+    "flow": "flow2",
+    "name": "mark written submitted flips status",
+    "pass": true,
+    "evidence": ""
+  },
+  {
+    "flow": "flow2",
+    "name": "follow-up update appended",
+    "pass": true,
+    "evidence": "note visible=true"
+  },
+  {
+    "flow": "flow2",
+    "name": "close incident -> Closed badge",
+    "pass": true,
+    "evidence": "badges: Closed"
+  },
+  {
+    "flow": "flow2",
+    "name": "close removes transition buttons + update box",
+    "pass": true,
+    "evidence": "buttonsGone=true textareaGone=true"
+  },
+  {
+    "flow": "flow3",
+    "name": "past learnedAt accepted by form",
+    "pass": true,
+    "evidence": "http://localhost:5180/incidents/qx71d641eh8c7f3jwn73bc2dt58cpgjv"
+  },
+  {
+    "flow": "flow3",
+    "name": "\"24h report overdue\" danger badge on log",
+    "pass": true,
+    "evidence": "badges: 24h report overdue, 48h report overdue, 24h report pending, 48h report pending, 24h report overdue, 48h report overdue, 24h report overdue, 48h report overdue, 24h report pending, 48h report pending"
+  },
+  {
+    "flow": "flow3",
+    "name": "\"48h report overdue\" danger badge on log",
+    "pass": true,
+    "evidence": ""
+  },
+  {
+    "flow": "flow4",
+    "name": "CSV downloads with proper headers",
+    "pass": true,
+    "evidence": "file=sir-log-2026-08-18.csv header=true"
+  },
+  {
+    "flow": "flow4",
+    "name": "CSV contains incident rows",
+    "pass": true,
+    "evidence": "medication_error rows=8"
+  },
+  {
+    "flow": "flow5",
+    "name": "caregiver \"Report an incident\" lands on /incidents/new",
+    "pass": true,
+    "evidence": "http://localhost:5180/incidents/new"
+  },
+  {
+    "flow": "flow5",
+    "name": "caregiver can file an incident",
+    "pass": true,
+    "evidence": "success banner shown for client \"Sam Lee\""
+  },
+  {
+    "flow": "flow5",
+    "name": "caregiver blocked from /incidents (redirected)",
+    "pass": true,
+    "evidence": "final url=http://localhost:5180/caregiver/today"
+  },
+  {
+    "flow": "flow5",
+    "name": "caregiver blocked from /incidents/:id (redirected)",
+    "pass": true,
+    "evidence": "final url=http://localhost:5180/caregiver/today"
+  },
+  {
+    "flow": "flow6",
+    "name": "audit event incident_created",
+    "pass": true,
+    "evidence": "row(s) shown when filtered"
+  },
+  {
+    "flow": "flow6",
+    "name": "audit event incident_verbal_reported",
+    "pass": true,
+    "evidence": "row(s) shown when filtered"
+  },
+  {
+    "flow": "flow6",
+    "name": "audit event incident_written_submitted",
+    "pass": true,
+    "evidence": "row(s) shown when filtered"
+  },
+  {
+    "flow": "flow6",
+    "name": "audit event incident_update_added",
+    "pass": true,
+    "evidence": "row(s) shown when filtered"
+  },
+  {
+    "flow": "flow6",
+    "name": "audit event incident_closed",
+    "pass": true,
+    "evidence": "row(s) shown when filtered"
+  }
+]

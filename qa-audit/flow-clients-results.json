@@ -1,0 +1,106 @@
+{
+  "flow1 :: profile fields render": {
+    "pass": true,
+    "detail": "all 10 labels present"
+  },
+  "flow1 :: save profile closes dialog (no validation error)": {
+    "pass": true,
+    "detail": ""
+  },
+  "flow1 :: profile values persist after reload": {
+    "pass": true,
+    "detail": "all values persisted"
+  },
+  "flow2 :: add IPP objective": {
+    "pass": true,
+    "detail": "QA IPP Cooking msy5d5uz"
+  },
+  "flow2 :: add ISP objective": {
+    "pass": true,
+    "detail": "QA ISP Mobility msy5d5uz"
+  },
+  "flow2 :: both objectives listed": {
+    "pass": true,
+    "detail": ""
+  },
+  "flow2 :: status badges + source badges": {
+    "pass": true,
+    "detail": "ippRow=\"QA IPP Cooking msy5d5uz | \tIPP\t | Active\t—\t—\t | Achieve | Discontinue\" ispRow=\"QA ISP Mobility msy5d5uz | \tISP\t | Active\t—\t—\t | Achieve | Discontinue\""
+  },
+  "flow2 :: discontinue flips status": {
+    "pass": true,
+    "detail": "QA ISP Mobility msy5d5uz | \tISP\t | Discontinued\t—\t—\t"
+  },
+  "flow3 :: hours indicator renders numeric values": {
+    "pass": true,
+    "detail": "Authorized hours this month: 0 of 40"
+  },
+  "flow3 :: cap matches clients-list authorizationHours": {
+    "pass": true,
+    "detail": "indicator cap=40 list cap=40"
+  },
+  "flow4 :: generate report": {
+    "pass": true,
+    "detail": "rows before=1"
+  },
+  "flow4 :: draft row appears": {
+    "pass": true,
+    "detail": "rows 1 -> 2"
+  },
+  "flow4 :: entries prefilled from active objectives only": {
+    "pass": true,
+    "detail": "entries=2 expectedActive=2 hasIpp=true excludesDiscontinuedIsp=true"
+  },
+  "flow4 :: hoursDelivered numeric": {
+    "pass": true,
+    "detail": "hours=[0, 0]"
+  },
+  "flow4 :: regenerate does not duplicate": {
+    "pass": true,
+    "detail": "ok=true rows 2 -> 2"
+  },
+  "flow4 :: save edited entries": {
+    "pass": true,
+    "detail": ""
+  },
+  "flow4 :: entry edit persists": {
+    "pass": true,
+    "detail": "progress=\"QA progress note msy5d5uz\""
+  },
+  "flow4 :: submittedTo prefilled from coordinator email": {
+    "pass": true,
+    "detail": "value=\"qa.coordinator.msy5d5uz@example.com\" expected=\"qa.coordinator.msy5d5uz@example.com\""
+  },
+  "flow4 :: submit locks report (status + no edit affordances)": {
+    "pass": true,
+    "detail": "row=\"11/18/2026 – 02/17/2027\tQuarterly\t | Submitted\t08/17/2026 · qa.coordinator.msy5d5uz@example.com\t | View\" editGone=true view=true"
+  },
+  "flow4 :: view dialog shows submitted content": {
+    "pass": true,
+    "detail": "Progress report — 11/18/2026 – 02/17/2027 |  | Submitted 08/17/2026 to qa.coordinator.msy5d5uz@example.com |  | OBJECTIVE\tSERVICES\tPROGRESS\tBARRIERS\tPLAN FORWARD\tHOURS | "
+  },
+  "flow4 :: CSV export downloads with content": {
+    "pass": true,
+    "detail": "file=progress-report-2026-11-18-to-2027-02-17.csv bytes=559"
+  },
+  "flow5 :: create client with required fields only": {
+    "pass": true,
+    "detail": "QA Regression Client msy5d5uz"
+  },
+  "flow5 :: new client detail page loads with hours indicator": {
+    "pass": true,
+    "detail": "Authorized hours this month: 0 of 40"
+  },
+  "flow5 :: new client shows objectives empty-state": {
+    "pass": true,
+    "detail": ""
+  },
+  "admin console/page errors": {
+    "pass": true,
+    "detail": "none"
+  },
+  "flow6 :: caregiver clock-in": {
+    "pass": null,
+    "detail": "UNVERIFIABLE: clock-in did not reach the wizard. Clock in |  | Start your shift to begin your notes. |  | Phase 2 Client |  | 🕐 10:00 AM – 2:00 PM · 4 hours |  | No address |  | CURRENT TIME |  | 10:13 PM |  | Clock in now | → |  | Your start time is sent to ADP for payroll. You ca"
+  }
+}

@@ -57,6 +57,8 @@ let mockCompletionsResult: unknown
 let mockHasFullPlatformResult: unknown
 let mockTrainingConfigResult: unknown
 
+const mutationCalls: { name: string; args: unknown }[] = []
+
 vi.mock('convex/react', () => ({
   useConvexAuth: () => ({ isLoading: false, isAuthenticated: true }),
   useQuery: vi.fn((query: unknown, args: unknown) => {
@@ -67,7 +69,13 @@ vi.mock('convex/react', () => ({
     if (name.includes('getTrainingConfig')) return mockTrainingConfigResult
     return undefined
   }),
-  useMutation: () => vi.fn(),
+  useMutation: vi.fn((mutation: unknown) => {
+    const name = getFunctionName(mutation as Parameters<typeof getFunctionName>[0])
+    return vi.fn((args: unknown) => {
+      mutationCalls.push({ name, args })
+      return Promise.resolve()
+    })
+  }),
 }))
 
 function resetMocks() {
@@ -87,6 +95,7 @@ describe('TrainingPage when complete', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.sessionStorage.clear()
+    mutationCalls.length = 0
     resetMocks()
   })
 
@@ -128,12 +137,38 @@ describe('TrainingPage when complete', () => {
     finishButton.click()
     expect(navigateMock).toHaveBeenCalledWith('/onboarding/success', { replace: true })
   })
+
+  it('records the aggregate platform_training completion once all steps are done', async () => {
+    mutationCalls.length = 0
+    render(
+      <MemoryRouter>
+        <TrainingPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/Training complete/i)).toBeInTheDocument()
+    })
+
+    await waitFor(() => {
+      expect(
+        mutationCalls.some((call) => call.name.includes('completePlatformTraining')),
+      ).toBe(true)
+    })
+
+    const platformTrainingCalls = mutationCalls.filter((call) =>
+      call.name.includes('completePlatformTraining'),
+    )
+    expect(platformTrainingCalls).toHaveLength(1)
+    expect(platformTrainingCalls[0].args).toMatchObject({ clerkOrgId: 'org_123' })
+  })
 })
 
 describe('TrainingPage query blips mid-training', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.sessionStorage.clear()
+    mutationCalls.length = 0
     resetMocks()
     mockCompletionsResult = []
     mockTrainingConfigResult = customTrainingConfig

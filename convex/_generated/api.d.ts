@@ -69,6 +69,7 @@ import type * as scheduling from "../scheduling.js";
 import type * as search from "../search.js";
 import type * as seed from "../seed.js";
 import type * as seedAuditFixtures from "../seedAuditFixtures.js";
+import type * as seedGoldenAges from "../seedGoldenAges.js";
 import type * as seedPhase3Data from "../seedPhase3Data.js";
 import type * as seedPlatformAdmin from "../seedPlatformAdmin.js";
 import type * as shiftLifecycle from "../shiftLifecycle.js";
@@ -80,6 +81,7 @@ import type * as supportTickets from "../supportTickets.js";
 import type * as tenantSettings from "../tenantSettings.js";
 import type * as tenants from "../tenants.js";
 import type * as timePunches from "../timePunches.js";
+import type * as training from "../training.js";
 
 import type {
   ApiFromModules,
@@ -149,6 +151,7 @@ declare const fullApi: ApiFromModules<{
   search: typeof search;
   seed: typeof seed;
   seedAuditFixtures: typeof seedAuditFixtures;
+  seedGoldenAges: typeof seedGoldenAges;
   seedPhase3Data: typeof seedPhase3Data;
   seedPlatformAdmin: typeof seedPlatformAdmin;
   shiftLifecycle: typeof shiftLifecycle;
@@ -160,6 +163,7 @@ declare const fullApi: ApiFromModules<{
   tenantSettings: typeof tenantSettings;
   tenants: typeof tenants;
   timePunches: typeof timePunches;
+  training: typeof training;
 }>;
 
 /**
