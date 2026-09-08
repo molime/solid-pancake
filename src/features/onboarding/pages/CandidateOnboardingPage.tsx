@@ -79,10 +79,10 @@ const TASK_META: Record<string, { label: string; shortLabel: string; actionLabel
 
 const UPLOAD_TYPES = new Set(['photo_id', 'tax_id_ssn', 'cpr_certificate', 'health_screen', 'background_check', 'additional_certifications', 'car_insurance', 'personnel_record'])
 
-function getTaskRoute(task: Doc<'candidateTasks'>) {
+function getTaskRoute(task: Doc<'candidateTasks'>, hasTrainingProduct: boolean | undefined) {
   if (task.type === 'form_submission') return '/onboarding/application'
   if (task.type === 'employment_agreement') return '/onboarding/employment-agreement'
-  if (task.type === 'platform_training') return '/onboarding/training'
+  if (task.type === 'platform_training') return hasTrainingProduct ? '/training' : '/onboarding/training'
   return `/onboarding/upload/${task._id}`
 }
 
@@ -179,7 +179,7 @@ export function CandidateOnboardingPage() {
 
   const handleNext = () => {
     if (nextPending) {
-      navigate(getTaskRoute(nextPending))
+      navigate(getTaskRoute(nextPending, hasTrainingProduct))
     } else if (candidate?.status === 'offer_sent') {
       navigate('/onboarding/offer')
     } else if (candidate?.status === 'hired') {

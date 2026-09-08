@@ -391,6 +391,7 @@ export const getMyTenant = query({
         tenants.push({
           clerkOrgId: tenant.clerkOrgId,
           tenantName: tenant.name,
+          slug: tenant.slug,
           agencyAddress: tenant.address ?? null,
           role: member.role,
         })

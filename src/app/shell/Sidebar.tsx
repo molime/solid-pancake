@@ -38,6 +38,7 @@ interface NavItem {
   roles: string[]
   exact?: boolean
   requiresProduct?: string
+  hiddenWhenProduct?: string
 }
 
 const navItems: NavItem[] = [
@@ -208,6 +209,7 @@ const navItems: NavItem[] = [
     path: '/onboarding/training',
     icon: <Globe className="h-4 w-4" />,
     roles: ['org:candidate', 'org:caregiver'],
+    hiddenWhenProduct: 'training',
   },
   {
     label: 'Training Hub',
@@ -251,6 +253,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const visibleItems = navItems.filter((item) => {
     if (!item.roles.includes(role)) return false
     if (item.requiresProduct === 'training' && hasTrainingProduct !== true) {
+      return false
+    }
+    if (item.hiddenWhenProduct === 'training' && hasTrainingProduct === true) {
       return false
     }
     return true

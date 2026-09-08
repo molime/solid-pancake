@@ -165,8 +165,8 @@ describe('TenantRouteGuard', () => {
       </TenantRouteGuard>,
     )
 
-    expect(screen.getByText('Navigate to /sign-in')).toBeInTheDocument()
-    expect(mockNavigate).toHaveBeenCalledWith('/sign-in')
+    expect(screen.getByText('Navigate to /sign-in?redirect=%2F')).toBeInTheDocument()
+    expect(mockNavigate).toHaveBeenCalledWith('/sign-in?redirect=%2F')
     expect(useQuery).not.toHaveBeenCalled()
   })
 
@@ -320,8 +320,8 @@ describe('SignedInRouteGuard', () => {
       </SignedInRouteGuard>,
     )
 
-    expect(screen.getByText('Navigate to /sign-in')).toBeInTheDocument()
-    expect(mockNavigate).toHaveBeenCalledWith('/sign-in')
+    expect(screen.getByText('Navigate to /sign-in?redirect=%2F')).toBeInTheDocument()
+    expect(mockNavigate).toHaveBeenCalledWith('/sign-in?redirect=%2F')
   })
 
   it('renders children when signed in', () => {

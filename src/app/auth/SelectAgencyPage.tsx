@@ -16,7 +16,7 @@ import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
-import { setSelectedClerkOrgId } from '@/app/useTenant'
+import { setSelectedClerkOrgId, pickPreferredDbTenant } from '@/app/useTenant'
 import { roleHomePath } from '@/app/roleHomePath'
 import { clearSessionData } from '@/shared/lib/clearSession'
 
@@ -97,8 +97,10 @@ export function SelectAgencyPage() {
   useEffect(() => {
     if (isPlatformAdmin !== false) return
     if (!hasNoClerkMemberships || !dbTenants || dbTenants.length !== 1) return
-    setSelectedClerkOrgId(dbTenants[0].clerkOrgId)
-    navigate(roleHomePath(dbTenants[0].role), { replace: true })
+    const preferred = pickPreferredDbTenant(dbTenants, null)
+    if (!preferred) return
+    setSelectedClerkOrgId(preferred.clerkOrgId)
+    navigate(roleHomePath(preferred.role), { replace: true })
   }, [isPlatformAdmin, hasNoClerkMemberships, dbTenants, navigate])
 
   const handleDbTenantSelect = useCallback(

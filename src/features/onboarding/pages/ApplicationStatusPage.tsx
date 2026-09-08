@@ -118,6 +118,12 @@ export function ApplicationStatusPage() {
     api.candidates.getMyApplication,
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
+  const hasTrainingProduct = useQuery(
+    api.agencyConfig.hasProduct,
+    effectiveClerkOrgId
+      ? { clerkOrgId: effectiveClerkOrgId, productKey: 'training' }
+      : 'skip',
+  )
 
   const candidate = data?.candidate
   const application = data?.application
@@ -289,8 +295,8 @@ export function ApplicationStatusPage() {
               </Button>
             )}
             {status === 'hired' && (
-              <Button variant='primary' size='lg' className='w-full' onClick={() => navigate('/onboarding/training')}>
-                Complete platform training {String.fromCharCode(8594)}
+              <Button variant='primary' size='lg' className='w-full' onClick={() => navigate(hasTrainingProduct ? '/training' : '/onboarding/training')}>
+                {hasTrainingProduct ? 'Start training' : 'Complete platform training'} {String.fromCharCode(8594)}
               </Button>
             )}
             {['rejected', 'withdrawn'].includes(status) && (

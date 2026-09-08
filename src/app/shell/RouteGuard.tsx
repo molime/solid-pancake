@@ -1,12 +1,24 @@
 import { useAuth } from '@clerk/react'
 import { useQuery, useConvexAuth } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import type { PropsWithChildren } from 'react'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { getStoredClerkOrgId, useTenant } from '@/app/useTenant'
 import { roleHomePath } from '@/app/roleHomePath'
+
+function signInUrlWithRedirect(redirectPath: string): string {
+  const search = new URLSearchParams()
+  search.set('redirect', redirectPath)
+  return `/sign-in?${search.toString()}`
+}
+
+function buildRedirectPath(location: { pathname?: string; search?: string }): string {
+  const pathname = location.pathname ?? '/'
+  const search = location.search ?? ''
+  return `${pathname}${search}`
+}
 
 type TenantRole =
   | 'org:admin'
@@ -17,13 +29,19 @@ type TenantRole =
 
 export function TenantRouteGuard({ children }: PropsWithChildren) {
   const { isLoaded: authLoaded, isSignedIn } = useAuth()
+  const location = useLocation()
 
   if (!authLoaded) {
     return <AppLoader fullScreen />
   }
 
   if (!isSignedIn) {
-    return <Navigate to="/sign-in" replace />
+    return (
+      <Navigate
+        to={signInUrlWithRedirect(buildRedirectPath(location))}
+        replace
+      />
+    )
   }
 
   return <TenantMembershipGuard>{children}</TenantMembershipGuard>
@@ -64,13 +82,19 @@ function TenantMembershipGuard({ children }: PropsWithChildren) {
 
 export function SignedInRouteGuard({ children }: PropsWithChildren) {
   const { isLoaded, isSignedIn } = useAuth()
+  const location = useLocation()
 
   if (!isLoaded) {
     return <AppLoader fullScreen />
   }
 
   if (!isSignedIn) {
-    return <Navigate to="/sign-in" replace />
+    return (
+      <Navigate
+        to={signInUrlWithRedirect(buildRedirectPath(location))}
+        replace
+      />
+    )
   }
 
   return <>{children}</>
@@ -82,13 +106,19 @@ export function SignedInRouteGuard({ children }: PropsWithChildren) {
 export function PlatformAdminRouteGuard({ children }: PropsWithChildren) {
   const { isLoaded, isSignedIn } = useAuth()
   const isPlatformAdmin = useQuery(api.platform.isAdmin)
+  const location = useLocation()
 
   if (!isLoaded) {
     return <AppLoader fullScreen />
   }
 
   if (!isSignedIn) {
-    return <Navigate to="/sign-in" replace />
+    return (
+      <Navigate
+        to={signInUrlWithRedirect(buildRedirectPath(location))}
+        replace
+      />
+    )
   }
 
   if (isPlatformAdmin === undefined || isPlatformAdmin === null) {
