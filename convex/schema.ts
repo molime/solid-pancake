@@ -92,6 +92,30 @@ export default defineSchema({
       defaultRadiusMeters: v.number(),
       maxAccuracyMeters: v.number(),
     }),
+    shiftTemplates: v.optional(
+      v.array(
+        v.object({
+          value: v.string(),
+          label: v.string(),
+          hoursPerDay: v.optional(v.number()),
+          isFullTime: v.optional(v.boolean()),
+        }),
+      ),
+    ),
+    // Optional agency employer details used to prefilled state-mandated forms
+    // (DE 34, BCIA 8016, HCS 501, etc.) during the application flow.
+    employerInfo: v.optional(
+      v.object({
+        legalName: v.optional(v.string()),
+        phone: v.optional(v.string()),
+        address: v.optional(v.string()),
+        ein: v.optional(v.string()),
+        caEmployerAccountNumber: v.optional(v.string()),
+        homeCareOrganizationNumber: v.optional(v.string()),
+        liveScanOri: v.optional(v.string()),
+        liveScanMailCode: v.optional(v.string()),
+      }),
+    ),
   }).index('by_tenant', ['tenantId']),
 
   clients: defineTable({
@@ -553,6 +577,8 @@ export default defineSchema({
     name: v.string(),
     version: v.optional(v.number()),
     description: v.optional(v.string()),
+    category: v.optional(v.string()),
+    order: v.optional(v.number()),
     active: v.boolean(),
     fields: v.array(v.any()),
     createdBy: v.string(),
@@ -1042,4 +1068,63 @@ export default defineSchema({
   })
     .index('by_tenant', ['tenantId'])
     .index('by_status', ['status']),
+
+  // Standalone training courses for the Training module. Each tenant can have
+  // multiple courses; courses are grouped by category and contain typed steps.
+  trainingCourses: defineTable({
+    tenantId: v.id('tenants'),
+    courseKey: v.string(),
+    title: v.string(),
+    description: v.string(),
+    category: v.union(
+      v.literal('agency_onboarding'),
+      v.literal('regulatory'),
+      v.literal('safety'),
+      v.literal('skills'),
+      v.literal('other'),
+    ),
+    durationMinutes: v.number(),
+    steps: v.array(
+      v.object({
+        id: v.string(),
+        title: v.string(),
+        type: v.union(
+          v.literal('text'),
+          v.literal('video'),
+          v.literal('image'),
+          v.literal('policy'),
+          v.literal('quiz'),
+          v.literal('embed'),
+          v.literal('slides'),
+        ),
+        content: v.string(),
+        caption: v.optional(v.string()),
+        minDurationSec: v.optional(v.number()),
+        required: v.boolean(),
+      }),
+    ),
+    passingScore: v.number(),
+    requiredRoles: v.optional(v.array(v.string())),
+    active: v.boolean(),
+    isDefault: v.boolean(),
+    createdAt: v.string(),
+  })
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_key', ['tenantId', 'courseKey']),
+
+  // Per-step completion tracking for training courses.
+  trainingStepCompletions: defineTable({
+    tenantId: v.id('tenants'),
+    clerkUserId: v.string(),
+    courseId: v.id('trainingCourses'),
+    stepId: v.string(),
+    completedAt: v.string(),
+  })
+    .index('by_tenant_user_course', ['tenantId', 'clerkUserId', 'courseId'])
+    .index('by_tenant_user_course_step', [
+      'tenantId',
+      'clerkUserId',
+      'courseId',
+      'stepId',
+    ]),
 })

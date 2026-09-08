@@ -4,7 +4,7 @@ import {
   TenantRouteGuard,
   SignedInRouteGuard,
   TenantRoleRouteGuard,
-  TrainingRouteGuard,
+  PersonnelRecordRouteGuard,
 } from './RouteGuard'
 import { getFunctionName } from 'convex/server'
 
@@ -497,7 +497,7 @@ describe('guard stability during a Clerk token refresh', () => {
     })
   })
 
-  it('TrainingRouteGuard keeps a caregiver on the route through a mid-refresh resubscribe', () => {
+  it('PersonnelRecordRouteGuard keeps a caregiver on the route through a mid-refresh resubscribe', () => {
     window.localStorage.setItem('atria.selectedClerkOrgId', 'org_stored')
     mockClerkState({
       authLoaded: true,
@@ -508,15 +508,14 @@ describe('guard stability during a Clerk token refresh', () => {
     mockQueries({
       'candidates:getMyTenant': [storedCaregiverTenant],
       'members:me': { role: 'org:caregiver' },
-      'platformTrainingCompletions:listMyCompletions': [
-        { trainingId: 'platform_training', status: 'completed' },
-      ],
+      'tenantSettings:getEmployerInfo': { legalName: 'Test Agency' },
+      'candidates:getMyDocumentUploadStatus': { uploaded: true, uploadedAt: undefined },
     })
 
     const ui = (
-      <TrainingRouteGuard>
+      <PersonnelRecordRouteGuard>
         <div data-testid="protected">Protected</div>
-      </TrainingRouteGuard>
+      </PersonnelRecordRouteGuard>
     )
     const { rerender } = render(ui)
     expect(screen.getByTestId('protected')).toBeInTheDocument()
@@ -525,9 +524,8 @@ describe('guard stability during a Clerk token refresh', () => {
     // without the stored tenant.
     mockTransientEmptyResolution({
       'members:me': { role: 'org:caregiver' },
-      'platformTrainingCompletions:listMyCompletions': [
-        { trainingId: 'platform_training', status: 'completed' },
-      ],
+      'tenantSettings:getEmployerInfo': { legalName: 'Test Agency' },
+      'candidates:getMyDocumentUploadStatus': { uploaded: true, uploadedAt: undefined },
     })
     rerender(ui)
 
@@ -571,7 +569,7 @@ describe('guard stability during a Clerk token refresh', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/select-agency')
   })
 
-  it('TrainingRouteGuard still redirects a caregiver with incomplete training to /onboarding/training', () => {
+  it('PersonnelRecordRouteGuard redirects a Golden Ages caregiver without an uploaded HCS 501 to /personnel-record', () => {
     window.localStorage.setItem('atria.selectedClerkOrgId', 'org_stored')
     mockClerkState({
       authLoaded: true,
@@ -583,26 +581,56 @@ describe('guard stability during a Clerk token refresh', () => {
       'candidates:getMyTenant': [
         {
           clerkOrgId: 'org_stored',
-          tenantName: 'Test Agency',
+          tenantName: 'Golden Ages Home Care',
           role: 'org:caregiver',
         },
       ],
       'members:me': { role: 'org:caregiver' },
-      'platformTrainingCompletions:listMyCompletions': [
-        { trainingId: 'platform_training', status: 'in_progress' },
-      ],
+      'tenantSettings:getEmployerInfo': { legalName: 'Golden Ages Home Care, LLC' },
+      'candidates:getMyDocumentUploadStatus': { uploaded: false, uploadedAt: undefined },
     })
 
     render(
-      <TrainingRouteGuard>
+      <PersonnelRecordRouteGuard>
         <div data-testid="protected">Protected</div>
-      </TrainingRouteGuard>,
+      </PersonnelRecordRouteGuard>,
     )
 
     expect(
-      screen.getByText('Navigate to /onboarding/training'),
+      screen.getByText('Navigate to /personnel-record'),
     ).toBeInTheDocument()
-    expect(mockNavigate).toHaveBeenCalledWith('/onboarding/training')
+    expect(mockNavigate).toHaveBeenCalledWith('/personnel-record')
+  })
+
+  it('PersonnelRecordRouteGuard lets a Golden Ages caregiver through once the HCS 501 is uploaded', () => {
+    window.localStorage.setItem('atria.selectedClerkOrgId', 'org_stored')
+    mockClerkState({
+      authLoaded: true,
+      isSignedIn: true,
+      orgLoaded: true,
+      organization: null,
+    })
+    mockQueries({
+      'candidates:getMyTenant': [
+        {
+          clerkOrgId: 'org_stored',
+          tenantName: 'Golden Ages Home Care',
+          role: 'org:caregiver',
+        },
+      ],
+      'members:me': { role: 'org:caregiver' },
+      'tenantSettings:getEmployerInfo': { legalName: 'Golden Ages Home Care, LLC' },
+      'candidates:getMyDocumentUploadStatus': { uploaded: true, uploadedAt: '2026-09-01T00:00:00.000Z' },
+    })
+
+    render(
+      <PersonnelRecordRouteGuard>
+        <div data-testid="protected">Protected</div>
+      </PersonnelRecordRouteGuard>,
+    )
+
+    expect(screen.getByTestId('protected')).toBeInTheDocument()
+    expect(screen.queryByTestId('navigate')).not.toBeInTheDocument()
   })
 
   it('an active Clerk org wins over a stale stored tenant', () => {
@@ -618,12 +646,14 @@ describe('guard stability during a Clerk token refresh', () => {
       'platformTrainingCompletions:listMyCompletions': [
         { trainingId: 'platform_training', status: 'completed' },
       ],
+      'agencyConfig:hasProduct': false,
+      'training:listCourses': [],
     })
 
     render(
-      <TrainingRouteGuard>
+      <PersonnelRecordRouteGuard>
         <div data-testid="protected">Protected</div>
-      </TrainingRouteGuard>,
+      </PersonnelRecordRouteGuard>,
     )
 
     expect(screen.getByTestId('protected')).toBeInTheDocument()

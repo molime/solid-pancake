@@ -1,0 +1,185 @@
+{
+  "summary": {
+    "total": 33,
+    "passed": 31,
+    "failed": 2,
+    "consoleErrors": []
+  },
+  "results": {
+    "evv": [
+      {
+        "check": "page renders with export card",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "alternate-EVV aid disclaimer visible",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "excluded live-in count badge renders",
+        "pass": true,
+        "evidence": "0 live-in exempt visits excluded"
+      },
+      {
+        "check": "visit rows render for range",
+        "pass": false,
+        "evidence": "rows=0"
+      },
+      {
+        "check": "CSV downloads",
+        "pass": true,
+        "evidence": "suggested=evv-export-2026-01-01-to-2026-08-18.csv"
+      },
+      {
+        "check": "CSV labeled alternate-EVV submission aid",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "CSV has six-element headers",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "CSV states excluded live-in count",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "CSV visit rows present",
+        "pass": false,
+        "evidence": "dataRows=0"
+      },
+      {
+        "check": "attestation card renders",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "attestation recorded and listed",
+        "pass": true,
+        "evidence": "employee=Antonio Valencia"
+      },
+      {
+        "check": "excluded count increase",
+        "pass": true,
+        "evidence": "skipped — no visit provider matched an employee option; count label verified only"
+      }
+    ],
+    "grievances": [
+      {
+        "check": "found a client",
+        "pass": true,
+        "evidence": "/clients/j970jh964zvdwfr50d2dbmmwbx8ary5p"
+      },
+      {
+        "check": "grievance filed, status Open",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "SLA badge shows Due date",
+        "pass": true,
+        "evidence": "Due 08/25/2026\t"
+      },
+      {
+        "check": "resolution proposed, status badge updates",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "grievance resolved, SLA badge Closed",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "second grievance escalated",
+        "pass": true,
+        "evidence": "08/17/2026\tQA Client\t QA grievance 736170: billing dispute escalation \t Escalated\t Due 08/25/2026\t Propose resolution Resolve"
+      }
+    ],
+    "caps": [
+      {
+        "check": "CAP card renders on /audit",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "CAP created with source + Open status",
+        "pass": true,
+        "evidence": "Regional center\tQA CAP 755621: missing quarterly progress report signature\t09/16/2026\t Open\t—\t Mark submitted"
+      },
+      {
+        "check": "default due date ~30 days out",
+        "pass": true,
+        "evidence": "due=09/16/2026 (+29d)"
+      },
+      {
+        "check": "status transitions to Submitted",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "evidence column renders (no upload UI by design)",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "status transitions to Verified",
+        "pass": true,
+        "evidence": "Regional center\tQA CAP 755621: missing quarterly progress report signature\t09/16/2026\t Verified\t—\t"
+      }
+    ],
+    "supervision": [
+      {
+        "check": "found an employee",
+        "pass": true,
+        "evidence": "/hr/employees/kd7crp8mtx4sff8067vgaf3s3d8a91v5"
+      },
+      {
+        "check": "supervision entry added to timeline",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "annual evaluation entry added with kind badge",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "entries show recorder name",
+        "pass": true,
+        "evidence": ""
+      }
+    ],
+    "roles": [
+      {
+        "check": "HR sees CAP create button",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "HR can reach /evv",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "HR sees File grievance button",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "HR sees supervision add form",
+        "pass": true,
+        "evidence": ""
+      },
+      {
+        "check": "caregiver blocked from /evv",
+        "pass": true,
+        "evidence": "landed on http://localhost:5180/caregiver/today"
+      }
+    ]
+  }
+}

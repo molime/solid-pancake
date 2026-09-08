@@ -71,9 +71,10 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
             role === 'org:coordinator' && 'bg-atria-info-bg text-atria-info',
             role === 'org:caregiver' &&
               'bg-atria-success-bg text-atria-success',
+            role === 'org:hr' && 'bg-atria-warning-bg text-atria-warning',
           )}
         >
-          {role.replace('org:', '')}
+          {role === 'org:caregiver' ? 'employee' : role.replace('org:', '')}
         </span>
         <button
           onClick={handleSignOut}

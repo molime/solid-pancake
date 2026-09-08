@@ -1,0 +1,46 @@
+{
+  "setup: past-due shift for caregiver": {
+    "pass": true,
+    "detail": "already present"
+  },
+  "setup: new shift appears on caregiver today": {
+    "pass": true,
+    "detail": ""
+  },
+  "caregiver clock-in reaches wizard": {
+    "pass": true,
+    "detail": ""
+  },
+  "when step can advance": {
+    "pass": true,
+    "detail": ""
+  },
+  "what step can advance": {
+    "pass": true,
+    "detail": ""
+  },
+  "objective picker shows ACTIVE objectives only": {
+    "pass": true,
+    "detail": "options=[Select objective | QA IPP Cooking msy51u24 | QA IPP Cooking msy5d5uz]"
+  },
+  "objective linked to note": {
+    "pass": true,
+    "detail": "selected=\"QA IPP Cooking msy51u24\""
+  },
+  "goal step can advance": {
+    "pass": true,
+    "detail": ""
+  },
+  "issues step can advance": {
+    "pass": true,
+    "detail": "tasks=1"
+  },
+  "note submission enabled with objective linked": {
+    "pass": true,
+    "detail": ""
+  },
+  "note submitted + clocked out": {
+    "pass": true,
+    "detail": ""
+  }
+}

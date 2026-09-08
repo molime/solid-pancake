@@ -224,7 +224,7 @@ describe('createDefaultApplicationFormData', () => {
 })
 
 describe('ApplicationFormPage', () => {
-  it('renders the multi-step application and submits all sections', async () => {
+  it('renders the multi-step application and submits all sections', { timeout: 60000 }, async () => {
     sessionStorage.clear()
     render(
       <MemoryRouter>

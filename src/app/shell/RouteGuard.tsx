@@ -5,7 +5,6 @@ import { Navigate } from 'react-router-dom'
 import { useState } from 'react'
 import type { PropsWithChildren } from 'react'
 import { AppLoader } from '@/shared/ui/AppLoader'
-import { isPlatformTrainingComplete } from '@/features/onboarding/model/trainingCompletion'
 import { getStoredClerkOrgId, useTenant } from '@/app/useTenant'
 import { roleHomePath } from '@/app/roleHomePath'
 
@@ -149,26 +148,77 @@ export function TenantRoleRouteGuard({
 
   return <>{children}</>
 }
-export function TrainingRouteGuard({ children }: PropsWithChildren) {
+function areNewCoursesComplete(
+  courses: Array<{ requiredRoles?: string[] | null; courseKey: string; _id: string }> | undefined,
+  completions: Array<{ trainingId: string; status: string; expiresAt?: string | null }> | undefined,
+  role: string,
+) {
+  if (!courses || courses.length === 0) return false
+  const completedIds = new Set(
+    (completions ?? [])
+      .filter((c) => {
+        if (!['complete', 'completed'].includes(c.status)) return false
+        if (c.expiresAt && new Date(c.expiresAt).getTime() <= Date.now()) return false
+        return true
+      })
+      .map((c) => c.trainingId),
+  )
+  const requiredForRole = courses.filter(
+    (c) =>
+      !c.requiredRoles ||
+      c.requiredRoles.length === 0 ||
+      c.requiredRoles.includes(role),
+  )
+  if (requiredForRole.length === 0) return false
+  return requiredForRole.every((c) => completedIds.has(c.courseKey))
+}
+
+export { areNewCoursesComplete }
+
+/**
+ * Post-hire document gate for caregiver dashboard routes. Golden Ages
+ * requires hired caregivers to upload their completed HCS 501 personnel
+ * record before accessing the dashboard; caregivers of other agencies (or
+ * without a candidate record) pass through untouched.
+ *
+ * Pending training no longer hard-redirects from the dashboard — the
+ * caregiver dashboard renders a persistent TrainingReminderBanner instead.
+ */
+export function PersonnelRecordRouteGuard({ children }: PropsWithChildren) {
   const effectiveClerkOrgId = useEffectiveClerkOrgId()
   const { isLoading: convexAuthLoading } = useConvexAuth()
   const member = useQuery(
     api.members.me,
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
-  const completions = useQuery(
-    api.platformTrainingCompletions.listMyCompletions,
-    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
+  const isCaregiver = member?.role === 'org:caregiver'
+  const employerInfo = useQuery(
+    api.tenantSettings.getEmployerInfo,
+    effectiveClerkOrgId && isCaregiver ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
+  )
+  const personnelRecord = useQuery(
+    api.candidates.getMyDocumentUploadStatus,
+    effectiveClerkOrgId && isCaregiver
+      ? { clerkOrgId: effectiveClerkOrgId, documentType: 'hcs_501' }
+      : 'skip',
   )
   const [hasAuthorized, setHasAuthorized] = useState(false)
-  const isReady = effectiveClerkOrgId && member !== undefined && member !== null && completions !== undefined && completions !== null && !convexAuthLoading
+  const isReady =
+    effectiveClerkOrgId &&
+    member !== undefined &&
+    member !== null &&
+    !convexAuthLoading
 
   if (isReady && member && !hasAuthorized) {
     setHasAuthorized(true)
   }
 
-  if (!effectiveClerkOrgId || member === undefined || completions === undefined || convexAuthLoading) {
-    return hasAuthorized ? <>{children}</> : <AppLoader fullScreen label="Checking training status" />
+  if (
+    !effectiveClerkOrgId ||
+    member === undefined ||
+    convexAuthLoading
+  ) {
+    return hasAuthorized ? <>{children}</> : <AppLoader fullScreen label="Checking access" />
   }
 
   if (!member) {
@@ -176,8 +226,11 @@ export function TrainingRouteGuard({ children }: PropsWithChildren) {
   }
 
   if (member.role === 'org:caregiver') {
-    if (!isPlatformTrainingComplete(completions)) {
-      return <Navigate to="/onboarding/training" replace />
+    const isGoldenAges = (employerInfo?.legalName ?? '')
+      .toLowerCase()
+      .includes('golden')
+    if (isGoldenAges && personnelRecord && !personnelRecord.uploaded) {
+      return <Navigate to="/personnel-record" replace />
     }
   }
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { convexTest } from 'convex-test'
 import schema from './schema'
 import { api, internal } from './_generated/api'
@@ -142,6 +142,9 @@ describe('grievances SLA business-day math', () => {
 
 describe('grievances workflow', () => {
   it('files a grievance with SLA fields and an audit event', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-20T12:00:00.000Z'))
+
     const t = createTestConvex()
     const { tenantId, clientId } = await seedTenant(t)
 
@@ -168,6 +171,8 @@ describe('grievances workflow', () => {
         .collect(),
     )
     expect(auditEvents.some((e) => e.action === 'grievance_filed')).toBe(true)
+
+    vi.useRealTimers()
   })
 
   it('moves open → resolution_proposed → resolved with audit events', async () => {

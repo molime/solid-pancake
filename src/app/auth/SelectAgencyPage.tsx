@@ -72,31 +72,34 @@ export function SelectAgencyPage() {
     api.candidates.getMyTenant,
     hasNoClerkMemberships && convexAuth.isAuthenticated ? {} : 'skip',
   )
-  // Check if this user is a platform admin — if they have no org memberships
-  // and no tenant records, but ARE a platform admin, redirect to /platform.
+  // Platform admins should never see the agency picker, even if they happen to
+  // have Clerk org memberships. Check platform admin status whenever we are
+  // authenticated, regardless of membership count.
   const isPlatformAdmin = useQuery(
     api.platform.isAdmin,
-    hasNoClerkMemberships && convexAuth.isAuthenticated ? {} : 'skip',
+    convexAuth.isAuthenticated ? {} : 'skip',
   )
 
-  // Platform admin with no org: go straight to /platform
+  // Platform admin: go straight to /platform before any selector logic runs.
   useEffect(() => {
-    if (!hasNoClerkMemberships || isPlatformAdmin === undefined) return
-    if (!dbTenants || dbTenants.length > 0) return
+    if (isPlatformAdmin === undefined) return
     if (isPlatformAdmin === true) {
       navigate('/platform/subscriptions', { replace: true })
     }
-  }, [hasNoClerkMemberships, isPlatformAdmin, dbTenants, navigate])
+  }, [isPlatformAdmin, navigate])
 
   // Exactly one tenant: pick it and go straight in. Multiple tenants fall
   // through to the picker below so the user can choose their agency.
   // Navigate to the role-appropriate home (not '/') so the route guards
   // don't re-evaluate and risk a redirect loop back to /select-agency.
+  // Gate on isPlatformAdmin === false so platform admins never get auto-routed
+  // into an agency workspace while their admin status is still resolving.
   useEffect(() => {
+    if (isPlatformAdmin !== false) return
     if (!hasNoClerkMemberships || !dbTenants || dbTenants.length !== 1) return
     setSelectedClerkOrgId(dbTenants[0].clerkOrgId)
     navigate(roleHomePath(dbTenants[0].role), { replace: true })
-  }, [hasNoClerkMemberships, dbTenants, navigate])
+  }, [isPlatformAdmin, hasNoClerkMemberships, dbTenants, navigate])
 
   const handleDbTenantSelect = useCallback(
     (clerkOrgId: string, role: string) => {
@@ -143,9 +146,10 @@ export function SelectAgencyPage() {
   }, [pendingOrg, convexAuth.isLoading, convexAuth.isAuthenticated])
 
   // Auto-select the only membership so users aren't forced to click.
-  // This fires immediately when there's exactly 1 membership, regardless of
-  // Convex auth loading state. The bootstrap effect handles the Convex auth wait.
+  // Gate on isPlatformAdmin === false so platform admins don't get routed into
+  // an agency workspace while their admin status is still resolving.
   useEffect(() => {
+    if (isPlatformAdmin !== false) return
     if (!isLoaded || isBootstrapping || pendingOrg) return
     const memberships = getVisibleMemberships(userMemberships.data ?? [])
     if (memberships.length !== 1) return
@@ -165,6 +169,7 @@ export function SelectAgencyPage() {
     if (organization || orgId) return
     void handleSelect(orgData)
   }, [
+    isPlatformAdmin,
     isLoaded,
     isBootstrapping,
     pendingOrg,
@@ -182,7 +187,6 @@ export function SelectAgencyPage() {
     )
   }
 
-  // Bootstrap once org and Convex auth are both ready.
   useEffect(() => {
     if (!pendingOrg || !user) return
     if (!organization || organization.id !== pendingOrg.id) return
@@ -255,8 +259,14 @@ export function SelectAgencyPage() {
     navigate,
   ])
 
-  if (!isLoaded || userMemberships.data === undefined) {
+  if (!isLoaded || userMemberships.data === undefined || isPlatformAdmin === undefined) {
     return <AppLoader fullScreen label="Finding your agencies" />
+  }
+
+  // Platform admins are redirected to /platform by the effect above. Don't render
+  // the picker while that navigation is in flight.
+  if (isPlatformAdmin === true) {
+    return <AppLoader fullScreen label="Opening platform admin" />
   }
 
   // No Clerk org memberships: wait for the tenantMembers resolution. A
@@ -358,6 +368,7 @@ export function SelectAgencyPage() {
               return (
                 <Card
                   key={mem.organization.id}
+                  data-testid={`agency-card-${mem.organization.id}`}
                   className={`transition-colors ${
                     isLoading
                       ? 'opacity-60 cursor-wait'

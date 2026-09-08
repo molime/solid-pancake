@@ -1,0 +1,60 @@
+{
+  "courseKey": "ga_california_disaster",
+  "title": "California Fire, Earthquake & Evacuation",
+  "description": "Prepare for and respond to fires, earthquakes, severe weather, and power outages.",
+  "category": "regulatory",
+  "durationMinutes": 15,
+  "passingScore": 80,
+  "steps": [
+    {
+      "id": "h6_fire_video",
+      "title": "Video: Home Fire Safety & Escape Planning",
+      "type": "video",
+      "content": "https://www.youtube.com/embed/pCAqm8U8k60",
+      "required": true,
+      "minDurationSec": 0,
+      "caption": "FEMA fire-emergency guidance for families and caregivers."
+    },
+    {
+      "id": "h6_earthquake_video",
+      "title": "Video: Earthquake Safety",
+      "type": "video",
+      "content": "https://www.youtube.com/embed/d08QUmxzdKU",
+      "required": true,
+      "minDurationSec": 0,
+      "caption": "Drop, cover, and hold-on demonstration for earthquake response."
+    },
+    {
+      "id": "h6_disaster_slides",
+      "title": "Fire, Earthquake & Evacuation",
+      "type": "slides",
+      "content": "[{\"id\": \"ca-h6-1\", \"title\": \"Fire Response\", \"body\": \"Sound the alarm, get everyone out, stay low under smoke, and meet at the safe place. Call 911 from outside. Never go back inside for belongings.\", \"imageUrl\": \"https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&q=80\", \"narration\": \"Fire Response. Sound the alarm, get everyone out, stay low under smoke, and meet at the safe place. Call 911 from outside. Never go back inside for belongings.\"}, {\"id\": \"ca-h6-2\", \"title\": \"Earthquake: Drop, Cover & Hold On\", \"body\": \"Indoors: drop, take cover under sturdy furniture, and hold on. Stay away from windows and heavy objects. Outdoors: move away from buildings and power lines.\", \"imageUrl\": \"https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&q=80\", \"narration\": \"Earthquake: Drop, Cover & Hold On. Indoors: drop, take cover under sturdy furniture, and hold on. Stay away from windows and heavy objects. Outdoors: move away from buildings and power lines.\"}, {\"id\": \"ca-h6-3\", \"title\": \"Evacuation Planning\", \"body\": \"Know two ways out of every room. Keep walkers, wheelchairs, glasses, and shoes near the bed. Practice the plan with the client and family.\", \"imageUrl\": \"https://images.unsplash.com/photo-1516567832553-66232148f74c?w=800&q=80\", \"narration\": \"Evacuation Planning. Know two ways out of every room. Keep walkers, wheelchairs, glasses, and shoes near the bed. Practice the plan with the client and family.\"}, {\"id\": \"ca-h6-4\", \"title\": \"Severe Weather\", \"body\": \"Stay indoors and away from windows. Have the client put on sturdy shoes in case evacuation is needed. Keep the emergency kit ready.\", \"imageUrl\": \"https://images.unsplash.com/photo-1541963463532-d68292c34b19?w=800&q=80\", \"narration\": \"Severe Weather. Stay indoors and away from windows. Have the client put on sturdy shoes in case evacuation is needed. Keep the emergency kit ready.\"}, {\"id\": \"ca-h6-5\", \"title\": \"Power Outage\", \"body\": \"Use flashlights; avoid candles. Keep refrigerator doors closed. Follow the care plan for medical equipment that needs power. Report to the office.\", \"imageUrl\": \"https://images.unsplash.com/photo-1544027993-37dbfe43562a?w=800&q=80\", \"narration\": \"Power Outage. Use flashlights; avoid candles. Keep refrigerator doors closed. Follow the care plan for medical equipment that needs power. Report to the office.\"}, {\"id\": \"ca-h6-6\", \"title\": \"Missing Client\", \"body\": \"Check the home calmly, ask neighbors, call the office and emergency contacts, and call 911 if the client is at risk or missing more than a few minutes.\", \"imageUrl\": \"https://images.unsplash.com/photo-1581056771107-24ca5f033842?w=800&q=80\", \"narration\": \"Missing Client. Check the home calmly, ask neighbors, call the office and emergency contacts, and call 911 if the client is at risk or missing more than a few minutes.\"}, {\"id\": \"ca-h6-7\", \"title\": \"After an Emergency\", \"body\": \"Account for everyone, follow the office disaster plan, document what happened, and participate in drills and reviews to improve readiness.\", \"imageUrl\": \"https://images.unsplash.com/photo-1583324113626-70df0f4deaab?w=800&q=80\", \"narration\": \"After an Emergency. Account for everyone, follow the office disaster plan, document what happened, and participate in drills and reviews to improve readiness.\"}]",
+      "required": true,
+      "minDurationSec": 140
+    },
+    {
+      "id": "h6_kit",
+      "title": "Interactive: Build a Disaster Kit",
+      "type": "text",
+      "content": "A 3-DAY DISASTER KIT SHOULD INCLUDE:\n\n- Water: 1 gallon per person per day.\n- Non-perishable food and a manual can opener.\n- First aid kit and prescription medications.\n- Flashlight, battery-powered radio, and extra batteries.\n- Phone charger and a list of emergency contacts.\n- Change of clothes and sanitation supplies.\n- Copies of important documents in a waterproof bag.\n- Cash and change.\n- Pet supplies if applicable.\n\nSPECIAL NEEDS\n- Extra glasses, hearing-aid batteries, and mobility aids.\n- Medical equipment such as oxygen or CPAP backup plans.\n- Items that calm the client, such as familiar objects or comfort items.",
+      "required": true,
+      "minDurationSec": 34
+    },
+    {
+      "id": "h6_missing",
+      "title": "Scenario: Missing Client or Power Outage",
+      "type": "text",
+      "content": "MISSING CLIENT\n- Check the home calmly, including bathrooms, backyard, and garage.\n- Ask neighbors if they saw the client.\n- Call the office and emergency contacts immediately.\n- If the client is at risk or has been missing more than a few minutes, call 911.\n\nPOWER OUTAGE\n- Use flashlights; avoid candles because of fire risk.\n- Keep refrigerator and freezer doors closed.\n- Follow the care plan for medical equipment that needs power.\n- Report the outage and any medical needs to the office.\n\nSEVERE WEATHER\n- Stay indoors and away from windows.\n- Have the client put on sturdy shoes in case evacuation is needed.\n- Keep the emergency kit ready and listen to weather alerts.",
+      "required": true,
+      "minDurationSec": 39
+    },
+    {
+      "id": "h6_quiz",
+      "title": "Module 3 Check: Disasters & Evacuation",
+      "type": "quiz",
+      "content": "{\"questions\": [{\"question\": \"What is the first thing to do in a fire emergency?\", \"options\": [\"Call the office\", \"Gather belongings\", \"Sound the alarm and get everyone out\", \"Try to extinguish the fire\"], \"correct\": 2}, {\"question\": \"During an earthquake indoors, you should:\", \"options\": [\"Run outside immediately\", \"Drop, cover, and hold on\", \"Stand in a doorway\", \"Get in the car\"], \"correct\": 1}, {\"question\": \"How much water should be in a 3-day disaster kit per person per day?\", \"options\": [\"1 cup\", \"1 quart\", \"1 gallon\", \"3 gallons\"], \"correct\": 2}, {\"question\": \"What should you do if a client is missing?\", \"options\": [\"Wait to see if they return\", \"Search the home, ask neighbors, call the office and 911 if needed\", \"Go home for the day\", \"Tell the family later\"], \"correct\": 1}, {\"question\": \"During a power outage, you should avoid:\", \"options\": [\"Flashlights\", \"Candles\", \"Closing the refrigerator door\", \"Reporting to the office\"], \"correct\": 1}]}",
+      "required": true,
+      "minDurationSec": 100
+    }
+  ]
+}
