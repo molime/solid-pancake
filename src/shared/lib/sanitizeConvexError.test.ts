@@ -50,6 +50,17 @@ describe('sanitizeConvexError', () => {
     )
   })
 
+  it('strips repeated prefixes from nested action errors', () => {
+    expect(
+      sanitizeConvexError('Uncaught Error: Uncaught Error: Something broke.'),
+    ).toBe('Something broke.')
+    expect(
+      sanitizeConvexError(
+        'Server Error Uncaught Error: Uncaught Error: Missing STRIPE_SECRET_KEY environment variable',
+      ),
+    ).toBe('Missing STRIPE_SECRET_KEY environment variable')
+  })
+
   it('strips the full Convex transport wrapper stack', () => {
     expect(
       sanitizeConvexError(

@@ -196,6 +196,496 @@ _____________________________ Signature ______________________ Date
 Individuals Choice, LLC is an equal opportunity employer. Employment, evaluations and wages are based on the qualifications of an applicant and her/his ability to perform the duties listed in this Job Description without regard to race, religious creed, gender, national origin, ancestry, disability, age, marital status, sexual orientation, medical condition or any other characteristic protected from discrimination by federal, state or local law.
 `.trim()
 
+export const GOLDEN_AGES_CAREGIVER_JD = `
+Golden Ages Home Care
+
+Affiliated Home Care Aide (HCA) Position Description
+
+Job Summary:
+An individual who, under professional supervision, provides assistance with nutritional and environmental support, personal hygiene, feeding and dressing.
+
+Organizational Relationship: Reports to the designated Supervisor
+
+Risk of Occupational Exposure to Blood Borne Pathogens: B: limited exposure
+
+Line of Supervision:
+● Provides supervision to no one.
+● Receives supervision from the Supervisor.
+
+Qualifications:
+● Must be at least 18 years old.
+● Successful completion of Orientation/Entry-Level Training for home care aides.
+● Prefer at least 6 months of work experience.
+● Speaks, reads, writes, and is able to communicate effectively in English.
+● Must have a current CPR certification.
+● Must have CDSS Criminal Record Check Clearance.
+● Must have TB clearance.
+● Must be registered with the CA CDSS Home Care Aide registry.
+
+Responsibilities:
+Personal Care Services – assists with:
+● Bath (tub, shower, or bed).
+● Oral hygiene.
+● Grooming with care of hair.
+● Ordinary care of nails.
+● Routine skin care/ lotion massage.
+● Positioning and turning of patients that cannot assist self- in bed and chair.
+● Toileting assist, incontinent care.
+● Eating.
+● Dressing.
+● Walking.
+● Toileting.
+● Medication reminders for self-administered medications.
+
+Homemaking - assists with:
+● Meal planning and preparation in accordance with complex and modified diets.
+● Feeding the client.
+● Linen change.
+● Laundry.
+● Light housekeeping.
+● Washing dishes.
+● Clean kitchen.
+● Dust & vacuum (only those rooms the client uses).
+● List needed supplies and grocery shopping.
+
+REQUIRED TO:
+● Follow universal precautions whenever giving any aspect of client service.
+● Maintain confidentiality.
+● Perform ONLY those functions specified for each individual client on the service plan.
+● Respond to the physical, emotional and development needs of clients.
+● Follow emergency procedures in the event of any incident, i.e., accident, injury, or significant change in client's condition.
+
+Essential Administrative Functions:
+● Follows client rights at all times.
+● Records each activity performed on each case on a daily basis.
+● Reports any incidents or client changes immediately.
+● Submits Daily Activity Sheets and records accurately on a timely basis (WEEKLY).
+● Follows instructions, is punctual and is at work as scheduled.
+● Follows all appropriate Organization policies.
+● Attends in-service education annually per Organization policy.
+● Provides all information required for the maintenance of her/his personnel record as per State regulations and Organization policy.
+● Shows interest, asks questions, and seeks help as indicated; is receptive to supervision.
+● Develops relationships and is cooperative with client, family, and supervisor.
+● Maintains appropriate appearance.
+● Productive and uses time efficiently.
+● Follows instructions, is punctual and attendance is acceptable.
+● Cooperates with supervisor and with client/family.
+● Self-reliant and plans appropriately.
+● Performs other duties as are reasonably assigned.
+● Signed SOC 341A.
+
+Functional Abilities:
+● Able to lift, turn and transfer clients weighing up to 150+ pounds.
+● Able to carry bundles upstairs weighing up to 10 pounds.
+● Able to stoop and bend.
+● Able to travel to prospective client's place of residence.
+● Able to hear and effectively communicate in English.
+
+Employee Name: ___________________________________________________________________
+
+Employee Signature: ________________________________________ Date: ___________________
+`.trim()
+
+export const GOLDEN_AGES_COORDINATOR_JD = `
+Golden Ages Home Care
+
+Care Coordinator / Office Support Position Description
+
+Job Summary:
+Responsible for day-to-day supervision of direct client services, managing the weekly schedules of workers, taking the intakes as needed, conducting client record reviews and participating in the QA activities.
+
+Organizational Relationship: Reports directly to the Administrator
+
+Risk of Occupational Exposure to Blood Borne Pathogens: C: no exposure
+
+Line of Supervision:
+● Provides supervision to HCAs.
+● Receives supervision from the Administrator.
+
+Qualifications:
+● A professional with a minimum of one (1) year training and experience in home care services or a related program.
+● Prefer a BA degree with one (1) year experience in home care/service delivery or a related program.
+● Must have current CPR certification.
+● Must have CDSS Criminal Record Check Clearance.
+
+Responsibilities:
+● Takes referrals and assigns clients to field staff.
+● Follow up on referrals by contacting clients, family members, etc.
+● Handles client service supervision per Organization's policy.
+● Documents telephone/in-office conferences with the clients/family, staff, and others.
+● Manages the client services coordination.
+● Assists with interviews/hiring service staff.
+● Orients staff to the Policies and Procedures of our Organization.
+● Supervises staff to ensure quality performance standards.
+● Establishes mutual goal setting and achievement standards.
+● Projects a concerned, professional appearance toward Organization's staff.
+● Maintains high visibility and availability while in the office.
+● Works to develop a positive rapport/relationship with all staff.
+● Shares on-call responsibility on an equitable basis.
+● Actively develops and pursues referral sources, as well as facilitates on-going relationships with various community organizations.
+● Performs other duties as assigned.
+● Signed SOC 341A.
+
+Functional Abilities:
+● Able to hear and effectively communicate in English.
+● Able to read 12 point or larger type.
+● Able to travel to prospective clients' place of residence.
+
+Employee Name: ___________________________________________________________________
+`.trim()
+
+export const GOLDEN_AGES_ADMINISTRATOR_JD = `
+Golden Ages Home Care
+
+Administrator Position Description
+
+Job Summary:
+The Administrator is an individual appointed by the Governing Body to administer, direct, and coordinate all the activities/programs of the Home Care Organization. They function under the direction of the Governing Body.
+
+Organizational Relationship: Reports directly to the Governing Body
+
+Risk of Occupational Exposure to Blood Borne Pathogens: C: no exposure
+
+Line of Supervision:
+● Provides supervision to Supervisor, HCAs, and all other employees.
+● Receives supervision from the Governing Body.
+
+Qualifications:
+● A professional with training and experience in home care/services delivery/administration or a related industry.
+● Prefer One (1) year of supervisory/administrative experience in home care/services or related program.
+● Must be able to effectively communicate in English.
+● Must have CDSS Criminal Record Check Clearance.
+
+Responsibilities:
+● Planning, organizing, directing, and evaluating operations to ensure the provision of adequate and appropriate care/services.
+● Complying with applicable state, local & federal laws and regulations.
+● Fiscal planning, budgeting, and management of operations in accordance with established fiscal parameters.
+● Implementing governing body directives and ensuring that appropriate service policies are developed and implemented.
+● Recruiting, employing, and retaining qualified personnel to maintain staffing levels.
+● Establishing and maintaining effective channels of communication.
+● Ensuring program personnel have current information and current practices.
+● Directing and monitoring organizational QA activities.
+● Ensuring staff development including orientation, in-service education, continuing education and evaluation of staff.
+● Ensuring appropriate staff supervision during all operating hours.
+● Assuring the development and qualifications for services and the assignment of personnel.
+● Ensuring the accuracy of public information materials and activities.
+● Ensuring that they have appointed one or more staff to act in their absence from the office (CA DSS Designation of Responsibility form).
+● Signed SOC 341A.
+● Informing the governing body, staff of current organizational, community, and industry trends.
+● Develops administrative policies and procedures relating to the Organization.
+● Reviews and evaluates existing policies and procedures by means of Annual Organization Evaluation completion.
+● Participates in preparation of reports & a required budgets.
+● Determines organizational lines of authority and fixes areas of responsibility.
+● Performs staff performance evaluations and processes merit increase requests.
+● Approves all salary increases and staff promotions.
+● Authorizes purchase of supplies and equipment.
+● Acts as official Organization spokesperson and representative.
+● Contacts local, state, and national associations and participates in meetings, conventions, etc.
+● Cooperates with other organizations to increase and improve services to the community.
+● Handles client complaints and investigations.
+● Handles unresolved problems between staff and supervisors.
+● Accommodates Federal, State and regulatory personnel on Organization survey visits.
+● Projects a concerned, professional attitude and develops a positive rapport with all staff.
+● Develops an open, positive rapport with community resources affiliated with the Organization.
+● Maintains high visibility and availability via telephone to referral sources, community resources, clients, and staff.
+● Actively pursues new and innovative marketing opportunities.
+● Acts as the Privacy Officer.
+● Serves as the Organization Disaster Coordinator.
+● Serves as the Agency Civil Rights/Section 1557 Coordinator.
+● Performs other duties as assigned.
+
+Employee Name: ___________________________________________________________________
+
+Employee Signature: ________________________________________ Date: ___________________
+`.trim()
+
+export const GOLDEN_AGES_SUPERVISOR_JD = `
+Golden Ages Home Care
+
+Supervisor Position Description
+
+Job Summary:
+Responsible for day-to-day supervision of direct client services, managing the weekly schedules of workers, taking the intakes as needed, conducting client record reviews and participating in the QA activities.
+
+Organizational Relationship: Reports directly to the Administrator
+
+Risk of Occupational Exposure to Blood Borne Pathogens: C: no exposure
+
+Line of Supervision:
+● Provides supervision to HCAs.
+● Receives supervision from the Administrator.
+
+Qualifications:
+● A professional with a minimum of one (1) year training and experience in home care services or a related program.
+● Prefer a BA degree with one (1) year experience in home care/service delivery or a related program.
+● Must have current CPR certification.
+● Must have CDSS Criminal Record Check Clearance.
+
+Responsibilities:
+● Takes referrals and assigns clients to field staff.
+● Follow up on referrals by contacting clients, family members, etc.
+● Handles client service supervision per Organization's policy.
+● Documents telephone/in-office conferences with the clients/family, staff, and others.
+● Manages the client services coordination.
+● Assists with interviews/hiring service staff.
+● Orients staff to the Policies and Procedures of our Organization.
+● Supervises staff to ensure quality performance standards.
+● Establishes mutual goal setting and achievement standards.
+● Projects a concerned, professional appearance toward Organization's staff.
+● Maintains high visibility and availability while in the office.
+● Works to develop a positive rapport/relationship with all staff.
+● Shares on-call responsibility on an equitable basis.
+● Actively develops and pursues referral sources, as well as facilitates on-going relationships with various community organizations.
+● Performs other duties as assigned.
+● Signed SOC 341A.
+
+Functional Abilities:
+● Able to hear and effectively communicate in English.
+● Able to read 12 point or larger type.
+● Able to travel to prospective clients' place of residence.
+
+Employee Name: ___________________________________________________________________
+
+Employee Signature _____________________________________________ Date: ______________
+`.trim()
+
+export const GOLDEN_AGES_HR_MANAGER_JD = `
+Golden Ages Home Care
+
+Human Resource (HR) Manager Position Description
+
+Job Summary:
+The HR Manager is responsible for assuring proper documentation of personnel files are intact. Responsible for training other staff as appropriate, coordinating in–service programs and other events within the Organization. Assures that the location is “survey ready” at all times.
+
+Organizational Relationship: Reports directly to the Administrator.
+
+Risk of Occupational Exposure to Blood Borne Pathogens: C: no exposure
+
+Line of Supervision:
+● Provides supervision to HCA's and other staff as appropriate for training.
+● Receives supervision from the Administrator.
+
+Qualifications:
+● High School graduate or equivalent.
+● 3-years recent HR experience preferably in a home care Organization or other health related field.
+● Moderate competency with computers and keyboarding, EXCEL spreadsheet competence.
+● Ability to multi-task with minimal stress and is a self-starter able to be self-directed.
+● Must have CDSS Criminal Record Check Clearance.
+
+Responsibilities:
+● Assists in the hiring process, recruiting, interviewing, and personnel file management.
+● Prepares new hiring documents as necessary.
+● Submits written requests for offsite HR functions as determined to be within working capital allocated for such activities.
+● Communicates with the out sourced company (if in place) for in-services as needed. Determines the next year's in-service calendar 6 months in advance allowing for development time.
+● Responsible for the initial management of employee grievances.
+● Communicates regularly with HR staff to discuss processes, changes, new policies etc.
+● Assists the Administrator in preparing for audits or license surveys as requested.
+● Responsible for assurance that the HR department is “survey ready” at all times.
+● Re-enforces HIPAA compliance with all personnel.
+● Encourages participates in QA Committee program.
+● Actively encourages employee recognition program.
+● Participates in the QA Committee process as requested.
+● Notifies the Organization of emergencies, sickness, and other imminent occurrences that may affect the client caseload as quickly as possible relative to the event's occurrence.
+● Submits written time requests 2 weeks or more in advance of planned time off.
+● Signed SOC 341A.
+● Other duties as assigned.
+
+Functional Abilities:
+● Able to read 12 point or larger type.
+● Able to hear, speak and effectively communicate in English.
+
+Employee Name: ___________________________________________________________________
+
+Employee Signature: ________________________________________ Date: ___________________
+`.trim()
+
+export const GOLDEN_AGES_OFFICE_MANAGER_JD = `
+Golden Ages Home Care
+
+Office Manager Position Description
+
+Job Summary:
+The responsibility and authority for the Office Manager will be overseen by the Administrator. Day to day activities include: office reception, ordering of office supplies and forms, managing office cleaning, biohazard pickups, and shredding pickups. Managing the postal needs, postage, pickups, mailings etc. Direct responsibility for management of the answering service contract.
+
+Organizational Relationship: Reports directly to the Administrator
+
+Risk Of Occupational Exposure To Blood Borne Pathogens: C: no exposure.
+
+Line of Supervision:
+● Provides supervision to no one.
+● Receives supervision from the Administrator.
+
+Qualifications:
+● Associate degree (preferred).
+● High School graduate or proof of post-secondary education if high school transcript is unavailable.
+● Computer literate in MS Word and Excel.
+● Organized, meticulous and gives attention to detail.
+● Must have CDSS Criminal Record Check Clearance.
+
+Responsibilities:
+● Office reception functions.
+● Ensures phones are answered in a professional and courteous manner.
+● Taking telephone referral information if staff is unavailable and promptly passes on referral.
+● Ordering office supplies and forms.
+● Oversight of cleaning contract, scheduling biohazard pickups, and shredding pickups.
+● Manages the postal needs such as postage, pickups, and mailing.
+● Responsible for managing the Answering service contract, handling and processing complaints, and forwarding complaint logs to the QA Committee.
+● Distributing and receiving employee surveys/paychecks to office staff.
+● Telemarketing our services when appropriate.
+● Assisting in all activities that are required of the Administrator.
+● Being Productive and using time efficiently.
+● Following instructions is punctual and attendance is acceptable.
+● Is self-reliant and plans appropriately.
+● Signed SOC 341A.
+● Performs other duties as assigned.
+
+Functional Abilities:
+● Able to read 12 point or larger type.
+● Able to lift/stoop effectively so as to be able to perform the above-listed responsibilities.
+● Able to hear adequately with no more than an amplifier on the phone and effectively communicate in English.
+● Able to read, write and maintain simple records in English.
+
+Employee Name: ___________________________________________________________________
+
+Employee Signature: ________________________________________ Date: ___________________
+`.trim()
+
+export const GOLDEN_AGES_PAYROLL_MANAGER_JD = `
+Golden Ages Home Care
+
+Payroll Manager Position Description
+
+Job Summary:
+The Payroll Manager is responsible for the oversight of payroll, billing, and collections functions. Additionally, this person will have primary oversight of the orientation and training for the computer system, payroll and billing reports, and monthly management of the Accounts Receivable.
+
+Organizational Relationship: Reports to the Administrator.
+
+Risk of Occupational Exposure to Blood Borne Pathogens: C: no exposure
+
+Line of Supervision:
+● Provides supervision to no one.
+● Receives supervision from the Administrator.
+
+Qualifications:
+● High School graduate or equivalent.
+● 2 years recent experience in management and supervision of credit and collections, payroll and billing, or governmental billing procedures in a home services Organization or other health related field.
+● A minimum of 1 year experience in electronic payroll and billing procedures in a home care environment.
+● Must have CDSS Criminal Record Check Clearance.
+
+Responsibilities:
+● Supervises data entry of visit notes, authorization for services and payroll processes.
+● Assists the locations in problem solving payroll/billing issues.
+● Manages the upload of payroll data in a timely manner.
+● Conducts monthly meetings with the Administrator and the Governing Body to review new processes, address problem areas and develop creative approaches to improve profit margins and accounts receivable management.
+● Manages the accounts receivable.
+● Assures prompt resolution of accounts receivable >90 days in collaboration with the Administrator.
+● Participates in all collection activities of problem accounts.
+● Provides oversight of the timely completion of all billing forms.
+● Communicates with the Administrator on problem areas.
+● Maintains good relationships with contracts and accounts.
+● Assures the Administrator that the office is operated in the most cost-effective manner.
+● Reviews and analyzes all financial reports on a monthly basis with Administrators.
+● Demonstrates a concerned, helpful, and professional demeanor with all office personnel.
+● Notifies the Organization of emergencies, sickness, and other imminent occurrences that may affect the client caseload as quickly as possible relative to the event's occurrence.
+● Submits written time-off requests at least 2 weeks or more in advance of planned time off.
+● Signed SOC 341A.
+● Performs other duties as assigned.
+
+Functional Abilities:
+● Able to stoop and bend.
+● Able to hear and effectively communicate in English.
+● Able to work well with people especially under pressure or in stressful times.
+
+Employee Name: ____________________________________________________________
+
+Employee Signature: ________________________________________ Date: ___________
+`.trim()
+
+export const GOLDEN_AGES_CFO_JD = `
+Golden Ages Home Care
+
+CFO / Vice President of Finance Position Description
+
+Job Summary:
+The CFO/Vice President of Finance is appointed by the Administrator/Governing Body and is responsible for the overall fiscal operations of the agency.
+
+Organizational Relationship: Reports directly to the Administrator
+
+Risk Of Occupational Exposure To Blood Borne Pathogens: C: no exposure
+
+Qualifications:
+● Prefer a baccalaureate degree with a minimum of two (2) years progressive financial or management experience.
+● Prefer financial education/training in US finance practices.
+● Must pass a criminal background check.
+
+Responsibilities:
+● Establish and monitor all fiscal policies.
+● Ensure compliance with all applicable federal, state, and local fiscal reporting requirements.
+● Ensure compliance with federal, state and local laws relating to the billing of services.
+● Ensure preparation of all billing reports.
+● Ensure payroll is accurately and properly processed.
+● Monitor and oversee the billing and collection process.
+● Develop and control the processing of all accounts payable.
+● Responsible for preparation of the annual budget for submission to the Governing Body.
+● Responsible for preparation of all financial reporting and interpretation.
+● Educate and train staff as to the proper application of fiscal policies.
+● Cooperate with Governing Body pursuant to agency mission and philosophy.
+● Develop policies and procedures to ensure the safeguarding of corporate assets.
+● Participate in agency programs/events, including but not limited to QA, annual agency evaluation, emergency preparedness.
+● Other duties as be assigned.
+
+Functional Abilities:
+● Must be able to read 12 point or larger type.
+● Must be able to hear adequately with no more than an amplifier on the phone and to effectively communicate in English.
+
+Employee Name: ___________________________________________________________________
+
+Employee Signature: ________________________________________ Date: ___________________
+`.trim()
+
+export const GOLDEN_AGES_POSITION_TO_JD: Record<string, string> = {
+  'Affiliated Home Care Aide (HCA)': GOLDEN_AGES_CAREGIVER_JD,
+  'Supervisor': GOLDEN_AGES_SUPERVISOR_JD,
+  'Administrator': GOLDEN_AGES_ADMINISTRATOR_JD,
+  'Human Resource (HR) Manager': GOLDEN_AGES_HR_MANAGER_JD,
+  'Office Manager': GOLDEN_AGES_OFFICE_MANAGER_JD,
+  'Payroll Manager': GOLDEN_AGES_PAYROLL_MANAGER_JD,
+  'CFO / Vice President of Finance': GOLDEN_AGES_CFO_JD,
+}
+
+export const GOLDEN_AGES_POSITION_TO_ROLE: Record<string, string> = {
+  'Affiliated Home Care Aide (HCA)': 'org:caregiver',
+  'Supervisor': 'org:coordinator',
+  'Administrator': 'org:admin',
+  'Human Resource (HR) Manager': 'org:hr',
+  'Office Manager': 'org:coordinator',
+  'Payroll Manager': 'org:hr',
+  'CFO / Vice President of Finance': 'org:admin',
+}
+
+export const GOLDEN_AGES_POSITIONS = [
+  'Affiliated Home Care Aide (HCA)',
+  'Supervisor',
+  'Administrator',
+  'Human Resource (HR) Manager',
+  'Office Manager',
+  'Payroll Manager',
+  'CFO / Vice President of Finance',
+]
+
+export const GOLDEN_AGES_BACKGROUND_CHECK_DISCLAIMER = `
+Important notice before you apply
+
+Golden Ages Home Care is a California licensed Home Care Organization. As required by the California Department of Social Services (CDSS), all staff with client contact must obtain a CDSS criminal record clearance before providing services. This means every applicant must:
+
+- Complete fingerprinting through the California Department of Justice Live Scan process.
+- Register on the Home Care Aide Registry (the agency will guide you through it).
+- Obtain TB clearance and complete a health screen.
+- Complete the required five (5) hour entry-level training (two hours of caregiver role and terms of employment orientation plus three hours of safety, emergency procedures, and infection control) before your first client assignment.
+
+Submitting this application does not guarantee employment. Any offer of employment is contingent on successfully clearing the background check and completing the requirements above.
+`.trim()
+
 export function jobDescriptionForBranch(branchType?: string): string {
   if (branchType === 'ILS') return ILS_JOB_DESCRIPTION
   if (branchType === 'SLS') return SLS_JOB_DESCRIPTION
@@ -208,6 +698,23 @@ export function jobDescriptionForPosition(branchType?: string, positionTitle?: s
     return SLS_SUPPORT_COORDINATOR_JD
   }
   return jobDescriptionForBranch(branchType)
+}
+
+export function jobDescriptionForAgency(
+  agencyName?: string,
+  branchType?: string,
+  positionTitle?: string,
+): string {
+  if ((agencyName ?? '').toLowerCase().includes('golden')) {
+    if (positionTitle && GOLDEN_AGES_POSITION_TO_JD[positionTitle]) {
+      return GOLDEN_AGES_POSITION_TO_JD[positionTitle]
+    }
+    if (positionTitle === 'Coordinator' || positionTitle === 'Support Coordinator') {
+      return GOLDEN_AGES_COORDINATOR_JD
+    }
+    return GOLDEN_AGES_CAREGIVER_JD
+  }
+  return jobDescriptionForPosition(branchType, positionTitle)
 }
 
 export const EMPLOYEE_CONTRACT_TEXT = `
@@ -388,6 +895,85 @@ NOTE: RETAIN IN EMPLOYEE/VOLUNTEER FILE
 export const LEGAL_VALIDITY_TEXT =
   'I understand that typing my name and/or initials in this online application has the same legal validity as a handwritten signature.'
 
+export const GOLDEN_AGES_EMPLOYEE_CONTRACT_TEXT = `
+Golden Ages Home Care
+
+EMPLOYEE CONTRACT
+Standard of Conduct
+
+The Golden Ages Home Care conduct policy is that all employees will observe certain standards of behavior while at work. These standards are not intended to restrict an employee's legitimate rights, but to ensure a professional, safe, and respectful care environment for our clients.
+
+The following are some, but not all, actions on the part of employees, which may result in disciplinary action, including discharge without prior warning:
+
+1. Each employee while on duty may not have visitors at a client's residence at any time except by prior arrangement with the Administrator.
+2. Employees are not to make personal phone calls while on duty thereby neglecting their clients or responsibilities.
+3. Tips, gratuities, significant gifts and purchases to employees from clients and/or family members are prohibited. If a client or family insists, the matter must be referred to the Administrator.
+4. Possession or consumption of alcohol or controlled substances while on duty is prohibited.
+5. Reporting to work under the influence of alcohol or controlled substances and/or possession of a dangerous weapon will be grounds for immediate termination.
+6. Smoking is not permitted in the office, in agency vehicles, or in a client's residence.
+7. Employees are expected to treat clients with respect, courtesy and consideration at all times. Any type of physical or mental abuse will be grounds for immediate dismissal.
+8. Leaving the work site during scheduled hours without authorization from the Administrator, except under emergency conditions and with proper coverage, will result in immediate dismissal.
+9. Unreported absence from work for one or more days without prior Administrator or designee's approval may result in termination of employment.
+10. Excessive tardiness: 4 times within a one-month period or one time a month for four consecutive months may result in termination.
+11. Falsification of employment application documents, timesheets or other documents may result in termination.
+12. Insubordination, failure to comply with reasonable requests from management, failure to work on assignments given, or the use of obscene or insulting language against the Administrator, another employee or a client will result in dismissal.
+13. Willful damage to agency or client property, or unauthorized use or removal of equipment or other agency property, will result in dismissal.
+14. Unauthorized use of the agency's information, data system or records is prohibited and will result in immediate dismissal.
+15. Gambling, horseplay, unnecessary boisterous conduct, provoking or engaging in a fight is prohibited.
+16. Dishonesty and theft.
+17. Carelessness resulting in injury to oneself, other employees, or clients.
+18. Sharing of confidential information, employee records, client records, personnel records, or business or financial records with any unauthorized person is prohibited and will result in dismissal.
+19. Creating or contributing to unsanitary conditions.
+20. Lack of supervision of a client, which endangers the safety of the client.
+21. Physical, emotional abuse and negligence to clients.
+22. Unprofessional behavior on the job or other behavior outside the agency that would negatively reflect on the agency's reputation.
+23. Continuous inability to communicate with clients or family members.
+24. Employees should not have any monetary transactions with clients.
+25. Employees providing care to clients are not to engage in and must avoid conversations or actions regarding religion or sex with clients. Golden Ages Home Care considers any violation of this rule a very serious offense. Such violations will result in discipline up to and including immediate discharge without prior warning or notice (whether the offense is the employee's first or not).
+26. Same rules and regulations that apply to clients will be applicable to staff.
+
+I ________________________________________ have received my copy of the Golden Ages Home Care personnel policies. I understand and agree that it is my responsibility to read and familiarize myself with the policies and procedures contained in them, including the Open Door Policy, performance evaluations, and annual training requirements.
+
+I understand that except for employment at-will status, any and all policies or practices can be changed at any time by the Administrator. The Administrator reserves the right to change my hours, wages, and working conditions at any time.
+
+I understand and agree that other than the Administrator, no other person has the authority to enter into any agreement, express or implied, for employment for any specific period of time, or to make any agreement for employment other than at-will; only the Administrator has the authority to make any such agreement and then only in writing.
+
+I understand that nothing in the personnel policies creates or is intended to create a promise or representation of continued employment and that employment at Golden Ages Home Care is employment at-will; employment may be terminated at the will of either the Administrator or me. My signature below certifies that I understand that the foregoing agreement on at-will status is the sole and entire agreement between Golden Ages Home Care and me concerning the duration of my employment and the circumstances under which my employment may be terminated. It supersedes all prior agreements, understandings and representations concerning my employment with Golden Ages Home Care.
+
+I have read, understood and agree to the above guidelines while under the employment of Golden Ages Home Care.
+
+Employee Signature _____________________________________________  Date: _______________
+
+Administrator/Designee Signature: ________________________________  Date: _______________
+`.trim()
+
+export const GOLDEN_AGES_HIPAA_TEXT = `
+Golden Ages Home Care
+
+HIPAA and CONFIDENTIALITY CLAUSE
+
+To: All Golden Ages Home Care Employees
+Re: HIPAA & Confidentiality Clause
+
+THE HEALTH INSURANCE PORTABILITY AND ACCOUNTABILITY ACT (HIPAA)
+
+What are HIPAA laws?
+
+This Act was created to provide protection for personal health information. The Privacy Rule is a federal law which allows AN INDIVIDUAL certain RIGHTS over HIS/HER personal health information.
+
+- I ___________________________________________, do certify that I have been presented, read, comprehend and acknowledge the above information regarding HIPAA confidentiality laws.
+- My signature below confirms that I will abide by all laws and regulations governing this subject.
+- I will protect and refrain from disseminating any and/or all information regarding the health and well-being of the clients entrusted in my care.
+
+Employee Signature: ______________________________  Date: _____________________
+
+Supervisor's Signature: _____________________________  Date: ______________________
+`.trim()
+
+export function isGoldenAgesAgency(agencyName?: string): boolean {
+  return (agencyName ?? '').toLowerCase().includes('golden')
+}
+
 export interface AcknowledgmentDoc {
   key: 'jobDescription' | 'employeeContract' | 'employeeRights' | 'hipaa' | 'abuseNotice'
   title: string
@@ -399,5 +985,17 @@ export const ACKNOWLEDGMENT_DOCUMENTS: AcknowledgmentDoc[] = [
   { key: 'employeeContract', title: 'Employee Contract', text: EMPLOYEE_CONTRACT_TEXT },
   { key: 'employeeRights', title: 'Employee Rights', text: EMPLOYEE_RIGHTS_TEXT },
   { key: 'hipaa', title: 'HIPAA Privacy & Confidentiality', text: HIPAA_TEXT },
+  { key: 'abuseNotice', title: 'Abuse, Neglect & Exploitation Reporting', text: ABUSE_NOTICE_TEXT },
+]
+
+// Golden Ages variants of the same five acknowledgments. The job description
+// is selected per position via jobDescriptionForAgency; the Employee Rights
+// (LIC 9052) and Abuse Reporting (SOC 341A) texts are official state forms and
+// are reused unchanged.
+export const GOLDEN_AGES_ACKNOWLEDGMENT_DOCUMENTS: AcknowledgmentDoc[] = [
+  { key: 'jobDescription', title: 'Job Description', text: JOB_DESCRIPTION_TEXT },
+  { key: 'employeeContract', title: 'Employee Contract', text: GOLDEN_AGES_EMPLOYEE_CONTRACT_TEXT },
+  { key: 'employeeRights', title: 'Employee Rights', text: EMPLOYEE_RIGHTS_TEXT },
+  { key: 'hipaa', title: 'HIPAA Privacy & Confidentiality', text: GOLDEN_AGES_HIPAA_TEXT },
   { key: 'abuseNotice', title: 'Abuse, Neglect & Exploitation Reporting', text: ABUSE_NOTICE_TEXT },
 ]

@@ -1,52 +1,91 @@
-import { Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { SignedInRouteGuard } from './RouteGuard'
 import { useUser, useClerk } from '@clerk/react'
+import { clearSessionData } from '@/shared/lib/clearSession'
+import { cn } from '@/shared/lib/cn'
 import { LogOut } from 'lucide-react'
+import { NAV_ITEMS } from './platformNavItems'
+
+function Wordmark() {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#22c55e]">
+        <span className="text-base font-bold text-[#0b0f10]">A</span>
+      </div>
+      <div>
+        <p className="text-[15px] font-bold leading-tight text-[#f5f7f6]">
+          ATRIA-X
+        </p>
+        <p className="text-[10px] font-medium uppercase tracking-widest text-[#9aa6a8]">
+          Platform Control
+        </p>
+      </div>
+    </div>
+  )
+}
 
 export function PlatformShell() {
   const { user } = useUser()
   const { signOut } = useClerk()
   const navigate = useNavigate()
 
+  const handleSignOut = () => {
+    clearSessionData()
+    signOut(() => navigate('/sign-in'))
+  }
+
   return (
     <SignedInRouteGuard>
-      <div className="flex h-screen overflow-hidden bg-atria-bg">
-        <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[240px] flex-col bg-atria-sidebar text-atria-sidebar-text lg:flex">
-          <div className="flex h-16 items-center gap-2 border-b border-white/5 px-4">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-atria-accent">
-              <span className="text-xs font-bold text-white">A</span>
-            </div>
-            <span className="text-sm font-semibold tracking-tight text-white">
-              ATRIA-X
-            </span>
+      <div className="min-h-screen bg-[#0b0f10]">
+        <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[248px] flex-col bg-[#101517] lg:flex">
+          <div className="border-b border-[#2a3437] px-5 py-5">
+            <Wordmark />
           </div>
           <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-            <a
-              href="/platform"
-              className="flex items-center gap-3 rounded-md bg-white/10 px-3 py-2 text-sm font-medium text-white"
-            >
-              Platform
-            </a>
+            {NAV_ITEMS.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  cn(
+                    'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors',
+                    isActive
+                      ? 'bg-[rgba(34,197,94,0.16)] text-[#22c55e]'
+                      : 'text-[#9aa6a8] hover:bg-[#1e2629] hover:text-[#f5f7f6]',
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    {isActive && (
+                      <span className="absolute left-[-12px] top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r bg-[#22c55e]" />
+                    )}
+                    <item.icon className="h-5 w-5" />
+                    {item.label}
+                  </>
+                )}
+              </NavLink>
+            ))}
           </nav>
-          <div className="border-t border-white/5 px-4 py-3 space-y-3">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-atria-accent/20">
-                <span className="text-xs font-semibold text-atria-accent">
+          <div className="space-y-3 border-t border-[#2a3437] p-4">
+            <div className="flex items-center gap-3 rounded-lg bg-[#1e2629] px-3 py-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[rgba(34,197,94,0.16)]">
+                <span className="text-sm font-semibold text-[#22c55e]">
                   {user?.firstName?.[0] ?? 'U'}
                 </span>
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium text-white">
+                <p className="truncate text-sm font-medium text-[#f5f7f6]">
                   {user?.fullName ?? 'User'}
                 </p>
-                <p className="truncate text-[11px] text-atria-sidebar-text/60">
-                  platform admin
+                <p className="truncate text-xs text-[#9aa6a8]">
+                  Platform Admin
                 </p>
               </div>
             </div>
             <button
-              onClick={() => signOut(() => navigate('/sign-in'))}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-atria-sidebar-text/70 hover:bg-white/5 hover:text-white transition-colors"
+              onClick={handleSignOut}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[#9aa6a8] transition-colors hover:bg-[#1e2629] hover:text-[#f5f7f6]"
             >
               <LogOut className="h-4 w-4" />
               Sign out
@@ -54,26 +93,18 @@ export function PlatformShell() {
           </div>
         </aside>
 
-        <div className="flex-1 flex flex-col lg:ml-[240px]">
-          <header className="flex h-14 items-center justify-between border-b border-atria-border bg-atria-surface px-4 lg:px-6">
-            <div className="flex items-center gap-2 lg:hidden">
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-atria-accent">
-                <span className="text-xs font-bold text-white">A</span>
-              </div>
-              <span className="text-sm font-semibold text-atria-ink">
-                ATRIA-X Platform
-              </span>
-            </div>
-            <div className="hidden lg:block" />
+        <div className="lg:ml-[248px]">
+          <header className="flex h-14 items-center justify-between border-b border-[#2a3437] bg-[#101517] px-4 lg:hidden">
+            <Wordmark />
             <button
-              onClick={() => signOut(() => navigate('/sign-in'))}
-              className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-atria-muted hover:text-atria-ink hover:bg-atria-bg transition-colors"
+              onClick={handleSignOut}
+              className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-[#9aa6a8] transition-colors hover:text-[#f5f7f6]"
             >
               <LogOut className="h-4 w-4" />
               Sign out
             </button>
           </header>
-          <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+          <main className="min-h-screen p-6 lg:p-8">
             <Outlet />
           </main>
         </div>

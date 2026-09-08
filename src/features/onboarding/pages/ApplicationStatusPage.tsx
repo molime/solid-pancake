@@ -1,11 +1,14 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
+import { SignedInApplyFlowBranding } from '../components/application/ApplyFlowBranding'
 import { useNavigate } from 'react-router-dom'
 import { useClerk } from '@clerk/react'
+import { clearSessionData } from '@/shared/lib/clearSession'
 import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
+import { AppLoader } from '@/shared/ui/AppLoader'
 import { Button } from '@/shared/ui/Button'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { cn } from '@/shared/lib/cn'
@@ -50,7 +53,7 @@ const STATUS_CONFIG: Record<string, { title: string; description: string; varian
   },
   accepted: {
     title: 'Offer accepted',
-    description: 'Welcome to the team! Complete your onboarding tasks.',
+    description: 'Welcome to the team! Complete your tasks.',
     variant: 'success',
     cardClass: 'border-atria-success/30 bg-atria-success/10',
     labelClass: 'text-atria-success',
@@ -95,8 +98,32 @@ function formatDate(value?: string) {
 export function ApplicationStatusPage() {
   const navigate = useNavigate()
   const { signOut } = useClerk()
+
+  const handleSignOut = () => {
+    clearSessionData()
+    signOut(() => navigate('/sign-in'))
+  }
   const { clerkOrgId, isLoading } = useTenant()
-  const data = useQuery(api.candidates.getMyApplication, clerkOrgId ? { clerkOrgId } : 'skip')
+
+  // Sticky mounting: once the page has rendered its content once, it must
+  // never unmount back to a loader during brief Clerk/Convex auth flickers.
+  const hasMountedRef = useRef(false)
+  const lastClerkOrgIdRef = useRef<string | undefined>(undefined)
+  // eslint-disable-next-line react-hooks/refs
+  if (clerkOrgId) lastClerkOrgIdRef.current = clerkOrgId
+  // eslint-disable-next-line react-hooks/refs
+  const effectiveClerkOrgId = clerkOrgId ?? lastClerkOrgIdRef.current
+
+  const data = useQuery(
+    api.candidates.getMyApplication,
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
+  )
+  const hasTrainingProduct = useQuery(
+    api.agencyConfig.hasProduct,
+    effectiveClerkOrgId
+      ? { clerkOrgId: effectiveClerkOrgId, productKey: 'training' }
+      : 'skip',
+  )
 
   const candidate = data?.candidate
   const application = data?.application
@@ -122,7 +149,14 @@ export function ApplicationStatusPage() {
     return tasks.find((t) => UPLOAD_TYPES.has(t.type) && t.status !== 'complete') ?? null
   }, [tasks])
 
-  if (isLoading || !clerkOrgId) return null
+  // Only show the loader on the very first load; afterwards the page stays
+  // mounted through brief auth flickers.
+  // eslint-disable-next-line react-hooks/refs
+  if (!hasMountedRef.current && (isLoading || !effectiveClerkOrgId)) {
+    return <AppLoader fullScreen />
+  }
+  // eslint-disable-next-line react-hooks/refs
+  hasMountedRef.current = true
 
   const firstName = candidate?.displayName?.split(' ')[0] ?? 'there'
 
@@ -132,10 +166,10 @@ export function ApplicationStatusPage() {
         <CardContent className='p-8'>
           <div className='mb-6 flex flex-col items-center text-center'>
             <AtriaLogo />
-            <p className='mt-2 text-sm text-atria-text-secondary'>Onboarding</p>
+            <p className='mt-2 text-sm text-atria-text-secondary'>Candidate Portal</p>
             <button
               type='button'
-              onClick={() => signOut(() => navigate('/sign-in'))}
+              onClick={handleSignOut}
               className='mt-2 text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
             >
               Sign out
@@ -252,36 +286,28 @@ export function ApplicationStatusPage() {
             )}
             {['applied', 'hr_review'].includes(status) && (
               <Button variant='primary' size='lg' className='w-full' onClick={() => navigate('/onboarding')}>
-                View my onboarding tasks {String.fromCharCode(8594)}
+                View my tasks {String.fromCharCode(8594)}
               </Button>
             )}
             {status === 'accepted' && (
               <Button variant='secondary' size='lg' className='w-full' onClick={() => navigate('/onboarding')}>
-                Back to onboarding checklist {String.fromCharCode(8594)}
+                Back to task list {String.fromCharCode(8594)}
               </Button>
             )}
             {status === 'hired' && (
-              <Button variant='primary' size='lg' className='w-full' onClick={() => navigate('/onboarding/training')}>
-                Complete platform training {String.fromCharCode(8594)}
+              <Button variant='primary' size='lg' className='w-full' onClick={() => navigate(hasTrainingProduct ? '/training' : '/onboarding/training')}>
+                {hasTrainingProduct ? 'Start training' : 'Complete platform training'} {String.fromCharCode(8594)}
               </Button>
             )}
             {['rejected', 'withdrawn'].includes(status) && (
               <Button variant='secondary' size='lg' className='w-full' onClick={() => navigate('/onboarding')}>
-                Back to onboarding checklist {String.fromCharCode(8594)}
+                Back to task list {String.fromCharCode(8594)}
               </Button>
             )}
           </div>
         </CardContent>
       </Card>
-      <div className='mt-6 flex flex-col items-center gap-2'>
-        {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
-        <img
-          src="/agency-logo-individualschoice.jpeg"
-          alt="Agency logo"
-          className='h-10 w-auto object-contain opacity-70'
-        />
-        <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
-      </div>
+      <SignedInApplyFlowBranding />
     </div>
   )
 }

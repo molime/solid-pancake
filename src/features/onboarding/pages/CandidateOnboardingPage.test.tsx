@@ -118,4 +118,32 @@ describe('CandidateOnboardingPage', () => {
     expect(screen.getByText('Car insurance policy')).toBeInTheDocument()
     expect(screen.getByText('1 of 8 complete')).toBeInTheDocument()
   })
+
+  it('shows skipped optional tasks with a Skipped badge and an Upload now button', () => {
+    tasks = baseTasks.map((t) =>
+      t.type === 'additional_certifications' ? { ...t, status: 'skipped' } : t,
+    )
+    render(
+      <MemoryRouter>
+        <CandidateOnboardingPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Skipped optional steps')).toBeInTheDocument()
+    expect(screen.getByText('Skipped')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Upload now' }))
+    expect(navigateMock).toHaveBeenCalledWith('/onboarding/upload/task_certs')
+  })
+
+  it('does not show the skipped section for skipped required tasks', () => {
+    tasks = [...baseTasks, { _id: 'task_car', type: 'car_insurance', status: 'skipped' }]
+    render(
+      <MemoryRouter>
+        <CandidateOnboardingPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByText('Skipped optional steps')).not.toBeInTheDocument()
+  })
 })

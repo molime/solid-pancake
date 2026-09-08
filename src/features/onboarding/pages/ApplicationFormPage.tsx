@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser, useClerk } from '@clerk/react'
+import { clearSessionData } from '@/shared/lib/clearSession'
 import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
@@ -10,11 +11,13 @@ import { Select } from '@/shared/ui/Select'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
+import { AppLoader } from '@/shared/ui/AppLoader'
 import { ProgressSteps } from '@/shared/ui/ProgressSteps'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { generatePrefilledPdf, saveAndDownload, saveAndUpload } from '../pdf/generatePrefilledPdf'
 import { getMapping, normalizeW4PdfData } from '../pdf/mappings'
 import { PersonalInfoSection } from '../components/application/PersonalInfoSection'
+import { SignedInApplyFlowBranding } from '../components/application/ApplyFlowBranding'
 import { EmploymentHistorySection } from '../components/application/EmploymentHistorySection'
 import { ReferencesSection } from '../components/application/ReferencesSection'
 import { CriminalRecordSection } from '../components/application/CriminalRecordSection'
@@ -27,10 +30,10 @@ import {
   type DisbursementInfo,
   createDefaultApplicationFormData,
   isNonEmptyString,
-  positionOptionsForBranch,
+  positionOptionsForAgency,
 } from '../components/application/types'
 import { prefilledI9FromPersonal, prefilledW4FromPersonal, mergeDraft } from './applicationUtils'
-import { jobDescriptionForPosition, LEGAL_VALIDITY_TEXT } from '../components/application/legalText'
+import { jobDescriptionForAgency, isGoldenAgesAgency, LEGAL_VALIDITY_TEXT, GOLDEN_AGES_BACKGROUND_CHECK_DISCLAIMER } from '../components/application/legalText'
 import { formatDateUS } from '@/shared/format'
 
 
@@ -52,6 +55,167 @@ function splitName(full = '') {
   const lastName = parts.length > 1 ? parts[parts.length - 1] : ''
   const middleInitial = parts.length === 3 ? parts[1][0] : ''
   return { firstName, lastName, middleInitial }
+}
+
+function isGoldenAgesEmployer(employerInfo?: { legalName?: string }) {
+  return (employerInfo?.legalName ?? '').toLowerCase().includes('golden')
+}
+
+function splitStreet(street = '') {
+  const trimmed = street.trim()
+  const parts = trimmed.split(/\s+/)
+  const maybeNumber = parts[0] ?? ''
+  const startsWithNumber = /^\d/.test(maybeNumber)
+  const streetNumber = startsWithNumber ? maybeNumber : ''
+  const streetName = startsWithNumber ? parts.slice(1).join(' ') : trimmed
+  return { streetNumber, streetName }
+}
+
+function parsePhoneParts(phone = '') {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length === 10) {
+    return { areaCode: digits.slice(0, 3), phone: digits.slice(3) }
+  }
+  return { areaCode: '', phone }
+}
+
+type EmployerInfoData = {
+  legalName?: string
+  address?: string
+  phone?: string
+  ein?: string
+  caEmployerAccountNumber?: string
+  homeCareOrganizationNumber?: string
+  liveScanOri?: string
+  liveScanMailCode?: string
+}
+
+// Assemble the data overlaid onto the LIC 508 Criminal Record Statement.
+// Field positions live in CRIMINAL_RECORD_MAPPING (mappings.ts); keys with
+// empty/undefined values are skipped by the overlay, so fields we have no
+// data for (other states lived, driver's license) are simply left blank.
+function buildCriminalRecordPdfData(
+  data: ApplicationFormData,
+  opts: { signature: string; date: string },
+  employerInfo?: EmployerInfoData,
+  isGoldenAges = false,
+) {
+  const { address } = data.personal
+  return {
+    ...data.criminalRecord,
+    convictedCaliforniaYes: data.criminalRecord.convictedCalifornia ? 'X' : '',
+    convictedCaliforniaNo: !data.criminalRecord.convictedCalifornia ? 'X' : '',
+    convictedOtherYes: data.criminalRecord.convictedOther ? 'X' : '',
+    convictedOtherNo: !data.criminalRecord.convictedOther ? 'X' : '',
+    // The out-of-state question is only asked in the Golden Ages flow (where
+    // the radio defaults to "No"); other agencies keep both boxes blank,
+    // exactly like the paper form.
+    livedOtherStateYes: data.criminalRecord.livedOutsideCalifornia === true ? 'X' : '',
+    livedOtherStateNo:
+      isGoldenAges && data.criminalRecord.livedOutsideCalifornia !== true
+        ? 'X'
+        : '',
+    facilityName: employerInfo?.legalName ?? data.agencyName ?? '',
+    facilityNumber: employerInfo?.homeCareOrganizationNumber ?? '',
+    name: `${data.personal.firstName} ${data.personal.lastName}`.trim(),
+    address: [address.street, address.city, address.state, address.zip].filter(Boolean).join(', '),
+    socialSecurityNumber: data.personal.ssn,
+    driversLicense: data.driversLicense.hasLicense ? data.driversLicense.cdlNumber : '',
+    dateOfBirth: formatDateUS(data.personal.dateOfBirth),
+    signature: opts.signature,
+    date: opts.date,
+  }
+}
+
+function buildGoldenAgesPrefilledData(
+  data: ApplicationFormData,
+  employerInfo?: EmployerInfoData,
+) {
+  const todayUs = new Date().toLocaleDateString('en-US')
+  const personal = data.personal
+  const address = personal.address
+  const { streetNumber, streetName } = splitStreet(address.street)
+  const employerName = employerInfo?.legalName ?? data.agencyName ?? ''
+  const employerAddress = employerInfo?.address ?? ''
+  const employerPhone = employerInfo?.phone ?? ''
+  const employerPhoneParts = parsePhoneParts(employerPhone)
+
+  // Simple employer address split: last two comma-separated parts are city/state+zip
+  const employerAddressParts = employerAddress.split(',').map((s) => s.trim())
+  const employerCity = employerAddressParts[employerAddressParts.length - 2] ?? ''
+  const employerStateZip = employerAddressParts[employerAddressParts.length - 1] ?? ''
+  const employerStateZipParts = employerStateZip.split(/\s+/)
+  const employerZip = employerStateZipParts.slice(-1)[0] ?? ''
+
+  const de34 = {
+    // The top strip (report date, CA employer account number, branch code,
+    // federal ID) is intentionally left blank — Golden Ages asked that
+    // nothing be filled in those fields; HR completes them when filing.
+    date: '',
+    caEmployerAccountNumber: '',
+    federalIdNumber: '',
+    businessName: employerName,
+    contactPerson: '',
+    contactPhone: employerPhoneParts.phone ? `(${employerPhoneParts.areaCode}) ${employerPhoneParts.phone}` : employerPhone,
+    businessAddress: employerAddress,
+    employeeFirstName: personal.firstName,
+    employeeMiddleInitial: personal.middleInitial,
+    employeeLastName: personal.lastName,
+    socialSecurityNumber: personal.ssn,
+    streetNumber,
+    streetName,
+    unitApt: address.apt,
+    city: address.city,
+    state: address.state,
+    zip: address.zip,
+    startOfWorkDate: '',
+  }
+
+  const bcia8016 = {
+    ori: employerInfo?.liveScanOri ?? '',
+    authorizedApplicantType: 'Applicant',
+    typeOfLicense: 'Home Care Aide',
+    agencyAuthorized: employerName,
+    agencyMailCode: employerInfo?.liveScanMailCode ?? '',
+    agencyStreetAddress: employerAddress,
+    agencyCity: employerCity,
+    agencyZip: employerZip,
+    agencyContactName: '',
+    agencyPhone: employerPhoneParts.phone ? `(${employerPhoneParts.areaCode}) ${employerPhoneParts.phone}` : employerPhone,
+    applicantLastName: personal.lastName,
+    applicantFirstName: personal.firstName,
+    applicantSuffix: '',
+    aliasLastName: personal.middleInitial ? '' : '',
+    aliasFirstName: '',
+    aliasSuffix: '',
+    dateOfBirth: formatDateUS(personal.dateOfBirth),
+    sexMale: personal.gender === 'male' ? 'X' : '',
+    sexFemale: personal.gender === 'female' ? 'X' : '',
+    sexNonbinary: '',
+    driverLicenseNumber: '',
+    height: '',
+    weight: '',
+    eyeColor: '',
+    hairColor: '',
+    placeOfBirth: '',
+    socialSecurityNumber: personal.ssn,
+    homeAddressStreet: address.street,
+    homeAddressCity: address.city,
+    homeAddressZip: address.zip,
+    billingNumber: '',
+    miscNumber: '',
+    dojChecked: 'X',
+    fbiChecked: 'X',
+    employerName,
+    employerAddress,
+    employerCity,
+    employerZip,
+    employerMailCode: employerInfo?.liveScanMailCode ?? '',
+    employerPhone: employerPhoneParts.phone ? `(${employerPhoneParts.areaCode}) ${employerPhoneParts.phone}` : employerPhone,
+    applicantSignatureDate: todayUs,
+  }
+
+  return { de34, bcia8016 }
 }
 
 function validatePersonal(personal: ApplicationFormData['personal']) {
@@ -202,10 +366,19 @@ function formatValue(value: unknown) {
 // Health screen (LIC 503) schedule values derived from the availability step:
 // days per week come from the selected days of week, hours per day from the
 // selected shift (all full-time shifts are 8 hours) or the part-time custom hours.
-function healthScreenSchedule(personal: ApplicationFormData['personal']) {
+function healthScreenSchedule(
+  personal: ApplicationFormData['personal'],
+  templates?: { value: string; hoursPerDay?: number }[],
+) {
   const workDaysPerWeek = personal.daysOfWeek.length > 0 ? String(personal.daysOfWeek.length) : '5'
+  const selectedTemplate = templates?.find((t) => t.value === personal.shift)
+  const templateHours = selectedTemplate?.hoursPerDay
   const workHoursPerDay =
-    personal.availability === 'part_time' ? personal.customHours || '8' : '8'
+    personal.availability === 'part_time'
+      ? personal.customHours || (templateHours ? String(templateHours) : '8')
+      : templateHours
+        ? String(templateHours)
+        : '8'
   return { workDaysPerWeek, workHoursPerDay }
 }
 
@@ -276,23 +449,46 @@ function ReviewSection({ data }: { data: ApplicationFormData }) {
 export function ApplicationFormPage() {
   const navigate = useNavigate()
   const { signOut } = useClerk()
+
+  const handleSignOut = () => {
+    clearSessionData()
+    signOut(() => navigate('/sign-in'))
+  }
   const { clerkOrgId, tenantName, isLoading } = useTenant()
   const { user, isLoaded: userLoaded } = useUser()
+
+  // Sticky mounting: once the page has rendered its content once, it must
+  // never unmount back to a loader during brief Clerk/Convex auth flickers.
+  const hasMountedRef = useRef(false)
+  const lastClerkOrgIdRef = useRef<string | undefined>(undefined)
+  // eslint-disable-next-line react-hooks/refs
+  if (clerkOrgId) lastClerkOrgIdRef.current = clerkOrgId
+  // eslint-disable-next-line react-hooks/refs
+  const effectiveClerkOrgId = clerkOrgId ?? lastClerkOrgIdRef.current
+
   const candidate = useQuery(
     api.candidates.getCandidateProfile,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
   const draft = useQuery(
     api.drafts.getDraft,
-    clerkOrgId ? { clerkOrgId, formType: 'application' } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId, formType: 'application' } : 'skip',
   )
   const myApplication = useQuery(
     api.candidates.getMyApplication,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
   const branches = useQuery(
     api.agencyConfig.listAgencyBranches,
-    clerkOrgId ? { clerkOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
+  )
+  const shiftTemplates = useQuery(
+    api.tenantSettings.getShiftTemplates,
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
+  )
+  const employerInfo = useQuery(
+    api.tenantSettings.getEmployerInfo,
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
   const submit = useMutation(api.candidates.submitApplication)
   const saveDraft = useMutation(api.drafts.saveDraft)
@@ -349,6 +545,14 @@ export function ApplicationFormPage() {
     const branch = branches.find((b) => b._id === candidate.branchId)
     return branch?.branchType as string | undefined
   }, [candidate, branches])
+
+  // Golden Ages reuses the Individuals Choice flow but swaps California
+  // documents and hides agency-specific acknowledgments.
+  const isGoldenAges = isGoldenAgesEmployer(employerInfo) || isGoldenAgesAgency(tenantName)
+  // Agency name used for agency-specific content (job descriptions). Prefer
+  // the employer legal name so tenants whose display name does not mention
+  // the agency (e.g. dev test tenants) still resolve Golden Ages content.
+  const effectiveAgencyName = employerInfo?.legalName ?? tenantName
 
   const handleDisbursementChange = useCallback((disbursement: DisbursementInfo) => {
     setData((prev) => ({ ...prev, disbursement }))
@@ -415,15 +619,23 @@ export function ApplicationFormPage() {
 
   // Auto-save draft on changes (debounced)
   useEffect(() => {
-    if (!clerkOrgId || !hasInitialized) return
+    if (!effectiveClerkOrgId || !hasInitialized) return
     const timeout = setTimeout(() => {
-      saveDraft({ clerkOrgId, formType: 'application', data })
+      saveDraft({ clerkOrgId: effectiveClerkOrgId, formType: 'application', data })
       draftSavedAtRef.current = Date.now()
     }, 1000)
     return () => clearTimeout(timeout)
-  }, [data, clerkOrgId, hasInitialized, saveDraft])
+  }, [data, effectiveClerkOrgId, hasInitialized, saveDraft])
 
-  if (isLoading || !userLoaded || !clerkOrgId) return null
+  // Only show the loader on the very first load; afterwards the page stays
+  // mounted and the last known clerkOrgId covers brief auth flickers.
+  // eslint-disable-next-line react-hooks/refs
+  if (!hasMountedRef.current && (isLoading || !userLoaded || !effectiveClerkOrgId)) {
+    return <AppLoader fullScreen />
+  }
+  // eslint-disable-next-line react-hooks/refs
+  hasMountedRef.current = true
+  const orgId = effectiveClerkOrgId as string
 
   const handleContinue = () => {
     setShowErrors(true)
@@ -434,10 +646,14 @@ export function ApplicationFormPage() {
     setError('')
     setShowErrors(false)
     const completedStep = step
-    setStep((s) => Math.min(s + 1, STEPS.length - 1))
+    const nextStep = Math.min(completedStep + 1, STEPS.length - 1)
+    setStep(nextStep)
     setGeneratedPdfs([])
     if (completedStep === 3 || completedStep === 4) {
       generateStepPdfs(completedStep)
+    }
+    if (nextStep === 7) {
+      generateAllPdfsForReview()
     }
   }
 
@@ -458,8 +674,8 @@ export function ApplicationFormPage() {
     setIsSubmitting(true)
     try {
       await generateAndUploadPrefilledDocuments()
-      await submit({ clerkOrgId, fields: data })
-      await deleteDraft({ clerkOrgId, formType: 'application' })
+      await submit({ clerkOrgId: orgId, fields: data })
+      await deleteDraft({ clerkOrgId: orgId, formType: 'application' })
       try {
         sessionStorage.removeItem('atriax.application.step')
       } catch {
@@ -473,9 +689,9 @@ export function ApplicationFormPage() {
   }
 
   const generateAndUploadPrefilledDocuments = async () => {
-    if (!clerkOrgId || !candidate?._id) return
+    if (!candidate?._id) return
     const getUploadUrl = async () => {
-      const { url } = await generateUploadUrl({ clerkOrgId })
+      const { url } = await generateUploadUrl({ clerkOrgId: orgId })
       return url
     }
 
@@ -492,10 +708,9 @@ export function ApplicationFormPage() {
           i9Bytes,
           'i9_prefilled.pdf',
           'i9',
-          clerkOrgId,
+          orgId,
           getUploadUrl,
           savePrefilledDocument,
-          candidate._id,
         )
       } catch {
         // Best-effort: do not block submission if PDF generation fails.
@@ -514,10 +729,9 @@ export function ApplicationFormPage() {
           w4Bytes,
           'w4_prefilled.pdf',
           'w4',
-          clerkOrgId,
+          orgId,
           getUploadUrl,
           savePrefilledDocument,
-          candidate._id,
         )
       } catch {
         // Best-effort: do not block submission if PDF generation fails.
@@ -527,41 +741,53 @@ export function ApplicationFormPage() {
     const criminalMapping = getMapping('criminal_record')
     if (criminalMapping) {
       try {
-        const { address } = data.personal
-        const criminalData = {
-          ...data.criminalRecord,
-          convictedCaliforniaYes: data.criminalRecord.convictedCalifornia ? 'X' : '',
-          convictedCaliforniaNo: !data.criminalRecord.convictedCalifornia ? 'X' : '',
-          convictedOtherYes: data.criminalRecord.convictedOther ? 'X' : '',
-          convictedOtherNo: !data.criminalRecord.convictedOther ? 'X' : '',
-          name: data.personal.firstName + ' ' + data.personal.lastName,
-          address: address.street,
-          city: address.city,
-          zip: address.zip,
-          socialSecurityNumber: data.personal.ssn,
-          dateOfBirth: formatDateUS(data.personal.dateOfBirth),
-          signature: data.i9.signature,
-          date: formatDateUS(data.i9.date),
-          printedName: data.personal.firstName + ' ' + data.personal.lastName,
-          printedDate: formatDateUS(data.i9.date),
-          offense: data.criminalRecord.convictedDetails || '',
-          offenseLocation: '',
-          offenseDate: '',
-          offenseDescription: '',
-        }
+        const criminalData = buildCriminalRecordPdfData(
+          data,
+          { signature: data.i9.signature, date: formatDateUS(data.i9.date) },
+          employerInfo,
+          isGoldenAges,
+        )
         const criminalBytes = await generatePrefilledPdf(criminalMapping, criminalData)
         await saveAndUpload(
           criminalBytes,
           'lic_508_criminal_record_prefilled.pdf',
           'criminal_record',
-          clerkOrgId,
+          orgId,
           getUploadUrl,
           savePrefilledDocument,
-          candidate._id,
         )
       } catch {
         // Best-effort: do not block submission if PDF generation fails.
       }
+    }
+
+    if (isGoldenAges) {
+      const { de34, bcia8016 } = buildGoldenAgesPrefilledData(data, employerInfo)
+
+      const de34Mapping = getMapping('de_34')
+      if (de34Mapping) {
+        try {
+          const bytes = await generatePrefilledPdf(de34Mapping, de34)
+          await saveAndUpload(bytes, 'de_34_new_hire_prefilled.pdf', 'de_34', orgId, getUploadUrl, savePrefilledDocument)
+        } catch {
+          // Best-effort: do not block submission if PDF generation fails.
+        }
+      }
+
+      const bcia8016Mapping = getMapping('bcia_8016')
+      if (bcia8016Mapping) {
+        try {
+          const bytes = await generatePrefilledPdf(bcia8016Mapping, bcia8016)
+          await saveAndUpload(bytes, 'bcia_8016_live_scan_prefilled.pdf', 'bcia_8016', orgId, getUploadUrl, savePrefilledDocument)
+        } catch {
+          // Best-effort: do not block submission if PDF generation fails.
+        }
+      }
+
+      // HCS 501 (personnel record) is intentionally NOT prefilled here: it is
+      // completed by the employee at the time of hire — hired Golden Ages
+      // caregivers download the blank form, fill it, and upload it back before
+      // accessing the dashboard (see PersonnelRecordPage).
     }
   }
 
@@ -572,26 +798,15 @@ export function ApplicationFormPage() {
         // Criminal record step completed - generate LIC 508
         const criminalMapping = getMapping('criminal_record')
         if (criminalMapping) {
-          const criminalData = {
-            name: data.personal.firstName + ' ' + data.personal.lastName,
-            address: data.personal.address.street,
-            city: data.personal.address.city,
-            zip: data.personal.address.zip,
-            socialSecurityNumber: data.personal.ssn,
-            dateOfBirth: formatDateUS(data.personal.dateOfBirth),
-            convictedCaliforniaYes: data.criminalRecord.convictedCalifornia ? 'X' : '',
-            convictedCaliforniaNo: !data.criminalRecord.convictedCalifornia ? 'X' : '',
-            convictedOtherYes: data.criminalRecord.convictedOther ? 'X' : '',
-            convictedOtherNo: !data.criminalRecord.convictedOther ? 'X' : '',
-            signature: data.personal.firstName + ' ' + data.personal.lastName,
-            date: new Date().toLocaleDateString('en-US'),
-            printedName: data.personal.firstName + ' ' + data.personal.lastName,
-            printedDate: new Date().toLocaleDateString('en-US'),
-            offense: data.criminalRecord.convictedDetails || '',
-            offenseLocation: '',
-            offenseDate: '',
-            offenseDescription: '',
-          }
+          const criminalData = buildCriminalRecordPdfData(
+            data,
+            {
+              signature: `${data.personal.firstName} ${data.personal.lastName}`.trim(),
+              date: new Date().toLocaleDateString('en-US'),
+            },
+            employerInfo,
+            isGoldenAges,
+          )
           const bytes = await generatePrefilledPdf(criminalMapping, criminalData)
           pdfs.push({ name: 'lic_508_criminal_record_prefilled.pdf', bytes, description: 'Criminal Record Statement (LIC 508) - filled out with your information. Keep for your records.' })
         }
@@ -618,20 +833,170 @@ export function ApplicationFormPage() {
           pdfs.push({ name: 'w4_prefilled.pdf', bytes, description: 'Federal W-4 Tax Withholding form - filled out with your information. Keep for your records. Your HR team will complete the employer section.' })
         }
         // Also generate health screen and live scan so the applicant can take them to their doctor/Live Scan office
-        const healthMapping = getMapping('health_screen')
+        const healthMapping = getMapping(isGoldenAges ? 'golden_ages_health_screen' : 'health_screen')
         if (healthMapping) {
-          const healthData = {
-            facilityName: data.agencyName || 'Your agency',
-            personName: data.personal.firstName + ' ' + data.personal.lastName,
-            positionTitle: data.personal.positionApplyingFor || 'Caregiver',
-            ...healthScreenSchedule(data.personal),
-            applicantSignature: data.personal.firstName + ' ' + data.personal.lastName,
-            applicantAddress: [data.personal.address.street, data.personal.address.city, data.personal.address.state, data.personal.address.zip].filter(Boolean).join(', '),
-            date: new Date().toLocaleDateString('en-US'),
-          }
+          const fullName = `${data.personal.firstName} ${data.personal.lastName}`.trim()
+          const fullAddress = [data.personal.address.street, data.personal.address.apt, data.personal.address.city, data.personal.address.state, data.personal.address.zip].filter(Boolean).join(', ')
+          const healthData = isGoldenAges
+            ? {
+                personName: fullName,
+                firstName: data.personal.firstName,
+                lastName: data.personal.lastName,
+                dateOfBirth: formatDateUS(data.personal.dateOfBirth),
+                positionTitle: data.personal.positionApplyingFor || 'Caregiver',
+                address: fullAddress,
+                phone: data.personal.homePhone || data.personal.cellPhone,
+                email: data.personal.email,
+                date: new Date().toLocaleDateString('en-US'),
+              }
+            : {
+                facilityName: data.agencyName || 'Your agency',
+                personName: fullName,
+                positionTitle: data.personal.positionApplyingFor || 'Caregiver',
+                ...healthScreenSchedule(data.personal, shiftTemplates ?? undefined),
+                applicantSignature: fullName,
+                applicantAddress: [data.personal.address.street, data.personal.address.city, data.personal.address.state, data.personal.address.zip].filter(Boolean).join(', '),
+                date: new Date().toLocaleDateString('en-US'),
+              }
           const bytes = await generatePrefilledPdf(healthMapping, healthData)
-          pdfs.push({ name: 'lic_503_health_screen_prefilled.pdf', bytes, description: 'Health Screening Report (LIC 503) - Take this form to your primary care doctor for a health screening. This is at your own cost. Bring the signed/stamped form back and upload it in the Health Screen step.' })
+          pdfs.push({
+            name: isGoldenAges ? 'golden_ages_health_screen_prefilled.pdf' : 'lic_503_health_screen_prefilled.pdf',
+            bytes,
+            description: isGoldenAges
+              ? 'Golden Ages Health Documents - Take these forms to your primary care doctor for a health screening. This is at your own cost. Bring the signed/stamped forms back and upload them in the Health Screen step.'
+              : 'Health Screening Report (LIC 503) - Take this form to your primary care doctor for a health screening. This is at your own cost. Bring the signed/stamped form back and upload it in the Health Screen step.',
+          })
         }
+
+        if (isGoldenAges) {
+          const { de34, bcia8016 } = buildGoldenAgesPrefilledData(data, employerInfo)
+
+          const de34Mapping = getMapping('de_34')
+          if (de34Mapping) {
+            const bytes = await generatePrefilledPdf(de34Mapping, de34)
+            pdfs.push({ name: 'de_34_new_hire_prefilled.pdf', bytes, description: 'California DE 34 — Report of New Employee(s). Filled out with your information and Golden Ages employer details. Your HR team submits this to the EDD when you are hired.' })
+          }
+
+          const bcia8016Mapping = getMapping('bcia_8016')
+          if (bcia8016Mapping) {
+            const bytes = await generatePrefilledPdf(bcia8016Mapping, bcia8016)
+            pdfs.push({ name: 'bcia_8016_live_scan_prefilled.pdf', bytes, description: 'California BCIA 8016 — Request for Live Scan Service. Filled out with your information and Golden Ages agency details.' })
+          }
+        } else {
+          const liveScanMapping = getMapping('live_scan')
+          if (liveScanMapping) {
+            const liveScanData = {
+              lastName: data.personal.lastName,
+              firstName: data.personal.firstName,
+              dateOfBirth: formatDateUS(data.personal.dateOfBirth),
+              socialSecurityNumber: data.personal.ssn,
+              sexMale: data.personal.gender === 'male' ? 'X' : '',
+              sexFemale: data.personal.gender === 'female' ? 'X' : '',
+              homeAddressStreet: data.personal.address.street,
+              homeAddressCityStateZip: [data.personal.address.city, data.personal.address.state, data.personal.address.zip].filter(Boolean).join(', '),
+              transactionDate: new Date().toLocaleDateString('en-US'),
+            }
+            const bytes = await generatePrefilledPdf(liveScanMapping, liveScanData)
+            pdfs.push({ name: 'lic_9163_live_scan_prefilled.pdf', bytes, description: 'Live Scan Fingerprint Request (LIC 9163) - Take this form to the Live Scan office at 1625 Flickinger Ave, San Jose, CA 95131 (9am-4pm Mon-Fri). The $70 cost will be reimbursed. Bring the stamped receipt back and upload it in the Background Check step.' })
+          }
+        }
+      }
+    } catch {
+      // Best-effort: don't block navigation if PDF generation fails
+    }
+    setGeneratedPdfs(pdfs)
+  }
+
+  const generateAllPdfsForReview = async () => {
+    const pdfs: { name: string; bytes: Uint8Array; description?: string }[] = []
+    try {
+      // Criminal record (LIC 508)
+      const criminalMapping = getMapping('criminal_record')
+      if (criminalMapping) {
+        const criminalData = buildCriminalRecordPdfData(
+          data,
+          { signature: data.i9.signature, date: formatDateUS(data.i9.date) },
+          employerInfo,
+          isGoldenAges,
+        )
+        const bytes = await generatePrefilledPdf(criminalMapping, criminalData)
+        pdfs.push({ name: 'lic_508_criminal_record_prefilled.pdf', bytes, description: 'Criminal Record Statement (LIC 508) - filled out with your information. Keep for your records.' })
+      }
+
+      // I-9
+      const i9Mapping = getMapping('i9')
+      if (i9Mapping) {
+        const i9PdfData = {
+          ...(data.i9 as unknown as Record<string, unknown>),
+          dateOfBirth: formatDateUS(data.i9.dateOfBirth),
+          date: formatDateUS(data.i9.date),
+        }
+        const bytes = await generatePrefilledPdf(i9Mapping, i9PdfData)
+        pdfs.push({ name: 'i9_prefilled.pdf', bytes, description: 'Employment Eligibility Verification (I-9) - Section 1 filled out with your information. Your HR team will complete Section 2.' })
+      }
+
+      // W-4
+      const w4Mapping = getMapping('w4')
+      if (w4Mapping) {
+        const w4PdfData = normalizeW4PdfData({
+          ...(data.w4 as unknown as Record<string, unknown>),
+          date: formatDateUS(data.w4.date),
+        })
+        const bytes = await generatePrefilledPdf(w4Mapping, w4PdfData)
+        pdfs.push({ name: 'w4_prefilled.pdf', bytes, description: 'Federal W-4 Tax Withholding form - filled out with your information. Keep for your records. Your HR team will complete the employer section.' })
+      }
+
+      // Health screen (LIC 503) or Golden Ages health documents.
+      const healthMapping = getMapping(isGoldenAges ? 'golden_ages_health_screen' : 'health_screen')
+      if (healthMapping) {
+        const fullName = `${data.personal.firstName} ${data.personal.lastName}`.trim()
+        const fullAddress = [data.personal.address.street, data.personal.address.apt, data.personal.address.city, data.personal.address.state, data.personal.address.zip].filter(Boolean).join(', ')
+        const healthData = isGoldenAges
+          ? {
+              personName: fullName,
+              firstName: data.personal.firstName,
+              lastName: data.personal.lastName,
+              dateOfBirth: formatDateUS(data.personal.dateOfBirth),
+              positionTitle: data.personal.positionApplyingFor || 'Caregiver',
+              address: fullAddress,
+              phone: data.personal.homePhone || data.personal.cellPhone,
+              email: data.personal.email,
+              date: new Date().toLocaleDateString('en-US'),
+            }
+          : {
+              facilityName: data.agencyName || 'Your agency',
+              personName: fullName,
+              positionTitle: data.personal.positionApplyingFor || 'Caregiver',
+              ...healthScreenSchedule(data.personal, shiftTemplates ?? undefined),
+              applicantSignature: fullName,
+              applicantAddress: [data.personal.address.street, data.personal.address.city, data.personal.address.state, data.personal.address.zip].filter(Boolean).join(', '),
+              date: new Date().toLocaleDateString('en-US'),
+            }
+        const bytes = await generatePrefilledPdf(healthMapping, healthData)
+        pdfs.push({
+          name: isGoldenAges ? 'golden_ages_health_screen_prefilled.pdf' : 'lic_503_health_screen_prefilled.pdf',
+          bytes,
+          description: isGoldenAges
+            ? 'Golden Ages Health Documents - Take these forms to your primary care doctor for a health screening. This is at your own cost. Bring the signed/stamped forms back and upload them in the Health Screen step.'
+            : 'Health Screening Report (LIC 503) - Take this form to your primary care doctor for a health screening. This is at your own cost. Bring the signed/stamped form back and upload it in the Health Screen step.',
+        })
+      }
+
+      if (isGoldenAges) {
+        const { de34, bcia8016 } = buildGoldenAgesPrefilledData(data, employerInfo)
+
+        const de34Mapping = getMapping('de_34')
+        if (de34Mapping) {
+          const bytes = await generatePrefilledPdf(de34Mapping, de34)
+          pdfs.push({ name: 'de_34_new_hire_prefilled.pdf', bytes, description: 'California DE 34 — Report of New Employee(s). Filled out with your information and Golden Ages employer details. Your HR team submits this to the EDD when you are hired.' })
+        }
+
+        const bcia8016Mapping = getMapping('bcia_8016')
+        if (bcia8016Mapping) {
+          const bytes = await generatePrefilledPdf(bcia8016Mapping, bcia8016)
+          pdfs.push({ name: 'bcia_8016_live_scan_prefilled.pdf', bytes, description: 'California BCIA 8016 — Request for Live Scan Service. Filled out with your information and Golden Ages agency details.' })
+        }
+      } else {
         const liveScanMapping = getMapping('live_scan')
         if (liveScanMapping) {
           const liveScanData = {
@@ -646,7 +1011,7 @@ export function ApplicationFormPage() {
             transactionDate: new Date().toLocaleDateString('en-US'),
           }
           const bytes = await generatePrefilledPdf(liveScanMapping, liveScanData)
-          pdfs.push({ name: 'lic_9163_live_scan_prefilled.pdf', bytes, description: 'Live Scan Fingerprint Request (LIC 9163) - Take this form to the Live Scan office at 1625 Flickinger Ave, San Jose, CA 95131 (9am-4pm Mon-Fri). The $70 cost will be reimbursed. Bring the stamped receipt back and upload it in the Background Check step.' })
+          pdfs.push({ name: 'lic_9163_live_scan_prefilled.pdf', bytes, description: 'Live Scan Fingerprint Request (LIC 903) - Take this form to the Live Scan office at 1625 Flickinger Ave, San Jose, CA 95131 (9am-4pm Mon-Fri). The $70 cost will be reimbursed. Bring the stamped receipt back and upload it in the Background Check step.' })
         }
       }
     } catch {
@@ -692,6 +1057,14 @@ export function ApplicationFormPage() {
       case 0:
         return (
           <div className='flex flex-col gap-6'>
+            {isGoldenAges && (
+              <div className='rounded-[var(--radius-atria-md)] border border-atria-warning/30 bg-atria-warning-bg p-6'>
+                <h3 className='mb-3 text-lg font-semibold text-atria-ink'>Important notice before you apply</h3>
+                <p className='whitespace-pre-line text-sm leading-relaxed text-atria-text-secondary'>
+                  {GOLDEN_AGES_BACKGROUND_CHECK_DISCLAIMER.split('\n\n').slice(1).join('\n\n')}
+                </p>
+              </div>
+            )}
             <div className='rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface-2 p-6'>
               <h3 className='mb-3 text-lg font-semibold text-atria-ink'>Job Description</h3>
               <FieldGroup label='Position applying for' htmlFor='jdPositionApplyingFor' className='mb-4'>
@@ -706,14 +1079,14 @@ export function ApplicationFormPage() {
                   }
                 >
                   <option value='' disabled>Select position</option>
-                  {positionOptionsForBranch(branchType).map((o) => (
+                  {positionOptionsForAgency(effectiveAgencyName, branchType).map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </Select>
               </FieldGroup>
               {data.personal.positionApplyingFor ? (
                 <p className='whitespace-pre-line text-sm leading-relaxed text-atria-text-secondary'>
-                  {jobDescriptionForPosition(branchType, data.personal.positionApplyingFor)}
+                  {jobDescriptionForAgency(effectiveAgencyName, branchType, data.personal.positionApplyingFor)}
                 </p>
               ) : (
                 <p className='text-sm leading-relaxed text-atria-text-secondary'>
@@ -756,6 +1129,7 @@ export function ApplicationFormPage() {
               }))}
             branchType={branchType}
             showErrors={showErrors}
+            shiftTemplates={shiftTemplates ?? undefined}
           />
         )
       case 2:
@@ -790,6 +1164,7 @@ export function ApplicationFormPage() {
             value={data.criminalRecord}
             onChange={(criminalRecord) => setData((prev) => ({ ...prev, criminalRecord }))}
             showErrors={showErrors}
+            isGoldenAges={isGoldenAges}
           />
         )
       case 4:
@@ -836,6 +1211,7 @@ export function ApplicationFormPage() {
               branchType={branchType}
               positionTitle={data.personal.positionApplyingFor}
               showErrors={showErrors}
+              isGoldenAges={isGoldenAges}
             />
           </div>
         )
@@ -852,10 +1228,10 @@ export function ApplicationFormPage() {
         <CardContent className='p-8'>
           <div className='mb-6 flex flex-col items-center text-center'>
             <AtriaLogo />
-            <p className='mt-2 text-sm text-atria-text-secondary'>Onboarding</p>
+            <p className='mt-2 text-sm text-atria-text-secondary'>Candidate Portal</p>
             <button
               type='button'
-              onClick={() => signOut(() => navigate('/sign-in'))}
+              onClick={handleSignOut}
               className='mt-2 text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
             >
               Sign out
@@ -929,15 +1305,7 @@ export function ApplicationFormPage() {
           </button>
         </CardContent>
       </Card>
-      <div className='mt-6 flex flex-col items-center gap-2'>
-        {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
-        <img
-          src="/agency-logo-individualschoice.jpeg"
-          alt="Agency logo"
-          className='h-10 w-auto object-contain opacity-70'
-        />
-        <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
-      </div>
+      <SignedInApplyFlowBranding />
     </div>
   )
 }

@@ -15,14 +15,22 @@ import {
 } from './types'
 import { formatPhone, isValidEmail, isValidPhone } from '@/shared/validation'
 
+export interface ShiftTemplate {
+  value: string
+  label: string
+  hoursPerDay?: number
+  isFullTime?: boolean
+}
+
 interface PersonalInfoSectionProps {
   value: PersonalInfo
   onChange: (value: PersonalInfo) => void
   branchType?: string
   showErrors?: boolean
+  shiftTemplates?: ShiftTemplate[]
 }
 
-export function PersonalInfoSection({ value, onChange, showErrors }: PersonalInfoSectionProps) {
+export function PersonalInfoSection({ value, onChange, showErrors, shiftTemplates }: PersonalInfoSectionProps) {
   const update = <K extends keyof PersonalInfo>(key: K, val: PersonalInfo[K]) => {
     onChange({ ...value, [key]: val })
   }
@@ -46,7 +54,22 @@ export function PersonalInfoSection({ value, onChange, showErrors }: PersonalInf
   const emailError = (val: string) =>
     showErrors && val.trim() && !isValidEmail(val) ? 'Enter a valid email address' : undefined
 
-  const shiftOptions = value.availability === 'part_time' ? PART_TIME_SHIFT_OPTIONS : SHIFT_OPTIONS
+  const fallbackShiftOptions =
+    value.availability === 'part_time' ? PART_TIME_SHIFT_OPTIONS : SHIFT_OPTIONS
+
+  const shiftOptions = shiftTemplates
+    ? shiftTemplates.filter((t) => {
+        if (value.availability === 'part_time') return t.isFullTime === false || t.isFullTime === undefined
+        if (value.availability === 'full_time') return t.isFullTime === true || t.isFullTime === undefined
+        return true
+      })
+    : fallbackShiftOptions
+
+  const selectedTemplate = shiftTemplates?.find((t) => t.value === value.shift)
+  const customHoursPlaceholder =
+    value.availability === 'part_time' && selectedTemplate?.hoursPerDay
+      ? String(selectedTemplate.hoursPerDay)
+      : 'e.g. 4'
 
   return (
     <div className='flex flex-col gap-5'>
@@ -94,7 +117,7 @@ export function PersonalInfoSection({ value, onChange, showErrors }: PersonalInf
           </Select>
         </FieldGroup>
 
-        <FieldGroup label='SSN / ITIN' htmlFor='ssn' required error={required(value.ssn)}>
+        <FieldGroup label={value.idType ? value.idType.toUpperCase() : 'SSN / ITIN'} htmlFor='ssn' required error={required(value.ssn)}>
           <Input
             id='ssn'
             value={value.ssn}
@@ -264,7 +287,7 @@ export function PersonalInfoSection({ value, onChange, showErrors }: PersonalInf
                 id='customHours'
                 value={value.customHours}
                 onChange={(e) => update('customHours', e.target.value)}
-                placeholder='e.g. 4'
+                placeholder={customHoursPlaceholder}
               />
             </FieldGroup>
           )}

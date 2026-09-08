@@ -192,6 +192,7 @@ async function submitShift(
       servicesProvided: string
       clientResponse: string
       narrative: string
+      objectiveId?: Id<'clientObjectives'>
     }
     tasks: {
       taskId: Id<'shiftTasks'>
@@ -230,12 +231,24 @@ async function submitShift(
     throw new Error(`Incomplete documentation: ${blockers.join(' ')}`)
   }
 
+  if (args.note.objectiveId !== undefined) {
+    await assertObjectiveUsableForShift(
+      ctx,
+      tenantId,
+      args.note.objectiveId,
+      shift.clientId,
+    )
+  }
+
   await ctx.db.patch(existingNote._id, {
     startTime: args.note.startTime,
     endTime: args.note.endTime,
     servicesProvided: args.note.servicesProvided,
     clientResponse: args.note.clientResponse,
     narrative: args.note.narrative,
+    ...(args.note.objectiveId !== undefined
+      ? { objectiveId: args.note.objectiveId }
+      : {}),
     submittedBy: actor.subject,
     submittedAt: new Date().toISOString(),
   })
@@ -523,6 +536,20 @@ export const startDocumentation = mutation({
   },
 })
 
+async function assertObjectiveUsableForShift(
+  ctx: MutationCtx,
+  tenantId: Id<'tenants'>,
+  objectiveId: Id<'clientObjectives'>,
+  clientId: Id<'clients'>,
+) {
+  const objective = await ctx.db.get(objectiveId)
+  if (!objective) throw new Error('Client objective not found.')
+  assertTenantDoc(objective, tenantId)
+  if (objective.clientId !== clientId) {
+    throw new Error('Objective belongs to a different client.')
+  }
+}
+
 export const updateProgressNote = mutation({
   args: {
     clerkOrgId: v.string(),
@@ -532,6 +559,7 @@ export const updateProgressNote = mutation({
     servicesProvided: v.optional(v.string()),
     clientResponse: v.optional(v.string()),
     narrative: v.optional(v.string()),
+    objectiveId: v.optional(v.id('clientObjectives')),
   },
   handler: async (ctx, args) => {
     const { tenantId, identity, role } = await requireTenantRole(
@@ -561,6 +589,15 @@ export const updateProgressNote = mutation({
     }
     if (args.clientResponse !== undefined) patch.clientResponse = args.clientResponse
     if (args.narrative !== undefined) patch.narrative = args.narrative
+    if (args.objectiveId !== undefined) {
+      await assertObjectiveUsableForShift(
+        ctx,
+        tenantId,
+        args.objectiveId,
+        shift.clientId,
+      )
+      patch.objectiveId = args.objectiveId
+    }
 
     await ctx.db.patch(note._id, patch)
     return note._id
@@ -676,6 +713,7 @@ export const clockOut = mutation({
         servicesProvided: v.string(),
         clientResponse: v.string(),
         narrative: v.string(),
+        objectiveId: v.optional(v.id('clientObjectives')),
       }),
     ),
     tasks: v.optional(
@@ -785,6 +823,7 @@ export const clockOut = mutation({
           servicesProvided: note.servicesProvided,
           clientResponse: note.clientResponse,
           narrative: note.narrative,
+          objectiveId: note.objectiveId,
         },
         tasks: mergedTasks.map((task) => ({
           taskId: task._id,

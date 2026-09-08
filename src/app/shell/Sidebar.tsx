@@ -13,11 +13,22 @@ import {
   MapPin,
   Mail,
   Clock,
+  Home,
+  ShieldCheck,
+  BadgeCheck,
+  Banknote,
+  BarChart3,
+  Bell,
+  LifeBuoy,
+  ScrollText,
+  AlertTriangle,
+  FileCheck2,
+  GraduationCap,
 } from 'lucide-react'
 import { cn } from '@/shared/lib/cn'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
-import { useTenant } from '@/app/useTenant'
+import { getStoredClerkOrgId, useTenant } from '@/app/useTenant'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 
 interface NavItem {
@@ -25,13 +36,76 @@ interface NavItem {
   path: string
   icon: React.ReactNode
   roles: string[]
+  exact?: boolean
+  requiresProduct?: string
+  hiddenWhenProduct?: string
 }
 
 const navItems: NavItem[] = [
   {
+    label: 'HR Home',
+    path: '/hr',
+    icon: <Home className="h-4 w-4" />,
+    roles: ['org:admin', 'org:hr'],
+  },
+  {
     label: 'Dashboard',
     path: '/',
     icon: <LayoutDashboard className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator'],
+  },
+  {
+    label: 'Admin',
+    path: '/admin',
+    icon: <ShieldCheck className="h-4 w-4" />,
+    roles: ['org:admin'],
+  },
+  {
+    label: 'Compliance',
+    path: '/compliance',
+    icon: <BadgeCheck className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator', 'org:hr'],
+  },
+  {
+    label: 'Incidents',
+    path: '/incidents',
+    icon: <AlertTriangle className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator', 'org:hr'],
+  },
+  {
+    label: 'EVV Export',
+    path: '/evv',
+    icon: <FileCheck2 className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator', 'org:hr'],
+  },
+  {
+    label: 'Reporting',
+    path: '/reports',
+    icon: <BarChart3 className="h-4 w-4" />,
+    roles: ['org:admin'],
+  },
+  {
+    label: 'Audit Trail',
+    path: '/audit',
+    icon: <ShieldCheck className="h-4 w-4" />,
+    roles: ['org:admin', 'org:hr'],
+  },
+  {
+    label: 'Logs',
+    path: '/logs',
+    icon: <ScrollText className="h-4 w-4" />,
+    roles: ['org:admin'],
+  },
+  {
+    label: 'Notifications',
+    path: '/notifications',
+    icon: <Bell className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator', 'org:hr', 'org:caregiver'],
+  },
+  {
+    label: 'Support',
+    path: '/support',
+    icon: <LifeBuoy className="h-4 w-4" />,
     roles: ['org:admin', 'org:coordinator'],
   },
   {
@@ -72,15 +146,21 @@ const navItems: NavItem[] = [
   },
   {
     label: 'Billing',
-    path: '/coordinator/billing',
+    path: '/billing',
     icon: <FileText className="h-4 w-4" />,
-    roles: ['org:admin', 'org:coordinator'],
+    roles: ['org:admin'],
+  },
+  {
+    label: 'Payroll',
+    path: '/billing/payroll',
+    icon: <Banknote className="h-4 w-4" />,
+    roles: ['org:admin'],
   },
   {
     label: 'Clients',
     path: '/clients',
     icon: <Users className="h-4 w-4" />,
-    roles: ['org:admin', 'org:coordinator'],
+    roles: ['org:admin'],
   },
   {
     label: 'Team',
@@ -110,7 +190,7 @@ const navItems: NavItem[] = [
     label: 'Settings',
     path: '/settings/geofence',
     icon: <MapPin className="h-4 w-4" />,
-    roles: ['org:admin', 'org:coordinator'],
+    roles: ['org:admin'],
   },
   {
     label: 'Email Domains',
@@ -129,6 +209,14 @@ const navItems: NavItem[] = [
     path: '/onboarding/training',
     icon: <Globe className="h-4 w-4" />,
     roles: ['org:candidate', 'org:caregiver'],
+    hiddenWhenProduct: 'training',
+  },
+  {
+    label: 'Training Hub',
+    path: '/training',
+    icon: <GraduationCap className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator', 'org:hr', 'org:caregiver', 'org:candidate'],
+    requiresProduct: 'training',
   },
   {
     label: 'Profile',
@@ -138,13 +226,6 @@ const navItems: NavItem[] = [
   },
 ]
 
-const platformNavItem: NavItem = {
-  label: 'Platform',
-  path: '/platform',
-  icon: <Globe className="h-4 w-4" />,
-  roles: [],
-}
-
 interface SidebarProps {
   mobileOpen?: boolean
   onMobileClose?: () => void
@@ -152,19 +233,33 @@ interface SidebarProps {
 
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const { clerkOrgId } = useTenant()
+  const effectiveClerkOrgId = clerkOrgId ?? getStoredClerkOrgId() ?? undefined
   const { user } = useUser()
   const location = useLocation()
 
-  const member = useQuery(api.members.me, clerkOrgId ? { clerkOrgId } : 'skip')
+  const member = useQuery(
+    api.members.me,
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
+  )
+  const hasTrainingProduct = useQuery(
+    api.agencyConfig.hasProduct,
+    effectiveClerkOrgId
+      ? { clerkOrgId: effectiveClerkOrgId, productKey: 'training' }
+      : 'skip',
+  )
 
   const role = member?.role ?? 'org:caregiver'
 
-  const isPlatformAdmin = useQuery(api.platform.isAdmin)
-
-  const visibleItems = navItems.filter((item) => item.roles.includes(role))
-  const itemsWithPlatform = isPlatformAdmin
-    ? [...visibleItems, platformNavItem]
-    : visibleItems
+  const visibleItems = navItems.filter((item) => {
+    if (!item.roles.includes(role)) return false
+    if (item.requiresProduct === 'training' && hasTrainingProduct !== true) {
+      return false
+    }
+    if (item.hiddenWhenProduct === 'training' && hasTrainingProduct === true) {
+      return false
+    }
+    return true
+  })
 
   return (
     <>
@@ -174,7 +269,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
           role={role}
           userName={user?.fullName ?? 'User'}
           userInitial={user?.firstName?.[0] ?? 'U'}
-          visibleItems={itemsWithPlatform}
+          visibleItems={visibleItems}
         />
       </aside>
 
@@ -199,7 +294,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               role={role}
               userName={user?.fullName ?? 'User'}
               userInitial={user?.firstName?.[0] ?? 'U'}
-              visibleItems={itemsWithPlatform}
+              visibleItems={visibleItems}
             />
           </aside>
         </div>
@@ -225,15 +320,16 @@ function SidebarContent({
 }) {
   return (
     <>
-      <div className="flex h-16 items-center border-b border-white/5 px-4">
-        <AtriaLogo className="h-10" />
+      <div className="flex h-28 items-center border-b border-white/5 px-4">
+        <AtriaLogo className="h-20 px-1" />
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {visibleItems.map((item) => {
-          const isActive =
-            locationPath === item.path ||
-            (item.path !== '/' && locationPath.startsWith(`${item.path}/`))
+          const isActive = item.exact
+            ? locationPath === item.path
+            : locationPath === item.path ||
+              (item.path !== '/' && locationPath.startsWith(`${item.path}/`))
           return (
             <NavLink
               key={item.path}

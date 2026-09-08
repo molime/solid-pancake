@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useClerk } from '@clerk/react'
+import { clearSessionData } from '@/shared/lib/clearSession'
 import { useAction, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
@@ -12,30 +13,26 @@ import { cn } from '@/shared/lib/cn'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 import { formatPhone, isValidEmail, isValidPhone } from '@/shared/validation'
-import { positionOptionsForBranch } from '../components/application/types'
+import { positionOptionsForAgency } from '../components/application/types'
+import { ApplyFlowBranding } from '../components/application/ApplyFlowBranding'
 
 export function ApplyEntryPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { signOut } = useClerk()
 
+  const handleSignOut = () => {
+    clearSessionData()
+    signOut(() => navigate('/sign-in'))
+  }
+
   useEffect(() => {
-    // Clear all session state when loading the /apply page so the applicant starts fresh
-    try {
-      localStorage.clear()
-      sessionStorage.clear()
-    } catch {
-      // Storage might be restricted in some contexts
-    }
-    // Clear all cookies
-    document.cookie.split(';').forEach((c) => {
-      const eq = c.indexOf('=')
-      const name = eq > -1 ? c.substring(0, eq).trim() : c.trim()
-      // Set expiry to past to delete, for multiple path/domain combinations
-      document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/'
-      document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' + window.location.hostname
-      document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.' + window.location.hostname
-    })
+    // Sign out any existing Clerk session, then wipe all local state so the
+    // applicant starts completely fresh — even if they were logged in as HR
+    // or another role and navigated to /apply without signing out first.
+    clearSessionData()
+    void signOut?.({ redirectUrl: window.location.href })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const slug = searchParams.get('agency') ?? ''
 
@@ -69,15 +66,7 @@ export function ApplyEntryPage() {
             </p>
           </CardContent>
         </Card>
-        <div className='mt-6 flex flex-col items-center gap-2'>
-          {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
-          <img
-            src="/agency-logo-individualschoice.jpeg"
-            alt="Agency logo"
-            className='h-10 w-auto object-contain opacity-70'
-          />
-          <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
-        </div>
+        <ApplyFlowBranding name={agencyInfo?.name} legalName={agencyInfo?.legalName} />
       </div>
     )
   }
@@ -168,7 +157,7 @@ export function ApplyEntryPage() {
               <p className='mt-2 text-sm text-atria-text-secondary'>{agencyName}</p>
               <button
                 type='button'
-                onClick={() => signOut(() => navigate('/sign-in'))}
+                onClick={handleSignOut}
                 className='mt-2 text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
               >
                 Sign out
@@ -223,15 +212,7 @@ export function ApplyEntryPage() {
             </p>
           </CardContent>
         </Card>
-        <div className='mt-6 flex flex-col items-center gap-2'>
-          {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
-          <img
-            src="/agency-logo-individualschoice.jpeg"
-            alt="Agency logo"
-            className='h-10 w-auto object-contain opacity-70'
-          />
-          <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
-        </div>
+        <ApplyFlowBranding name={agencyInfo?.name} legalName={agencyInfo?.legalName} />
       </div>
     )
   }
@@ -343,7 +324,7 @@ export function ApplyEntryPage() {
                     onChange={(e) => setSelectedPosition(e.target.value)}
                   >
                     <option value='' disabled>Select position</option>
-                    {positionOptionsForBranch(branchType).map((o) => (
+                    {positionOptionsForAgency(agencyName, branchType).map((o) => (
                       <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </Select>
@@ -365,15 +346,7 @@ export function ApplyEntryPage() {
           )}
         </CardContent>
       </Card>
-      <div className='mt-6 flex flex-col items-center gap-2'>
-        {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
-        <img
-          src="/agency-logo-individualschoice.jpeg"
-          alt="Agency logo"
-          className='h-10 w-auto object-contain opacity-70'
-        />
-        <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
-      </div>
+      <ApplyFlowBranding name={agencyInfo?.name} legalName={agencyInfo?.legalName} />
     </div>
   )
 }

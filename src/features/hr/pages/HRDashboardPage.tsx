@@ -13,6 +13,7 @@ import { HrToast } from '../components/HrToast'
 import { useHrToast } from '../hooks/useHrToast'
 import { candidateStatusPill, candidateStatusAccentClass } from '../lib/candidateStatus'
 import { formatDateUS } from '@/shared/format'
+import { AgencyBranding } from '@/shared/ui/AgencyBranding'
 
 function initials(name: string) {
   return name
@@ -172,6 +173,8 @@ export function HRDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AgencyBranding />
 
       <InviteCandidateModal
         open={inviteOpen}

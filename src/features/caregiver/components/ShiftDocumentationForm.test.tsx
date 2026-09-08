@@ -106,6 +106,7 @@ function mockState(options?: {
   geofenceEnforceClockIn?: boolean
   geofenceEnforceClockOut?: boolean
   details?: ReturnType<typeof makeDetails>
+  objectives?: Array<{ _id: string; title: string; status: string }>
 }) {
   const details = options?.details ?? makeDetails()
   const geofence = {
@@ -121,6 +122,7 @@ function mockState(options?: {
       const name = getFunctionName(queryRef as Parameters<typeof getFunctionName>[0])
       if (name === 'shiftQueries:getWithDetails') return details
       if (name === 'tenantSettings:get') return { tenantId: 'tenant_123', shiftGeofence: geofence }
+      if (name === 'clientObjectives:listByClient') return options?.objectives
       return undefined
     }) as unknown as typeof useQuery,
   )
@@ -505,6 +507,75 @@ describe('ShiftDocumentationForm', () => {
 
     await waitFor(() => {
       expect(onDone).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('hides the objective picker when the client has no objectives', async () => {
+    mockState({
+      details: makeDetails({
+        status: 'in_progress',
+        clockInAt: '2026-06-25T08:01:00Z',
+        note: {
+          startTime: '08:00',
+          endTime: '16:00',
+          servicesProvided: 'Bathing',
+          clientResponse: 'No problems — all good today',
+          narrative: 'Done',
+        },
+      }),
+      objectives: [],
+    })
+    const user = userEvent.setup()
+    render(<ShiftDocumentationForm clerkOrgId="org_123" shiftId={shiftId} />)
+
+    for (let i = 0; i < 3; i++) {
+      await user.click(screen.getByRole('button', { name: /Next Step/i }))
+    }
+
+    expect(screen.getByText(/Did you work on her goals/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('objective-select')).not.toBeInTheDocument()
+  })
+
+  it('shows the objective picker on the goal step and saves the selection', async () => {
+    mockState({
+      details: makeDetails({
+        status: 'in_progress',
+        clockInAt: '2026-06-25T08:01:00Z',
+        note: {
+          startTime: '08:00',
+          endTime: '16:00',
+          servicesProvided: 'Bathing',
+          clientResponse: 'No problems — all good today',
+          narrative: 'Done',
+        },
+      }),
+      objectives: [
+        { _id: 'objective_1', title: 'Prepare a simple meal', status: 'active' },
+        { _id: 'objective_2', title: 'Old objective', status: 'discontinued' },
+      ],
+    })
+    mocks.updateProgressNote.mockResolvedValueOnce('note_123')
+    const user = userEvent.setup()
+    render(<ShiftDocumentationForm clerkOrgId="org_123" shiftId={shiftId} />)
+
+    for (let i = 0; i < 3; i++) {
+      await user.click(screen.getByRole('button', { name: /Next Step/i }))
+    }
+
+    expect(screen.getByText(/Did you work on her goals/i)).toBeInTheDocument()
+    const select = screen.getByTestId('objective-select')
+    // Only active objectives are listed.
+    expect(select).toHaveTextContent('Prepare a simple meal')
+    expect(select).not.toHaveTextContent('Old objective')
+
+    await user.selectOptions(select, 'objective_1')
+
+    await waitFor(() => {
+      expect(mocks.updateProgressNote).toHaveBeenCalledWith({
+        clerkOrgId: 'org_123',
+        shiftId,
+        objectiveId: 'objective_1',
+      })
     })
   })
 

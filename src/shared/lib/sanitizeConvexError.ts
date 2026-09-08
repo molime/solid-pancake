@@ -10,10 +10,10 @@
  */
 export function sanitizeConvexError(message: string): string {
   return message
-    .replace(/^\[CONVEX[^\]]*\]\s*/i, '')
+    .replace(/^(\[CONVEX[^\]]*\]\s*)+/i, '')
     .replace(/\[Request ID:[^\]]*\]\s*/i, '')
-    .replace(/^Server Error:?\s*/i, '')
-    .replace(/^Uncaught (Convex)?Error:?\s*/i, '')
+    .replace(/^(Server Error:?\s*)+/i, '')
+    .replace(/^(Uncaught (Convex)?Error:?\s*)+/i, '')
     .replace(/\n[\s\S]*$/, '')
     .replace(/\s+at async handler[\s\S]*$/i, '')
     .replace(/\s*Called by client\.?\s*$/i, '')

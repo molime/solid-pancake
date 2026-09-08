@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Input } from '@/shared/ui/Input'
 import { Textarea } from '@/shared/ui/Textarea'
 import { Checkbox } from '@/shared/ui/Checkbox'
+import { Select } from '@/shared/ui/Select'
 import { ShiftTaskList } from './ShiftTaskList'
 import {
   WIZARD_STEPS,
@@ -44,6 +45,9 @@ export function ShiftNoteStep<TaskId extends string>({
   onEditStep,
   isSaving,
   saved,
+  objectives,
+  selectedObjectiveId,
+  onObjectiveChange,
 }: {
   stepId: WizardStepId
   stepIndex: number
@@ -66,6 +70,11 @@ export function ShiftNoteStep<TaskId extends string>({
   onEditStep?: (stepIndex: number) => void
   isSaving: boolean
   saved: boolean
+  // Active IPP/ISP objectives for the shift's client (docs/07 gap row B2).
+  // When absent or empty, the objective picker is hidden entirely.
+  objectives?: { _id: string; title: string }[]
+  selectedObjectiveId?: string
+  onObjectiveChange?: (objectiveId: string) => void
 }) {
   const step = WIZARD_STEPS.find((s) => s.id === stepId)!
   const stepBlockers = validateStep(stepId, note, taskDrafts, tasks)
@@ -129,10 +138,33 @@ export function ShiftNoteStep<TaskId extends string>({
         )}
 
         {stepId === 'goal' && (
-          <GoalStep
-            selectedGoals={selectedGoals}
-            onChange={onSelectedGoalsChange}
-          />
+          <>
+            <GoalStep
+              selectedGoals={selectedGoals}
+              onChange={onSelectedGoalsChange}
+            />
+            {objectives && objectives.length > 0 && onObjectiveChange && (
+              <div className="space-y-2">
+                <p className="text-sm text-atria-text-secondary">
+                  Link this visit to an IPP/ISP objective (optional)
+                </p>
+                <Select
+                  value={selectedObjectiveId ?? ''}
+                  onChange={(e) => onObjectiveChange(e.target.value)}
+                  data-testid="objective-select"
+                >
+                  <option value="" disabled>
+                    Select objective
+                  </option>
+                  {objectives.map((objective) => (
+                    <option key={objective._id} value={objective._id}>
+                      {objective.title}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
+          </>
         )}
 
         {stepId === 'issues' && (

@@ -2,6 +2,7 @@ import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { assertTenantDoc, requireTenantRole } from './authHelpers'
+import { notifyTenantStaff } from './_utils/notifications'
 
 type BillingLine = Doc<'billingLines'>
 type ExportBatch = Doc<'exportBatches'>
@@ -60,6 +61,9 @@ export async function enrichInvoice(
       `ATRIA-${invoice.exportedAt.slice(0, 10).replace(/-/g, '')}`,
     lineCount: invoice.lineCount ?? lines.length,
     totalAmount,
+    // Migration fallback: exportBatches rows written before the status field
+    // existed read as 'draft'.
+    status: invoice.status ?? 'draft',
   }
 }
 
@@ -110,6 +114,10 @@ export async function createInvoiceRecord(
         'One or more selected billing lines were already invoiced.',
       )
     }
+    // Blocked lines are excluded from invoicing (skipped, not fatal).
+    if (line.blockedReason) {
+      continue
+    }
 
     const shift = await ctx.db.get(line.shiftId)
     if (!shift) throw new Error('Shift not found for billing line.')
@@ -119,6 +127,10 @@ export async function createInvoiceRecord(
     }
     caregiverIds.add(shift.caregiverId)
     lines.push(line)
+  }
+
+  if (lines.length === 0) {
+    throw new Error('All selected billing lines are blocked from invoicing.')
   }
 
   const singleCaregiverId =
@@ -145,17 +157,16 @@ export async function createInvoiceRecord(
     caregiverId: singleCaregiverId,
     caregiverName: caregiver?.displayName ?? caregiver?.email,
     caregiverEmail: caregiver?.email,
-    lineCount: uniqueLineIds.length,
+    lineCount: lines.length,
     totalAmount,
   })
 
-  await ctx.db.patch(invoiceId, {
-    invoiceNumber: `ATRIA-${now.slice(0, 10).replace(/-/g, '')}-${String(
-      invoiceId,
-    )
-      .slice(-6)
-      .toUpperCase()}`,
-  })
+  const invoiceNumber = `ATRIA-${now.slice(0, 10).replace(/-/g, '')}-${String(
+    invoiceId,
+  )
+    .slice(-6)
+    .toUpperCase()}`
+  await ctx.db.patch(invoiceId, { invoiceNumber })
 
   for (const line of lines) {
     await ctx.db.patch(line._id, { exportBatchId: invoiceId })
@@ -166,8 +177,18 @@ export async function createInvoiceRecord(
     action: 'invoice_created',
     metadata: {
       invoiceId: invoiceId as string,
-      lineCount: uniqueLineIds.length,
+      lineCount: lines.length,
       totalAmount,
+    },
+  })
+
+  await notifyTenantStaff(ctx, tenantId, ['org:admin', 'org:coordinator'], {
+    type: 'invoice_created',
+    message: `Invoice ${invoiceNumber} has been created for $${totalAmount}.`,
+    metadata: {
+      invoiceId: invoiceId as string,
+      invoiceNumber,
+      amount: totalAmount,
     },
   })
 

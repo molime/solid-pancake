@@ -1,4 +1,5 @@
 import { useUser, useClerk } from '@clerk/react'
+import { clearSessionData } from '@/shared/lib/clearSession'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
@@ -20,13 +21,22 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { user } = useUser()
   const { signOut } = useClerk()
   const navigate = useNavigate()
+
+  const handleSignOut = () => {
+    clearSessionData()
+    signOut(() => navigate('/sign-in'))
+  }
   const location = useLocation()
   const member = useQuery(
     api.members.me,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
   const role = member?.role ?? 'org:caregiver'
-  const agencyLogo = resolveAgencyLogo(tenantName)
+  const employerInfo = useQuery(
+    api.tenantSettings.getEmployerInfo,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
+  const agencyLogo = resolveAgencyLogo(tenantName, employerInfo?.legalName)
 
   return (
     <header className="h-16 bg-atria-surface border-b border-atria-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
@@ -65,12 +75,13 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
             role === 'org:coordinator' && 'bg-atria-info-bg text-atria-info',
             role === 'org:caregiver' &&
               'bg-atria-success-bg text-atria-success',
+            role === 'org:hr' && 'bg-atria-warning-bg text-atria-warning',
           )}
         >
-          {role.replace('org:', '')}
+          {role === 'org:caregiver' ? 'employee' : role.replace('org:', '')}
         </span>
         <button
-          onClick={() => signOut(() => navigate('/sign-in'))}
+          onClick={handleSignOut}
           className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-atria-muted hover:text-atria-ink hover:bg-atria-bg transition-colors"
           aria-label="Sign out"
         >

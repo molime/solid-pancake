@@ -626,7 +626,7 @@ describe('inviteCandidate', () => {
         displayName: 'No Bypass Candidate',
         email: 'candidate@gmail.com',
       }),
-    ).rejects.toThrow('not allowed to access this application')
+    ).rejects.toThrow('not allowed by email restrictions')
 
     const candidate = await t.run(async (ctx) => {
       const tenant = await ctx.db
@@ -644,7 +644,7 @@ describe('inviteCandidate', () => {
     expect(candidate).toBeDefined()
     expect(candidate?.status).toBe('invited')
     expect(candidate?.invitationFailed).toBe(true)
-    expect(candidate?.invitationError).toContain('not allowed to access this application')
+    expect(candidate?.invitationError).toContain('not allowed by email restrictions')
   })
 
   it('falls back to manual setup when the Clerk invitation allow-list rejects the email', async () => {
@@ -2580,6 +2580,215 @@ describe('listCandidateTasks', () => {
   })
 })
 
+describe('skipCandidateTask', () => {
+  async function seedCandidateWithTask(
+    t: ReturnType<typeof createTestConvex>,
+    clerkOrgId: string,
+    adminId: string,
+    candidateUserId: string,
+    taskType: string,
+  ) {
+    await seedTenant(t, clerkOrgId, adminId)
+    let taskId: Id<'candidateTasks'> = 'task_placeholder' as Id<'candidateTasks'>
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        role: 'org:candidate',
+        displayName: 'Skip Candidate',
+        email: 'skip@example.com',
+      })
+      const candidateId = await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        email: 'skip@example.com',
+        displayName: 'Skip Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+      taskId = await ctx.db.insert('candidateTasks', {
+        tenantId: tenant._id,
+        candidateId,
+        type: taskType,
+        status: 'pending',
+        order: 7,
+      })
+    })
+    return taskId
+  }
+
+  it('marks an optional task as skipped', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_skip_task'
+    const candidateUserId = 'user_candidate_skip_task'
+
+    const taskId = await seedCandidateWithTask(
+      t,
+      clerkOrgId,
+      'user_admin_skip_task',
+      candidateUserId,
+      'additional_certifications',
+    )
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.skipCandidateTask,
+      { clerkOrgId, taskId },
+    )
+
+    const task = await t.run(async (ctx) => ctx.db.get(taskId))
+    expect(task?.status).toBe('skipped')
+  })
+
+  it('rejects skipping a required task', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_skip_required'
+    const candidateUserId = 'user_candidate_skip_required'
+
+    const taskId = await seedCandidateWithTask(
+      t,
+      clerkOrgId,
+      'user_admin_skip_required',
+      candidateUserId,
+      'photo_id',
+    )
+
+    await expect(
+      asCandidate(t, candidateUserId, clerkOrgId).mutation(
+        api.candidates.skipCandidateTask,
+        { clerkOrgId, taskId },
+      ),
+    ).rejects.toThrow('Only optional tasks can be skipped.')
+
+    const task = await t.run(async (ctx) => ctx.db.get(taskId))
+    expect(task?.status).toBe('pending')
+  })
+
+  it('rejects skipping another candidate\'s task', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_skip_other'
+    const candidateUserId = 'user_candidate_skip_other'
+    const otherUserId = 'user_candidate_skip_other_2'
+
+    const taskId = await seedCandidateWithTask(
+      t,
+      clerkOrgId,
+      'user_admin_skip_other',
+      candidateUserId,
+      'additional_certifications',
+    )
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: otherUserId,
+        role: 'org:candidate',
+        displayName: 'Other Candidate',
+        email: 'other@example.com',
+      })
+      await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId: otherUserId,
+        email: 'other@example.com',
+        displayName: 'Other Candidate',
+        status: 'invited',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    await expect(
+      asCandidate(t, otherUserId, clerkOrgId).mutation(
+        api.candidates.skipCandidateTask,
+        { clerkOrgId, taskId },
+      ),
+    ).rejects.toThrow('Candidates can only skip their own tasks.')
+  })
+
+  it('flips a skipped task back to complete when the candidate uploads', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_skip_upload'
+    const candidateUserId = 'user_candidate_skip_upload'
+
+    const taskId = await seedCandidateWithTask(
+      t,
+      clerkOrgId,
+      'user_admin_skip_upload',
+      candidateUserId,
+      'additional_certifications',
+    )
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.skipCandidateTask,
+      { clerkOrgId, taskId },
+    )
+    let task = await t.run(async (ctx) => ctx.db.get(taskId))
+    expect(task?.status).toBe('skipped')
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.attachCandidateDocument,
+      {
+        clerkOrgId,
+        storageId: 'storage-cert',
+        fileName: 'cert.pdf',
+        contentType: 'application/pdf',
+        size: 1024,
+        documentType: 'additional_certifications',
+        label: 'Additional certifications',
+      },
+    )
+
+    task = await t.run(async (ctx) => ctx.db.get(taskId))
+    expect(task?.status).toBe('complete')
+  })
+
+  it('does not regress a completed task back to skipped', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_skip_complete'
+    const candidateUserId = 'user_candidate_skip_complete'
+
+    const taskId = await seedCandidateWithTask(
+      t,
+      clerkOrgId,
+      'user_admin_skip_complete',
+      candidateUserId,
+      'additional_certifications',
+    )
+
+    // Complete the task by uploading a certification first.
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.attachCandidateDocument,
+      {
+        clerkOrgId,
+        storageId: 'storage-cert',
+        fileName: 'cert.pdf',
+        contentType: 'application/pdf',
+        size: 1024,
+        documentType: 'additional_certifications',
+        label: 'Additional certifications',
+      },
+    )
+    let task = await t.run(async (ctx) => ctx.db.get(taskId))
+    expect(task?.status).toBe('complete')
+
+    // Revisiting the multi-upload page and clicking skip must not undo it.
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.skipCandidateTask,
+      { clerkOrgId, taskId },
+    )
+
+    task = await t.run(async (ctx) => ctx.db.get(taskId))
+    expect(task?.status).toBe('complete')
+  })
+})
+
 describe('role guard regression', () => {
   it('blocks org:candidate from calling listShifts', async () => {
     const t = createTestConvex()
@@ -3463,5 +3672,352 @@ describe('getW4ForHR tenant prefill (AC-9)', () => {
 
     expect(result.agencyName).toBe('Test Agency')
     expect(result.agencyEin).toBe('12-3456789')
+  })
+})
+
+describe('attachCandidateDocument flag scheduling', () => {
+  async function seedFlagCandidate(
+    t: ReturnType<typeof createTestConvex>,
+    clerkOrgId: string,
+    candidateUserId: string,
+  ) {
+    const tenantId = await seedTenant(t, clerkOrgId, 'user_admin_attach_flag')
+    let candidateId: Id<'candidates'> = 'candidate_placeholder' as Id<'candidates'>
+    await t.run(async (ctx) => {
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: candidateUserId,
+        role: 'org:candidate',
+        displayName: 'Flag Candidate',
+        email: 'flag-attach@example.com',
+      })
+      candidateId = await ctx.db.insert('candidates', {
+        tenantId,
+        clerkUserId: candidateUserId,
+        email: 'flag-attach@example.com',
+        displayName: 'Flag Candidate',
+        status: 'applied',
+        createdAt: new Date().toISOString(),
+      })
+      const requiredTypes = [
+        'form_submission',
+        'photo_id',
+        'tax_id_ssn',
+        'cpr_certificate',
+        'health_screen',
+        'employment_agreement',
+      ]
+      for (const [index, type] of requiredTypes.entries()) {
+        await ctx.db.insert('candidateTasks', {
+          tenantId,
+          candidateId,
+          type,
+          status: 'complete',
+          order: index,
+          completedAt: new Date().toISOString(),
+        })
+      }
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
+        type: 'additional_certifications',
+        status: 'pending',
+        order: 7,
+      })
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId,
+        type: 'car_insurance',
+        status: 'pending',
+        order: 8,
+      })
+    })
+    return { tenantId, candidateId }
+  }
+
+  async function listHrCasesForTenant(
+    t: ReturnType<typeof createTestConvex>,
+    tenantId: Id<'tenants'>,
+  ) {
+    return t.run(async (ctx) =>
+      ctx.db
+        .query('hrCases')
+        .withIndex('by_tenant_status', (q) => q.eq('tenantId', tenantId))
+        .collect(),
+    )
+  }
+
+  it('flags the document immediately when it expires within 30 days', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_attach_flag_near'
+    const candidateUserId = 'user_candidate_attach_flag_near'
+
+    const { tenantId, candidateId } = await seedFlagCandidate(
+      t,
+      clerkOrgId,
+      candidateUserId,
+    )
+
+    vi.useFakeTimers()
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.attachCandidateDocument,
+      {
+        clerkOrgId,
+        storageId: 'storage-flag-near',
+        fileName: 'policy.pdf',
+        contentType: 'application/pdf',
+        size: 2048,
+        documentType: 'car_insurance',
+        label: 'Car Insurance Policy',
+        expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    )
+    await t.finishAllScheduledFunctions(vi.runAllTimers)
+
+    const cases = await listHrCasesForTenant(t, tenantId)
+    expect(cases).toHaveLength(1)
+    expect(cases[0]?.flagType).toBe('expiring_document')
+    expect(cases[0]?.subjectType).toBe('candidate')
+    expect(cases[0]?.subjectId).toBe(candidateId as string)
+    expect(cases[0]?.status).toBe('open')
+  })
+
+  it('does not flag a document expiring beyond 30 days', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_attach_flag_far'
+    const candidateUserId = 'user_candidate_attach_flag_far'
+
+    const { tenantId } = await seedFlagCandidate(t, clerkOrgId, candidateUserId)
+
+    vi.useFakeTimers()
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.candidates.attachCandidateDocument,
+      {
+        clerkOrgId,
+        storageId: 'storage-flag-far',
+        fileName: 'policy.pdf',
+        contentType: 'application/pdf',
+        size: 2048,
+        documentType: 'car_insurance',
+        label: 'Car Insurance Policy',
+        expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    )
+    await t.finishAllScheduledFunctions(vi.runAllTimers)
+
+    const cases = await listHrCasesForTenant(t, tenantId)
+    expect(cases).toHaveLength(0)
+  })
+})
+
+describe('applyPublic', () => {
+  it('accepts a public applicant whose email domain is not on the staff invitation allowlist', async () => {
+    // Regression: applyPublic used to enforce the tenant's allowedEmailDomains
+    // (a staff-invitation setting), which broke the public apply link for
+    // real applicants using gmail/yahoo. Public self-service applications
+    // must ignore that allowlist.
+    vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init: RequestInit | undefined) => {
+        if (url.includes('/users') && init?.method === 'POST') {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                id: 'user_public_apply',
+                email_addresses: [{ email_address: 'candidate@gmail.com' }],
+              }),
+          })
+        }
+
+        if (url.includes('/memberships') && init?.method === 'POST') {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ id: 'mem_public_apply' }),
+          })
+        }
+
+        if (url.includes('/sign_in_tokens')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                id: 'sit_public_apply',
+                token: 'sint_public_apply',
+                user_id: 'user_public_apply',
+              }),
+          })
+        }
+
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: () => Promise.resolve({ errors: [{ message: 'Not found' }] }),
+        })
+      }) as unknown as typeof fetch,
+    )
+
+    const t = createTestConvex()
+    const clerkOrgId = 'org_public_apply'
+    const adminId = 'user_admin_public_apply'
+
+    const tenantId = await seedTenant(t, clerkOrgId, adminId)
+    await t.run(async (ctx) => {
+      await ctx.db.patch(tenantId, { allowedEmailDomains: ['agency.org'] })
+    })
+
+    const result = await t.action(api.candidates.applyPublic, {
+      slug: 'test-agency',
+      email: 'candidate@gmail.com',
+      displayName: 'Public Applicant',
+      appBaseUrl: 'http://localhost:5173',
+    })
+
+    expect(result.alreadyApplied).toBe(false)
+    expect(result.magicLink).toMatch(/__clerk_ticket=sint_public_apply$/)
+
+    const candidate = await t.run(async (ctx) => {
+      return ctx.db
+        .query('candidates')
+        .withIndex('by_tenant_email', (q) =>
+          q.eq('tenantId', tenantId).eq('email', 'candidate@gmail.com'),
+        )
+        .first()
+    })
+    expect(candidate?.clerkUserId).toBe('user_public_apply')
+    expect(candidate?.status).toBe('application_draft')
+  })
+})
+
+
+describe('DE 34 new hire report — employee profile flows', () => {
+  async function seedEmployeeCandidate(
+    t: ReturnType<typeof createTestConvex>,
+    clerkOrgId: string,
+    clerkUserId: string,
+  ) {
+    return t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId,
+        role: 'org:caregiver',
+        displayName: 'DE34 Employee',
+        email: 'de34.employee@example.com',
+      })
+      const candidateId = await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId,
+        email: 'de34.employee@example.com',
+        displayName: 'DE34 Employee',
+        status: 'hired',
+        createdAt: new Date().toISOString(),
+      })
+      return { tenantId: tenant._id as Id<'tenants'>, candidateId: candidateId as Id<'candidates'> }
+    })
+  }
+
+  it('getCandidateByClerkUserId resolves the candidate for HR and returns null for unknown users', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_de34_lookup'
+    const hrId = 'user_hr_de34_lookup'
+    const candidateUserId = 'user_candidate_de34_lookup'
+    const adminId = 'user_admin_de34_lookup'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedHR(t, clerkOrgId, hrId)
+    const { candidateId } = await seedEmployeeCandidate(t, clerkOrgId, candidateUserId)
+
+    const found = await asHR(t, hrId, clerkOrgId).query(
+      api.candidates.getCandidateByClerkUserId,
+      { clerkOrgId, clerkUserId: candidateUserId },
+    )
+    expect(found).toEqual({ candidateId })
+
+    const missing = await asHR(t, hrId, clerkOrgId).query(
+      api.candidates.getCandidateByClerkUserId,
+      { clerkOrgId, clerkUserId: 'user_no_such_user' },
+    )
+    expect(missing).toBeNull()
+  })
+
+  it('saveSignedPrefilledDocumentForHR attaches the completed DE 34 next to the prefilled version', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_de34_hr_upload'
+    const hrId = 'user_hr_de34_upload'
+    const adminId = 'user_admin_de34_upload'
+    const candidateUserId = 'user_candidate_de34_upload'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedHR(t, clerkOrgId, hrId)
+    const { tenantId, candidateId } = await seedEmployeeCandidate(t, clerkOrgId, candidateUserId)
+
+    // The prefilled version generated at application submit time (before the
+    // hire transition, so it is stored by staff on the candidate's record).
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.candidates.savePrefilledDocument,
+      {
+        clerkOrgId,
+        candidateId,
+        documentType: 'de_34',
+        storageId: 'storage-de34-prefilled',
+      },
+    )
+
+    await asHR(t, hrId, clerkOrgId).mutation(
+      api.candidates.saveSignedPrefilledDocumentForHR,
+      {
+        clerkOrgId,
+        candidateId,
+        documentType: 'de_34',
+        storageId: 'storage-de34-completed',
+      },
+    )
+
+    const docs = await t.run(async (ctx) =>
+      ctx.db
+        .query('prefilledDocuments')
+        .withIndex('by_tenant_candidate_type', (q) =>
+          q.eq('tenantId', tenantId).eq('candidateId', candidateId).eq('documentType', 'de_34'),
+        )
+        .collect(),
+    )
+    expect(docs).toHaveLength(1)
+    expect(docs[0]?.storageId).toBe('storage-de34-prefilled')
+    expect(docs[0]?.uploadedSignedStorageId).toBe('storage-de34-completed')
+  })
+
+  it('saveSignedPrefilledDocumentForHR creates the row when no prefilled version exists yet', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_de34_hr_upload_new'
+    const hrId = 'user_hr_de34_upload_new'
+    const adminId = 'user_admin_de34_upload_new'
+    const candidateUserId = 'user_candidate_de34_upload_new'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedHR(t, clerkOrgId, hrId)
+    const { candidateId } = await seedEmployeeCandidate(t, clerkOrgId, candidateUserId)
+
+    const docId = await asHR(t, hrId, clerkOrgId).mutation(
+      api.candidates.saveSignedPrefilledDocumentForHR,
+      {
+        clerkOrgId,
+        candidateId,
+        documentType: 'de_34',
+        storageId: 'storage-de34-completed-only',
+      },
+    )
+
+    const doc = await t.run(async (ctx) => ctx.db.get(docId as Id<'prefilledDocuments'>))
+    expect(doc?.documentType).toBe('de_34')
+    expect(doc?.uploadedSignedStorageId).toBe('storage-de34-completed-only')
   })
 })

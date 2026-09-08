@@ -1,0 +1,78 @@
+{
+  "authed": true,
+  "results": {
+    "/compliance": {
+      "authenticated": true,
+      "events": [],
+      "httpStatus": 200,
+      "finalUrl": "http://localhost:5180/compliance",
+      "bodyLength": 549,
+      "bodyExcerpt": "HR Home | Dashboard | Admin | Compliance | Reporting | Audit Trail | Notifications | Schedule | Review | Knowledge | Billing | Payroll | Clients | Team | Candidates | Employees | Cases | Settings | Email Domains | Platform | A | ATRIA-X E2E Admin | admin | Compliance | Diego's Agency | admin | Sign out | A | Compliance | Credential and document complia",
+      "blank": false,
+      "probes": {
+        "gaps": true,
+        "override": false
+      }
+    },
+    "/billing": {
+      "authenticated": true,
+      "events": [],
+      "httpStatus": 200,
+      "finalUrl": "http://localhost:5180/",
+      "bodyLength": 984,
+      "bodyExcerpt": "HR Home | Dashboard | Admin | Compliance | Reporting | Audit Trail | Notifications | Schedule | Review | Knowledge | Billing | Payroll | Clients | Team | Candidates | Employees | Cases | Settings | Email Domains | Platform | A | ATRIA-X E2E Admin | admin | Dashboard | Diego's Agency | admin | Sign out | A | Good afternoon, ATRIA-X | Here's what needs y",
+      "blank": false,
+      "probes": {
+        "perPatientInvoice": false
+      }
+    },
+    "/billing/payroll": {
+      "authenticated": true,
+      "events": [],
+      "httpStatus": 200,
+      "finalUrl": "http://localhost:5180/",
+      "bodyLength": 984,
+      "bodyExcerpt": "HR Home | Dashboard | Admin | Compliance | Reporting | Audit Trail | Notifications | Schedule | Review | Knowledge | Billing | Payroll | Clients | Team | Candidates | Employees | Cases | Settings | Email Domains | Platform | A | ATRIA-X E2E Admin | admin | Dashboard | Diego's Agency | admin | Sign out | A | Good afternoon, ATRIA-X | Here's what needs y",
+      "blank": false,
+      "probes": {
+        "payroll": true
+      }
+    },
+    "/notifications": {
+      "authenticated": true,
+      "events": [],
+      "httpStatus": 200,
+      "finalUrl": "http://localhost:5180/notifications",
+      "bodyLength": 309,
+      "bodyExcerpt": "HR Home | Dashboard | Admin | Compliance | Reporting | Audit Trail | Notifications | Schedule | Review | Knowledge | Billing | Payroll | Clients | Team | Candidates | Employees | Cases | Settings | Email Domains | Platform | A | ATRIA-X E2E Admin | admin | Notifications | Diego's Agency | admin | Sign out | A | A | Preparing workspace | Securing agency ",
+      "blank": false,
+      "probes": {
+        "markAsRead": false
+      }
+    },
+    "/audit": {
+      "authenticated": true,
+      "events": [],
+      "httpStatus": 200,
+      "finalUrl": "http://localhost:5180/audit",
+      "bodyLength": 431,
+      "bodyExcerpt": "HR Home | Dashboard | Admin | Compliance | Reporting | Audit Trail | Notifications | Schedule | Review | Knowledge | Billing | Payroll | Clients | Team | Candidates | Employees | Cases | Settings | Email Domains | Platform | A | ATRIA-X E2E Admin | admin | Audit | Diego's Agency | admin | Sign out | A | Audit Trail | Every recorded action across your a",
+      "blank": false,
+      "probes": {
+        "audit": true
+      }
+    },
+    "/reports": {
+      "authenticated": true,
+      "events": [],
+      "httpStatus": 200,
+      "finalUrl": "http://localhost:5180/",
+      "bodyLength": 984,
+      "bodyExcerpt": "HR Home | Dashboard | Admin | Compliance | Reporting | Audit Trail | Notifications | Schedule | Review | Knowledge | Billing | Payroll | Clients | Team | Candidates | Employees | Cases | Settings | Email Domains | Platform | A | ATRIA-X E2E Admin | admin | Dashboard | Diego's Agency | admin | Sign out | A | Good afternoon, ATRIA-X | Here's what needs y",
+      "blank": false,
+      "probes": {
+        "export": false
+      }
+    }
+  }
+}

@@ -7,6 +7,7 @@ interface CriminalRecordSectionProps {
   value: CriminalRecord
   onChange: (value: CriminalRecord) => void
   showErrors?: boolean
+  isGoldenAges?: boolean
 }
 
 function YesNoField({
@@ -50,7 +51,7 @@ function YesNoField({
   )
 }
 
-export function CriminalRecordSection({ value, onChange, showErrors }: CriminalRecordSectionProps) {
+export function CriminalRecordSection({ value, onChange, showErrors, isGoldenAges }: CriminalRecordSectionProps) {
   const update = <K extends keyof CriminalRecord>(key: K, val: CriminalRecord[K]) => {
     onChange({ ...value, [key]: val })
   }
@@ -94,6 +95,15 @@ export function CriminalRecordSection({ value, onChange, showErrors }: CriminalR
         value={value.convictedUnderAlias}
         onChange={(val) => update('convictedUnderAlias', val)}
       />
+
+      {isGoldenAges && (
+        <YesNoField
+          id='livedOutsideCalifornia'
+          label='Have you lived in a state other than California within the last five years?'
+          value={value.livedOutsideCalifornia ?? false}
+          onChange={(val) => update('livedOutsideCalifornia', val)}
+        />
+      )}
 
       <FieldGroup
         label='Alias names used'

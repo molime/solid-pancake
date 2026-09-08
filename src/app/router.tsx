@@ -1,21 +1,79 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { SignIn, SignUp } from '@clerk/react'
 import { Suspense, lazy, type ReactNode } from 'react'
 import { AppShell } from './shell/AppShell'
 import { PlatformShell } from './shell/PlatformShell'
 import { SelectAgencyPage } from './auth/SelectAgencyPage'
-import { SignedInRouteGuard, TenantRoleRouteGuard, TrainingRouteGuard } from './shell/RouteGuard'
+import { PlatformAdminRouteGuard, PersonnelRecordRouteGuard, SignedInRouteGuard, TenantRoleRouteGuard } from './shell/RouteGuard'
+import { TrainingProductGuard } from './shell/TrainingProductGuard'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
+import { cn } from '@/shared/lib/cn'
 
 const DashboardPage = lazy(() =>
   import('@/features/dashboard/pages/DashboardPage').then((module) => ({
     default: module.DashboardPage,
   })),
 )
+const AgencyAdminDashboardPage = lazy(() =>
+  import('@/features/dashboard/pages/AgencyAdminDashboardPage').then(
+    (module) => ({
+      default: module.AgencyAdminDashboardPage,
+    }),
+  ),
+)
+const ComplianceOverviewPage = lazy(() =>
+  import('@/features/compliance/pages/ComplianceOverviewPage').then(
+    (module) => ({
+      default: module.ComplianceOverviewPage,
+    }),
+  ),
+)
+const IncidentsPage = lazy(() =>
+  import('@/features/incidents/pages/IncidentsPage').then((module) => ({
+    default: module.IncidentsPage,
+  })),
+)
+const EvvExportPage = lazy(() =>
+  import('@/features/evv/pages/EvvExportPage').then((module) => ({
+    default: module.EvvExportPage,
+  })),
+)
+const IncidentFormPage = lazy(() =>
+  import('@/features/incidents/pages/IncidentFormPage').then((module) => ({
+    default: module.IncidentFormPage,
+  })),
+)
+const IncidentDetailPage = lazy(() =>
+  import('@/features/incidents/pages/IncidentDetailPage').then((module) => ({
+    default: module.IncidentDetailPage,
+  })),
+)
+const ReportingPage = lazy(() =>
+  import('@/features/reporting/pages/ReportingPage').then((module) => ({
+    default: module.ReportingPage,
+  })),
+)
+const NotificationsPage = lazy(() =>
+  import('@/features/notifications/pages/NotificationsPage').then(
+    (module) => ({
+      default: module.NotificationsPage,
+    }),
+  ),
+)
+const SupportPage = lazy(() =>
+  import('@/features/support/SupportPage').then((module) => ({
+    default: module.SupportPage,
+  })),
+)
 const CaregiverTodayPage = lazy(() =>
   import('@/features/caregiver/pages/CaregiverTodayPage').then((module) => ({
     default: module.CaregiverTodayPage,
+  })),
+)
+const PersonnelRecordPage = lazy(() =>
+  import('@/features/caregiver/pages/PersonnelRecordPage').then((module) => ({
+    default: module.PersonnelRecordPage,
   })),
 )
 const CoordinatorReviewPage = lazy(() =>
@@ -30,9 +88,29 @@ const BillingPage = lazy(() =>
     default: module.BillingPage,
   })),
 )
+const PayrollPage = lazy(() =>
+  import('@/features/billing/pages/PayrollPage').then((module) => ({
+    default: module.PayrollPage,
+  })),
+)
+const AuditTrailPage = lazy(() =>
+  import('@/features/reporting/pages/AuditTrailPage').then((module) => ({
+    default: module.AuditTrailPage,
+  })),
+)
+const AuditReadinessPage = lazy(() =>
+  import('@/features/reporting/pages/AuditReadinessPage').then((module) => ({
+    default: module.AuditReadinessPage,
+  })),
+)
 const ClientsPage = lazy(() =>
   import('@/features/clients/pages/ClientsPage').then((module) => ({
     default: module.ClientsPage,
+  })),
+)
+const ClientDetailPage = lazy(() =>
+  import('@/features/clients/pages/ClientDetailPage').then((module) => ({
+    default: module.ClientDetailPage,
   })),
 )
 const TeamPage = lazy(() =>
@@ -40,10 +118,77 @@ const TeamPage = lazy(() =>
     default: module.TeamPage,
   })),
 )
-const PlatformAdminPage = lazy(() =>
-  import('@/features/platform/pages/PlatformAdminPage').then((module) => ({
-    default: module.PlatformAdminPage,
+const PlatformSubscriptionsPage = lazy(() =>
+  import('@/features/platform/pages/PlatformSubscriptionsPage').then(
+    (module) => ({
+      default: module.PlatformSubscriptionsPage,
+    }),
+  ),
+)
+const PlatformSubscriptionDetailPage = lazy(() =>
+  import('@/features/platform/pages/PlatformSubscriptionDetailPage').then(
+    (module) => ({
+      default: module.PlatformSubscriptionDetailPage,
+    }),
+  ),
+)
+const PlatformAgenciesPage = lazy(() =>
+  import('@/features/platform/pages/PlatformAgenciesPage').then((module) => ({
+    default: module.PlatformAgenciesPage,
   })),
+)
+const PlatformCreateAgencyPage = lazy(() =>
+  import('@/features/platform/pages/PlatformCreateAgencyPage').then(
+    (module) => ({
+      default: module.PlatformCreateAgencyPage,
+    }),
+  ),
+)
+const PlatformAgencyDetailPage = lazy(() =>
+  import('@/features/platform/pages/PlatformAgencyDetailPage').then(
+    (module) => ({
+      default: module.PlatformAgencyDetailPage,
+    }),
+  ),
+)
+const PlatformHealthPage = lazy(() =>
+  import('@/features/platform/pages/PlatformHealthPage').then((module) => ({
+    default: module.PlatformHealthPage,
+  })),
+)
+const PlatformReportsPage = lazy(() =>
+  import('@/features/platform/pages/PlatformReportsPage').then((module) => ({
+    default: module.PlatformReportsPage,
+  })),
+)
+const PlatformAuditPage = lazy(() =>
+  import('@/features/platform/pages/PlatformAuditPage').then((module) => ({
+    default: module.PlatformAuditPage,
+  })),
+)
+const PlatformSupportPage = lazy(() =>
+  import('@/features/platform/pages/PlatformSupportPage').then((module) => ({
+    default: module.PlatformSupportPage,
+  })),
+)
+const PlatformBillingPage = lazy(() =>
+  import('@/features/platform/pages/PlatformBillingPage').then((module) => ({
+    default: module.PlatformBillingPage,
+  })),
+)
+const PlatformInvoiceCreatePage = lazy(() =>
+  import('@/features/platform/pages/PlatformInvoiceCreatePage').then(
+    (module) => ({
+      default: module.PlatformInvoiceCreatePage,
+    }),
+  ),
+)
+const PlatformInvoiceDetailPage = lazy(() =>
+  import('@/features/platform/pages/PlatformInvoiceDetailPage').then(
+    (module) => ({
+      default: module.PlatformInvoiceDetailPage,
+    }),
+  ),
 )
 const SearchPage = lazy(() =>
   import('@/features/search/pages/SearchPage').then((module) => ({
@@ -124,6 +269,11 @@ const ApplicationFormPage = lazy(() =>
     default: module.ApplicationFormPage,
   })),
 )
+const DynamicApplicationPage = lazy(() =>
+  import('@/features/forms/pages/DynamicApplicationPage').then((module) => ({
+    default: module.DynamicApplicationPage,
+  })),
+)
 const ApplicationStatusPage = lazy(() =>
   import('@/features/onboarding/pages/ApplicationStatusPage').then((module) => ({
     default: module.ApplicationStatusPage,
@@ -164,6 +314,26 @@ const TrainingPage = lazy(() =>
     default: module.TrainingPage,
   })),
 )
+const TrainingHubPage = lazy(() =>
+  import('@/features/training/pages/TrainingHubPage').then((module) => ({
+    default: module.TrainingHubPage,
+  })),
+)
+const CoursePlayerPage = lazy(() =>
+  import('@/features/training/pages/CoursePlayerPage').then((module) => ({
+    default: module.CoursePlayerPage,
+  })),
+)
+const TrainingCertificatePage = lazy(() =>
+  import('@/features/training/pages/TrainingCertificatePage').then((module) => ({
+    default: module.TrainingCertificatePage,
+  })),
+)
+const TrainingAdminPage = lazy(() =>
+  import('@/features/training/pages/TrainingAdminPage').then((module) => ({
+    default: module.TrainingAdminPage,
+  })),
+)
 const OnboardingSuccessPage = lazy(() =>
   import('@/features/onboarding/pages/OnboardingSuccessPage').then((module) => ({
     default: module.OnboardingSuccessPage,
@@ -195,11 +365,62 @@ function useRedirectParam() {
   return redirect ?? '/select-agency'
 }
 
+// Derives a product label from the redirect target so the shared login page
+// tells the user which ATRIA portal they are signing into.
+function deriveProductLabel(redirectUrl: string): string | null {
+  if (redirectUrl.includes('/onboarding') || redirectUrl.includes('/caregiver')) {
+    return 'Candidate Portal'
+  }
+  if (redirectUrl.includes('/hr')) return 'HR Portal'
+  if (redirectUrl.includes('/coordinator')) return 'Staff Portal'
+  return null
+}
+
+// Product tabs let users pick which ATRIA portal they are signing into.
+// Selecting a tab only changes the redirect target — the sign-in form is
+// the same Clerk component underneath.
+const PRODUCT_TABS = [
+  { label: 'Candidate Portal', redirect: '/onboarding' },
+  { label: 'HR Portal', redirect: '/hr' },
+  { label: 'Staff Portal', redirect: '/coordinator/review' },
+]
+
 function SignInRedirect() {
-  const redirectUrl = useRedirectParam()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const redirectUrl = searchParams.get('redirect') ?? '/select-agency'
+  const productLabel = deriveProductLabel(redirectUrl)
+  const activeIndex = PRODUCT_TABS.findIndex((t) => t.redirect === redirectUrl)
+
+  const handleTabChange = (redirect: string) => {
+    setSearchParams({ redirect }, { replace: true })
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-atria-bg p-4">
-      <AtriaLogo />
+      <div className="flex flex-col items-center gap-2">
+        <AtriaLogo />
+        {productLabel && (
+          <p className="text-sm font-medium text-atria-text-secondary">
+            {productLabel}
+          </p>
+        )}
+      </div>
+      <div className="flex gap-2">
+        {PRODUCT_TABS.map((tab, i) => (
+          <button
+            key={tab.redirect}
+            onClick={() => handleTabChange(tab.redirect)}
+            className={cn(
+              'rounded-full px-4 py-2 text-sm font-medium transition-colors',
+              activeIndex === i
+                ? 'bg-atria-accent text-atria-on-accent'
+                : 'border border-atria-border bg-atria-surface text-atria-ink hover:bg-atria-surface-2',
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
       <SignIn
         routing="path"
         path="/sign-in"
@@ -277,12 +498,110 @@ export function AppRouter() {
           </RouteSuspense>
         }
       />
-      <Route element={<PlatformShell />}>
+      <Route
+        element={
+          <PlatformAdminRouteGuard>
+            <PlatformShell />
+          </PlatformAdminRouteGuard>
+        }
+      >
         <Route
           path="platform"
+          element={<Navigate replace to="/platform/subscriptions" />}
+        />
+        <Route
+          path="platform/subscriptions"
           element={
             <RouteSuspense>
-              <PlatformAdminPage />
+              <PlatformSubscriptionsPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/subscriptions/:tenantSlug"
+          element={
+            <RouteSuspense>
+              <PlatformSubscriptionDetailPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/agencies"
+          element={
+            <RouteSuspense>
+              <PlatformAgenciesPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/agencies/create"
+          element={
+            <RouteSuspense>
+              <PlatformCreateAgencyPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/agencies/:tenantId"
+          element={
+            <RouteSuspense>
+              <PlatformAgencyDetailPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/health"
+          element={
+            <RouteSuspense>
+              <PlatformHealthPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/reports"
+          element={
+            <RouteSuspense>
+              <PlatformReportsPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/support"
+          element={
+            <RouteSuspense>
+              <PlatformSupportPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/audit"
+          element={
+            <RouteSuspense>
+              <PlatformAuditPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/billing"
+          element={
+            <RouteSuspense>
+              <PlatformBillingPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/billing/create"
+          element={
+            <RouteSuspense>
+              <PlatformInvoiceCreatePage />
+            </RouteSuspense>
+          }
+        />
+        <Route
+          path="platform/billing/:invoiceId"
+          element={
+            <RouteSuspense>
+              <PlatformInvoiceDetailPage />
             </RouteSuspense>
           }
         />
@@ -301,14 +620,156 @@ export function AppRouter() {
           }
         />
         <Route
+          path="admin"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:admin']}>
+              <RouteSuspense>
+                <AgencyAdminDashboardPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        {/* Alias: /dashboard lands on the Agency Admin Dashboard (role-guarded at /admin). */}
+        <Route
+          path="dashboard"
+          element={<Navigate replace to="/admin" />}
+        />
+        <Route
+          path="compliance"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator', 'org:hr']}
+            >
+              <RouteSuspense>
+                <ComplianceOverviewPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="incidents"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator', 'org:hr']}
+            >
+              <RouteSuspense>
+                <IncidentsPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        {/* Caregivers can file an incident but never see the log or detail. */}
+        <Route
+          path="incidents/new"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={[
+                'org:admin',
+                'org:coordinator',
+                'org:hr',
+                'org:caregiver',
+              ]}
+            >
+              <RouteSuspense>
+                <IncidentFormPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="incidents/:incidentId"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator', 'org:hr']}
+            >
+              <RouteSuspense>
+                <IncidentDetailPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="evv"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator', 'org:hr']}
+            >
+              <RouteSuspense>
+                <EvvExportPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="reports"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator']}
+            >
+              <RouteSuspense>
+                <ReportingPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="audit"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:admin', 'org:hr']}>
+              <RouteSuspense>
+                <AuditReadinessPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="logs"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:admin']}>
+              <RouteSuspense>
+                <AuditTrailPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="notifications"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={[
+                'org:admin',
+                'org:coordinator',
+                'org:hr',
+                'org:caregiver',
+              ]}
+            >
+              <RouteSuspense>
+                <NotificationsPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="support"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator']}
+            >
+              <RouteSuspense>
+                <SupportPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
           path="caregiver/today"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:caregiver']}>
-              <TrainingRouteGuard>
+              <PersonnelRecordRouteGuard>
                 <RouteSuspense>
                   <CaregiverTodayPage />
                 </RouteSuspense>
-              </TrainingRouteGuard>
+              </PersonnelRecordRouteGuard>
             </TenantRoleRouteGuard>
           }
         />
@@ -325,13 +786,25 @@ export function AppRouter() {
           }
         />
         <Route
-          path="coordinator/billing"
+          path="billing"
           element={
             <TenantRoleRouteGuard
               allowedRoles={['org:admin', 'org:coordinator']}
             >
               <RouteSuspense>
                 <BillingPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="billing/payroll"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator']}
+            >
+              <RouteSuspense>
+                <PayrollPage />
               </RouteSuspense>
             </TenantRoleRouteGuard>
           }
@@ -344,6 +817,18 @@ export function AppRouter() {
             >
               <RouteSuspense>
                 <ClientsPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="clients/:clientId"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={['org:admin', 'org:coordinator', 'org:hr']}
+            >
+              <RouteSuspense>
+                <ClientDetailPage />
               </RouteSuspense>
             </TenantRoleRouteGuard>
           }
@@ -474,11 +959,11 @@ export function AppRouter() {
           path="caregiver/schedule"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:caregiver']}>
-              <TrainingRouteGuard>
+              <PersonnelRecordRouteGuard>
                 <RouteSuspense>
                   <CaregiverSchedulePage />
                 </RouteSuspense>
-              </TrainingRouteGuard>
+              </PersonnelRecordRouteGuard>
             </TenantRoleRouteGuard>
           }
         />
@@ -486,8 +971,20 @@ export function AppRouter() {
           path="caregiver/availability"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:caregiver']}>
+              <PersonnelRecordRouteGuard>
+                <RouteSuspense>
+                  <AvailabilityPage />
+                </RouteSuspense>
+              </PersonnelRecordRouteGuard>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="personnel-record"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:caregiver']}>
               <RouteSuspense>
-                <AvailabilityPage />
+                <PersonnelRecordPage />
               </RouteSuspense>
             </TenantRoleRouteGuard>
           }
@@ -503,12 +1000,86 @@ export function AppRouter() {
           }
         />
         <Route
+          path="training"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={[
+                'org:admin',
+                'org:coordinator',
+                'org:hr',
+                'org:caregiver',
+                'org:candidate',
+              ]}
+            >
+              <TrainingProductGuard>
+                <RouteSuspense>
+                  <TrainingHubPage />
+                </RouteSuspense>
+              </TrainingProductGuard>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="training/:courseId"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={[
+                'org:admin',
+                'org:coordinator',
+                'org:hr',
+                'org:caregiver',
+                'org:candidate',
+              ]}
+            >
+              <TrainingProductGuard>
+                <RouteSuspense>
+                  <CoursePlayerPage />
+                </RouteSuspense>
+              </TrainingProductGuard>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="training/certificate/:courseId"
+          element={
+            <TenantRoleRouteGuard
+              allowedRoles={[
+                'org:admin',
+                'org:coordinator',
+                'org:hr',
+                'org:caregiver',
+                'org:candidate',
+              ]}
+            >
+              <TrainingProductGuard>
+                <RouteSuspense>
+                  <TrainingCertificatePage />
+                </RouteSuspense>
+              </TrainingProductGuard>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="training/admin"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:admin', 'org:hr']}>
+              <TrainingProductGuard>
+                <RouteSuspense>
+                  <TrainingAdminPage />
+                </RouteSuspense>
+              </TrainingProductGuard>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
           path="onboarding"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:candidate', 'org:caregiver']}>
-              <RouteSuspense>
-                <CandidateOnboardingIndex />
-              </RouteSuspense>
+              <PersonnelRecordRouteGuard>
+                <RouteSuspense>
+                  <CandidateOnboardingIndex />
+                </RouteSuspense>
+              </PersonnelRecordRouteGuard>
             </TenantRoleRouteGuard>
           }
         />
@@ -516,9 +1087,11 @@ export function AppRouter() {
           path="onboarding/checklist"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:candidate', 'org:caregiver']}>
-              <RouteSuspense>
-                <CandidateOnboardingPage />
-              </RouteSuspense>
+              <PersonnelRecordRouteGuard>
+                <RouteSuspense>
+                  <CandidateOnboardingPage />
+                </RouteSuspense>
+              </PersonnelRecordRouteGuard>
             </TenantRoleRouteGuard>
           }
         />
@@ -528,6 +1101,16 @@ export function AppRouter() {
             <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
               <RouteSuspense>
                 <ApplicationFormPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="onboarding/application-dynamic"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
+              <RouteSuspense>
+                <DynamicApplicationPage />
               </RouteSuspense>
             </TenantRoleRouteGuard>
           }

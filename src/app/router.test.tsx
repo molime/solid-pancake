@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { AppRouter } from './router'
 import { getFunctionName } from 'convex/server'
@@ -123,6 +123,97 @@ describe('AppRouter auth routes', () => {
     render(<TestRouter initialEntries={['/sign-in/factor-one']} />)
     expect(screen.getByTestId('sign-in')).toBeInTheDocument()
   })
+
+  it('shows "Candidate Portal" when the redirect targets onboarding', () => {
+    render(<TestRouter initialEntries={['/sign-in?redirect=/onboarding']} />)
+    expect(
+      screen.getByText('Candidate Portal', { selector: 'p' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows "Candidate Portal" when the redirect targets the caregiver app', () => {
+    render(
+      <TestRouter initialEntries={['/sign-in?redirect=/caregiver/today']} />,
+    )
+    expect(
+      screen.getByText('Candidate Portal', { selector: 'p' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows "HR Portal" when the redirect targets /hr', () => {
+    render(<TestRouter initialEntries={['/sign-in?redirect=/hr']} />)
+    expect(
+      screen.getByText('HR Portal', { selector: 'p' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows "Staff Portal" when the redirect targets /coordinator', () => {
+    render(<TestRouter initialEntries={['/sign-in?redirect=/coordinator']} />)
+    expect(
+      screen.getByText('Staff Portal', { selector: 'p' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows no product label for the default /select-agency redirect', () => {
+    render(<TestRouter initialEntries={['/sign-in']} />)
+    expect(screen.queryByText(/Portal/, { selector: 'p' })).not.toBeInTheDocument()
+  })
+})
+
+describe('SignInRedirect product tabs', () => {
+  it('renders a tab for each product', () => {
+    render(<TestRouter initialEntries={['/sign-in']} />)
+    expect(
+      screen.getByRole('button', { name: 'Candidate Portal' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'HR Portal' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Staff Portal' }),
+    ).toBeInTheDocument()
+  })
+
+  it('updates the redirect param when a tab is clicked', () => {
+    render(<TestRouter initialEntries={['/sign-in']} />)
+    fireEvent.click(screen.getByRole('button', { name: 'HR Portal' }))
+    expect(
+      screen.getByText('HR Portal', { selector: 'p' }),
+    ).toBeInTheDocument()
+  })
+
+  it('highlights the active tab matching the redirect param', () => {
+    render(<TestRouter initialEntries={['/sign-in?redirect=/hr']} />)
+    expect(screen.getByRole('button', { name: 'HR Portal' }).className).toContain(
+      'bg-atria-accent',
+    )
+    expect(
+      screen.getByRole('button', { name: 'Candidate Portal' }).className,
+    ).not.toContain('bg-atria-accent')
+  })
+
+  it('updates the product label when the tab changes', () => {
+    render(<TestRouter initialEntries={['/sign-in?redirect=/onboarding']} />)
+    expect(
+      screen.getByText('Candidate Portal', { selector: 'p' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Staff Portal' }))
+    expect(
+      screen.getByText('Staff Portal', { selector: 'p' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Candidate Portal', { selector: 'p' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows no active tab for the default /select-agency redirect', () => {
+    render(<TestRouter initialEntries={['/sign-in']} />)
+    for (const name of ['Candidate Portal', 'HR Portal', 'Staff Portal']) {
+      expect(screen.getByRole('button', { name }).className).not.toContain(
+        'bg-atria-accent',
+      )
+    }
+  })
 })
 
 function mockSignedInWithRole(role: string) {
@@ -154,6 +245,8 @@ function mockSignedInWithRole(role: string) {
           : []
       }
       if (name === 'onboarding:hasPlatformTrainingCompleted') return role === 'org:caregiver' || role === 'org:candidate'
+      if (name === 'agencyConfig:hasProduct') return false
+      if (name === 'training:listCourses') return []
       return undefined
     }) as unknown as typeof useQuery,
   )
@@ -189,6 +282,8 @@ function mockSignedInWithRoleAndTraining(role: string, trainingComplete: boolean
           : []
       }
       if (name === 'onboarding:hasPlatformTrainingCompleted') return trainingComplete
+      if (name === 'agencyConfig:hasProduct') return false
+      if (name === 'training:listCourses') return []
       return undefined
     }) as unknown as typeof useQuery,
   )
@@ -261,15 +356,13 @@ describe('AppRouter scheduling routes', () => {
     })
   })
 
-  it('redirects caregiver from /caregiver/today to training when incomplete', async () => {
+  it('lets a caregiver with incomplete training reach /caregiver/today (reminder banner instead of redirect)', async () => {
     mockSignedInWithRoleAndTraining('org:caregiver', false)
 
     render(<TestRouter initialEntries={['/caregiver/today']} />)
 
     await waitFor(() => {
-      expect(
-        screen.queryByTestId('caregiver-today-page'),
-      ).not.toBeInTheDocument()
+      expect(screen.getByTestId('caregiver-today-page')).toBeInTheDocument()
     })
   })
 })

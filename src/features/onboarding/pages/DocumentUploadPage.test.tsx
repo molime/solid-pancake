@@ -25,6 +25,7 @@ vi.mock('@/shared/lib/upload', () => ({
 
 const attachMock = vi.fn().mockResolvedValue('file-1')
 const saveSignedPrefilledDocumentMock = vi.fn().mockResolvedValue('doc-1')
+const skipTaskMock = vi.fn().mockResolvedValue(undefined)
 
 function createTasks(type: string) {
   return [{ _id: `task_${type}`, type, status: 'pending' }]
@@ -57,6 +58,7 @@ vi.mock('convex/react', () => ({
     const name = getFunctionName(mutation as Parameters<typeof getFunctionName>[0])
     if (name === 'candidates:attachCandidateDocument') return attachMock
     if (name === 'candidates:saveSignedPrefilledDocument') return saveSignedPrefilledDocumentMock
+    if (name === 'candidates:skipCandidateTask') return skipTaskMock
     return vi.fn()
   }),
 }))
@@ -199,6 +201,38 @@ describe('DocumentUploadPage', () => {
         documentType: 'live_scan',
         storageId: 'storage-123',
       })
+    })
+  })
+
+  it('marks the task as skipped and navigates back when skip is clicked', async () => {
+    const { useQuery } = vi.mocked(await import('convex/react'))
+    useQuery.mockImplementation(
+      ((query: unknown) => {
+        const name = getFunctionName(query as Parameters<typeof getFunctionName>[0])
+        if (name === 'candidates:listCandidateTasks') return createTasks('additional_certifications')
+        return undefined
+      }) as unknown as typeof useQuery,
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/onboarding/upload/task_additional_certifications']}>
+        <Routes>
+          <Route path='/onboarding/upload/:taskId' element={<DocumentUploadPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Skip this step/i }))
+
+    await waitFor(() => {
+      expect(skipTaskMock).toHaveBeenCalledWith({
+        clerkOrgId: 'org_123',
+        taskId: 'task_additional_certifications',
+      })
+    })
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith('/onboarding')
     })
   })
 })

@@ -1,0 +1,68 @@
+{
+  "courseKey": "ga_california_safety_falls",
+  "title": "California Safety & Fall Prevention",
+  "description": "Keep clients, caregivers, and homes safe by preventing falls and reducing hazards.",
+  "category": "regulatory",
+  "durationMinutes": 15,
+  "passingScore": 80,
+  "steps": [
+    {
+      "id": "h3_intro",
+      "title": "Hour 3: Basic Safety & Fall Prevention",
+      "type": "slides",
+      "content": "[{\"id\": \"ca-h3-1\", \"title\": \"Hour 3: Basic Safety & Fall Prevention\", \"body\": \"This hour focuses on keeping clients, caregivers, and homes safe. Most injuries in home care are preventable when you know what to look for.\", \"imageUrl\": \"https://images.unsplash.com/photo-1763631007426-5869ece08264?w=800&q=80\", \"narration\": \"Hour 3: Basic Safety & Fall Prevention. This hour focuses on keeping clients, caregivers, and homes safe. Most injuries in home care are preventable when you know what to look for.\"}, {\"id\": \"ca-h3-2\", \"title\": \"Why Safety Matters\", \"body\": \"Falls, burns, medication errors, and injuries can change a client's life. Your awareness and actions are the first line of defense.\", \"imageUrl\": \"https://images.unsplash.com/photo-1581056771107-24ca5f033842?w=800&q=80\", \"narration\": \"Why Safety Matters. Falls, burns, medication errors, and injuries can change a client's life. Your awareness and actions are the first line of defense.\"}, {\"id\": \"ca-h3-3\", \"title\": \"Where Falls Happen\", \"body\": \"Falls can happen in doorways, stairs, bathrooms, kitchens, and outdoors. Be alert everywhere.\", \"imageUrl\": \"https://images.unsplash.com/photo-1763631025486-e59abe0ff979?w=800&q=80\", \"narration\": \"Where Falls Happen. Falls can happen in doorways, stairs, bathrooms, kitchens, and outdoors. Be alert everywhere.\"}, {\"id\": \"ca-h3-4\", \"title\": \"Your Role in Prevention\", \"body\": \"You are the eyes and ears in the home. Report hazards, encourage safe footwear, keep pathways clear, and never rush a client.\", \"imageUrl\": \"https://images.unsplash.com/photo-1771238012528-4bd7875e041e?w=800&q=80\", \"narration\": \"Your Role in Prevention. You are the eyes and ears in the home. Report hazards, encourage safe footwear, keep pathways clear, and never rush a client.\"}, {\"id\": \"ca-h3-5\", \"title\": \"Common Home Hazards\", \"body\": \"Look for throw rugs, loose cords, poor lighting, wet floors, clutter, and unstable furniture.\", \"imageUrl\": \"https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&q=80\", \"narration\": \"Common Home Hazards. Look for throw rugs, loose cords, poor lighting, wet floors, clutter, and unstable furniture.\"}, {\"id\": \"ca-h3-6\", \"title\": \"Fall-Risk Factors\", \"body\": \"Risk factors include poor balance, vision problems, dizziness from medications, low blood pressure, foot pain, and unsafe footwear.\", \"imageUrl\": \"https://images.unsplash.com/photo-1559234938-b60fff04894d?w=800&q=80\", \"narration\": \"Fall-Risk Factors. Risk factors include poor balance, vision problems, dizziness from medications, low blood pressure, foot pain, and unsafe footwear.\"}, {\"id\": \"ca-h3-7\", \"title\": \"Safe Transfers & Body Mechanics\", \"body\": \"Keep your feet shoulder-width apart, bend your knees, and lift with your legs. Never pull a client by the arms.\", \"imageUrl\": \"https://images.unsplash.com/photo-1647913097114-5975d965a1ff?w=800&q=80\", \"narration\": \"Safe Transfers & Body Mechanics. Keep your feet shoulder-width apart, bend your knees, and lift with your legs. Never pull a client by the arms.\"}, {\"id\": \"ca-h3-8\", \"title\": \"Bathroom Safety\", \"body\": \"Use non-slip mats, grab bars, and a shower chair. Never leave an at-risk client unattended in the bath. Set water heater below 120°F.\", \"imageUrl\": \"https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800&q=80\", \"narration\": \"Bathroom Safety. Use non-slip mats, grab bars, and a shower chair. Never leave an at-risk client unattended in the bath. Set water heater below 120°F.\"}]",
+      "required": true,
+      "minDurationSec": 160
+    },
+    {
+      "id": "h3_fall_video",
+      "title": "Video: Preventing Falls at Home",
+      "type": "video",
+      "content": "https://www.youtube.com/embed/mLuuIFswxmM",
+      "required": true,
+      "minDurationSec": 0,
+      "caption": "National Council on Aging guidance on identifying and reducing fall risks in the home."
+    },
+    {
+      "id": "h3_hazards",
+      "title": "Common Home Hazards & Safe Practices",
+      "type": "slides",
+      "content": "[{\"id\": \"ca-h3h-1\", \"title\": \"Trip Hazards\", \"body\": \"Remove or tape down loose rugs, secure cords along walls, and keep floors free of clutter and spills.\", \"imageUrl\": \"https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&q=80\", \"narration\": \"Trip Hazards. Remove or tape down loose rugs, secure cords along walls, and keep floors free of clutter and spills.\"}, {\"id\": \"ca-h3h-2\", \"title\": \"Lighting\", \"body\": \"Keep pathways well-lit, especially at night. Use nightlights in bedrooms, bathrooms, and halls.\", \"imageUrl\": \"https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800&q=80\", \"narration\": \"Lighting. Keep pathways well-lit, especially at night. Use nightlights in bedrooms, bathrooms, and halls.\"}, {\"id\": \"ca-h3h-3\", \"title\": \"Footwear\", \"body\": \"Clients should wear well-fitting, non-slip shoes. Avoid socks on smooth floors and loose slippers.\", \"imageUrl\": \"https://images.unsplash.com/photo-1583324113626-70df0f4deaab?w=800&q=80\", \"narration\": \"Footwear. Clients should wear well-fitting, non-slip shoes. Avoid socks on smooth floors and loose slippers.\"}, {\"id\": \"ca-h3h-4\", \"title\": \"Safe Transfers\", \"body\": \"Use transfer belts when available, keep a wide base, and ask for help when needed. Never twist while lifting.\", \"imageUrl\": \"https://images.unsplash.com/photo-1763631007426-5869ece08264?w=800&q=80\", \"narration\": \"Safe Transfers. Use transfer belts when available, keep a wide base, and ask for help when needed. Never twist while lifting.\"}, {\"id\": \"ca-h3h-5\", \"title\": \"Body Mechanics\", \"body\": \"Squat, keep your back straight, hold items close, and lift with your legs. Do not jerk or reach.\", \"imageUrl\": \"https://images.unsplash.com/photo-1763631025486-e59abe0ff979?w=800&q=80\", \"narration\": \"Body Mechanics. Squat, keep your back straight, hold items close, and lift with your legs. Do not jerk or reach.\"}, {\"id\": \"ca-h3h-6\", \"title\": \"Bathroom Safety\", \"body\": \"Install grab bars, use shower chairs, set water below 120°F, and clean up water immediately.\", \"imageUrl\": \"https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800&q=80\", \"narration\": \"Bathroom Safety. Install grab bars, use shower chairs, set water below 120°F, and clean up water immediately.\"}, {\"id\": \"ca-h3h-7\", \"title\": \"Kitchen Safety\", \"body\": \"Clean spills immediately, keep heavy items at waist level, never leave cooking unattended, and check smoke detectors.\", \"imageUrl\": \"https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=800&q=80\", \"narration\": \"Kitchen Safety. Clean spills immediately, keep heavy items at waist level, never leave cooking unattended, and check smoke detectors.\"}, {\"id\": \"ca-h3h-8\", \"title\": \"Outdoor & Entry Safety\", \"body\": \"Remove leaves, ice, and objects from walkways. Ensure handrails are secure and locks work.\", \"imageUrl\": \"https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=800&q=80\", \"narration\": \"Outdoor & Entry Safety. Remove leaves, ice, and objects from walkways. Ensure handrails are secure and locks work.\"}]",
+      "required": true,
+      "minDurationSec": 160
+    },
+    {
+      "id": "h3_checklist",
+      "title": "Interactive: Room-by-Room Safety Checklist",
+      "type": "text",
+      "content": "Use this checklist during every visit to reduce falls and injuries.\n\nLIVING AREAS\n- Clear clutter and secure cords along walls.\n- Remove or tape down loose rugs.\n- Ensure lamps and light switches are easy to reach.\n- Keep frequently used items within reach.\n\nBATHROOM\n- Check that grab bars are sturdy.\n- Use non-slip mats in tub and on floor.\n- Set water heater below 120°F to avoid burns.\n- Never rush a client who needs help toileting or bathing.\n\nBEDROOM\n- Keep a nightlight on.\n- Place a lamp and phone within reach of the bed.\n- Ensure the path from bed to bathroom is clear.\n\nKITCHEN\n- Clean spills immediately.\n- Keep heavy items at waist level.\n- Never leave cooking unattended.\n- Check that smoke detectors work.\n\nOUTDOORS / ENTRY\n- Remove leaves, ice, or objects from walkways.\n- Ensure handrails are secure.\n- Lock doors and set alarms per the care plan.",
+      "required": true,
+      "minDurationSec": 52
+    },
+    {
+      "id": "h3_transfer_video",
+      "title": "Video: Safe Transfer & Body Mechanics",
+      "type": "video",
+      "content": "https://www.youtube.com/embed/e_cUoz8Ag5k",
+      "required": true,
+      "minDurationSec": 0,
+      "caption": "Practical guidance on assisting with standing, sitting, and moving safely while protecting your back."
+    },
+    {
+      "id": "h3_body_mechanics",
+      "title": "Body Mechanics & Safe Lifting",
+      "type": "text",
+      "content": "PROTECTING YOUR BACK\nCaregiving often requires bending, lifting, and assisting with movement. Using proper body mechanics protects you and the client from injury.\n\nLIFTING RULES\n- Plan the lift before you begin.\n- Keep your feet shoulder-width apart for a stable base.\n- Bend your knees and keep your back straight.\n- Lift with your leg muscles, not your back.\n- Hold the load close to your body.\n- Avoid twisting; turn your whole body.\n- Do not reach or jerk.\n\nTRANSFERS\n- Explain each step to the client.\n- Use a gait or transfer belt when available and you are trained.\n- Lock wheelchair brakes before standing transfers.\n- Never pull a client up by the arms or wrists.\n- Ask for help when a client needs more support than you can safely provide.\n\nWHEN TO STOP\nIf a client is too heavy, uncooperative, or the surface is unsafe, stop and call the office for assistance. Your safety matters too.",
+      "required": true,
+      "minDurationSec": 53
+    },
+    {
+      "id": "h3_quiz",
+      "title": "Module 1 Check: Safety & Fall Prevention",
+      "type": "quiz",
+      "content": "{\"questions\": [{\"question\": \"What is the safest way to lift a client?\", \"options\": [\"Bend at the waist and use your back\", \"Keep feet apart, bend knees, and lift with your legs\", \"Pull the client up by the arms\", \"Twist while lifting\"], \"correct\": 1}, {\"question\": \"Which of the following is a common fall hazard?\", \"options\": [\"Good lighting\", \"Non-slip shoes\", \"Loose throw rugs\", \"Grab bars\"], \"correct\": 2}, {\"question\": \"When should you leave a client's home?\", \"options\": [\"When the client asks you to stay late\", \"If you feel unsafe and have called the office\", \"When the TV is too loud\", \"Only at the end of your scheduled shift\"], \"correct\": 1}, {\"question\": \"What water temperature helps prevent burns?\", \"options\": [\"140\\u00b0F\", \"120\\u00b0F or below\", \"160\\u00b0F\", \"Any temperature the client prefers\"], \"correct\": 1}, {\"question\": \"Which footwear is safest for clients?\", \"options\": [\"Loose slippers\", \"Socks on tile\", \"Well-fitting, non-slip shoes\", \"Bare feet\"], \"correct\": 2}]}",
+      "required": true,
+      "minDurationSec": 100
+    }
+  ]
+}

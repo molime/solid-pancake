@@ -7,7 +7,19 @@ import {
   createClerkUserAndJoinOrg,
   friendlyClerkMessage,
   clerkErrorMessage,
+  accountTypeLabel,
 } from './_utils/invitationBypass'
+
+
+describe('accountTypeLabel', () => {
+  it('maps roles to human account-type labels', () => {
+    expect(accountTypeLabel('org:admin')).toBe('owner')
+    expect(accountTypeLabel('owner')).toBe('owner')
+    expect(accountTypeLabel('org:coordinator')).toBe('coordinator')
+    expect(accountTypeLabel('org:caregiver')).toBe('employee')
+    expect(accountTypeLabel('org:candidate')).toBe('ATRIA-X')
+  })
+})
 
 
 describe('isDevInvitationBypassEnabled', () => {
@@ -298,6 +310,95 @@ describe('createClerkUserAndJoinOrg', () => {
     })
     expect(result.clerkUserId).toBe('user_new')
   })
+
+  it('sends a role-aware welcome email naming the account type', async () => {
+    const runAfter = vi.fn(() => Promise.resolve('sched_1'))
+    const ctx = {
+      scheduler: {
+        runAfter,
+        runAt: vi.fn(() => Promise.resolve('sched_2')),
+        cancel: vi.fn(() => Promise.resolve()),
+      } as unknown as Scheduler,
+    }
+    await createClerkUserAndJoinOrg({
+      ctx,
+      secretKey: 'sk_test',
+      clerkOrgId: 'org_test',
+      emailAddress: 'new@example.com',
+      displayName: 'New User',
+      role: 'org:coordinator',
+      appBaseUrl: 'http://localhost:5173',
+      accountType: 'coordinator',
+      agencyName: 'Sunrise <Care>',
+    })
+    expect(runAfter).toHaveBeenCalled()
+    const emailArgs = (
+      runAfter.mock.calls as unknown as [
+        number,
+        unknown,
+        { subject: string; html: string },
+      ][]
+    )[0][2]
+    expect(emailArgs.subject).toBe('Your coordinator account is ready')
+    // Agency name is HTML-escaped before interpolation.
+    expect(emailArgs.html).toContain(
+      'Your coordinator account for Sunrise &lt;Care&gt; is ready.',
+    )
+  })
+
+  it('keeps the generic subject when no account type is given', async () => {
+    const runAfter = vi.fn(() => Promise.resolve('sched_1'))
+    const ctx = {
+      scheduler: {
+        runAfter,
+        runAt: vi.fn(() => Promise.resolve('sched_2')),
+        cancel: vi.fn(() => Promise.resolve()),
+      } as unknown as Scheduler,
+    }
+    await createClerkUserAndJoinOrg({
+      ctx,
+      secretKey: 'sk_test',
+      clerkOrgId: 'org_test',
+      emailAddress: 'new@example.com',
+      displayName: 'New User',
+      role: 'org:candidate',
+      appBaseUrl: 'http://localhost:5173',
+    })
+    const emailArgs = (
+      runAfter.mock.calls as unknown as [number, unknown, { subject: string }][]
+    )[0][2]
+    expect(emailArgs.subject).toBe('Your ATRIA-X account is ready')
+  })
+
+  it('includes the payment-setup link paragraph when provided', async () => {
+    const runAfter = vi.fn(() => Promise.resolve('sched_1'))
+    const ctx = {
+      scheduler: {
+        runAfter,
+        runAt: vi.fn(() => Promise.resolve('sched_2')),
+        cancel: vi.fn(() => Promise.resolve()),
+      } as unknown as Scheduler,
+    }
+    await createClerkUserAndJoinOrg({
+      ctx,
+      secretKey: 'sk_test',
+      clerkOrgId: 'org_test',
+      emailAddress: 'new@example.com',
+      displayName: 'New User',
+      role: 'org:admin',
+      appBaseUrl: 'http://localhost:5173',
+      accountType: 'owner',
+      agencyName: 'Sunrise Care',
+      paymentSetupUrl: 'https://checkout.stripe.com/c/pay/cs_test_123',
+    })
+    const emailArgs = (
+      runAfter.mock.calls as unknown as [number, unknown, { html: string }][]
+    )[0][2]
+    expect(emailArgs.html).toContain(
+      'href="https://checkout.stripe.com/c/pay/cs_test_123"',
+    )
+    expect(emailArgs.html).toContain('set up your payment method')
+  })
 })
 
 describe('friendlyClerkMessage', () => {
@@ -329,6 +430,22 @@ describe('friendlyClerkMessage', () => {
     expect(friendlyClerkMessage('user not found')).toBe(
       'Account not found. Please check your email or use the sign-in link.',
     )
+  })
+
+  it('maps the Clerk instance allowlist rejection to friendly text', () => {
+    expect(
+      friendlyClerkMessage(
+        'candidate@gmail.com is not allowed to access this application.',
+      ),
+    ).toBe(
+      'This email address is not allowed by email restrictions. Please contact the agency.',
+    )
+  })
+
+  it('maps the email-taken duplicate variant to friendly text', () => {
+    expect(
+      friendlyClerkMessage('That email address is taken. Please try another.'),
+    ).toBe('An account with this email already exists. Please sign in instead.')
   })
 
   it('maps the identification_exists Clerk error to friendly text', () => {

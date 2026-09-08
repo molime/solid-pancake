@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDocumentCategoryLabel, formatStatusLabel, formatDateUS, calculateAge } from './format'
+import { formatDocumentCategoryLabel, formatStatusLabel, formatDateUS, calculateAge, formatIncidentCategoryLabel, formatIncidentStatusLabel, formatAgencyNotifiedLabel } from './format'
 
 describe('formatDocumentCategoryLabel', () => {
   it('maps known document categories to human-readable labels', () => {
@@ -12,6 +12,58 @@ describe('formatDocumentCategoryLabel', () => {
 
   it('falls back to formatStatusLabel for unknown categories', () => {
     expect(formatDocumentCategoryLabel('unknown_thing')).toBe(formatStatusLabel('unknown_thing'))
+  })
+})
+
+describe('formatIncidentCategoryLabel', () => {
+  it('maps known incident categories to human-readable labels', () => {
+    expect(formatIncidentCategoryLabel('death')).toBe('Death')
+    expect(formatIncidentCategoryLabel('serious_injury')).toBe('Serious injury')
+    expect(formatIncidentCategoryLabel('hospitalization')).toBe('Hospitalization')
+    expect(formatIncidentCategoryLabel('emergency_room_visit')).toBe('Emergency room visit')
+    expect(formatIncidentCategoryLabel('medication_error')).toBe('Medication error')
+    expect(formatIncidentCategoryLabel('suspected_abuse')).toBe('Suspected abuse')
+    expect(formatIncidentCategoryLabel('suspected_exploitation')).toBe('Suspected exploitation')
+    expect(formatIncidentCategoryLabel('suspected_neglect')).toBe('Suspected neglect')
+    expect(formatIncidentCategoryLabel('victim_of_crime')).toBe('Victim of crime')
+    expect(formatIncidentCategoryLabel('missing_person')).toBe('Missing person')
+    expect(formatIncidentCategoryLabel('unauthorized_absence')).toBe('Unauthorized absence')
+    expect(formatIncidentCategoryLabel('aggressive_act')).toBe('Aggressive act')
+    expect(formatIncidentCategoryLabel('rights_violation')).toBe('Rights violation')
+    expect(formatIncidentCategoryLabel('other')).toBe('Other')
+  })
+
+  it('falls back to formatStatusLabel for unknown categories', () => {
+    expect(formatIncidentCategoryLabel('unknown_thing')).toBe(formatStatusLabel('unknown_thing'))
+  })
+})
+
+describe('formatIncidentStatusLabel', () => {
+  it('maps known incident statuses to human-readable labels', () => {
+    expect(formatIncidentStatusLabel('draft')).toBe('Report pending')
+    expect(formatIncidentStatusLabel('verbal_reported')).toBe('Verbal reported')
+    expect(formatIncidentStatusLabel('written_submitted')).toBe('Written submitted')
+    expect(formatIncidentStatusLabel('closed')).toBe('Closed')
+  })
+
+  it('falls back to formatStatusLabel for unknown statuses', () => {
+    expect(formatIncidentStatusLabel('unknown_status')).toBe(formatStatusLabel('unknown_status'))
+  })
+})
+
+describe('formatAgencyNotifiedLabel', () => {
+  it('maps known agency codes to human-readable labels', () => {
+    expect(formatAgencyNotifiedLabel('aps')).toBe('Adult Protective Services')
+    expect(formatAgencyNotifiedLabel('cps')).toBe('Child Protective Services')
+    expect(formatAgencyNotifiedLabel('ccl')).toBe('Community Care Licensing')
+    expect(formatAgencyNotifiedLabel('law_enforcement')).toBe('Law enforcement')
+    expect(formatAgencyNotifiedLabel('ombudsman')).toBe('Ombudsman')
+    expect(formatAgencyNotifiedLabel('dph')).toBe('Dept. of Public Health')
+    expect(formatAgencyNotifiedLabel('other')).toBe('Other')
+  })
+
+  it('falls back to formatStatusLabel for unknown agencies', () => {
+    expect(formatAgencyNotifiedLabel('unknown_agency')).toBe(formatStatusLabel('unknown_agency'))
   })
 })
 

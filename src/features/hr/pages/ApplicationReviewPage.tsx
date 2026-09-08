@@ -17,6 +17,7 @@ import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { generatePrefilledPdf, saveAndUpload } from '@/features/onboarding/pdf/generatePrefilledPdf'
 import { getMapping, normalizeW4PdfData } from '@/features/onboarding/pdf/mappings'
 import { isNonEmptyString } from '@/features/onboarding/components/application/types'
+import { DynamicFormReview } from '@/features/forms/components/DynamicFormReview'
 import { ArrowLeft, CheckCircle2, Download, RotateCcw, XCircle } from 'lucide-react'
 import { Component, useState, useMemo, useRef } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
@@ -370,6 +371,27 @@ export function ApplicationReviewPage() {
   const candidate = detail?.candidate
   const application = detail?.applications?.[0]
   const fields = (application?.fields ?? {}) as Record<string, unknown>
+
+  const dynamicFormSubmissions = (fields.dynamicFormSubmissions ?? []) as {
+    formDefinitionId: Id<'formDefinitions'>
+    submissionId: Id<'formSubmissions'>
+    formKey: string | null
+    formName: string
+  }[]
+  const dynamicSubmissionIds = dynamicFormSubmissions.map((s) => s.submissionId)
+  const dynamicFormDefinitionIds = dynamicFormSubmissions.map((s) => s.formDefinitionId)
+  const dynamicSubmissions = useQuery(
+    api.forms.getFormSubmissionsByIds,
+    clerkOrgId && dynamicSubmissionIds.length > 0
+      ? { clerkOrgId, submissionIds: dynamicSubmissionIds }
+      : 'skip',
+  )
+  const dynamicFormDefinitions = useQuery(
+    api.forms.getFormDefinitionsByIds,
+    clerkOrgId && dynamicFormDefinitionIds.length > 0
+      ? { clerkOrgId, formDefinitionIds: dynamicFormDefinitionIds }
+      : 'skip',
+  )
 
   const [hrNotes, setHrNotes] = useState('')
   const [payRate, setPayRate] = useState(String(fields.payRate || '$22.00 / hr'))
@@ -781,6 +803,63 @@ export function ApplicationReviewPage() {
               </div>
             </SectionBlock>
 
+            {dynamicFormSubmissions.length > 0 && (
+              <SectionBlock title="Application forms">
+                <div className="flex flex-col gap-4">
+                  {dynamicFormSubmissions.map((meta) => {
+                    const submission = dynamicSubmissions?.find((s) => s._id === meta.submissionId)
+                    const formDefinition = dynamicFormDefinitions?.find(
+                      (f) => f._id === meta.formDefinitionId,
+                    )
+                    if (!submission) {
+                      return (
+                        <Card key={meta.submissionId}>
+                          <CardContent className="p-4">
+                            <p className="text-sm text-atria-text-secondary">
+                              Loading {meta.formName}…
+                            </p>
+                          </CardContent>
+                        </Card>
+                      )
+                    }
+                    if (!formDefinition) {
+                      return (
+                        <Card key={meta.submissionId}>
+                          <CardHeader>
+                            <CardTitle>{meta.formName}</CardTitle>
+                          </CardHeader>
+                          <CardContent className="p-4">
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                              {Object.entries(submission.answers).map(([key, value]) => (
+                                <ApplicationField
+                                  key={key}
+                                  label={key}
+                                  value={
+                                    typeof value === 'boolean'
+                                      ? value
+                                        ? 'Yes'
+                                        : 'No'
+                                      : String(value ?? '')
+                                  }
+                                />
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )
+                    }
+                    return (
+                      <DynamicFormReview
+                        key={meta.submissionId}
+                        form={formDefinition}
+                        answers={submission.answers}
+                      />
+                    )
+                  })}
+                </div>
+              </SectionBlock>
+            )}
+
             <SectionBlock title="Employment history">
               {employment.length === 0 ? (
                 <p className="text-sm text-atria-text-secondary">No employment history provided.</p>
@@ -842,7 +921,7 @@ export function ApplicationReviewPage() {
                 <ApplicationField label="FIRST NAME" value={String(i9.firstName ?? '')} />
                 <ApplicationField label="ADDRESS" value={`${i9.address ?? ''}, ${i9.city ?? ''}, ${i9.state ?? ''} ${i9.zip ?? ''}`.trim()} />
                 <ApplicationField label="DATE OF BIRTH" value={String(i9.dateOfBirth ?? '')} />
-                <ApplicationField label="SSN" value={String(i9.ssn ?? '')} />
+                <ApplicationField label={String(personal.idType ?? 'ssn').toUpperCase()} value={String(i9.ssn ?? '')} />
                 <ApplicationField label="CITIZENSHIP STATUS" value={String(i9.citizenshipStatus ?? '').replace(/_/g, ' ')} />
                 <ApplicationField label="ALIEN NUMBER" value={String(i9.alienNumber ?? '')} />
               </div>
@@ -985,10 +1064,10 @@ export function ApplicationReviewPage() {
 
             <SectionBlock title="Prefilled documents">
               <div className="space-y-2">
-                {(['health_screen', 'live_scan', 'criminal_record', 'i9', 'w4'] as const).map((type) => {
+                {(['health_screen', 'live_scan', 'criminal_record', 'i9', 'w4', 'de_34', 'bcia_8016', 'hcs_501'] as const).map((type) => {
                   const doc = prefilledDocByType.get(type)
                   const hasSigned = !!doc?.uploadedSignedStorageId
-                  const isOnlineForm = type === 'criminal_record' || type === 'i9' || type === 'w4'
+                  const isOnlineForm = type === 'criminal_record' || type === 'i9' || type === 'w4' || type === 'bcia_8016'
                   return (
                     <div
                       key={type}
@@ -1001,6 +1080,9 @@ export function ApplicationReviewPage() {
                           {type === 'criminal_record' && 'Criminal Record (LIC 508)'}
                           {type === 'i9' && 'I-9 Employment Eligibility'}
                           {type === 'w4' && 'W-4 Tax Withholding'}
+                          {type === 'de_34' && 'DE 34 — Report of New Employee(s)'}
+                          {type === 'bcia_8016' && 'BCIA 8016 — Live Scan Request'}
+                          {type === 'hcs_501' && 'HCS 501 — Personnel Record'}
                         </span>
                         <PrefilledDocumentDownloadButton
                           clerkOrgId={clerkOrgId!}

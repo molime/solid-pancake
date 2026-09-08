@@ -17,10 +17,14 @@ const MILEAGE_NOTE = 'reimbursed for mileage'
 
 function datePlusDays(days: number): string {
   const date = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
-  return date.toISOString().split('T')[0]
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  const yyyy = date.getFullYear()
+  return `${mm}/${dd}/${yyyy}`
 }
 
 async function acceptJobDescriptionAndLegalValidity(page: import('@playwright/test').Page) {
+  await page.locator('#jdPositionApplyingFor').selectOption('Caregiver')
   await page.getByLabel('I have read and understand the job description').check()
   await page.getByLabel('I understand that typing my name').check()
   await page.getByRole('button', { name: /Save and continue/i }).click()
@@ -30,7 +34,7 @@ async function fillPersonalInfo(page: import('@playwright/test').Page, transport
   await page.getByLabel('First name').fill('E2E')
   await page.getByLabel('Last name').fill('Candidate')
   await page.locator('#idType').selectOption('ssn')
-  await page.getByLabel('SSN / ITIN').fill('123-45-6789')
+  await page.getByLabel('SSN').fill('123-45-6789')
   await page.getByLabel('Street address').fill('123 Main St')
   await page.getByLabel('Apt / suite').fill('Apt 1')
   await page.getByLabel('City').first().fill('San Jose')
@@ -39,13 +43,12 @@ async function fillPersonalInfo(page: import('@playwright/test').Page, transport
   await page.getByLabel('Home phone').fill('555-111-2222')
   await page.getByLabel('Cell phone').fill('555-333-4444')
   await page.locator('#email').fill(E2E_CANDIDATE_EMAIL)
-  await page.locator('#dateOfBirth').fill('1990-06-15')
+  await page.locator('#dateOfBirth').fill('06/15/1990')
   await page.locator('#gender').selectOption('female')
   await page.locator('#availability').selectOption('full_time')
   await page.locator('#shift-morning').check()
   await page.locator('#day-monday').check()
   await page.locator('#day-tuesday').check()
-  await page.locator('#positionApplyingFor').selectOption('Caregiver')
   await page.getByLabel('I am 18 years of age or older').check()
   await page.locator(transport ? '#canTransportClients-yes' : '#canTransportClients-no').check()
 }
@@ -71,11 +74,11 @@ async function fillI9AndW4(page: import('@playwright/test').Page) {
   await page.locator('#i9City').fill('San Jose')
   await page.locator('#i9State').selectOption('CA')
   await page.locator('#i9Zip').fill('95131')
-  await page.locator('#i9DateOfBirth').fill('1990-06-15')
+  await page.locator('#i9DateOfBirth').fill('06/15/1990')
   await page.locator('#i9Ssn').fill('123-45-6789')
   await page.locator('#citizenshipStatus').selectOption('citizen')
   await page.locator('#i9Signature').fill('E2E Candidate')
-  await page.locator('#i9Date').fill('2026-07-18')
+  await page.locator('#i9Date').fill('07/18/2026')
 
   await page.locator('#w4FirstName').fill('E2E')
   await page.locator('#w4LastName').fill('Candidate')
@@ -84,7 +87,7 @@ async function fillI9AndW4(page: import('@playwright/test').Page) {
   await page.locator('#w4Ssn').fill('123-45-6789')
   await page.locator('#filingStatus').selectOption('single')
   await page.locator('#w4Signature').fill('E2E Candidate')
-  await page.locator('#w4Date').fill('2026-07-18')
+  await page.locator('#w4Date').fill('07/18/2026')
 }
 
 async function fillAcknowledgments(page: import('@playwright/test').Page) {
@@ -92,7 +95,7 @@ async function fillAcknowledgments(page: import('@playwright/test').Page) {
   for (const key of docs) {
     await page.locator(`#${key}-agreed`).check()
     await page.locator(`#${key}-initials`).fill('EC')
-    await page.locator(`#${key}-date`).fill('2026-07-18')
+    await page.locator(`#${key}-date`).fill('07/18/2026')
   }
 }
 
@@ -131,7 +134,8 @@ async function completePrecedingTasks(token: string) {
   await attachCandidateDocumentForE2E(token, E2E_ORG_ID, 'tax_id_ssn', 'Upload Tax ID or SSN')
   await attachCandidateDocumentForE2E(token, E2E_ORG_ID, 'cpr_certificate', 'Upload CPR certificate', datePlusDays(365))
   await attachCandidateDocumentForE2E(token, E2E_ORG_ID, 'health_screen', 'Upload signed health screen')
-  // Completes background_check and employment_agreement in one call.
+  await attachCandidateDocumentForE2E(token, E2E_ORG_ID, 'background_check', 'Upload stamped Live Scan receipt')
+  // Completes employment_agreement (background_check must be uploaded first).
   await callConvexMutation(token, 'candidates:acknowledgeBackgroundCheck', {
     clerkOrgId: E2E_ORG_ID,
   })
@@ -141,19 +145,29 @@ async function openHrReviewPage(
   page: import('@playwright/test').Page,
   candidateId: string,
 ) {
-  await page.goto('about:blank')
-  await page.waitForTimeout(500)
-  await page.goto(`/hr/candidates/${candidateId}`)
-  await page.waitForLoadState('networkidle')
   for (let attempt = 0; attempt < 3; attempt++) {
+    await page.goto('about:blank')
+    await page.waitForTimeout(500)
+    await page.goto(`/hr/candidates/${candidateId}`)
+    await page.waitForLoadState('domcontentloaded')
+    // Handle "ATRIA-X needs a refresh" interstitial.
     const refreshBtn = page.getByRole('button', { name: 'Refresh app' })
     if (await refreshBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await refreshBtn.click()
-      await page.waitForLoadState('networkidle')
-      await page.goto(`/hr/candidates/${candidateId}`)
-      await page.waitForLoadState('networkidle')
-    } else {
-      break
+      await page.waitForLoadState('domcontentloaded')
+      continue
+    }
+    // If redirected to /select-agency, wait for auto-select to complete.
+    if (page.url().includes('/select-agency')) {
+      await page.waitForTimeout(5000)
+      continue
+    }
+    // If on the HR page, wait for content.
+    try {
+      await expect(page.getByText('Application Review')).toBeVisible({ timeout: 15000 })
+      return
+    } catch {
+      // Retry on next iteration.
     }
   }
   await expect(page.getByText('Application Review')).toBeVisible({ timeout: 30000 })
@@ -210,12 +224,13 @@ test.describe('application car insurance (transport clients)', { tag: '@auth' },
     // The conditional checklist step is present when transport = Yes.
     await page.goto('/onboarding/checklist')
     await page.waitForLoadState('networkidle')
-    await expect(page.getByText('Your onboarding tasks')).toBeVisible()
+    await expect(page.getByText('Your tasks')).toBeVisible()
     await expect(page.getByRole('button', { name: /Car insurance policy/ })).toBeVisible()
 
     // Finish the required preceding steps, then upload the policy in the UI.
     let candidateToken = await extractClerkToken(page)
     if (!candidateToken) throw new Error('Could not extract candidate session token.')
+    await page.waitForTimeout(2000)
     await completePrecedingTasks(candidateToken)
 
     await page.goto('/onboarding/upload/car_insurance')
@@ -292,7 +307,7 @@ test.describe('application car insurance (transport clients)', { tag: '@auth' },
 
     await page.goto('/onboarding/checklist')
     await page.waitForLoadState('networkidle')
-    await expect(page.getByText('Your onboarding tasks')).toBeVisible()
+    await expect(page.getByText('Your tasks')).toBeVisible()
     await expect(page.getByText('Photo ID').first()).toBeVisible()
     await expect(page.getByRole('button', { name: /Car insurance policy/ })).toBeHidden()
 

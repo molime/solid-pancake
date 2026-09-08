@@ -6,10 +6,11 @@ import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import {
+  AlertTriangle,
   Bell,
   Database,
-  Plus,
   Search,
+  XCircle,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
@@ -35,6 +36,10 @@ export function DashboardPage() {
 
   const stats = useQuery(
     api.shiftQueries.dashboardStats,
+    clerkOrgId && canViewDashboard ? { clerkOrgId } : 'skip',
+  )
+  const complianceOverview = useQuery(
+    api.compliance.getComplianceOverview,
     clerkOrgId && canViewDashboard ? { clerkOrgId } : 'skip',
   )
 
@@ -84,10 +89,6 @@ export function DashboardPage() {
               type="text"
             />
           </div>
-          <Button variant="primary" size="sm">
-            <Plus className="h-4 w-4" />
-            Quick Actions
-          </Button>
           <button
             className="flex h-10 w-10 items-center justify-center rounded-full border border-atria-border bg-atria-surface text-atria-muted transition-colors hover:text-atria-ink"
             type="button"
@@ -216,6 +217,73 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {canViewDashboard && complianceOverview && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Needs attention</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {complianceOverview.expiring === 0 &&
+            complianceOverview.expired === 0 &&
+            pendingDocuments === 0 ? (
+              <div className="rounded-[var(--radius-atria-md)] border border-dashed border-atria-border p-6 text-center">
+                <p className="text-sm text-atria-muted">
+                  Nothing needs attention right now.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {pendingDocuments > 0 && (
+                  <div className="flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-atria-info-bg text-atria-info">
+                        <Bell className="h-4 w-4" />
+                      </span>
+                      <p className="text-sm font-medium text-atria-ink">
+                        Pending document reviews
+                      </p>
+                    </div>
+                    <span className="text-lg font-semibold text-atria-ink">
+                      {pendingDocuments}
+                    </span>
+                  </div>
+                )}
+                {complianceOverview.expiring > 0 && (
+                  <div className="flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-atria-warning-bg text-atria-warning">
+                        <AlertTriangle className="h-4 w-4" />
+                      </span>
+                      <p className="text-sm font-medium text-atria-ink">
+                        Credentials expiring within 30 days
+                      </p>
+                    </div>
+                    <span className="text-lg font-semibold text-atria-ink">
+                      {complianceOverview.expiring}
+                    </span>
+                  </div>
+                )}
+                {complianceOverview.expired > 0 && (
+                  <div className="flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-atria-danger-bg text-atria-danger">
+                        <XCircle className="h-4 w-4" />
+                      </span>
+                      <p className="text-sm font-medium text-atria-ink">
+                        Expired credentials
+                      </p>
+                    </div>
+                    <span className="text-lg font-semibold text-atria-ink">
+                      {complianceOverview.expired}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

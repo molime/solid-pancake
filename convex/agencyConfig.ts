@@ -116,6 +116,12 @@ const DEFAULT_PRODUCTS = [
     description: 'Candidate application, onboarding, training, and hiring flow.',
   },
   {
+    key: 'training',
+    label: 'Training & Compliance Courses',
+    description:
+      'Assignable, trackable staff training courses with videos, interactive content, and quizzes.',
+  },
+  {
     key: 'full_platform',
     label: 'Full Platform',
     description: 'Hiring + shift management + documentation + scheduling + billing.',
@@ -182,7 +188,7 @@ export const seedDefaultProducts = mutation({
         })
       }
     }
-    // Seed agency product subscription with 'hiring' as default
+    // Seed agency product subscription with 'hiring' and 'training' as defaults
     const existingSub = await ctx.db
       .query('agencyProducts')
       .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
@@ -191,6 +197,11 @@ export const seedDefaultProducts = mutation({
       await ctx.db.insert('agencyProducts', {
         tenantId,
         productKey: 'hiring',
+        active: true,
+      })
+      await ctx.db.insert('agencyProducts', {
+        tenantId,
+        productKey: 'training',
         active: true,
       })
     }
@@ -449,9 +460,15 @@ export const getPublicAgencyInfo = query({
       .filter((q) => q.eq(q.field('active'), true))
       .collect()
 
+    const settings = await ctx.db
+      .query('tenantSettings')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', tenant._id))
+      .unique()
+
     return {
       clerkOrgId: tenant.clerkOrgId,
       name: tenant.name,
+      legalName: settings?.employerInfo?.legalName ?? null,
       address: tenant.address ?? null,
       branches: branches.map((b) => ({ _id: b._id, label: b.label, branchType: b.branchType })),
     }
@@ -484,6 +501,76 @@ export const createBranchInternal = internalMutation({
       order,
       active: true,
     })
+  },
+})
+
+/**
+ * Internal variant of seedDefaultBranches keyed by tenantId (no caller-role
+ * requirement) — used by the platform-admin createTenant action.
+ */
+export const seedDefaultBranchesInternal = internalMutation({
+  args: { tenantId: v.id('tenants') },
+  handler: async (ctx, { tenantId }) => {
+    const existing = await ctx.db
+      .query('agencyBranches')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    if (existing.length > 0) return existing.map((b) => b._id)
+    const created = await Promise.all(
+      PREDEFINED_BRANCHES.map((b) =>
+        ctx.db.insert('agencyBranches', {
+          tenantId,
+          branchType: b.branchType,
+          label: b.label,
+          isPredefined: true,
+          order: b.order,
+          active: true,
+        }),
+      ),
+    )
+    return created
+  },
+})
+
+/**
+ * Internal variant of seedDefaultProducts keyed by tenantId — used by the
+ * platform-admin createTenant action.
+ */
+export const seedDefaultProductsInternal = internalMutation({
+  args: { tenantId: v.id('tenants') },
+  handler: async (ctx, { tenantId }) => {
+    // Seed products if they don't exist
+    for (const p of DEFAULT_PRODUCTS) {
+      const existing = await ctx.db
+        .query('products')
+        .withIndex('by_key', (q) => q.eq('key', p.key))
+        .first()
+      if (!existing) {
+        await ctx.db.insert('products', {
+          key: p.key,
+          label: p.label,
+          description: p.description,
+          active: true,
+        })
+      }
+    }
+    // Seed agency product subscription with 'hiring' and 'training' as defaults
+    const existingSub = await ctx.db
+      .query('agencyProducts')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    if (existingSub.length === 0) {
+      await ctx.db.insert('agencyProducts', {
+        tenantId,
+        productKey: 'hiring',
+        active: true,
+      })
+      await ctx.db.insert('agencyProducts', {
+        tenantId,
+        productKey: 'training',
+        active: true,
+      })
+    }
   },
 })
 

@@ -3,6 +3,7 @@ import { useQuery, useMutation } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Doc, Id } from '../../../../convex/_generated/dataModel'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Table,
   TableBody,
@@ -16,6 +17,7 @@ import { Button } from '@/shared/ui/Button'
 import { Input } from '@/shared/ui/Input'
 import { Select } from '@/shared/ui/Select'
 import { Badge } from '@/shared/ui/Badge'
+import { USDateInput } from '@/shared/ui/USDateInput'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import {
   Dialog,
@@ -69,12 +71,22 @@ export function ClientsPage() {
   const createManyShifts = useMutation(api.shifts.createMany)
   const updateServiceAddress = useMutation(api.clients.updateServiceAddress)
 
-  const [form, setForm] = useState({
+  const emptyCreateForm = {
     displayName: '',
     serviceType: 'SLS' as 'SLS' | 'ILS',
     authorizationHours: 40,
     riskFlags: '',
-  })
+    uci: '',
+    dob: '',
+    conservatorName: '',
+    conservatorPhone: '',
+    regionalCenter: '',
+    serviceCoordinatorName: '',
+    serviceCoordinatorEmail: '',
+    vendorNumber: '',
+    serviceCode: '',
+  }
+  const [form, setForm] = useState(emptyCreateForm)
   const [showForm, setShowForm] = useState(false)
 
   const [scheduleOpen, setScheduleOpen] = useState(false)
@@ -133,13 +145,18 @@ export function ClientsPage() {
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean),
+      uci: form.uci.trim() || undefined,
+      dob: form.dob || undefined,
+      conservatorName: form.conservatorName.trim() || undefined,
+      conservatorPhone: form.conservatorPhone.trim() || undefined,
+      regionalCenter: form.regionalCenter.trim() || undefined,
+      serviceCoordinatorName: form.serviceCoordinatorName.trim() || undefined,
+      serviceCoordinatorEmail:
+        form.serviceCoordinatorEmail.trim() || undefined,
+      vendorNumber: form.vendorNumber.trim() || undefined,
+      serviceCode: form.serviceCode.trim() || undefined,
     })
-    setForm({
-      displayName: '',
-      serviceType: 'SLS',
-      authorizationHours: 40,
-      riskFlags: '',
-    })
+    setForm(emptyCreateForm)
     setShowForm(false)
   }
 
@@ -404,6 +421,116 @@ export function ClientsPage() {
                 />
               </div>
             </div>
+            <p className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+              Regional center details (optional)
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                  UCI
+                </label>
+                <Input
+                  value={form.uci}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, uci: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                  Date of Birth
+                </label>
+                <USDateInput
+                  value={form.dob}
+                  onChange={(iso) => setForm((f) => ({ ...f, dob: iso }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                  Conservator Name
+                </label>
+                <Input
+                  value={form.conservatorName}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, conservatorName: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                  Conservator Phone
+                </label>
+                <Input
+                  value={form.conservatorPhone}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, conservatorPhone: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                  Regional Center
+                </label>
+                <Input
+                  value={form.regionalCenter}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, regionalCenter: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                  Service Coordinator
+                </label>
+                <Input
+                  value={form.serviceCoordinatorName}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      serviceCoordinatorName: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                  Coordinator Email
+                </label>
+                <Input
+                  type="email"
+                  value={form.serviceCoordinatorEmail}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      serviceCoordinatorEmail: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                  Vendor Number
+                </label>
+                <Input
+                  value={form.vendorNumber}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, vendorNumber: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                  Service Code
+                </label>
+                <Input
+                  value={form.serviceCode}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, serviceCode: e.target.value }))
+                  }
+                  placeholder="e.g. 520 or 896"
+                />
+              </div>
+            </div>
             <Button variant="primary" onClick={handleCreate}>
               Save Client
             </Button>
@@ -465,7 +592,12 @@ export function ClientsPage() {
                       />
                     </TableCell>
                     <TableCell className="font-medium">
-                      {client.displayName}
+                      <Link
+                        to={`/clients/${client._id}`}
+                        className="text-atria-accent hover:underline"
+                      >
+                        {client.displayName}
+                      </Link>
                     </TableCell>
                     <TableCell>
                       <Badge variant="default">{client.serviceType}</Badge>

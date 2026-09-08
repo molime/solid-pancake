@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { getFunctionName } from 'convex/server'
 import { SelectAgencyPage } from './SelectAgencyPage'
 
 const mocks = {
@@ -35,7 +36,15 @@ vi.mock('convex/react', async () => {
     ...actual,
     useConvexAuth: vi.fn(),
     useMutation: vi.fn(() => mocks.ensureAgency),
-    useQuery: vi.fn(() => dbTenantResult),
+    useQuery: vi.fn((query: unknown) => {
+      // The SelectAgencyPage now also queries platform:isAdmin; default it to
+      // false so the selector UI renders for the existing tests.
+      const name = getFunctionName(
+        query as Parameters<typeof getFunctionName>[0],
+      )
+      if (name === 'platform:isAdmin') return false
+      return dbTenantResult
+    }),
   }
 })
 
@@ -506,5 +515,52 @@ describe('SelectAgencyPage', () => {
     expect(
       screen.queryByText(/You don't belong to any agency yet/i),
     ).not.toBeInTheDocument()
+  })
+
+  it('hides admin memberships and auto-selects the candidate org when the user has both roles', async () => {
+    mocks.setActive.mockResolvedValueOnce(undefined)
+
+    mockClerkState({
+      orgs: [
+        {
+          id: 'org_123',
+          name: 'Test Agency',
+          slug: 'test',
+          role: 'org:member',
+          atriaRole: 'org:candidate',
+        },
+        { id: 'org_456', name: 'Admin Agency', slug: 'admin', role: 'org:admin' },
+      ],
+      activeOrgId: null,
+      user: { fullName: 'Candice', primaryEmailAddress: { emailAddress: 'c@x.com' } },
+    })
+    mockConvexAuth({ isLoading: false, isAuthenticated: true })
+
+    render(<SelectAgencyPage />)
+
+    // The admin org is filtered out, leaving one visible membership that is
+    // auto-selected without ever showing the picker.
+    await waitFor(() => {
+      expect(mocks.setActive).toHaveBeenCalledWith({ organization: 'org_123' })
+    })
+    expect(
+      screen.queryByRole('button', { name: /Admin Agency/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps admin memberships visible when the user has no candidate or caregiver role', () => {
+    mockClerkState({
+      orgs: [
+        { id: 'org_123', name: 'Test Agency', slug: 'test', role: 'org:admin' },
+        { id: 'org_456', name: 'Other Agency', slug: 'other', role: 'org:admin' },
+      ],
+      activeOrgId: 'org_123',
+      user: { fullName: 'Alice', primaryEmailAddress: { emailAddress: 'a@x.com' } },
+    })
+    mockConvexAuth({ isLoading: false, isAuthenticated: true })
+
+    render(<SelectAgencyPage />)
+    expect(screen.getByRole('button', { name: /Test Agency/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Other Agency/i })).toBeInTheDocument()
   })
 })
