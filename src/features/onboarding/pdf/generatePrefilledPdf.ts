@@ -16,14 +16,10 @@ const TEMPLATE_NAMES: Record<
   string
 > = {
   health_screen: 'lic_503_health_screen',
-  golden_ages_health_screen: 'golden_ages_health_screen',
   live_scan: 'lic_9163_live_scan',
   criminal_record: 'lic_508_criminal_record',
   w4: 'w4',
   i9: 'i9',
-  de_34: 'de_34_new_hire',
-  bcia_8016: 'bcia_8016_live_scan',
-  hcs_501: 'hcs_501_personnel_record',
 }
 
 // Whiteout rectangles remove residual agency data from the scanned templates
@@ -35,34 +31,6 @@ const WHITEOUT_AREAS: Record<
   // The LIC 503 template is a clean scan — no residual agency data to hide,
   // so no whiteout rectangles (they were masking our own overlaid values).
   health_screen: [],
-  // Golden Ages health documents have small placeholder labels inside each
-  // blank line; white them out so the overlaid applicant data is clean.
-  golden_ages_health_screen: [
-    // Page 2 — Health Questionnaire / Medical History.
-    { page: 1, x: 108.75, y: 717.35, width: 24.01, height: 10.04 },
-    { page: 1, x: 465.75, y: 715.10, width: 19.01, height: 10.04 },
-    { page: 1, x: 121.50, y: 686.60, width: 33.02, height: 10.04 },
-    { page: 1, x: 453.75, y: 688.10, width: 26.02, height: 10.04 },
-    { page: 1, x: 141.75, y: 658.85, width: 19.49, height: 10.04 },
-    // Page 3 — Tuberculosis Screening Questionnaire.
-    { page: 2, x: 131.25, y: 696.35, width: 24.01, height: 10.04 },
-    { page: 2, x: 498.75, y: 671.60, width: 19.01, height: 10.04 },
-    // Page 5 — Employee Health Statement.
-    { page: 4, x: 113.25, y: 632.60, width: 24.01, height: 10.04 },
-    { page: 4, x: 108.00, y: 600.35, width: 19.49, height: 10.04 },
-    // Page 6 — Influenza Vaccine.
-    { page: 5, x: 185.25, y: 439.10, width: 24.01, height: 10.04 },
-    // Page 7 — Employee Flu Vaccine Tracking Form.
-    { page: 6, x: 205.50, y: 673.10, width: 24.01, height: 10.04 },
-    { page: 6, x: 228.78, y: 653.35, width: 37.87, height: 12.18 },
-    { page: 6, x: 293.25, y: 652.85, width: 32.02, height: 10.04 },
-    // Page 8 — COVID-19 Vaccination Religious Exemption.
-    { page: 7, x: 141.75, y: 550.85, width: 42.51, height: 10.04 },
-    { page: 7, x: 136.50, y: 535.85, width: 42.02, height: 10.04 },
-    { page: 7, x: 122.25, y: 518.60, width: 31.02, height: 10.04 },
-    { page: 7, x: 156.00, y: 486.35, width: 26.02, height: 10.04 },
-    { page: 7, x: 153.75, y: 469.85, width: 22.50, height: 10.04 },
-  ],
   // Section 4 "Agency Address Set Contributing Agency" comes pre-filled with
   // the California Department of Social Services address — that pre-fill is
   // correct and must stay visible, so no whiteout for live_scan.
@@ -70,9 +38,6 @@ const WHITEOUT_AREAS: Record<
   criminal_record: [],
   w4: [],
   i9: [],
-  de_34: [],
-  bcia_8016: [],
-  hcs_501: [],
 }
 
 function applyWhiteout(doc: PDFDocument, mappingKey: keyof typeof MAPPINGS) {
@@ -119,10 +84,7 @@ export async function loadTemplate(name: string): Promise<PDFDocument> {
     return PDFDocument.create()
   }
   const bytes = new Uint8Array(await response.arrayBuffer())
-  // Some agency PDF templates come with encryption/owner passwords that
-  // prevent pdf-lib from loading them. We only read and overlay text, so
-  // ignoring encryption is safe for our fill-and-download use case.
-  return PDFDocument.load(bytes, { ignoreEncryption: true })
+  return PDFDocument.load(bytes)
 }
 
 function getOrCreatePage(doc: PDFDocument, pageIndex: number) {

@@ -116,12 +116,6 @@ const DEFAULT_PRODUCTS = [
     description: 'Candidate application, onboarding, training, and hiring flow.',
   },
   {
-    key: 'training',
-    label: 'Training & Compliance Courses',
-    description:
-      'Assignable, trackable staff training courses with videos, interactive content, and quizzes.',
-  },
-  {
     key: 'full_platform',
     label: 'Full Platform',
     description: 'Hiring + shift management + documentation + scheduling + billing.',
@@ -188,7 +182,7 @@ export const seedDefaultProducts = mutation({
         })
       }
     }
-    // Seed agency product subscription with 'hiring' and 'training' as defaults
+    // Seed agency product subscription with 'hiring' as default
     const existingSub = await ctx.db
       .query('agencyProducts')
       .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
@@ -197,11 +191,6 @@ export const seedDefaultProducts = mutation({
       await ctx.db.insert('agencyProducts', {
         tenantId,
         productKey: 'hiring',
-        active: true,
-      })
-      await ctx.db.insert('agencyProducts', {
-        tenantId,
-        productKey: 'training',
         active: true,
       })
     }
@@ -460,15 +449,9 @@ export const getPublicAgencyInfo = query({
       .filter((q) => q.eq(q.field('active'), true))
       .collect()
 
-    const settings = await ctx.db
-      .query('tenantSettings')
-      .withIndex('by_tenant', (q) => q.eq('tenantId', tenant._id))
-      .unique()
-
     return {
       clerkOrgId: tenant.clerkOrgId,
       name: tenant.name,
-      legalName: settings?.employerInfo?.legalName ?? null,
       address: tenant.address ?? null,
       branches: branches.map((b) => ({ _id: b._id, label: b.label, branchType: b.branchType })),
     }
@@ -554,7 +537,7 @@ export const seedDefaultProductsInternal = internalMutation({
         })
       }
     }
-    // Seed agency product subscription with 'hiring' and 'training' as defaults
+    // Seed agency product subscription with 'hiring' as default
     const existingSub = await ctx.db
       .query('agencyProducts')
       .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
@@ -563,11 +546,6 @@ export const seedDefaultProductsInternal = internalMutation({
       await ctx.db.insert('agencyProducts', {
         tenantId,
         productKey: 'hiring',
-        active: true,
-      })
-      await ctx.db.insert('agencyProducts', {
-        tenantId,
-        productKey: 'training',
         active: true,
       })
     }

@@ -13,10 +13,6 @@ import {
   ACKNOWLEDGMENT_DOCUMENTS,
   jobDescriptionForBranch,
   jobDescriptionForPosition,
-  jobDescriptionForAgency,
-  isGoldenAgesAgency,
-  GOLDEN_AGES_CAREGIVER_JD,
-  GOLDEN_AGES_COORDINATOR_JD,
 } from './legalText'
 import { positionOptionsForBranch } from './types'
 
@@ -212,30 +208,5 @@ describe('position options', () => {
       'Support Coordinator',
       'Day Program Assistant',
     ])
-  })
-})
-
-describe('agency detection', () => {
-  it('detects Golden Ages by name', () => {
-    expect(isGoldenAgesAgency('Golden Ages Home Care')).toBe(true)
-    expect(isGoldenAgesAgency('golden ages')).toBe(true)
-    expect(isGoldenAgesAgency('Individuals Choice, Inc')).toBe(false)
-    expect(isGoldenAgesAgency(undefined)).toBe(false)
-  })
-})
-
-describe('agency-aware job descriptions', () => {
-  it('returns Golden Ages caregiver JD for Golden Ages', () => {
-    expect(jobDescriptionForAgency('Golden Ages Home Care', undefined, 'Caregiver')).toBe(GOLDEN_AGES_CAREGIVER_JD)
-  })
-
-  it('returns Golden Ages coordinator JD for Golden Ages coordinators', () => {
-    expect(jobDescriptionForAgency('Golden Ages Home Care', undefined, 'Coordinator')).toBe(GOLDEN_AGES_COORDINATOR_JD)
-    expect(jobDescriptionForAgency('Golden Ages Home Care', undefined, 'Support Coordinator')).toBe(GOLDEN_AGES_COORDINATOR_JD)
-  })
-
-  it('falls back to Individuals Choice descriptions for non-Golden Ages agencies', () => {
-    expect(jobDescriptionForAgency('Individuals Choice, Inc', 'ILS', 'Caregiver')).toBe(ILS_JOB_DESCRIPTION)
-    expect(jobDescriptionForAgency('Individuals Choice, Inc', 'SLS', 'Caregiver')).toBe(SLS_JOB_DESCRIPTION)
   })
 })

@@ -144,25 +144,12 @@ type MockState = {
   summary?: typeof SUMMARY_CLEAR
   obligations?: ReturnType<typeof makeObligations>
   retention?: typeof RETENTION
-  fixList?: {
-    status: 'ready' | 'almost' | 'not_ready'
-    items: {
-      id: string
-      severity: 'critical' | 'soon'
-      title: string
-      detail?: string
-      linkTo: string | null
-      dueAt?: string
-    }[]
-  }
-  member?: { role: string }
 }
 
 function mockState(state: MockState) {
   vi.mocked(useQuery).mockImplementation(((queryRef: unknown) => {
     const name = functionName(queryRef)
     if (name === 'auditReadiness:getReport') return state.report
-    if (name === 'auditReadiness:getFixList') return state.fixList
     if (name === 'incidents:getIncidentTimeliness') return state.timeliness
     if (name === 'auditReadiness:getAnnualEvaluation') return undefined
     if (name === 'agencyObligations:listObligations') return state.obligations
@@ -170,7 +157,6 @@ function mockState(state: MockState) {
       return state.summary
     }
     if (name === 'documentArchive:getRetentionReport') return state.retention
-    if (name === 'members:me') return state.member
     return undefined
   }) as unknown as typeof useQuery)
 }
@@ -178,11 +164,9 @@ function mockState(state: MockState) {
 // Imported lazily inside the tests so the convex/react mock is in place.
 let AuditReadinessPageUnderTest: (typeof import('./AuditReadinessPage'))['AuditReadinessPage']
 
-// The simple traffic-light view is the default; the full auditor-facing view
-// lives at /audit?view=full. Existing tests below exercise the full view.
-function renderPage(initialEntries: string[] = ['/audit?view=full']) {
+function renderPage() {
   return render(
-    <MemoryRouter initialEntries={initialEntries}>
+    <MemoryRouter>
       <AuditReadinessPageUnderTest />
     </MemoryRouter>,
   )
@@ -354,139 +338,5 @@ describe('AuditReadinessPage — five pillars', () => {
     expect(functionName(ref)).toBe('auditPacket:exportPacketCsv')
     expect(args).toMatchObject({ clerkOrgId: 'org_123' })
     expect((args as { startDate: string }).startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
-  })
-})
-
-
-describe('AuditReadinessPage — simple view (default)', () => {
-  beforeEach(async () => {
-    vi.clearAllMocks()
-    const module = await import('./AuditReadinessPage')
-    AuditReadinessPageUnderTest = module.AuditReadinessPage
-  })
-
-  it('shows the green state when nothing needs fixing', () => {
-    mockState({ fixList: { status: 'ready', items: [] } })
-
-    renderPage(['/audit'])
-
-    expect(screen.getByText("You're audit ready.")).toBeInTheDocument()
-    expect(screen.queryByText('What to fix')).not.toBeInTheDocument()
-    // The full view's pillar sections stay one level down.
-    expect(screen.queryByText('Personnel')).not.toBeInTheDocument()
-  })
-
-  it('shows the yellow state with a fix-it link per item', () => {
-    mockState({
-      fixList: {
-        status: 'almost',
-        items: [
-          {
-            id: 'credential-expiring-1',
-            severity: 'soon',
-            title: "Maria's CPR card expires in 12 days",
-            linkTo: '/compliance',
-          },
-        ],
-      },
-    })
-
-    renderPage(['/audit'])
-
-    expect(screen.getByText('Almost — fix this 1 thing.')).toBeInTheDocument()
-    const fixLink = screen.getByRole('link', { name: /fix it/i })
-    expect(fixLink).toHaveAttribute('href', '/compliance')
-    expect(
-      screen.getByText("Maria's CPR card expires in 12 days"),
-    ).toBeInTheDocument()
-  })
-
-  it('shows the red state with numbered items and no button when linkTo is null', () => {
-    mockState({
-      fixList: {
-        status: 'not_ready',
-        items: [
-          {
-            id: 'sir-written-1',
-            severity: 'critical',
-            title: "John's incident is missing its written report",
-            detail: 'overdue by 6 hours',
-            linkTo: '/incidents/abc123',
-          },
-          {
-            id: 'billing-1',
-            severity: 'critical',
-            title: "A shift for John can't be billed yet",
-            detail: 'Missing required credential: Driver License',
-            linkTo: null,
-          },
-        ],
-      },
-    })
-
-    renderPage(['/audit'])
-
-    expect(screen.getByText('Not ready — fix these 2 things.')).toBeInTheDocument()
-    const fixLinks = screen.getAllByRole('link', { name: /fix it/i })
-    expect(fixLinks).toHaveLength(1)
-    expect(fixLinks[0]).toHaveAttribute('href', '/incidents/abc123')
-    expect(screen.getByText('overdue by 6 hours')).toBeInTheDocument()
-  })
-
-  it('links to the auditors area and hides Logs for non-admins', () => {
-    mockState({
-      fixList: { status: 'ready', items: [] },
-      member: { role: 'org:hr' },
-    })
-
-    renderPage(['/audit'])
-
-    expect(
-      screen.getByRole('link', { name: /full details, tables & exports/i }),
-    ).toHaveAttribute('href', '/audit?view=full')
-    expect(
-      screen.queryByRole('link', { name: /audit trail \(every recorded action\)/i }),
-    ).not.toBeInTheDocument()
-  })
-
-  it('shows the Logs link to admins', () => {
-    mockState({
-      fixList: { status: 'ready', items: [] },
-      member: { role: 'org:admin' },
-    })
-
-    renderPage(['/audit'])
-
-    expect(
-      screen.getByRole('link', { name: /audit trail \(every recorded action\)/i }),
-    ).toHaveAttribute('href', '/logs')
-  })
-
-  it('downloads the audit packet for the selected period', async () => {
-    Object.assign(URL, {
-      createObjectURL: vi.fn(() => 'blob:mock'),
-      revokeObjectURL: vi.fn(),
-    })
-    convexQuery.mockResolvedValue('"csv"')
-    mockState({ fixList: { status: 'ready', items: [] } })
-
-    renderPage(['/audit'])
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /download audit packet/i }),
-    )
-
-    await waitFor(() => expect(convexQuery).toHaveBeenCalled())
-    const [ref, args] = convexQuery.mock.calls[0] as [unknown, unknown]
-    expect(functionName(ref)).toBe('auditPacket:exportPacketCsv')
-    expect(args).toMatchObject({ clerkOrgId: 'org_123' })
-    const { startDate, endDate } = args as { startDate: string; endDate: string }
-    expect(startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
-    // Default period is the last 3 months (~90 days back from today).
-    const spanDays =
-      (new Date(endDate).getTime() - new Date(startDate).getTime()) /
-      (24 * 60 * 60 * 1000)
-    expect(spanDays).toBeGreaterThanOrEqual(89)
-    expect(spanDays).toBeLessThanOrEqual(91)
   })
 })

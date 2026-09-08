@@ -5,49 +5,6 @@ import { api } from '../../convex/_generated/api'
 
 const SELECTED_ORG_STORAGE_KEY = 'atria.selectedClerkOrgId'
 
-function getCurrentSubdomain(): string | null {
-  if (typeof window === 'undefined') return null
-  const host = window.location.hostname
-  const parts = host.split('.')
-  // Ignore www and bare apex domains (e.g. atriaxsolutions.com)
-  if (parts.length < 3) return null
-  return parts[0].toLowerCase()
-}
-
-function slugMatchesSubdomain(slug: string | undefined, subdomain: string | null): boolean {
-  if (!slug || !subdomain) return false
-  const normalized = slug.toLowerCase().replace(/[^a-z0-9]+/g, '')
-  return normalized.includes(subdomain.replace(/[^a-z0-9]+/g, ''))
-}
-
-type DbTenant = {
-  clerkOrgId: string
-  tenantName: string
-  slug?: string
-  agencyAddress?: string | null
-  role: string
-}
-
-export function pickPreferredDbTenant(
-  tenants: DbTenant[] | undefined,
-  storedClerkOrgId: string | null,
-): DbTenant | undefined {
-  if (!tenants || tenants.length === 0) return undefined
-  // 1. Explicit stored choice, if it is still a valid membership.
-  const stored = storedClerkOrgId
-    ? tenants.find((t) => t.clerkOrgId === storedClerkOrgId)
-    : undefined
-  if (stored) return stored
-  // 2. Tenant whose slug matches the current subdomain (e.g. goldenages.atriaxsolutions.com).
-  const subdomain = getCurrentSubdomain()
-  const subdomainMatch = subdomain
-    ? tenants.find((t) => slugMatchesSubdomain(t.slug, subdomain))
-    : undefined
-  if (subdomainMatch) return subdomainMatch
-  // 3. Fall back to the first membership.
-  return tenants[0]
-}
-
 // How long a resolved membership list must continuously exclude the stored
 // tenant before the stored id is cleared. During a Clerk token refresh the
 // getMyTenant query resubscribes and can transiently resolve without the
@@ -105,7 +62,9 @@ export function useTenant() {
   )
 
   const storedClerkOrgId = getStoredClerkOrgId()
-  const dbTenant = pickPreferredDbTenant(dbTenants, storedClerkOrgId)
+  const dbTenant =
+    dbTenants?.find((tenant) => tenant.clerkOrgId === storedClerkOrgId) ??
+    dbTenants?.[0]
 
   const { isLoading: convexAuthLoading } = useConvexAuth()
   const clerkOrgId = orgClerkOrgId ?? storedClerkOrgId ?? dbTenant?.clerkOrgId
@@ -123,8 +82,8 @@ export function useTenant() {
     if (orgClerkOrgId || !dbTenants) return
     const stored = getStoredClerkOrgId()
     if (!stored) {
-      const preferred = pickPreferredDbTenant(dbTenants, null)
-      if (preferred) setSelectedClerkOrgId(preferred.clerkOrgId)
+      const first = dbTenants[0]
+      if (first) setSelectedClerkOrgId(first.clerkOrgId)
       return
     }
     if (dbTenants.some((tenant) => tenant.clerkOrgId === stored)) return

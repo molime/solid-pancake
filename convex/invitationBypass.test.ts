@@ -432,22 +432,6 @@ describe('friendlyClerkMessage', () => {
     )
   })
 
-  it('maps the Clerk instance allowlist rejection to friendly text', () => {
-    expect(
-      friendlyClerkMessage(
-        'candidate@gmail.com is not allowed to access this application.',
-      ),
-    ).toBe(
-      'This email address is not allowed by email restrictions. Please contact the agency.',
-    )
-  })
-
-  it('maps the email-taken duplicate variant to friendly text', () => {
-    expect(
-      friendlyClerkMessage('That email address is taken. Please try another.'),
-    ).toBe('An account with this email already exists. Please sign in instead.')
-  })
-
   it('maps the identification_exists Clerk error to friendly text', () => {
     expect(friendlyClerkMessage('identification_exists')).toBe(
       'An account with this email already exists.',

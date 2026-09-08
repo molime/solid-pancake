@@ -4,8 +4,7 @@ import { Suspense, lazy, type ReactNode } from 'react'
 import { AppShell } from './shell/AppShell'
 import { PlatformShell } from './shell/PlatformShell'
 import { SelectAgencyPage } from './auth/SelectAgencyPage'
-import { PlatformAdminRouteGuard, PersonnelRecordRouteGuard, SignedInRouteGuard, TenantRoleRouteGuard } from './shell/RouteGuard'
-import { TrainingProductGuard } from './shell/TrainingProductGuard'
+import { PlatformAdminRouteGuard, SignedInRouteGuard, TenantRoleRouteGuard, TrainingRouteGuard } from './shell/RouteGuard'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 import { cn } from '@/shared/lib/cn'
@@ -69,11 +68,6 @@ const SupportPage = lazy(() =>
 const CaregiverTodayPage = lazy(() =>
   import('@/features/caregiver/pages/CaregiverTodayPage').then((module) => ({
     default: module.CaregiverTodayPage,
-  })),
-)
-const PersonnelRecordPage = lazy(() =>
-  import('@/features/caregiver/pages/PersonnelRecordPage').then((module) => ({
-    default: module.PersonnelRecordPage,
   })),
 )
 const CoordinatorReviewPage = lazy(() =>
@@ -269,11 +263,6 @@ const ApplicationFormPage = lazy(() =>
     default: module.ApplicationFormPage,
   })),
 )
-const DynamicApplicationPage = lazy(() =>
-  import('@/features/forms/pages/DynamicApplicationPage').then((module) => ({
-    default: module.DynamicApplicationPage,
-  })),
-)
 const ApplicationStatusPage = lazy(() =>
   import('@/features/onboarding/pages/ApplicationStatusPage').then((module) => ({
     default: module.ApplicationStatusPage,
@@ -312,26 +301,6 @@ const CandidateOnboardingIndex = lazy(() =>
 const TrainingPage = lazy(() =>
   import('@/features/onboarding/pages/TrainingPage').then((module) => ({
     default: module.TrainingPage,
-  })),
-)
-const TrainingHubPage = lazy(() =>
-  import('@/features/training/pages/TrainingHubPage').then((module) => ({
-    default: module.TrainingHubPage,
-  })),
-)
-const CoursePlayerPage = lazy(() =>
-  import('@/features/training/pages/CoursePlayerPage').then((module) => ({
-    default: module.CoursePlayerPage,
-  })),
-)
-const TrainingCertificatePage = lazy(() =>
-  import('@/features/training/pages/TrainingCertificatePage').then((module) => ({
-    default: module.TrainingCertificatePage,
-  })),
-)
-const TrainingAdminPage = lazy(() =>
-  import('@/features/training/pages/TrainingAdminPage').then((module) => ({
-    default: module.TrainingAdminPage,
   })),
 )
 const OnboardingSuccessPage = lazy(() =>
@@ -518,7 +487,7 @@ export function AppRouter() {
           }
         />
         <Route
-          path="platform/subscriptions/:tenantSlug"
+          path="platform/subscriptions/:tenantId"
           element={
             <RouteSuspense>
               <PlatformSubscriptionDetailPage />
@@ -765,11 +734,11 @@ export function AppRouter() {
           path="caregiver/today"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:caregiver']}>
-              <PersonnelRecordRouteGuard>
+              <TrainingRouteGuard>
                 <RouteSuspense>
                   <CaregiverTodayPage />
                 </RouteSuspense>
-              </PersonnelRecordRouteGuard>
+              </TrainingRouteGuard>
             </TenantRoleRouteGuard>
           }
         />
@@ -959,11 +928,11 @@ export function AppRouter() {
           path="caregiver/schedule"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:caregiver']}>
-              <PersonnelRecordRouteGuard>
+              <TrainingRouteGuard>
                 <RouteSuspense>
                   <CaregiverSchedulePage />
                 </RouteSuspense>
-              </PersonnelRecordRouteGuard>
+              </TrainingRouteGuard>
             </TenantRoleRouteGuard>
           }
         />
@@ -971,20 +940,8 @@ export function AppRouter() {
           path="caregiver/availability"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:caregiver']}>
-              <PersonnelRecordRouteGuard>
-                <RouteSuspense>
-                  <AvailabilityPage />
-                </RouteSuspense>
-              </PersonnelRecordRouteGuard>
-            </TenantRoleRouteGuard>
-          }
-        />
-        <Route
-          path="personnel-record"
-          element={
-            <TenantRoleRouteGuard allowedRoles={['org:caregiver']}>
               <RouteSuspense>
-                <PersonnelRecordPage />
+                <AvailabilityPage />
               </RouteSuspense>
             </TenantRoleRouteGuard>
           }
@@ -1000,86 +957,12 @@ export function AppRouter() {
           }
         />
         <Route
-          path="training"
-          element={
-            <TenantRoleRouteGuard
-              allowedRoles={[
-                'org:admin',
-                'org:coordinator',
-                'org:hr',
-                'org:caregiver',
-                'org:candidate',
-              ]}
-            >
-              <TrainingProductGuard>
-                <RouteSuspense>
-                  <TrainingHubPage />
-                </RouteSuspense>
-              </TrainingProductGuard>
-            </TenantRoleRouteGuard>
-          }
-        />
-        <Route
-          path="training/:courseId"
-          element={
-            <TenantRoleRouteGuard
-              allowedRoles={[
-                'org:admin',
-                'org:coordinator',
-                'org:hr',
-                'org:caregiver',
-                'org:candidate',
-              ]}
-            >
-              <TrainingProductGuard>
-                <RouteSuspense>
-                  <CoursePlayerPage />
-                </RouteSuspense>
-              </TrainingProductGuard>
-            </TenantRoleRouteGuard>
-          }
-        />
-        <Route
-          path="training/certificate/:courseId"
-          element={
-            <TenantRoleRouteGuard
-              allowedRoles={[
-                'org:admin',
-                'org:coordinator',
-                'org:hr',
-                'org:caregiver',
-                'org:candidate',
-              ]}
-            >
-              <TrainingProductGuard>
-                <RouteSuspense>
-                  <TrainingCertificatePage />
-                </RouteSuspense>
-              </TrainingProductGuard>
-            </TenantRoleRouteGuard>
-          }
-        />
-        <Route
-          path="training/admin"
-          element={
-            <TenantRoleRouteGuard allowedRoles={['org:admin', 'org:hr']}>
-              <TrainingProductGuard>
-                <RouteSuspense>
-                  <TrainingAdminPage />
-                </RouteSuspense>
-              </TrainingProductGuard>
-            </TenantRoleRouteGuard>
-          }
-        />
-        <Route
           path="onboarding"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:candidate', 'org:caregiver']}>
-              <PersonnelRecordRouteGuard>
-                <RouteSuspense>
-                  <CandidateOnboardingIndex />
-                </RouteSuspense>
-              </PersonnelRecordRouteGuard>
+              <RouteSuspense>
+                <CandidateOnboardingIndex />
+              </RouteSuspense>
             </TenantRoleRouteGuard>
           }
         />
@@ -1087,11 +970,9 @@ export function AppRouter() {
           path="onboarding/checklist"
           element={
             <TenantRoleRouteGuard allowedRoles={['org:candidate', 'org:caregiver']}>
-              <PersonnelRecordRouteGuard>
-                <RouteSuspense>
-                  <CandidateOnboardingPage />
-                </RouteSuspense>
-              </PersonnelRecordRouteGuard>
+              <RouteSuspense>
+                <CandidateOnboardingPage />
+              </RouteSuspense>
             </TenantRoleRouteGuard>
           }
         />
@@ -1101,16 +982,6 @@ export function AppRouter() {
             <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
               <RouteSuspense>
                 <ApplicationFormPage />
-              </RouteSuspense>
-            </TenantRoleRouteGuard>
-          }
-        />
-        <Route
-          path="onboarding/application-dynamic"
-          element={
-            <TenantRoleRouteGuard allowedRoles={['org:candidate']}>
-              <RouteSuspense>
-                <DynamicApplicationPage />
               </RouteSuspense>
             </TenantRoleRouteGuard>
           }

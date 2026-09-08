@@ -75,7 +75,7 @@ function isBreached(reportedAt: string | undefined, dueAt: string, nowIso: strin
   return reportedAt ? reportedAt > dueAt : nowIso > dueAt
 }
 
-export function withSlaFields(incident: Incident, nowIso: string) {
+function withSlaFields(incident: Incident, nowIso: string) {
   const vDue = verbalDueAt(incident)
   const wDue = writtenDueAt(incident)
   return {

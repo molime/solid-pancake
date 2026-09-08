@@ -14,29 +14,11 @@ describe('resolveAgencyLogo', () => {
     )
   })
 
-  it('returns the Golden Ages logo for a matching tenant name', () => {
-    expect(resolveAgencyLogo('Golden Ages Home Care')).toBe(
-      '/agency-logo-goldenages.png',
-    )
-  })
-
-  it('matches Golden Ages via the employer legal name when the tenant name differs', () => {
-    expect(
-      resolveAgencyLogo('My Organization Test', 'Golden Ages Home Care, LLC'),
-    ).toBe('/agency-logo-goldenages.png')
-  })
-
-  it('matches Individuals Choice via the employer legal name', () => {
-    expect(resolveAgencyLogo(undefined, 'Individuals Choice, Inc')).toBe(
-      '/agency-logo-individualschoice.jpeg',
-    )
-  })
-
   it('returns null for any other tenant', () => {
     expect(resolveAgencyLogo('Some Other Agency')).toBeNull()
   })
 
-  it('returns null when both names are undefined', () => {
+  it('returns null when tenantName is undefined', () => {
     expect(resolveAgencyLogo(undefined)).toBeNull()
   })
 

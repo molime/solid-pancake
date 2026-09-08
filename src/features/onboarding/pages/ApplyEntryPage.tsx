@@ -13,8 +13,7 @@ import { cn } from '@/shared/lib/cn'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 import { formatPhone, isValidEmail, isValidPhone } from '@/shared/validation'
-import { positionOptionsForAgency } from '../components/application/types'
-import { ApplyFlowBranding } from '../components/application/ApplyFlowBranding'
+import { positionOptionsForBranch } from '../components/application/types'
 
 export function ApplyEntryPage() {
   const [searchParams] = useSearchParams()
@@ -66,7 +65,15 @@ export function ApplyEntryPage() {
             </p>
           </CardContent>
         </Card>
-        <ApplyFlowBranding name={agencyInfo?.name} legalName={agencyInfo?.legalName} />
+        <div className='mt-6 flex flex-col items-center gap-2'>
+          {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
+          <img
+            src="/agency-logo-individualschoice.jpeg"
+            alt="Agency logo"
+            className='h-10 w-auto object-contain opacity-70'
+          />
+          <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
+        </div>
       </div>
     )
   }
@@ -212,7 +219,15 @@ export function ApplyEntryPage() {
             </p>
           </CardContent>
         </Card>
-        <ApplyFlowBranding name={agencyInfo?.name} legalName={agencyInfo?.legalName} />
+        <div className='mt-6 flex flex-col items-center gap-2'>
+          {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
+          <img
+            src="/agency-logo-individualschoice.jpeg"
+            alt="Agency logo"
+            className='h-10 w-auto object-contain opacity-70'
+          />
+          <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
+        </div>
       </div>
     )
   }
@@ -324,7 +339,7 @@ export function ApplyEntryPage() {
                     onChange={(e) => setSelectedPosition(e.target.value)}
                   >
                     <option value='' disabled>Select position</option>
-                    {positionOptionsForAgency(agencyName, branchType).map((o) => (
+                    {positionOptionsForBranch(branchType).map((o) => (
                       <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </Select>
@@ -346,7 +361,15 @@ export function ApplyEntryPage() {
           )}
         </CardContent>
       </Card>
-      <ApplyFlowBranding name={agencyInfo?.name} legalName={agencyInfo?.legalName} />
+      <div className='mt-6 flex flex-col items-center gap-2'>
+        {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
+        <img
+          src="/agency-logo-individualschoice.jpeg"
+          alt="Agency logo"
+          className='h-10 w-auto object-contain opacity-70'
+        />
+        <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
+      </div>
     </div>
   )
 }

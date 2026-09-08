@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { SignedInApplyFlowBranding } from '../components/application/ApplyFlowBranding'
 import { useNavigate } from 'react-router-dom'
 import { useClerk } from '@clerk/react'
 import { clearSessionData } from '@/shared/lib/clearSession'
@@ -716,7 +715,6 @@ export function TrainingPage() {
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
   const completeTraining = useMutation(api.platformTrainingCompletions.completeForCandidate)
-  const completePlatformTraining = useMutation(api.onboarding.completePlatformTraining)
   const hasFullPlatform = useQuery(
     api.agencyConfig.hasProduct,
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId, productKey: 'full_platform' } : 'skip',
@@ -790,46 +788,7 @@ export function TrainingPage() {
       window.sessionStorage.setItem('atria.training.stepIndex', String(currentIndex))
     }
   }, [currentIndex])
-
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  const allTrainingComplete =
-    completions !== undefined && completions !== null &&
-    completions.length > 0 &&
-    steps.every((s) => completedIds.has(s.id))
-
-  // Once every required step is recorded, also write the aggregate
-  // platform_training completion row that TrainingRouteGuard uses to
-  // decide whether a caregiver can enter the dashboard on future sessions.
-  const hasRecordedFinalCompletion = useRef(false)
-  useEffect(() => {
-    if (
-      allTrainingComplete &&
-      effectiveClerkOrgId &&
-      !hasRecordedFinalCompletion.current
-    ) {
-      hasRecordedFinalCompletion.current = true
-      completePlatformTraining({ clerkOrgId: effectiveClerkOrgId })
-    }
-  }, [allTrainingComplete, effectiveClerkOrgId, completePlatformTraining])
-
-  if (allTrainingComplete) {
-    markTrainingCompletedInSession()
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.removeItem('atria.training.stepIndex')
-    }
-  }
-
-  // If the user already finished training, send them straight to the
-  // dashboard instead of leaving them on the finish screen.
-  useEffect(() => {
-    if (!allTrainingComplete || effectiveHasFullPlatform === undefined) return
-    if (effectiveHasFullPlatform === false) {
-      navigate('/onboarding/success', { replace: true })
-    } else {
-      navigate('/caregiver/today', { replace: true })
-    }
-  }, [allTrainingComplete, effectiveHasFullPlatform, navigate])
 
   const step = steps[currentIndex]
   const isLast = currentIndex === steps.length - 1
@@ -843,6 +802,17 @@ export function TrainingPage() {
         </div>
       </div>
     )
+  }
+  const allTrainingComplete =
+    completions !== undefined && completions !== null &&
+    completions.length > 0 &&
+    steps.every((s) => completedIds.has(s.id))
+
+  if (allTrainingComplete) {
+    markTrainingCompletedInSession()
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem('atria.training.stepIndex')
+    }
   }
 
   // A transient isLoading/org-id blip (Clerk token refresh) must not blank
@@ -978,7 +948,15 @@ export function TrainingPage() {
           </p>
         </CardContent>
       </Card>
-      <SignedInApplyFlowBranding />
+      <div className='mt-6 flex flex-col items-center gap-2'>
+        {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
+        <img
+          src="/agency-logo-individualschoice.jpeg"
+          alt="Agency logo"
+          className='h-10 w-auto object-contain opacity-70'
+        />
+        <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
+      </div>
     </div>
   )
 }

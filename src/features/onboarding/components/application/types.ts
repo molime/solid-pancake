@@ -1,6 +1,6 @@
 export type IdType = 'ssn' | 'itin'
 export type Availability = 'full_time' | 'part_time'
-export type Shift = string
+export type Shift = 'morning' | 'evening' | 'overnight'
 export type CitizenshipStatus =
   | 'citizen'
   | 'noncitizen_national'
@@ -69,10 +69,6 @@ export interface CriminalRecord {
   convictedDetails: string
   convictedUnderAlias: boolean
   aliasNames: string
-  // LIC 508 asks whether the applicant lived outside California in the past
-  // five years. Only asked in the Golden Ages flow; undefined means the
-  // applicant was never asked and the form boxes stay blank.
-  livedOutsideCalifornia?: boolean
 }
 
 export interface DriversLicense {
@@ -177,16 +173,6 @@ export const POSITION_OPTIONS = [
   { value: 'Day Program Assistant', label: 'Day Program Assistant' },
 ]
 
-export const GOLDEN_AGES_POSITION_OPTIONS = [
-  { value: 'Affiliated Home Care Aide (HCA)', label: 'Affiliated Home Care Aide (HCA)' },
-  { value: 'Supervisor', label: 'Supervisor' },
-  { value: 'Administrator', label: 'Administrator' },
-  { value: 'Human Resource (HR) Manager', label: 'Human Resource (HR) Manager' },
-  { value: 'Office Manager', label: 'Office Manager' },
-  { value: 'Payroll Manager', label: 'Payroll Manager' },
-  { value: 'CFO / Vice President of Finance', label: 'CFO / Vice President of Finance' },
-]
-
 export function positionOptionsForBranch(branchType?: string) {
   if (branchType === 'ILS') {
     return POSITION_OPTIONS.map((o) =>
@@ -194,13 +180,6 @@ export function positionOptionsForBranch(branchType?: string) {
     )
   }
   return POSITION_OPTIONS
-}
-
-export function positionOptionsForAgency(agencyName?: string, branchType?: string) {
-  if ((agencyName ?? '').toLowerCase().includes('golden')) {
-    return GOLDEN_AGES_POSITION_OPTIONS
-  }
-  return positionOptionsForBranch(branchType)
 }
 
 export const SHIFT_OPTIONS = [

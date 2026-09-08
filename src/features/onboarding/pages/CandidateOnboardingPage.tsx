@@ -1,5 +1,4 @@
 import { useMemo, useRef } from 'react'
-import { SignedInApplyFlowBranding } from '../components/application/ApplyFlowBranding'
 import { useNavigate } from 'react-router-dom'
 import { useClerk } from '@clerk/react'
 import { clearSessionData } from '@/shared/lib/clearSession'
@@ -69,20 +68,14 @@ const TASK_META: Record<string, { label: string; shortLabel: string; actionLabel
     actionLabel: 'Upload car insurance',
     due: 'Due in 3 days',
   },
-  personnel_record: {
-    label: 'Personnel record (HCS 501)',
-    shortLabel: 'Personnel record',
-    actionLabel: 'Upload personnel record',
-    due: 'Required now that you are hired',
-  },
 }
 
-const UPLOAD_TYPES = new Set(['photo_id', 'tax_id_ssn', 'cpr_certificate', 'health_screen', 'background_check', 'additional_certifications', 'car_insurance', 'personnel_record'])
+const UPLOAD_TYPES = new Set(['photo_id', 'tax_id_ssn', 'cpr_certificate', 'health_screen', 'background_check', 'additional_certifications', 'car_insurance'])
 
-function getTaskRoute(task: Doc<'candidateTasks'>, hasTrainingProduct: boolean | undefined) {
+function getTaskRoute(task: Doc<'candidateTasks'>) {
   if (task.type === 'form_submission') return '/onboarding/application'
   if (task.type === 'employment_agreement') return '/onboarding/employment-agreement'
-  if (task.type === 'platform_training') return hasTrainingProduct ? '/training' : '/onboarding/training'
+  if (task.type === 'platform_training') return '/onboarding/training'
   return `/onboarding/upload/${task._id}`
 }
 
@@ -94,7 +87,7 @@ export function CandidateOnboardingPage() {
     clearSessionData()
     signOut(() => navigate('/sign-in'))
   }
-  const { clerkOrgId, tenantName, isLoading } = useTenant()
+  const { clerkOrgId, isLoading } = useTenant()
 
   // Sticky mounting: once the page has rendered its content once, it must
   // never unmount back to a loader during brief Clerk/Convex auth flickers.
@@ -113,24 +106,9 @@ export function CandidateOnboardingPage() {
     api.candidates.getCandidateProfile,
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
-  const employerInfo = useQuery(
-    api.tenantSettings.getEmployerInfo,
-    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
-  )
-  const hasTrainingProduct = useQuery(
-    api.agencyConfig.hasProduct,
-    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId, productKey: 'training' } : 'skip',
-  )
 
   // Skipped tasks (e.g. car_insurance when the applicant answered No to the
   // transport question) are never shown and never block progress.
-  const isGoldenAges = useMemo(
-    () =>
-      (employerInfo?.legalName ?? '').toLowerCase().includes('golden') ||
-      (tenantName ?? '').toLowerCase().includes('golden'),
-    [employerInfo, tenantName],
-  )
-
   const visibleTasks = useMemo(
     () => tasks?.filter((t) => t.status !== 'skipped'),
     [tasks],
@@ -179,17 +157,11 @@ export function CandidateOnboardingPage() {
 
   const handleNext = () => {
     if (nextPending) {
-      navigate(getTaskRoute(nextPending, hasTrainingProduct))
+      navigate(getTaskRoute(nextPending))
     } else if (candidate?.status === 'offer_sent') {
       navigate('/onboarding/offer')
     } else if (candidate?.status === 'hired') {
-      if (isGoldenAges && hasTrainingProduct) {
-        navigate('/training')
-      } else if (isGoldenAges) {
-        navigate('/onboarding/status')
-      } else {
-        navigate('/onboarding/training')
-      }
+      navigate('/onboarding/training')
     } else {
       navigate('/onboarding/status')
     }
@@ -200,11 +172,7 @@ export function CandidateOnboardingPage() {
     : candidate?.status === 'offer_sent'
       ? 'View your offer →'
       : candidate?.status === 'hired'
-        ? isGoldenAges
-          ? hasTrainingProduct
-            ? 'Start Golden Ages training →'
-            : 'Check application status →'
-          : 'Complete platform training →'
+        ? 'Complete platform training →'
         : 'Check application status →'
 
   return (
@@ -407,7 +375,15 @@ export function CandidateOnboardingPage() {
           </p>
         </CardContent>
       </Card>
-      <SignedInApplyFlowBranding />
+      <div className='mt-6 flex flex-col items-center gap-2'>
+        {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
+        <img
+          src="/agency-logo-individualschoice.jpeg"
+          alt="Agency logo"
+          className='h-10 w-auto object-contain opacity-70'
+        />
+        <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
+      </div>
     </div>
   )
 }

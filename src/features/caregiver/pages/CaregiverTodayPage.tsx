@@ -9,7 +9,6 @@ import { Card, CardContent } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { ShiftDocumentationForm } from '../components/ShiftDocumentationForm'
-import { TrainingReminderBanner } from '../components/TrainingReminderBanner'
 import { CalendarDays, ChevronLeft, Clock, MapPin, AlertTriangle } from 'lucide-react'
 import { formatTime, formatWeekdayDate, formatDurationHours, formatStreetAddress } from '@/shared/format'
 import { cn } from '@/shared/lib/cn'
@@ -40,10 +39,7 @@ export function CaregiverTodayPage() {
 
   if (data.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-6 px-4">
-        <div className="w-full max-w-2xl">
-          <TrainingReminderBanner />
-        </div>
+      <div className="flex h-full items-center justify-center px-4">
         <div className="text-center max-w-sm">
           <div className="mb-3 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-atria-surface-2">
             <CalendarDays className="h-7 w-7 text-atria-text-muted" />
@@ -52,13 +48,6 @@ export function CaregiverTodayPage() {
           <p className="mt-1 text-sm text-atria-text-secondary">
             You have no shifts for today in {tenantName}. Check back later or contact your coordinator.
           </p>
-          <Link
-            to="/incidents/new"
-            className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-atria-accent hover:underline"
-          >
-            <AlertTriangle className="h-4 w-4" />
-            Report an incident
-          </Link>
         </div>
       </div>
     )
@@ -69,7 +58,6 @@ export function CaregiverTodayPage() {
 
   return (
     <div className="space-y-5">
-      <TrainingReminderBanner />
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold text-atria-ink">
           Good morning, {firstName || 'Caregiver'} 👋

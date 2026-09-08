@@ -9,18 +9,14 @@ const SESSION_KEY = 'atria_training_complete_until'
 const SESSION_MS = 300_000
 
 export function isPlatformTrainingComplete(
-  completions:
-    | Array<{ trainingId: string; status: string; expiresAt?: string | null }>
-    | undefined,
+  completions: Array<{ trainingId: string; status: string }> | undefined,
 ): boolean {
   if (isTrainingCompletedInSession()) return true
   if (!completions) return false
-  const now = Date.now()
   return completions.some(
     (c) =>
       c.trainingId === PLATFORM_TRAINING_ID &&
-      COMPLETE_STATUSES.includes(c.status) &&
-      (!c.expiresAt || new Date(c.expiresAt).getTime() > now),
+      COMPLETE_STATUSES.includes(c.status),
   )
 }
 

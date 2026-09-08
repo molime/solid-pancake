@@ -245,8 +245,6 @@ function mockSignedInWithRole(role: string) {
           : []
       }
       if (name === 'onboarding:hasPlatformTrainingCompleted') return role === 'org:caregiver' || role === 'org:candidate'
-      if (name === 'agencyConfig:hasProduct') return false
-      if (name === 'training:listCourses') return []
       return undefined
     }) as unknown as typeof useQuery,
   )
@@ -282,8 +280,6 @@ function mockSignedInWithRoleAndTraining(role: string, trainingComplete: boolean
           : []
       }
       if (name === 'onboarding:hasPlatformTrainingCompleted') return trainingComplete
-      if (name === 'agencyConfig:hasProduct') return false
-      if (name === 'training:listCourses') return []
       return undefined
     }) as unknown as typeof useQuery,
   )
@@ -356,13 +352,15 @@ describe('AppRouter scheduling routes', () => {
     })
   })
 
-  it('lets a caregiver with incomplete training reach /caregiver/today (reminder banner instead of redirect)', async () => {
+  it('redirects caregiver from /caregiver/today to training when incomplete', async () => {
     mockSignedInWithRoleAndTraining('org:caregiver', false)
 
     render(<TestRouter initialEntries={['/caregiver/today']} />)
 
     await waitFor(() => {
-      expect(screen.getByTestId('caregiver-today-page')).toBeInTheDocument()
+      expect(
+        screen.queryByTestId('caregiver-today-page'),
+      ).not.toBeInTheDocument()
     })
   })
 })

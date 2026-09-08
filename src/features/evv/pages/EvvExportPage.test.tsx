@@ -91,7 +91,7 @@ describe('EvvExportPage', () => {
     EvvExportPageUnderTest = module.EvvExportPage
   })
 
-  it('labels the export as an alternate-EVV submission aid', { timeout: 30000 }, () => {
+  it('labels the export as an alternate-EVV submission aid', () => {
     mockEvvState()
     render(
       <MemoryRouter>

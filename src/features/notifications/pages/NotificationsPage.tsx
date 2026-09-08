@@ -1,6 +1,5 @@
 import { useOrganization } from '@clerk/react'
 import { useMutation, useQuery } from 'convex/react'
-import { Link } from 'react-router-dom'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { Badge } from '@/shared/ui/Badge'
@@ -162,14 +161,6 @@ export function NotificationsPage() {
                 >
                   {notification.message}
                 </p>
-                {typeof notification.metadata?.incidentId === 'string' && (
-                  <Link
-                    to={`/incidents/${notification.metadata.incidentId}`}
-                    className="shrink-0 text-sm font-medium text-atria-accent hover:underline"
-                  >
-                    View incident →
-                  </Link>
-                )}
               </div>
               <div className="flex shrink-0 items-center gap-3">
                 <span className="text-xs text-atria-text-muted">

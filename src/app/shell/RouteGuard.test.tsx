@@ -4,7 +4,7 @@ import {
   TenantRouteGuard,
   SignedInRouteGuard,
   TenantRoleRouteGuard,
-  PersonnelRecordRouteGuard,
+  TrainingRouteGuard,
 } from './RouteGuard'
 import { getFunctionName } from 'convex/server'
 
@@ -165,8 +165,8 @@ describe('TenantRouteGuard', () => {
       </TenantRouteGuard>,
     )
 
-    expect(screen.getByText('Navigate to /sign-in?redirect=%2F')).toBeInTheDocument()
-    expect(mockNavigate).toHaveBeenCalledWith('/sign-in?redirect=%2F')
+    expect(screen.getByText('Navigate to /sign-in')).toBeInTheDocument()
+    expect(mockNavigate).toHaveBeenCalledWith('/sign-in')
     expect(useQuery).not.toHaveBeenCalled()
   })
 
@@ -320,8 +320,8 @@ describe('SignedInRouteGuard', () => {
       </SignedInRouteGuard>,
     )
 
-    expect(screen.getByText('Navigate to /sign-in?redirect=%2F')).toBeInTheDocument()
-    expect(mockNavigate).toHaveBeenCalledWith('/sign-in?redirect=%2F')
+    expect(screen.getByText('Navigate to /sign-in')).toBeInTheDocument()
+    expect(mockNavigate).toHaveBeenCalledWith('/sign-in')
   })
 
   it('renders children when signed in', () => {
@@ -497,7 +497,7 @@ describe('guard stability during a Clerk token refresh', () => {
     })
   })
 
-  it('PersonnelRecordRouteGuard keeps a caregiver on the route through a mid-refresh resubscribe', () => {
+  it('TrainingRouteGuard keeps a caregiver on the route through a mid-refresh resubscribe', () => {
     window.localStorage.setItem('atria.selectedClerkOrgId', 'org_stored')
     mockClerkState({
       authLoaded: true,
@@ -508,14 +508,15 @@ describe('guard stability during a Clerk token refresh', () => {
     mockQueries({
       'candidates:getMyTenant': [storedCaregiverTenant],
       'members:me': { role: 'org:caregiver' },
-      'tenantSettings:getEmployerInfo': { legalName: 'Test Agency' },
-      'candidates:getMyDocumentUploadStatus': { uploaded: true, uploadedAt: undefined },
+      'platformTrainingCompletions:listMyCompletions': [
+        { trainingId: 'platform_training', status: 'completed' },
+      ],
     })
 
     const ui = (
-      <PersonnelRecordRouteGuard>
+      <TrainingRouteGuard>
         <div data-testid="protected">Protected</div>
-      </PersonnelRecordRouteGuard>
+      </TrainingRouteGuard>
     )
     const { rerender } = render(ui)
     expect(screen.getByTestId('protected')).toBeInTheDocument()
@@ -524,8 +525,9 @@ describe('guard stability during a Clerk token refresh', () => {
     // without the stored tenant.
     mockTransientEmptyResolution({
       'members:me': { role: 'org:caregiver' },
-      'tenantSettings:getEmployerInfo': { legalName: 'Test Agency' },
-      'candidates:getMyDocumentUploadStatus': { uploaded: true, uploadedAt: undefined },
+      'platformTrainingCompletions:listMyCompletions': [
+        { trainingId: 'platform_training', status: 'completed' },
+      ],
     })
     rerender(ui)
 
@@ -569,7 +571,7 @@ describe('guard stability during a Clerk token refresh', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/select-agency')
   })
 
-  it('PersonnelRecordRouteGuard redirects a Golden Ages caregiver without an uploaded HCS 501 to /personnel-record', () => {
+  it('TrainingRouteGuard still redirects a caregiver with incomplete training to /onboarding/training', () => {
     window.localStorage.setItem('atria.selectedClerkOrgId', 'org_stored')
     mockClerkState({
       authLoaded: true,
@@ -581,56 +583,26 @@ describe('guard stability during a Clerk token refresh', () => {
       'candidates:getMyTenant': [
         {
           clerkOrgId: 'org_stored',
-          tenantName: 'Golden Ages Home Care',
+          tenantName: 'Test Agency',
           role: 'org:caregiver',
         },
       ],
       'members:me': { role: 'org:caregiver' },
-      'tenantSettings:getEmployerInfo': { legalName: 'Golden Ages Home Care, LLC' },
-      'candidates:getMyDocumentUploadStatus': { uploaded: false, uploadedAt: undefined },
+      'platformTrainingCompletions:listMyCompletions': [
+        { trainingId: 'platform_training', status: 'in_progress' },
+      ],
     })
 
     render(
-      <PersonnelRecordRouteGuard>
+      <TrainingRouteGuard>
         <div data-testid="protected">Protected</div>
-      </PersonnelRecordRouteGuard>,
+      </TrainingRouteGuard>,
     )
 
     expect(
-      screen.getByText('Navigate to /personnel-record'),
+      screen.getByText('Navigate to /onboarding/training'),
     ).toBeInTheDocument()
-    expect(mockNavigate).toHaveBeenCalledWith('/personnel-record')
-  })
-
-  it('PersonnelRecordRouteGuard lets a Golden Ages caregiver through once the HCS 501 is uploaded', () => {
-    window.localStorage.setItem('atria.selectedClerkOrgId', 'org_stored')
-    mockClerkState({
-      authLoaded: true,
-      isSignedIn: true,
-      orgLoaded: true,
-      organization: null,
-    })
-    mockQueries({
-      'candidates:getMyTenant': [
-        {
-          clerkOrgId: 'org_stored',
-          tenantName: 'Golden Ages Home Care',
-          role: 'org:caregiver',
-        },
-      ],
-      'members:me': { role: 'org:caregiver' },
-      'tenantSettings:getEmployerInfo': { legalName: 'Golden Ages Home Care, LLC' },
-      'candidates:getMyDocumentUploadStatus': { uploaded: true, uploadedAt: '2026-09-01T00:00:00.000Z' },
-    })
-
-    render(
-      <PersonnelRecordRouteGuard>
-        <div data-testid="protected">Protected</div>
-      </PersonnelRecordRouteGuard>,
-    )
-
-    expect(screen.getByTestId('protected')).toBeInTheDocument()
-    expect(screen.queryByTestId('navigate')).not.toBeInTheDocument()
+    expect(mockNavigate).toHaveBeenCalledWith('/onboarding/training')
   })
 
   it('an active Clerk org wins over a stale stored tenant', () => {
@@ -646,14 +618,12 @@ describe('guard stability during a Clerk token refresh', () => {
       'platformTrainingCompletions:listMyCompletions': [
         { trainingId: 'platform_training', status: 'completed' },
       ],
-      'agencyConfig:hasProduct': false,
-      'training:listCourses': [],
     })
 
     render(
-      <PersonnelRecordRouteGuard>
+      <TrainingRouteGuard>
         <div data-testid="protected">Protected</div>
-      </PersonnelRecordRouteGuard>,
+      </TrainingRouteGuard>,
     )
 
     expect(screen.getByTestId('protected')).toBeInTheDocument()

@@ -31,7 +31,6 @@ function mockSidebarState(options: {
   user?: { fullName: string; firstName: string } | null
   memberRole?: string | null
   isPlatformAdmin?: boolean
-  hasTrainingProduct?: boolean
 }) {
   vi.mocked(useOrganization).mockReturnValue({
     organization: options.orgId ? { id: options.orgId } : null,
@@ -44,9 +43,6 @@ function mockSidebarState(options: {
   vi.mocked(useQuery).mockImplementation(((_api: unknown, args: unknown) => {
     if (args === 'skip') return null
     if (args && typeof args === 'object' && 'clerkOrgId' in args) {
-      if ('productKey' in args) {
-        return options.hasTrainingProduct ?? false
-      }
       return options.memberRole ? { role: options.memberRole } : null
     }
     // platform.isAdmin has no args (empty object {})
@@ -577,51 +573,5 @@ describe('Sidebar', () => {
       ).not.toBeInTheDocument()
       unmount()
     }
-  })
-
-  it('shows legacy Training link for caregivers without the training product', () => {
-    mockSidebarState({
-      orgId: 'org_123',
-      user: { fullName: 'Caregiver User', firstName: 'C' },
-      memberRole: 'org:caregiver',
-      hasTrainingProduct: false,
-    })
-
-    render(
-      <MemoryRouter>
-        <Sidebar />
-      </MemoryRouter>,
-    )
-
-    expect(screen.getByRole('link', { name: 'Training' })).toHaveAttribute(
-      'href',
-      '/onboarding/training',
-    )
-    expect(
-      screen.queryByRole('link', { name: 'Training Hub' }),
-    ).not.toBeInTheDocument()
-  })
-
-  it('shows Training Hub and hides legacy Training for caregivers with the training product', () => {
-    mockSidebarState({
-      orgId: 'org_123',
-      user: { fullName: 'Caregiver User', firstName: 'C' },
-      memberRole: 'org:caregiver',
-      hasTrainingProduct: true,
-    })
-
-    render(
-      <MemoryRouter>
-        <Sidebar />
-      </MemoryRouter>,
-    )
-
-    expect(screen.getByRole('link', { name: 'Training Hub' })).toHaveAttribute(
-      'href',
-      '/training',
-    )
-    expect(
-      screen.queryByRole('link', { name: 'Training' }),
-    ).not.toBeInTheDocument()
   })
 })

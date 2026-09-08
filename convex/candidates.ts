@@ -391,7 +391,6 @@ export const getMyTenant = query({
         tenants.push({
           clerkOrgId: tenant.clerkOrgId,
           tenantName: tenant.name,
-          slug: tenant.slug,
           agencyAddress: tenant.address ?? null,
           role: member.role,
         })
@@ -1452,27 +1451,6 @@ export const rejectOffer = mutation({
   },
 })
 
-function roleFromApplicationPosition(
-  agencyName: string,
-  fields?: Record<string, unknown>,
-): 'org:admin' | 'org:coordinator' | 'org:hr' | 'org:caregiver' {
-  const personal = (fields?.personal ?? {}) as Record<string, unknown>
-  const position = String(personal.positionApplyingFor ?? '')
-  if (agencyName.toLowerCase().includes('golden')) {
-    const map: Record<string, 'org:admin' | 'org:coordinator' | 'org:hr' | 'org:caregiver'> = {
-      'Affiliated Home Care Aide (HCA)': 'org:caregiver',
-      'Supervisor': 'org:coordinator',
-      'Administrator': 'org:admin',
-      'Human Resource (HR) Manager': 'org:hr',
-      'Office Manager': 'org:coordinator',
-      'Payroll Manager': 'org:hr',
-      'CFO / Vice President of Finance': 'org:admin',
-    }
-    if (map[position]) return map[position]
-  }
-  return 'org:caregiver'
-}
-
 export const hireCandidate = mutation({
   args: {
     clerkOrgId: v.string(),
@@ -1509,10 +1487,6 @@ export const hireCandidate = mutation({
     await assertPreHireRequirements(ctx, tenantId, args.candidateId, latest)
 
     const normalizedEmail = normalizeCandidateEmail(candidate.email)
-    const hiredRole = roleFromApplicationPosition(
-      tenant.name ?? '',
-      latest.fields as Record<string, unknown> | undefined,
-    )
 
     const existingMember = await ctx.db
       .query('tenantMembers')
@@ -1523,13 +1497,13 @@ export const hireCandidate = mutation({
 
     let tenantMemberId: Id<'tenantMembers'>
     if (existingMember) {
-      await ctx.db.patch(existingMember._id, { role: hiredRole })
+      await ctx.db.patch(existingMember._id, { role: 'org:caregiver' })
       tenantMemberId = existingMember._id
     } else {
       tenantMemberId = await ctx.db.insert('tenantMembers', {
         tenantId,
         clerkUserId: candidate.clerkUserId as string,
-        role: hiredRole,
+        role: 'org:caregiver',
         displayName: candidate.displayName,
         email: normalizedEmail,
       })
@@ -1608,26 +1582,6 @@ export const hireCandidate = mutation({
       .filter((q) => q.eq(q.field('type'), 'platform_training'))
       .collect()
     await Promise.all(leftoverTrainingTasks.map((task) => ctx.db.delete(task._id)))
-
-    // Post-hire paperwork: the HCS 501 personnel record must be completed by
-    // the employee at hire time and kept in their personnel file. Golden
-    // Ages caregivers are prompted for it through this checklist task (and
-    // their dashboard stays gated on the upload — see
-    // PersonnelRecordRouteGuard).
-    const lastTask = await ctx.db
-      .query('candidateTasks')
-      .withIndex('by_tenant_candidate_order', (q) =>
-        q.eq('tenantId', tenantId).eq('candidateId', candidate._id),
-      )
-      .order('desc')
-      .first()
-    await ctx.db.insert('candidateTasks', {
-      tenantId,
-      candidateId: candidate._id,
-      type: 'personnel_record',
-      status: 'pending',
-      order: (lastTask?.order ?? -1) + 1,
-    })
 
     await ctx.db.patch(candidate._id, { status: 'hired' })
 
@@ -1880,11 +1834,8 @@ export const saveSignedPrefilledDocument = mutation({
     storageId: v.string(),
   },
   handler: async (ctx, args) => {
-    // org:caregiver is included so hired Golden Ages caregivers can upload
-    // their completed HCS 501 personnel record after the hire transition.
     const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
       'org:candidate',
-      'org:caregiver',
     ])
 
     const candidate = await getOwnCandidate(ctx, tenantId, {
@@ -1912,129 +1863,6 @@ export const saveSignedPrefilledDocument = mutation({
     const docId = await ctx.db.insert('prefilledDocuments', {
       tenantId,
       candidateId: candidate._id,
-      documentType: args.documentType,
-      generatedAt: new Date().toISOString(),
-      generatedBy: identity.subject,
-      uploadedSignedStorageId: args.storageId,
-    })
-    return docId
-  },
-})
-
-/**
- * Whether the signed-in user (candidate or hired caregiver) has uploaded the
- * signed/stamped copy of a prefilled document (e.g. the Golden Ages HCS 501
- * personnel record). Used by the post-hire upload gate.
- */
-export const getMyDocumentUploadStatus = query({
-  args: { clerkOrgId: v.string(), documentType: v.string() },
-  handler: async (ctx, args) => {
-    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
-      'org:candidate',
-      'org:caregiver',
-      'org:admin',
-      'org:hr',
-      'org:coordinator',
-    ])
-
-    const candidate = await getOwnCandidate(ctx, tenantId, {
-      subject: identity.subject,
-      email: typeof identity.email === 'string' ? identity.email : undefined,
-    })
-    if (!candidate) {
-      // No candidate record (e.g. caregiver added manually without going
-      // through the application flow) — nothing to gate on.
-      return { uploaded: true, uploadedAt: undefined }
-    }
-
-    const doc = await ctx.db
-      .query('prefilledDocuments')
-      .withIndex('by_tenant_candidate_type', (q) =>
-        q
-          .eq('tenantId', tenantId)
-          .eq('candidateId', candidate._id)
-          .eq('documentType', args.documentType),
-      )
-      .first()
-
-    if (!doc?.uploadedSignedStorageId) {
-      return { uploaded: false, uploadedAt: undefined }
-    }
-    return { uploaded: true, uploadedAt: doc.generatedAt }
-  },
-})
-
-/**
- * Resolve a candidate record by Clerk user id (admin/HR/coordinator only).
- * Used on the employee profile page to link an employee back to the
- * documents from their hiring flow (e.g. the DE 34 new hire report).
- */
-export const getCandidateByClerkUserId = query({
-  args: { clerkOrgId: v.string(), clerkUserId: v.string() },
-  handler: async (ctx, args) => {
-    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
-      'org:admin',
-      'org:hr',
-      'org:coordinator',
-    ])
-    const candidate = await ctx.db
-      .query('candidates')
-      .withIndex('by_tenant_clerk_user', (q) =>
-        q.eq('tenantId', tenantId).eq('clerkUserId', args.clerkUserId),
-      )
-      .unique()
-    return candidate ? { candidateId: candidate._id } : null
-  },
-})
-
-/**
- * HR-side upload of the completed copy of a prefilled document — e.g. the
- * finished DE 34 new hire report, which HR completes (start-of-work date,
- * employer account numbers) after the prefilled version is generated at
- * application time. Mirrors saveSignedPrefilledDocument but targets an
- * explicit candidate instead of the caller's own profile, and keeps both
- * versions on the same prefilledDocuments row.
- */
-export const saveSignedPrefilledDocumentForHR = mutation({
-  args: {
-    clerkOrgId: v.string(),
-    candidateId: v.id('candidates'),
-    documentType: v.string(),
-    storageId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
-      'org:admin',
-      'org:hr',
-      'org:coordinator',
-    ])
-
-    const candidate = await ctx.db.get(args.candidateId)
-    if (!candidate) {
-      throw new ConvexError('Candidate not found.')
-    }
-    assertTenantDoc(candidate, tenantId)
-
-    const existing = await ctx.db
-      .query('prefilledDocuments')
-      .withIndex('by_tenant_candidate_type', (q) =>
-        q
-          .eq('tenantId', tenantId)
-          .eq('candidateId', args.candidateId)
-          .eq('documentType', args.documentType),
-      )
-      .first()
-
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        uploadedSignedStorageId: args.storageId,
-      })
-      return existing._id
-    }
-
-    const docId = await ctx.db.insert('prefilledDocuments', {
-      tenantId,
-      candidateId: args.candidateId,
       documentType: args.documentType,
       generatedAt: new Date().toISOString(),
       generatedBy: identity.subject,
@@ -2453,12 +2281,8 @@ export const attachCandidateDocument = mutation({
     photoIdType: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // org:caregiver is included so newly hired Golden Ages caregivers can
-    // finish post-hire paperwork (the HCS 501 personnel record) from their
-    // checklist after the hire transition.
     const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
       'org:candidate',
-      'org:caregiver',
     ])
 
     const own = await getOwnCandidate(ctx, tenantId, {
@@ -2613,46 +2437,6 @@ export const skipCandidateTask = mutation({
   },
 })
 
-// Lets a candidate mark a required onboarding task complete when the agency
-// handles the step externally (e.g. Golden Ages redirects applicants to the
-// CA DOJ fingerprint portal instead of uploading a receipt).
-export const completeCandidateTaskByType = mutation({
-  args: { clerkOrgId: v.string(), taskType: v.string() },
-  handler: async (ctx, { clerkOrgId, taskType }) => {
-    const { tenantId, identity } = await requireTenantRole(ctx, clerkOrgId, [
-      'org:candidate',
-      'org:caregiver',
-    ])
-
-    const candidate = await getOwnCandidate(ctx, tenantId, {
-      subject: identity.subject,
-      email: typeof identity.email === 'string' ? identity.email : undefined,
-    })
-    if (!candidate) {
-      throw new ConvexError('Candidate profile not found.')
-    }
-
-    const task = await ctx.db
-      .query('candidateTasks')
-      .withIndex('by_tenant_candidate_order', (q) =>
-        q.eq('tenantId', tenantId).eq('candidateId', candidate._id),
-      )
-      .filter((q) => q.eq(q.field('type'), taskType))
-      .first()
-
-    if (!task) {
-      throw new ConvexError(`Task ${taskType} not found.`)
-    }
-    if (task.status === 'complete') return task._id
-
-    await ctx.db.patch(task._id, {
-      status: 'complete',
-      completedAt: new Date().toISOString(),
-    })
-    return task._id
-  },
-})
-
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -2788,11 +2572,6 @@ export const applyPublic = action({
     const { createClerkUserAndJoinOrg } =
       await import('./_utils/invitationBypass')
 
-    // NOTE: the tenant's allowedEmailDomains allowlist intentionally does NOT
-    // apply here. That setting restricts staff invitations (its settings-page
-    // copy says so); the public apply link is the top of the hiring funnel and
-    // real applicants use personal email (gmail, yahoo, …). Enforcing the
-    // staff allowlist here silently breaks every public application.
     const secretKey = process.env.CLERK_SECRET_KEY ?? ''
     const result = await createClerkUserAndJoinOrg({
       ctx: { scheduler: ctx.scheduler },
@@ -2802,6 +2581,7 @@ export const applyPublic = action({
       clerkOrgId: tenant.clerkOrgId,
       role: 'org:candidate',
       appBaseUrl: args.appBaseUrl,
+      allowedEmailDomains: tenant.allowedEmailDomains,
     })
 
     await ctx.runMutation(internal.members.createManualMember, {

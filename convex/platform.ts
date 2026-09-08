@@ -82,85 +82,6 @@ async function recordPlatformAudit(
   })
 }
 
-/** Wipe all training progress (platform + course step completions) for a user.
- *  Used for support / QA reset. Restricted to platform admins.
- */
-export const deleteUserTrainingProgress = mutation({
-  args: {
-    clerkUserId: v.optional(v.string()),
-    email: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const identity = await requirePlatformAdmin(ctx)
-
-    if (!args.clerkUserId && !args.email) {
-      throw new ConvexError('Either clerkUserId or email is required.')
-    }
-
-    const normalizedEmail = args.email?.toLowerCase().trim()
-
-    const clerkUserId = args.clerkUserId
-    let memberships = clerkUserId
-      ? await ctx.db
-          .query('tenantMembers')
-          .withIndex('by_clerk_user_id', (q) => q.eq('clerkUserId', clerkUserId))
-          .collect()
-      : []
-
-    // Fall back to email lookup when no clerkUserId was supplied or when the
-    // id wasn't found in any tenant.
-    if (normalizedEmail && memberships.length === 0) {
-      const allMembers = await ctx.db.query('tenantMembers').collect()
-      memberships = allMembers.filter((m) => m.email.toLowerCase() === normalizedEmail)
-    }
-
-    if (memberships.length === 0) {
-      return { platformCount: 0, stepCount: 0 }
-    }
-
-    let platformCount = 0
-    let stepCount = 0
-
-    for (const member of memberships) {
-      const tenantId = member.tenantId
-      const targetClerkUserId = member.clerkUserId
-
-      const platformCompletions = await ctx.db
-        .query('platformTrainingCompletions')
-        .withIndex('by_tenant_user', (q) =>
-          q.eq('tenantId', tenantId).eq('clerkUserId', targetClerkUserId),
-        )
-        .collect()
-
-      for (const completion of platformCompletions) {
-        await ctx.db.delete(completion._id)
-        platformCount++
-      }
-
-      const stepCompletions = await ctx.db
-        .query('trainingStepCompletions')
-        .withIndex('by_tenant_user_course', (q) =>
-          q.eq('tenantId', tenantId).eq('clerkUserId', targetClerkUserId),
-        )
-        .collect()
-
-      for (const completion of stepCompletions) {
-        await ctx.db.delete(completion._id)
-        stepCount++
-      }
-
-      await recordPlatformAudit(ctx, identity, tenantId, 'platform.training.progress_deleted', {
-        targetClerkUserId,
-        targetEmail: normalizedEmail ?? undefined,
-        platformCompletionsDeleted: platformCount,
-        stepCompletionsDeleted: stepCount,
-      })
-    }
-
-    return { platformCount, stepCount }
-  },
-})
-
 /** Escape user/tenant-supplied strings before interpolating into HTML emails. */
 function escapeHtml(value: string): string {
   return value
@@ -489,81 +410,6 @@ export const listTenantsWithUsage = query({
   },
 })
 
-export const getTenantByClerkOrgId = query({
-  args: { clerkOrgId: v.string() },
-  handler: async (ctx, { clerkOrgId }) => {
-    await requirePlatformAdmin(ctx)
-
-    return await ctx.db
-      .query('tenants')
-      .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
-      .unique()
-  },
-})
-
-async function buildTenantDetail(ctx: QueryCtx, tenantId: Id<'tenants'>) {
-  const { start, end } = currentMonthRange()
-
-  const members = await ctx.db
-    .query('tenantMembers')
-    .withIndex('by_tenant_user', (q) => q.eq('tenantId', tenantId))
-    .collect()
-  const clients = await ctx.db
-    .query('clients')
-    .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
-    .collect()
-  const shifts = await ctx.db
-    .query('shifts')
-    .withIndex('by_tenant_status_start', (q) => q.eq('tenantId', tenantId))
-    .collect()
-  const docsThisMonth = await ctx.db
-    .query('documentArchiveItems')
-    .withIndex('by_tenant_created', (q) =>
-      q.eq('tenantId', tenantId).gte('createdAt', start),
-    )
-    .collect()
-
-  const subscription = await getTenantSubscriptionDoc(ctx, tenantId)
-  const plan = subscription
-    ? await getPlanByKey(ctx, subscription.planKey)
-    : null
-
-  const invoices = await ctx.db
-    .query('platformInvoices')
-    .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
-    .order('desc')
-    .collect()
-
-  const recentAudit = await ctx.db
-    .query('auditEvents')
-    .withIndex('by_tenant_created_at', (q) => q.eq('tenantId', tenantId))
-    .order('desc')
-    .take(10)
-
-  const countRole = (role: string) =>
-    members.filter((m) => m.role === role).length
-
-  return {
-    subscription: subscription ?? null,
-    plan: plan ?? null,
-    usage: {
-      seatCount: await countActiveSeats(ctx, tenantId),
-      caregiverCount: countRole('org:caregiver'),
-      coordinatorCount: countRole('org:coordinator'),
-      adminHrCount: countRole('org:admin') + countRole('org:hr'),
-      candidateCount: countRole('org:candidate'),
-      clientCount: clients.length,
-      shiftCount: shifts.length,
-      shiftsThisMonth: shifts.filter(
-        (s) => s.scheduledStart >= start && s.scheduledStart < end,
-      ).length,
-      docsThisMonth: docsThisMonth.length,
-    },
-    invoices,
-    recentAudit,
-  }
-}
-
 export const getTenantDetail = query({
   args: { tenantId: v.id('tenants') },
   handler: async (ctx, args) => {
@@ -571,113 +417,73 @@ export const getTenantDetail = query({
 
     const tenant = await ctx.db.get(args.tenantId)
     if (!tenant) {
-      // Return null instead of throwing so the UI can render a graceful
-      // "not found" state and log the problematic id.
-      return null
+      throw new ConvexError('Tenant not found.')
     }
 
-    const detail = await buildTenantDetail(ctx, args.tenantId)
-    return { tenant, ...detail }
-  },
-})
+    const { start, end } = currentMonthRange()
 
-export const getTenantDetailBySlug = query({
-  args: { slug: v.string() },
-  handler: async (ctx, args) => {
-    await requirePlatformAdmin(ctx)
-
-    const tenant = await ctx.db
-      .query('tenants')
-      .withIndex('by_slug', (q) => q.eq('slug', args.slug))
-      .first()
-    if (!tenant) {
-      return null
-    }
-
-    const detail = await buildTenantDetail(ctx, tenant._id)
-    return { tenant, ...detail }
-  },
-})
-
-const DEFAULT_PRODUCTS = [
-  {
-    key: 'hiring',
-    label: 'Hiring Process & Onboarding',
-    description: 'Candidate application, onboarding, training, and hiring flow.',
-  },
-  {
-    key: 'training',
-    label: 'Training & Compliance Courses',
-    description:
-      'Assignable, trackable staff training courses with videos, interactive content, and quizzes.',
-  },
-  {
-    key: 'full_platform',
-    label: 'Full Platform',
-    description: 'Hiring + shift management + documentation + scheduling + billing.',
-  },
-]
-
-export const ensureDefaultProductsExist = mutation({
-  args: {},
-  handler: async (ctx) => {
-    await requirePlatformAdmin(ctx)
-    for (const p of DEFAULT_PRODUCTS) {
-      const existing = await ctx.db
-        .query('products')
-        .withIndex('by_key', (q) => q.eq('key', p.key))
-        .first()
-      if (!existing) {
-        await ctx.db.insert('products', {
-          key: p.key,
-          label: p.label,
-          description: p.description,
-          active: true,
-        })
-      }
-    }
-    return true
-  },
-})
-
-export const getTenantProducts = query({
-  args: { tenantId: v.id('tenants') },
-  handler: async (ctx, args) => {
-    await requirePlatformAdmin(ctx)
-
-    const tenant = await ctx.db.get(args.tenantId)
-    if (!tenant) {
-      return null
-    }
-
-    const dbProducts = await ctx.db
-      .query('products')
-      .withIndex('by_key')
+    const members = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_tenant_user', (q) => q.eq('tenantId', args.tenantId))
       .collect()
-
-    const agencyProducts = await ctx.db
-      .query('agencyProducts')
+    const clients = await ctx.db
+      .query('clients')
       .withIndex('by_tenant', (q) => q.eq('tenantId', args.tenantId))
       .collect()
+    const shifts = await ctx.db
+      .query('shifts')
+      .withIndex('by_tenant_status_start', (q) =>
+        q.eq('tenantId', args.tenantId),
+      )
+      .collect()
+    const docsThisMonth = await ctx.db
+      .query('documentArchiveItems')
+      .withIndex('by_tenant_created', (q) =>
+        q.eq('tenantId', args.tenantId).gte('createdAt', start),
+      )
+      .collect()
 
-    const activeKeys = new Set(
-      agencyProducts.filter((ap) => ap.active).map((ap) => ap.productKey),
-    )
+    const subscription = await getTenantSubscriptionDoc(ctx, args.tenantId)
+    const plan = subscription
+      ? await getPlanByKey(ctx, subscription.planKey)
+      : null
 
-    // Always expose the default product list, using DB labels when available.
-    const products = DEFAULT_PRODUCTS.map((p) => {
-      const db = dbProducts.find((d) => d.key === p.key)
-      return {
-        key: p.key,
-        label: db?.label ?? p.label,
-        description: db?.description ?? p.description,
-        active: activeKeys.has(p.key),
-      }
-    })
+    const invoices = await ctx.db
+      .query('platformInvoices')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', args.tenantId))
+      .order('desc')
+      .collect()
+
+    const recentAudit = await ctx.db
+      .query('auditEvents')
+      .withIndex('by_tenant_created_at', (q) =>
+        q.eq('tenantId', args.tenantId),
+      )
+      .order('desc')
+      .take(10)
+
+    const countRole = (role: string) =>
+      members.filter((m) => m.role === role).length
 
     return {
       tenant,
-      products,
+      subscription: subscription ?? null,
+      plan: plan ?? null,
+      usage: {
+        seatCount: await countActiveSeats(ctx, args.tenantId),
+        caregiverCount: countRole('org:caregiver'),
+        coordinatorCount: countRole('org:coordinator'),
+        adminHrCount: countRole('org:admin') + countRole('org:hr'),
+        candidateCount: countRole('org:candidate'),
+        clientCount: clients.length,
+        shiftCount: shifts.length,
+        shiftsThisMonth: shifts.filter(
+          (s) => s.scheduledStart >= start && s.scheduledStart < end,
+        ).length,
+        docsThisMonth: docsThisMonth.length,
+      },
+      invoices,
+      recentAudit,
     }
   },
 })
@@ -961,12 +767,10 @@ export const listAuditEvents = query({
     const actorIds = new Set(events.map((e) => e.actorId))
     const actorNames = new Map<string, string>()
     for (const actorId of actorIds) {
-      // first() not unique(): users can belong to multiple tenants, and this
-      // view spans tenants — any membership row yields the same displayName.
       const member = await ctx.db
         .query('tenantMembers')
         .withIndex('by_clerk_user_id', (q) => q.eq('clerkUserId', actorId))
-        .first()
+        .unique()
       if (member) {
         actorNames.set(actorId, member.displayName)
         continue
@@ -2441,336 +2245,5 @@ export const setTenantLimits = mutation({
       { limits: args.limits },
     )
     return args.tenantId
-  },
-})
-
-export const seedGoldenAgesTrainingForAllTenants = mutation({
-  args: {},
-  returns: v.object({
-    count: v.number(),
-    results: v.array(
-      v.object({
-        tenantId: v.id('tenants'),
-        name: v.string(),
-        ok: v.boolean(),
-        error: v.optional(v.string()),
-      }),
-    ),
-  }),
-  handler: async (ctx) => {
-    await requirePlatformAdmin(ctx)
-    const tenants = await ctx.db.query('tenants').collect()
-    const results: {
-      tenantId: Id<'tenants'>
-      name: string
-      ok: boolean
-      error?: string
-    }[] = []
-
-    for (const tenant of tenants) {
-      try {
-        await ctx.runMutation(
-          internal.seedGoldenAges.seedGoldenAgesProductsInternal,
-          { tenantId: tenant._id },
-        )
-        await ctx.runMutation(
-          internal.seedGoldenAges.seedGoldenAgesTrainingInternal,
-          { tenantId: tenant._id },
-        )
-        results.push({
-          tenantId: tenant._id,
-          name: tenant.name,
-          ok: true,
-        })
-      } catch (err) {
-        results.push({
-          tenantId: tenant._id,
-          name: tenant.name,
-          ok: false,
-          error: err instanceof Error ? err.message : String(err),
-        })
-      }
-    }
-
-    return { count: tenants.length, results }
-  },
-})
-
-export const seedAgencyPreset = mutation({
-  args: {
-    tenantId: v.id('tenants'),
-    preset: v.union(v.literal('golden_ages'), v.literal('individuals_choice')),
-  },
-  returns: v.object({ ok: v.boolean(), message: v.string() }),
-  handler: async (ctx, args) => {
-    await requirePlatformAdmin(ctx)
-
-    const tenant = await ctx.db.get(args.tenantId)
-    if (!tenant) {
-      return { ok: false, message: 'Tenant not found.' }
-    }
-
-    try {
-      if (args.preset === 'golden_ages') {
-        await ctx.runMutation(
-          internal.seedGoldenAges.seedGoldenAgesProductsInternal,
-          { tenantId: args.tenantId },
-        )
-        await ctx.runMutation(
-          internal.seedGoldenAges.seedGoldenAgesBranchesInternal,
-          { tenantId: args.tenantId },
-        )
-        await ctx.runMutation(
-          internal.seedGoldenAges.seedGoldenAgesTrainingInternal,
-          { tenantId: args.tenantId },
-        )
-        return {
-          ok: true,
-          message: `Seeded Golden Ages content for ${tenant.name}.`,
-        }
-      }
-
-      // Individuals Choice defaults: legacy onboarding training, default
-      // branches, and the standard 7am-3pm / 3pm-11pm / overnight shifts.
-      const existingTrainingConfig = await ctx.db
-        .query('trainingConfigs')
-        .withIndex('by_tenant', (q) => q.eq('tenantId', args.tenantId))
-        .first()
-      if (!existingTrainingConfig) {
-        await ctx.db.insert('trainingConfigs', {
-          tenantId: args.tenantId,
-          isDefault: true,
-          passingScore: 70,
-          steps: [
-            {
-              id: 'welcome',
-              title: 'Welcome to Individuals Choice',
-              type: 'text',
-              content:
-                "Welcome to Individuals Choice, Inc! We are a vendor of the San Andreas Regional Center, providing health services to our consumers to improve their lifestyle and life quality. Our goal is to assist individuals with intellectual disabilities in achieving their aspired goals and promote their self-esteem by providing assistance in training, care, and supervision in daily living activities. Our mission is grounded on consumer choices, individualized services, and support — a partnership and collaboration of formal and natural supports.",
-              minDurationSec: 25,
-              required: true,
-            },
-            {
-              id: 'org_structure',
-              title: 'Organizational Structure',
-              type: 'text',
-              content:
-                "Individuals Choice, Inc operates two main programs.\n\n1. Independent Living Services (ILS): Customized instruction designed to meet the participant's needs, choices, and functional abilities. Planned to develop knowledge of specific tasks and learn at their own speed.\n\n2. Supported Living Services (SLS): Designed to assist with life skills such as budgeting, interpersonal and social skills, looking for employment, interviewing skills, general transportation, active life, and assistance with personal care.\n\nThe range of supported living services includes: assessment of consumer needs, assistance in finding and maintaining a home, facilitating circles of support, 24-hour emergency response system, social and daily living skills development, hiring and training of support staff, and development of work.",
-              minDurationSec: 30,
-              required: true,
-            },
-            {
-              id: 'role_of_staff',
-              title: 'Your Role as Support Staff',
-              type: 'text',
-              content:
-                "As a support staff member, you are the eyes and ears of the team. Your key responsibilities include:\n\n- Observing and reporting changes or any atypical observations about a consumer's condition\n- Performing assigned tasks as outlined in the consumer's support plan\n- Assisting with Activities of Daily Living (ADLs) — one of your main responsibilities (bathing, caring for skin/hair/teeth, toileting, walking, etc.)\n- Supporting consumers as they progress toward their life goals\n- Promoting practices that keep individuals healthy and safe\n\nWhile the consumer's support plan is created by the support coordinator and program director, input from all care team members is needed and valued.\n\nExpected qualities: dedicated, creative, honest, flexible, perceptive, empathetic, cheerful, patient, tactful, respectful, adaptable, hardworking, a good communicator, a good listener, compassionate, and reliable.",
-              minDurationSec: 30,
-              required: true,
-            },
-            {
-              id: 'consumer_rights',
-              title: 'Consumer Rights & Professional Boundaries',
-              type: 'policy',
-              content:
-                'CONSUMER RIGHTS: Every consumer has the right to be treated with consideration, respect, and full recognition of their dignity. Consumers shall receive treatment and services that are adequate, appropriate, and in compliance with federal and state laws. This includes respect for privacy, confidential treatment of records, freedom from discrimination and abuse, participation in the development of their care plan, and the right to refuse treatment after being fully informed.\n\nPROFESSIONAL BOUNDARIES: Maintain a positive, helpful relationship with consumers. Do not share personal information or use the consumer as a confidant. Keep the relationship supportive, not social. Be aware of consumer behavior in case of a disease or disorder. In case of a negative reaction, step back and re-approach later when calm. Use touch only when it serves a good purpose. Avoid terms the consumer may misconstrue. Practice good personal hygiene, dress professionally, and avoid off-color jokes, racial slurs, and profanity.\n\nHIPAA: Every employee must abide by confidentiality laws governing access, use, and dissemination of consumer information. You will sign a consent form to authorize the release of any information.',
-              minDurationSec: 40,
-              required: true,
-            },
-            {
-              id: 'policies_conduct',
-              title: 'Policies & Code of Conduct',
-              type: 'policy',
-              content:
-                "ZERO-TOLERANCE POLICIES: Individuals Choice, Inc maintains zero-tolerance for sexual harassment (unwelcome touching, comments about appearance, displaying inappropriate images), drugs (use of illegal substances on duty), and retaliation.\n\nCOMPLIANCE: All employees must comply with program rules, policies, and local, state, and federal laws. All employees are screened for criminal conviction before working with consumers. Unlawful or unethical behavior that harms the agency's reputation will not be permitted.\n\nCONFLICT OF INTEREST: Do not accept, offer, or give gifts or gratuities to or from consumers. Put the program's interests before your own. Do not borrow money from consumers or their family members. Do not accept additional private pay work from them.\n\nCONSEQUENCES: Violating the code of conduct may result in disciplinary action, termination of employment contract, and civil/criminal charges.\n\nCAUSES FOR TERMINATION: Use of drugs/alcohol on duty, physical force or abuse, threatening behavior, insubordination, neglect or abandoning a consumer, failure to report incidents, theft, no call/no show (automatic termination), and falsifying documentation.",
-              minDurationSec: 40,
-              required: true,
-            },
-            {
-              id: 'medication_procedures',
-              title: 'Medication Procedures',
-              type: 'text',
-              content:
-                "STORAGE: All medications (prescribed and OTC) are kept in a safe, centrally located, locked site accessible only to DSPs. Some individuals may keep medication in a locked space in their room if their physician has approved. Refrigerated medications are kept in a locked container. All medication is stored in its original container with original prescription labels.\n\nADMINISTRATION GUIDELINES: (1) Wash hands and wear gloves. (2) Remove medication from locked storage. (3) Check right medication, dose, time, route, and individual. (4) Give medication with water. (5) Watch the individual swallow. (6) Return container to locked storage.\n\nREFUSAL OR ERROR: If a consumer refuses medication or an error occurs, immediately notify the physician, page the program director, and document the incident. The program director files a written incident report to SARC within 24 hours.\n\nPRN MEDICATIONS: Contact the physician before each dose, describe symptoms, get permission, and document everything including physician directions and the individual's response within 1 hour.",
-              minDurationSec: 40,
-              required: true,
-            },
-            {
-              id: 'emergency_procedures',
-              title: 'Emergency Procedures',
-              type: 'text',
-              content:
-                'FIRE: (1) Sound the alarm. (2) Get everyone out. (3) Follow escape routes. (4) Crawl if caught in smoke. (5) Test doors with the back of your hand. (6) Meet at a pre-arranged safe place. (7) Do a head count. (8) Lead staff calls 911. (9) Fire department directs all activity once on site.\n\nEARTHQUAKE (INDOORS): Drop, cover, and hold. Get under doorways, beds, tables, or desks. Protect your head. Stay away from windows and anything that could topple.\n\nEARTHQUAKE (OUTDOORS): Move away from buildings, trees, and electrical lines. Drop to the ground until shaking stops.\n\nFLOOD (INTERNAL): Notify program director, shut main water valve, shut electricity/gas if needed, evacuate consumers if necessary.\n\nFLOOD (EXTERNAL): Notify program director, secure doors with blankets and sandbags, move consumers to higher ground.\n\nDISASTER KIT: Keep a 3-day supply of non-perishable food and water (1 gallon/person/day), first aid kit with prescription medications, flashlight and radio with extra batteries, change of clothing, sanitation supplies, and special medical supplies.\n\nMEDICAL EMERGENCY: Call 911 immediately, then report to support coordinator and program director.',
-              minDurationSec: 40,
-              required: true,
-            },
-            {
-              id: 'quiz',
-              title: 'Knowledge Check',
-              type: 'quiz',
-              content: JSON.stringify({
-                questions: [
-                  {
-                    question:
-                      'What is the primary mission of Individuals Choice, Inc?',
-                    options: [
-                      'To provide medical treatment to consumers',
-                      'To assist individuals with intellectual disabilities in achieving their goals and promote self-esteem',
-                      'To operate a residential care facility',
-                      'To provide transportation services only',
-                    ],
-                    correct: 1,
-                  },
-                  {
-                    question: 'What does ILS stand for?',
-                    options: [
-                      'Independent Living Services',
-                      'Integrated Life Support',
-                      'Individualized Learning System',
-                      'Inclusive Lifestyle Services',
-                    ],
-                    correct: 0,
-                  },
-                  {
-                    question: 'What is one of the main responsibilities of support staff?',
-                    options: [
-                      'Creating consumer support plans independently',
-                      'Prescribing medications to consumers',
-                      'Assisting with Activities of Daily Living (ADLs)',
-                      'Managing the agency finances',
-                    ],
-                    correct: 2,
-                  },
-                  {
-                    question: 'Where should all medications be stored?',
-                    options: [
-                      'In the consumer bedroom drawer',
-                      'In a safe, centrally located, locked site accessible only to DSPs',
-                      'In the bathroom cabinet',
-                      'In the kitchen on the counter',
-                    ],
-                    correct: 1,
-                  },
-                ],
-              }),
-              minDurationSec: 20,
-              required: true,
-            },
-          ],
-        })
-      }
-
-      const existingBranches = await ctx.db
-        .query('agencyBranches')
-        .withIndex('by_tenant', (q) => q.eq('tenantId', args.tenantId))
-        .collect()
-      if (existingBranches.length === 0) {
-        await ctx.db.insert('agencyBranches', {
-          tenantId: args.tenantId,
-          branchType: 'ILS',
-          label: 'Independent Living Services',
-          isPredefined: true,
-          order: 0,
-          active: true,
-        })
-        await ctx.db.insert('agencyBranches', {
-          tenantId: args.tenantId,
-          branchType: 'SLS',
-          label: 'Supported Living Services',
-          isPredefined: true,
-          order: 1,
-          active: true,
-        })
-      }
-
-      const existingSettings = await ctx.db
-        .query('tenantSettings')
-        .withIndex('by_tenant', (q) => q.eq('tenantId', args.tenantId))
-        .unique()
-      const individualsChoiceShifts = [
-        { value: 'morning', label: 'Morning (7am-3pm)', hoursPerDay: 8, isFullTime: true },
-        { value: 'evening', label: 'Evening (3pm-11pm)', hoursPerDay: 8, isFullTime: true },
-        { value: 'overnight', label: 'Overnight (11pm-7am)', hoursPerDay: 8, isFullTime: true },
-      ]
-      if (existingSettings) {
-        await ctx.db.patch(existingSettings._id, {
-          shiftTemplates: individualsChoiceShifts,
-        })
-      } else {
-        await ctx.db.insert('tenantSettings', {
-          tenantId: args.tenantId,
-          shiftGeofence: {
-            enabled: false,
-            enforceClockIn: false,
-            enforceClockOut: false,
-            defaultRadiusMeters: 150,
-            maxAccuracyMeters: 100,
-          },
-          shiftTemplates: individualsChoiceShifts,
-        })
-      }
-
-      const productsToEnsure = ['hiring', 'full_platform']
-      for (const productKey of productsToEnsure) {
-        const existingProduct = await ctx.db
-          .query('agencyProducts')
-          .withIndex('by_tenant_product', (q) =>
-            q.eq('tenantId', args.tenantId).eq('productKey', productKey),
-          )
-          .first()
-        if (!existingProduct) {
-          await ctx.db.insert('agencyProducts', {
-            tenantId: args.tenantId,
-            productKey,
-            active: true,
-          })
-        } else if (!existingProduct.active) {
-          await ctx.db.patch(existingProduct._id, { active: true })
-        }
-      }
-
-      return {
-        ok: true,
-        message: `Seeded Individuals Choice defaults for ${tenant.name}.`,
-      }
-    } catch (err) {
-      return {
-        ok: false,
-        message: err instanceof Error ? err.message : String(err),
-      }
-    }
-  },
-})
-
-/**
- * Platform-admin helper to disable any active dynamic `category: 'application'`
- * forms for a tenant. This forces candidates back to the built-in
- * Individuals Choice-style application flow instead of
- * /onboarding/application-dynamic.
- */
-export const disableDynamicApplicationForms = mutation({
-  args: { tenantId: v.id('tenants') },
-  returns: v.object({ deactivated: v.number() }),
-  handler: async (ctx, { tenantId }) => {
-    await requirePlatformAdmin(ctx)
-
-    const tenant = await ctx.db.get(tenantId)
-    if (!tenant) {
-      throw new Error('Tenant not found.')
-    }
-
-    let deactivated = 0
-    const existingForms = await ctx.db
-      .query('formDefinitions')
-      .withIndex('by_tenant_created', (q) => q.eq('tenantId', tenantId))
-      .collect()
-    for (const existing of existingForms) {
-      if (existing.category === 'application' && existing.active) {
-        await ctx.db.patch(existing._id, { active: false })
-        deactivated++
-      }
-    }
-    return { deactivated }
   },
 })
