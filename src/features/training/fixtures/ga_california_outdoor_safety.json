@@ -1,0 +1,35 @@
+{
+  "courseKey": "ga_california_outdoor_safety",
+  "title": "California Outdoor, Vehicle & Personal Safety",
+  "description": "Stay safe in the community, on the road, and while visiting clients.",
+  "category": "regulatory",
+  "durationMinutes": 15,
+  "passingScore": 80,
+  "steps": [
+    {
+      "id": "h4_outdoor",
+      "title": "Outdoor, Vehicle & Personal Safety",
+      "type": "text",
+      "content": "OUTDOOR SAFETY\n- Scan the area before approaching the home.\n- Park in well-lit, visible spots when possible.\n- Have your visit bag ready and keep one arm free.\n- Walk directly to the residence in a businesslike manner.\n- Trust your instincts; leave and call the office if you feel unsafe.\n\nVEHICLE SAFETY\n- Keep your vehicle in good working order with enough fuel.\n- Do not transport clients in your personal vehicle unless the agency and client have given written consent.\n- Keep a valid driver's license and insurance if driving is required.\n- Lock your car when parked or driving.\n- Turn on emergency flashers and wait for police if you have car trouble.\n\nPERSONAL SAFETY\n- Wear non-slip, closed-toe shoes.\n- Wear your ID badge and professional attire.\n- Keep your phone charged and available for emergencies.\n- Avoid carrying purses or valuables into the home.\n- Report aggressive behavior, threats, animal bites, or unsafe situations to the office immediately.",
+      "required": true,
+      "minDurationSec": 54
+    },
+    {
+      "id": "h4_safety_video",
+      "title": "Video: Caregiver Safety — The 5 Basics",
+      "type": "video",
+      "content": "https://www.youtube.com/embed/ilHHE5XX_vE",
+      "required": true,
+      "minDurationSec": 0,
+      "caption": "Core safety practices for caregivers in the home and community."
+    },
+    {
+      "id": "h4_personal_safety",
+      "title": "Personal Safety in the Community",
+      "type": "slides",
+      "content": "[{\"id\": \"ca-h4ps-1\", \"title\": \"Before You Arrive\", \"body\": \"Call clients in advance, ask for directions if needed, and request that pets be secured before you visit.\", \"imageUrl\": \"https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=800&q=80\", \"narration\": \"Before You Arrive. Call clients in advance, ask for directions if needed, and request that pets be secured before you visit.\"}, {\"id\": \"ca-h4ps-2\", \"title\": \"Pets and Strangers\", \"body\": \"If pets are menacing, back away slowly; never run. Cross the street if a group of strangers makes you uncomfortable.\", \"imageUrl\": \"https://images.unsplash.com/photo-1543333995-a78aea2eee50?w=800&q=80\", \"narration\": \"Pets and Strangers. If pets are menacing, back away slowly; never run. Cross the street if a group of strangers makes you uncomfortable.\"}, {\"id\": \"ca-h4ps-3\", \"title\": \"Protecting Belongings\", \"body\": \"It is recommended that staff not carry a purse. Lock valuables in the trunk and out of sight.\", \"imageUrl\": \"https://images.unsplash.com/photo-1589061434060-a05a5335bfbb?w=800&q=80\", \"narration\": \"Protecting Belongings. It is recommended that staff not carry a purse. Lock valuables in the trunk and out of sight.\"}, {\"id\": \"ca-h4ps-4\", \"title\": \"Office and Building Safety\", \"body\": \"Use common walkways, avoid isolated stairs, keep drawers closed, and report hazards such as wet floors or damaged cords.\", \"imageUrl\": \"https://images.unsplash.com/photo-1763631007426-5869ece08264?w=800&q=80\", \"narration\": \"Office and Building Safety. Use common walkways, avoid isolated stairs, keep drawers closed, and report hazards such as wet floors or damaged cords.\"}, {\"id\": \"ca-h4ps-5\", \"title\": \"Incident Reporting\", \"body\": \"Complete an incident report within 24 hours for any threat, bite, accident, or unsafe situation. Seek medical attention as needed.\", \"imageUrl\": \"https://images.unsplash.com/photo-1581056771107-24ca5f033842?w=800&q=80\", \"narration\": \"Incident Reporting. Complete an incident report within 24 hours for any threat, bite, accident, or unsafe situation. Seek medical attention as needed.\"}]",
+      "required": true,
+      "minDurationSec": 100
+    }
+  ]
+}

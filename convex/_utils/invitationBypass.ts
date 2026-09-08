@@ -48,6 +48,18 @@ const CLERK_ERROR_MAP: Array<[string, string]> = [
     'Please enter a valid email address.',
   ],
   [
+    // Clerk instance-level allowlist rejection (a dashboard restriction, not
+    // something the applicant can fix) — seen on prod when the instance
+    // allowlist blocked public applications.
+    'not allowed to access this application',
+    'This email address is not allowed by email restrictions. Please contact the agency.',
+  ],
+  [
+    // Duplicate-email variant Clerk returns on POST /users.
+    'email address is taken',
+    'An account with this email already exists. Please sign in instead.',
+  ],
+  [
     'not found',
     'Account not found. Please check your email or use the sign-in link.',
   ],

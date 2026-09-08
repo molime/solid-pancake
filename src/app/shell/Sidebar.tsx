@@ -23,11 +23,12 @@ import {
   ScrollText,
   AlertTriangle,
   FileCheck2,
+  GraduationCap,
 } from 'lucide-react'
 import { cn } from '@/shared/lib/cn'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
-import { useTenant } from '@/app/useTenant'
+import { getStoredClerkOrgId, useTenant } from '@/app/useTenant'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 
 interface NavItem {
@@ -36,6 +37,8 @@ interface NavItem {
   icon: React.ReactNode
   roles: string[]
   exact?: boolean
+  requiresProduct?: string
+  hiddenWhenProduct?: string
 }
 
 const navItems: NavItem[] = [
@@ -206,6 +209,14 @@ const navItems: NavItem[] = [
     path: '/onboarding/training',
     icon: <Globe className="h-4 w-4" />,
     roles: ['org:candidate', 'org:caregiver'],
+    hiddenWhenProduct: 'training',
+  },
+  {
+    label: 'Training Hub',
+    path: '/training',
+    icon: <GraduationCap className="h-4 w-4" />,
+    roles: ['org:admin', 'org:coordinator', 'org:hr', 'org:caregiver', 'org:candidate'],
+    requiresProduct: 'training',
   },
   {
     label: 'Profile',
@@ -222,14 +233,33 @@ interface SidebarProps {
 
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const { clerkOrgId } = useTenant()
+  const effectiveClerkOrgId = clerkOrgId ?? getStoredClerkOrgId() ?? undefined
   const { user } = useUser()
   const location = useLocation()
 
-  const member = useQuery(api.members.me, clerkOrgId ? { clerkOrgId } : 'skip')
+  const member = useQuery(
+    api.members.me,
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
+  )
+  const hasTrainingProduct = useQuery(
+    api.agencyConfig.hasProduct,
+    effectiveClerkOrgId
+      ? { clerkOrgId: effectiveClerkOrgId, productKey: 'training' }
+      : 'skip',
+  )
 
   const role = member?.role ?? 'org:caregiver'
 
-  const visibleItems = navItems.filter((item) => item.roles.includes(role))
+  const visibleItems = navItems.filter((item) => {
+    if (!item.roles.includes(role)) return false
+    if (item.requiresProduct === 'training' && hasTrainingProduct !== true) {
+      return false
+    }
+    if (item.hiddenWhenProduct === 'training' && hasTrainingProduct === true) {
+      return false
+    }
+    return true
+  })
 
   return (
     <>

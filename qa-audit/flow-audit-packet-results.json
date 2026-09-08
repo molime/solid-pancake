@@ -1,0 +1,74 @@
+{
+  "steps": [
+    {
+      "name": "audit: dashboard numbers captured",
+      "pass": true,
+      "detail": "personnel=0 of 1869 credentials verified, blocked=0 billing lines blocked, docs=0 of 4 shifts have progress notes"
+    },
+    {
+      "name": "packet: downloads as CSV",
+      "pass": true,
+      "detail": "audit-packet-2026-05-20-to-2026-08-18.csv, 102080 bytes"
+    },
+    {
+      "name": "packet: all documented sections present",
+      "pass": true,
+      "detail": "all 11 sections"
+    },
+    {
+      "name": "packet: blocked billing lines matches dashboard",
+      "pass": true,
+      "detail": "csv=0 page=0"
+    },
+    {
+      "name": "packet: documentation completeness matches dashboard",
+      "pass": true,
+      "detail": "csv=0/4 page=0/4"
+    },
+    {
+      "name": "packet: personnel roster rows == dashboard gaps",
+      "pass": true,
+      "detail": "csv rows=34 gaps=34; dashboard personnel=0 of 1869 vs report 0 of 1869"
+    },
+    {
+      "name": "packet: personnel counts match dashboard",
+      "pass": true
+    },
+    {
+      "name": "report: downloads as CSV",
+      "pass": true,
+      "detail": "audit-readiness-2026-08-18.csv, 18661 bytes"
+    },
+    {
+      "name": "retention: card renders with record-type counts",
+      "pass": true,
+      "detail": "Archived documents: 0 approaching expiry in the next 90 days · 0 under legal hold · 1869 total"
+    },
+    {
+      "name": "retention: legal hold reflected in card (backend-only mutation)",
+      "pass": true,
+      "detail": "before=0 after=1"
+    },
+    {
+      "name": "admin: no pageerrors/console errors",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "hr: /audit renders",
+      "pass": true,
+      "detail": "http://localhost:5180/audit"
+    },
+    {
+      "name": "hr: packet download works with all sections",
+      "pass": true,
+      "detail": "audit-packet-2026-05-20-to-2026-08-18.csv, 102080 bytes"
+    },
+    {
+      "name": "coordinator: /audit blocked (redirect or denied)",
+      "pass": true,
+      "detail": "url=http://localhost:5180/"
+    }
+  ],
+  "bugs": []
+}

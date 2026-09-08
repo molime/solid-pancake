@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { getFunctionName } from 'convex/server'
 import { SelectAgencyPage } from './SelectAgencyPage'
 
 const mocks = {
@@ -35,7 +36,15 @@ vi.mock('convex/react', async () => {
     ...actual,
     useConvexAuth: vi.fn(),
     useMutation: vi.fn(() => mocks.ensureAgency),
-    useQuery: vi.fn(() => dbTenantResult),
+    useQuery: vi.fn((query: unknown) => {
+      // The SelectAgencyPage now also queries platform:isAdmin; default it to
+      // false so the selector UI renders for the existing tests.
+      const name = getFunctionName(
+        query as Parameters<typeof getFunctionName>[0],
+      )
+      if (name === 'platform:isAdmin') return false
+      return dbTenantResult
+    }),
   }
 })
 

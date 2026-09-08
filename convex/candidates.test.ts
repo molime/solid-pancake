@@ -626,7 +626,7 @@ describe('inviteCandidate', () => {
         displayName: 'No Bypass Candidate',
         email: 'candidate@gmail.com',
       }),
-    ).rejects.toThrow('not allowed to access this application')
+    ).rejects.toThrow('not allowed by email restrictions')
 
     const candidate = await t.run(async (ctx) => {
       const tenant = await ctx.db
@@ -644,7 +644,7 @@ describe('inviteCandidate', () => {
     expect(candidate).toBeDefined()
     expect(candidate?.status).toBe('invited')
     expect(candidate?.invitationFailed).toBe(true)
-    expect(candidate?.invitationError).toContain('not allowed to access this application')
+    expect(candidate?.invitationError).toContain('not allowed by email restrictions')
   })
 
   it('falls back to manual setup when the Clerk invitation allow-list rejects the email', async () => {
@@ -3807,5 +3807,217 @@ describe('attachCandidateDocument flag scheduling', () => {
 
     const cases = await listHrCasesForTenant(t, tenantId)
     expect(cases).toHaveLength(0)
+  })
+})
+
+describe('applyPublic', () => {
+  it('accepts a public applicant whose email domain is not on the staff invitation allowlist', async () => {
+    // Regression: applyPublic used to enforce the tenant's allowedEmailDomains
+    // (a staff-invitation setting), which broke the public apply link for
+    // real applicants using gmail/yahoo. Public self-service applications
+    // must ignore that allowlist.
+    vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_clerk')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init: RequestInit | undefined) => {
+        if (url.includes('/users') && init?.method === 'POST') {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                id: 'user_public_apply',
+                email_addresses: [{ email_address: 'candidate@gmail.com' }],
+              }),
+          })
+        }
+
+        if (url.includes('/memberships') && init?.method === 'POST') {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ id: 'mem_public_apply' }),
+          })
+        }
+
+        if (url.includes('/sign_in_tokens')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                id: 'sit_public_apply',
+                token: 'sint_public_apply',
+                user_id: 'user_public_apply',
+              }),
+          })
+        }
+
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: () => Promise.resolve({ errors: [{ message: 'Not found' }] }),
+        })
+      }) as unknown as typeof fetch,
+    )
+
+    const t = createTestConvex()
+    const clerkOrgId = 'org_public_apply'
+    const adminId = 'user_admin_public_apply'
+
+    const tenantId = await seedTenant(t, clerkOrgId, adminId)
+    await t.run(async (ctx) => {
+      await ctx.db.patch(tenantId, { allowedEmailDomains: ['agency.org'] })
+    })
+
+    const result = await t.action(api.candidates.applyPublic, {
+      slug: 'test-agency',
+      email: 'candidate@gmail.com',
+      displayName: 'Public Applicant',
+      appBaseUrl: 'http://localhost:5173',
+    })
+
+    expect(result.alreadyApplied).toBe(false)
+    expect(result.magicLink).toMatch(/__clerk_ticket=sint_public_apply$/)
+
+    const candidate = await t.run(async (ctx) => {
+      return ctx.db
+        .query('candidates')
+        .withIndex('by_tenant_email', (q) =>
+          q.eq('tenantId', tenantId).eq('email', 'candidate@gmail.com'),
+        )
+        .first()
+    })
+    expect(candidate?.clerkUserId).toBe('user_public_apply')
+    expect(candidate?.status).toBe('application_draft')
+  })
+})
+
+
+describe('DE 34 new hire report — employee profile flows', () => {
+  async function seedEmployeeCandidate(
+    t: ReturnType<typeof createTestConvex>,
+    clerkOrgId: string,
+    clerkUserId: string,
+  ) {
+    return t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId,
+        role: 'org:caregiver',
+        displayName: 'DE34 Employee',
+        email: 'de34.employee@example.com',
+      })
+      const candidateId = await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId,
+        email: 'de34.employee@example.com',
+        displayName: 'DE34 Employee',
+        status: 'hired',
+        createdAt: new Date().toISOString(),
+      })
+      return { tenantId: tenant._id as Id<'tenants'>, candidateId: candidateId as Id<'candidates'> }
+    })
+  }
+
+  it('getCandidateByClerkUserId resolves the candidate for HR and returns null for unknown users', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_de34_lookup'
+    const hrId = 'user_hr_de34_lookup'
+    const candidateUserId = 'user_candidate_de34_lookup'
+    const adminId = 'user_admin_de34_lookup'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedHR(t, clerkOrgId, hrId)
+    const { candidateId } = await seedEmployeeCandidate(t, clerkOrgId, candidateUserId)
+
+    const found = await asHR(t, hrId, clerkOrgId).query(
+      api.candidates.getCandidateByClerkUserId,
+      { clerkOrgId, clerkUserId: candidateUserId },
+    )
+    expect(found).toEqual({ candidateId })
+
+    const missing = await asHR(t, hrId, clerkOrgId).query(
+      api.candidates.getCandidateByClerkUserId,
+      { clerkOrgId, clerkUserId: 'user_no_such_user' },
+    )
+    expect(missing).toBeNull()
+  })
+
+  it('saveSignedPrefilledDocumentForHR attaches the completed DE 34 next to the prefilled version', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_de34_hr_upload'
+    const hrId = 'user_hr_de34_upload'
+    const adminId = 'user_admin_de34_upload'
+    const candidateUserId = 'user_candidate_de34_upload'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedHR(t, clerkOrgId, hrId)
+    const { tenantId, candidateId } = await seedEmployeeCandidate(t, clerkOrgId, candidateUserId)
+
+    // The prefilled version generated at application submit time (before the
+    // hire transition, so it is stored by staff on the candidate's record).
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.candidates.savePrefilledDocument,
+      {
+        clerkOrgId,
+        candidateId,
+        documentType: 'de_34',
+        storageId: 'storage-de34-prefilled',
+      },
+    )
+
+    await asHR(t, hrId, clerkOrgId).mutation(
+      api.candidates.saveSignedPrefilledDocumentForHR,
+      {
+        clerkOrgId,
+        candidateId,
+        documentType: 'de_34',
+        storageId: 'storage-de34-completed',
+      },
+    )
+
+    const docs = await t.run(async (ctx) =>
+      ctx.db
+        .query('prefilledDocuments')
+        .withIndex('by_tenant_candidate_type', (q) =>
+          q.eq('tenantId', tenantId).eq('candidateId', candidateId).eq('documentType', 'de_34'),
+        )
+        .collect(),
+    )
+    expect(docs).toHaveLength(1)
+    expect(docs[0]?.storageId).toBe('storage-de34-prefilled')
+    expect(docs[0]?.uploadedSignedStorageId).toBe('storage-de34-completed')
+  })
+
+  it('saveSignedPrefilledDocumentForHR creates the row when no prefilled version exists yet', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_de34_hr_upload_new'
+    const hrId = 'user_hr_de34_upload_new'
+    const adminId = 'user_admin_de34_upload_new'
+    const candidateUserId = 'user_candidate_de34_upload_new'
+
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedHR(t, clerkOrgId, hrId)
+    const { candidateId } = await seedEmployeeCandidate(t, clerkOrgId, candidateUserId)
+
+    const docId = await asHR(t, hrId, clerkOrgId).mutation(
+      api.candidates.saveSignedPrefilledDocumentForHR,
+      {
+        clerkOrgId,
+        candidateId,
+        documentType: 'de_34',
+        storageId: 'storage-de34-completed-only',
+      },
+    )
+
+    const doc = await t.run(async (ctx) => ctx.db.get(docId as Id<'prefilledDocuments'>))
+    expect(doc?.documentType).toBe('de_34')
+    expect(doc?.uploadedSignedStorageId).toBe('storage-de34-completed-only')
   })
 })

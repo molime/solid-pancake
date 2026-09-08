@@ -807,6 +807,225 @@ describe('listFormSubmissions', () => {
   })
 })
 
+describe('application forms', () => {
+  it('getApplicationForms returns only active application forms ordered by order', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_app_forms'
+    const adminId = 'user_admin_app_forms'
+    const candidateUserId = 'user_candidate_app_forms'
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedCandidate(t, clerkOrgId, candidateUserId)
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.forms.createFormDefinition,
+      {
+        clerkOrgId,
+        key: 'onboarding-welcome',
+        category: 'onboarding',
+        order: 1,
+        name: 'Welcome',
+        fields: sampleFields,
+      },
+    )
+    const inactiveAppId = await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.forms.createFormDefinition,
+      {
+        clerkOrgId,
+        key: 'application-info',
+        category: 'application',
+        order: 2,
+        name: 'Application Info',
+        fields: sampleFields,
+      },
+    )
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.forms.createFormDefinition,
+      {
+        clerkOrgId,
+        key: 'application-extra',
+        category: 'application',
+        order: 1,
+        name: 'Application Extra',
+        fields: sampleFields,
+      },
+    )
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.forms.deactivateFormDefinition,
+      {
+        clerkOrgId,
+        formDefinitionId: inactiveAppId as Id<'formDefinitions'>,
+      },
+    )
+
+    const forms = await asCandidate(t, candidateUserId, clerkOrgId).query(
+      api.forms.getApplicationForms,
+      { clerkOrgId },
+    )
+    expect(forms).toHaveLength(1)
+    expect(forms[0]?.name).toBe('Application Extra')
+  })
+
+  it('hasApplicationForms returns true only when application forms exist', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_has_app_forms'
+    const adminId = 'user_admin_has_app_forms'
+    const candidateUserId = 'user_candidate_has_app_forms'
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedCandidate(t, clerkOrgId, candidateUserId)
+
+    const empty = await asCandidate(t, candidateUserId, clerkOrgId).query(
+      api.forms.hasApplicationForms,
+      { clerkOrgId },
+    )
+    expect(empty).toBe(false)
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(api.forms.createFormDefinition, {
+      clerkOrgId,
+      key: 'application-info',
+      category: 'application',
+      name: 'Application Info',
+      fields: sampleFields,
+    })
+
+    const hasForms = await asCandidate(t, candidateUserId, clerkOrgId).query(
+      api.forms.hasApplicationForms,
+      { clerkOrgId },
+    )
+    expect(hasForms).toBe(true)
+  })
+
+  it('hasApplicationForms works for caregivers too', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_has_app_forms_cg'
+    const adminId = 'user_admin_has_app_forms_cg'
+    const caregiverId = 'user_cg_has_app_forms_cg'
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedCaregiver(t, clerkOrgId, caregiverId)
+
+    const empty = await asCaregiver(t, caregiverId, clerkOrgId).query(
+      api.forms.hasApplicationForms,
+      { clerkOrgId },
+    )
+    expect(empty).toBe(false)
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(api.forms.createFormDefinition, {
+      clerkOrgId,
+      key: 'application-info',
+      category: 'application',
+      name: 'Application Info',
+      fields: sampleFields,
+    })
+
+    const hasForms = await asCaregiver(t, caregiverId, clerkOrgId).query(
+      api.forms.hasApplicationForms,
+      { clerkOrgId },
+    )
+    expect(hasForms).toBe(true)
+  })
+
+  it('submitApplicationForms validates required fields and creates application record', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_submit_app_forms'
+    const adminId = 'user_admin_submit_app_forms'
+    const candidateUserId = 'user_candidate_submit_app_forms'
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedCandidate(t, clerkOrgId, candidateUserId)
+
+    const formId = await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.forms.createFormDefinition,
+      {
+        clerkOrgId,
+        key: 'application-info',
+        category: 'application',
+        name: 'Application Info',
+        fields: [
+          { id: 'name', label: 'Name', type: 'text', required: true },
+          { id: 'positionAppliedFor', label: 'Position', type: 'text', required: false },
+        ],
+      },
+    )
+
+    await expect(
+      asCandidate(t, candidateUserId, clerkOrgId).mutation(
+        api.forms.submitApplicationForms,
+        {
+          clerkOrgId,
+          submissions: [
+            {
+              formDefinitionId: formId as Id<'formDefinitions'>,
+              answers: { positionAppliedFor: 'Caregiver' },
+            },
+          ],
+        },
+      ),
+    ).rejects.toThrow('Missing required field: Name')
+
+    await asCandidate(t, candidateUserId, clerkOrgId).mutation(
+      api.forms.submitApplicationForms,
+      {
+        clerkOrgId,
+        submissions: [
+          {
+            formDefinitionId: formId as Id<'formDefinitions'>,
+            answers: { name: 'Candidate', positionAppliedFor: 'HHA' },
+          },
+        ],
+      },
+    )
+
+    const candidate = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      return ctx.db
+        .query('candidates')
+        .withIndex('by_tenant_clerk_user', (q) =>
+          q.eq('tenantId', tenant?._id as Id<'tenants'>).eq('clerkUserId', candidateUserId),
+        )
+        .unique()
+    })
+    expect(candidate?.status).toBe('applied')
+
+    const application = await t.run(async (ctx) => {
+      const apps = await ctx.db
+        .query('applications')
+        .withIndex('by_candidate', (q) => q.eq('candidateId', candidate?._id as Id<'candidates'>))
+        .collect()
+      return apps[0]
+    })
+    expect(application?.status).toBe('submitted')
+    expect(application?.fields.position).toBe('HHA')
+    expect(application?.fields.dynamicFormSubmissions).toHaveLength(1)
+  })
+
+  it('getFormDefinitionsByIds returns matching tenant definitions', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_get_defs_by_ids'
+    const adminId = 'user_admin_get_defs_by_ids'
+    await seedTenant(t, clerkOrgId, adminId)
+
+    const formId = await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.forms.createFormDefinition,
+      {
+        clerkOrgId,
+        name: 'By Id',
+        fields: sampleFields,
+      },
+    )
+
+    const defs = await asAdmin(t, adminId, clerkOrgId).query(
+      api.forms.getFormDefinitionsByIds,
+      {
+        clerkOrgId,
+        formDefinitionIds: [formId as Id<'formDefinitions'>],
+      },
+    )
+    expect(defs).toHaveLength(1)
+    expect(defs[0]?.name).toBe('By Id')
+  })
+})
+
 describe('getFormSubmission', () => {
   it('allows any tenant role to read own tenant submission', async () => {
     const t = createTestConvex()

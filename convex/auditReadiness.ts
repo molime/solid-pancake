@@ -9,6 +9,8 @@ import {
   EXPIRING_SOON_DAYS,
 } from './compliance'
 import { loadLineEvidence } from './evidence'
+import { withSlaFields } from './incidents'
+import { computeDueInfo } from './progressReports'
 
 const AUDIT_ROLES: ('org:admin' | 'org:hr')[] = ['org:admin', 'org:hr']
 
@@ -306,6 +308,317 @@ export const exportCsv = query({
 
     const report = await buildReport(ctx, tenantId, tenant)
     return buildCsv(report, new Date().toISOString())
+  },
+})
+
+// ---------------------------------------------------------------------------
+// Fix list (docs/design-audit-simplification.md, stage 1): the plain-language,
+// worst-first action list behind the simple /audit view. Derived from the
+// SAME tables and helpers as the full view — buildReport gaps, the shared
+// incidents.withSlaFields SLA math, and progressReports.computeDueInfo — so
+// the traffic light can never disagree with the auditor-facing dashboard.
+// ---------------------------------------------------------------------------
+
+const FIX_SOON_DAYS = 30
+
+type FixItem = {
+  id: string
+  severity: 'critical' | 'soon'
+  title: string
+  detail?: string
+  // Null when the caller's role cannot open the target page (e.g. /billing
+  // is admin/coordinator-only, so HR sees the item without a Fix button).
+  linkTo: string | null
+  dueAt?: string
+}
+
+function hoursUntil(iso: string, now: Date) {
+  return Math.round((new Date(iso).getTime() - now.getTime()) / (60 * 60 * 1000))
+}
+
+function dueInDetail(iso: string, now: Date) {
+  const hours = hoursUntil(iso, now)
+  if (hours >= 48) {
+    const days = Math.round(hours / 24)
+    return `due in ${days} day${days === 1 ? '' : 's'}`
+  }
+  if (hours >= 1) return `due in ${hours} hour${hours === 1 ? '' : 's'}`
+  return 'due in under an hour'
+}
+
+function overdueByDetail(iso: string, now: Date) {
+  const hours = -hoursUntil(iso, now)
+  if (hours >= 48) {
+    const days = Math.round(hours / 24)
+    return `overdue by ${days} day${days === 1 ? '' : 's'}`
+  }
+  if (hours >= 1) return `overdue by ${hours} hour${hours === 1 ? '' : 's'}`
+  return 'overdue'
+}
+
+/** Strips statutory citations (e.g. "(WIC §4652.5)") from user-facing labels. */
+function plainLabel(label: string) {
+  return label.replace(/\s*\([^)]*\)/g, '').trim()
+}
+
+function compareFixItems(a: FixItem, b: FixItem) {
+  if (a.severity !== b.severity) return a.severity === 'critical' ? -1 : 1
+  if (a.dueAt && b.dueAt && a.dueAt !== b.dueAt) return a.dueAt < b.dueAt ? -1 : 1
+  if (a.dueAt && !b.dueAt) return -1
+  if (!a.dueAt && b.dueAt) return 1
+  return a.title.localeCompare(b.title)
+}
+
+export const getFixList = query({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, args) => {
+    const { tenantId, tenant, role } = await requireTenantRole(
+      ctx,
+      args.clerkOrgId,
+      AUDIT_ROLES,
+    )
+
+    const now = new Date()
+    const nowIso = now.toISOString()
+    const soonCutoff = new Date(
+      now.getTime() + FIX_SOON_DAYS * DAY_MS,
+    ).toISOString()
+    const todayDateOnly = nowIso.slice(0, 10)
+    const items: FixItem[] = []
+
+    // Credential gaps — the exact same per-employee objects the full view
+    // renders in its gaps table.
+    const report = await buildReport(ctx, tenantId, tenant)
+    for (const gap of report.gaps) {
+      const subject = gap.clerkUserId ?? gap.displayName
+      for (const label of gap.expired) {
+        items.push({
+          id: `credential-expired-${subject}-${label}`,
+          severity: 'critical',
+          title: `${gap.displayName}'s ${label} expired`,
+          linkTo: '/compliance',
+        })
+      }
+      for (const label of gap.missing) {
+        items.push({
+          id: `credential-missing-${subject}-${label}`,
+          severity: 'critical',
+          title: `${gap.displayName} is missing: ${label}`,
+          linkTo: '/compliance',
+        })
+      }
+    }
+
+    // Credentials expiring inside the same 30-day window the compliance page
+    // uses. Gaps only surface expired/missing, so expiring items are read
+    // from documentArchiveItems directly with the same label resolution as
+    // computeComplianceGaps.
+    const requirements = await ctx.db
+      .query('credentialRequirements')
+      .withIndex('by_tenant_role', (q) =>
+        q.eq('tenantId', tenantId).eq('role', 'org:caregiver'),
+      )
+      .collect()
+    const labelByCategory = new Map(
+      requirements.map((requirement) => [requirement.category, requirement.label]),
+    )
+    const profiles = await ctx.db
+      .query('employeeProfiles')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    const nameBySubject = new Map<string, string>()
+    for (const profile of profiles) {
+      nameBySubject.set(profile._id as string, profile.displayName)
+      if (profile.clerkUserId) {
+        nameBySubject.set(profile.clerkUserId, profile.displayName)
+      }
+    }
+    const archiveItems = await ctx.db
+      .query('documentArchiveItems')
+      .withIndex('by_tenant_created', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    for (const item of archiveItems) {
+      if (item.subjectType !== 'employee') continue
+      if (item.overrideStatus === 'overridden') continue
+      if (!item.expiresAt || item.expiresAt < nowIso || item.expiresAt > soonCutoff) {
+        continue
+      }
+      const name = nameBySubject.get(item.subjectId) ?? 'A team member'
+      const label = labelByCategory.get(item.category) ?? item.category
+      const days = Math.max(1, Math.round(hoursUntil(item.expiresAt, now) / 24))
+      items.push({
+        id: `credential-expiring-${item._id}`,
+        severity: 'soon',
+        title: `${name}'s ${label} expires in ${days} day${days === 1 ? '' : 's'}`,
+        linkTo: '/compliance',
+        dueAt: item.expiresAt,
+      })
+    }
+
+    const clients = await ctx.db
+      .query('clients')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    const clientNames = new Map(
+      clients.map((client) => [client._id as string, client.displayName]),
+    )
+
+    // SIR deadlines — the shared withSlaFields math, so the traffic light,
+    // the timeliness pillar, and the SIR CSV always agree.
+    const incidents = await ctx.db
+      .query('specialIncidents')
+      .withIndex('by_tenant_created', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    for (const incident of incidents) {
+      if (incident.status === 'closed') continue
+      const sla = withSlaFields(incident, nowIso)
+      const clientName =
+        clientNames.get(incident.clientId as string) ?? 'a client'
+      const linkTo = `/incidents/${incident._id}`
+      if (!incident.verbalReportedAt) {
+        items.push(
+          sla.verbalBreached
+            ? {
+                id: `sir-verbal-${incident._id}`,
+                severity: 'critical',
+                title: `${clientName}'s incident still needs the 24-hour call to the regional center`,
+                detail: overdueByDetail(sla.verbalDueAt, now),
+                linkTo,
+                dueAt: sla.verbalDueAt,
+              }
+            : {
+                id: `sir-verbal-${incident._id}`,
+                severity: 'soon',
+                title: `Call the regional center about ${clientName}'s incident`,
+                detail: dueInDetail(sla.verbalDueAt, now),
+                linkTo,
+                dueAt: sla.verbalDueAt,
+              },
+        )
+      }
+      if (!incident.writtenSubmittedAt) {
+        items.push(
+          sla.writtenBreached
+            ? {
+                id: `sir-written-${incident._id}`,
+                severity: 'critical',
+                title: `${clientName}'s incident is missing its written report`,
+                detail: overdueByDetail(sla.writtenDueAt, now),
+                linkTo,
+                dueAt: sla.writtenDueAt,
+              }
+            : {
+                id: `sir-written-${incident._id}`,
+                severity: 'soon',
+                title: `${clientName}'s incident needs its written report`,
+                detail: dueInDetail(sla.writtenDueAt, now),
+                linkTo,
+                dueAt: sla.writtenDueAt,
+              },
+        )
+      }
+    }
+
+    // Agency obligations (insurance certificates, disclosures, …) — citations
+    // stripped so the simple view never shows statute references.
+    const obligations = await ctx.db
+      .query('agencyObligations')
+      .withIndex('by_tenant_due', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    for (const obligation of obligations) {
+      const label = plainLabel(obligation.label)
+      if (obligation.dueAt < nowIso) {
+        items.push({
+          id: `obligation-${obligation._id}`,
+          severity: 'critical',
+          title: `${label} is overdue`,
+          detail: overdueByDetail(obligation.dueAt, now),
+          linkTo: '/compliance',
+          dueAt: obligation.dueAt,
+        })
+      } else if (obligation.dueAt <= soonCutoff) {
+        items.push({
+          id: `obligation-${obligation._id}`,
+          severity: 'soon',
+          title: `${label} is due soon`,
+          detail: dueInDetail(obligation.dueAt, now),
+          linkTo: '/compliance',
+          dueAt: obligation.dueAt,
+        })
+      }
+    }
+
+    // Progress reports — the same computeDueInfo math as
+    // progressReports.getProgressReportSummary.
+    for (const client of clients) {
+      const clientReports = await ctx.db
+        .query('progressReports')
+        .withIndex('by_tenant_client_period', (q) =>
+          q.eq('tenantId', tenantId).eq('clientId', client._id),
+        )
+        .collect()
+      const objectives = await ctx.db
+        .query('clientObjectives')
+        .withIndex('by_tenant_client', (q) =>
+          q.eq('tenantId', tenantId).eq('clientId', client._id),
+        )
+        .collect()
+      const due = computeDueInfo(client, objectives, clientReports, todayDateOnly)
+      const dueAt = due.nextDueAt ? `${due.nextDueAt}T00:00:00.000Z` : undefined
+      if (due.dueStatus === 'overdue') {
+        items.push({
+          id: `progress-report-${client._id}`,
+          severity: 'critical',
+          title: `${client.displayName}'s ${due.periodType} progress report is overdue`,
+          linkTo: `/clients/${client._id}`,
+          dueAt,
+        })
+      } else if (due.dueStatus === 'due_soon') {
+        items.push({
+          id: `progress-report-${client._id}`,
+          severity: 'soon',
+          title: `${client.displayName}'s ${due.periodType} progress report is coming up`,
+          detail: dueAt ? dueInDetail(dueAt, now) : undefined,
+          linkTo: `/clients/${client._id}`,
+          dueAt,
+        })
+      }
+    }
+
+    // Blocked billing lines. /billing is admin/coordinator-only, so HR sees
+    // the item without a Fix button (linkTo: null).
+    const canOpenBilling = role === 'org:admin'
+    const lines = await ctx.db
+      .query('billingLines')
+      .withIndex('by_tenant_export_batch', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    for (const line of lines) {
+      if (isBlank(line.blockedReason)) continue
+      const shift = await ctx.db.get(line.shiftId)
+      const clientName = shift
+        ? (clientNames.get(shift.clientId as string) ?? 'a client')
+        : 'a client'
+      items.push({
+        id: `billing-${line._id}`,
+        severity: 'critical',
+        title: `A shift for ${clientName} can't be billed yet`,
+        detail: line.blockedReason,
+        linkTo: canOpenBilling ? '/billing' : null,
+        dueAt: line.blockedAt ?? line.createdAt,
+      })
+    }
+
+    items.sort(compareFixItems)
+
+    const status: 'ready' | 'almost' | 'not_ready' = items.some(
+      (item) => item.severity === 'critical',
+    )
+      ? 'not_ready'
+      : items.length > 0
+        ? 'almost'
+        : 'ready'
+
+    return { status, items }
   },
 })
 

@@ -1,0 +1,173 @@
+{
+  "forms": [
+    {
+      "name": "Statement of Driving Status",
+      "description": "Golden Ages driving status and insurance verification.",
+      "fields": [
+        {
+          "id": "drivingHasLicense",
+          "type": "select",
+          "label": "Do you have a valid driver's license and auto insurance?",
+          "required": true,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "id": "drivingLicenseNumber",
+          "type": "text",
+          "label": "Driver's license number",
+          "required": false
+        },
+        {
+          "id": "drivingInsuranceCarrier",
+          "type": "text",
+          "label": "Auto insurance carrier",
+          "required": false
+        },
+        {
+          "id": "drivingAlternativeTransport",
+          "type": "textarea",
+          "label": "If no license, describe alternative transportation",
+          "required": false
+        },
+        {
+          "id": "drivingSignature",
+          "type": "text",
+          "label": "Employee signature",
+          "required": true
+        }
+      ],
+      "key": "driving_status",
+      "category": "onboarding",
+      "order": 40
+    },
+    {
+      "name": "Conflict of Interest Disclosure",
+      "description": "Golden Ages conflict-of-interest and non-solicitation acknowledgment.",
+      "fields": [
+        {
+          "id": "conflictNoGifts",
+          "type": "checkbox",
+          "label": "I will not accept gifts or gratuities from clients or families.",
+          "required": true
+        },
+        {
+          "id": "conflictNoPrivatePay",
+          "type": "checkbox",
+          "label": "I will not accept private-pay work from clients or families.",
+          "required": true
+        },
+        {
+          "id": "conflictNoBorrowing",
+          "type": "checkbox",
+          "label": "I will not borrow money or items from clients or families.",
+          "required": true
+        },
+        {
+          "id": "conflictNoSolicitation",
+          "type": "checkbox",
+          "label": "I will not solicit clients or families for outside business.",
+          "required": true
+        },
+        {
+          "id": "conflictSignature",
+          "type": "text",
+          "label": "Employee signature",
+          "required": true
+        }
+      ],
+      "key": "conflict_of_interest",
+      "category": "onboarding",
+      "order": 50
+    },
+    {
+      "name": "Orientation Checklist - Direct Care Staff",
+      "description": "Golden Ages orientation completion checklist for direct care staff.",
+      "fields": [
+        {
+          "id": "orientationRole",
+          "type": "checkbox",
+          "label": "Caregiver role, services, and expectations reviewed",
+          "required": true
+        },
+        {
+          "id": "orientationDocumentation",
+          "type": "checkbox",
+          "label": "Documentation requirements reviewed",
+          "required": true
+        },
+        {
+          "id": "orientationClientRights",
+          "type": "checkbox",
+          "label": "Client rights and grievances reviewed",
+          "required": true
+        },
+        {
+          "id": "orientationPersonnelPolicies",
+          "type": "checkbox",
+          "label": "Personnel policies reviewed",
+          "required": true
+        },
+        {
+          "id": "orientationHipaa",
+          "type": "checkbox",
+          "label": "HIPAA / confidentiality reviewed",
+          "required": true
+        },
+        {
+          "id": "orientationEeo",
+          "type": "checkbox",
+          "label": "EEO / non-discrimination reviewed",
+          "required": true
+        },
+        {
+          "id": "orientationQa",
+          "type": "checkbox",
+          "label": "Quality assurance reviewed",
+          "required": true
+        },
+        {
+          "id": "orientationAbuse",
+          "type": "checkbox",
+          "label": "Abuse reporting (SOC 341A) reviewed",
+          "required": true
+        },
+        {
+          "id": "orientationSafety",
+          "type": "checkbox",
+          "label": "Safety, fire, OSHA, first aid, CPR reviewed",
+          "required": true
+        },
+        {
+          "id": "orientationEmergency",
+          "type": "checkbox",
+          "label": "Emergency / disaster plan reviewed",
+          "required": true
+        },
+        {
+          "id": "orientationInfection",
+          "type": "checkbox",
+          "label": "Infection control reviewed",
+          "required": true
+        },
+        {
+          "id": "orientationEmployeeSignature",
+          "type": "text",
+          "label": "Employee signature",
+          "required": true
+        },
+        {
+          "id": "orientationSupervisorSignature",
+          "type": "text",
+          "label": "Supervisor signature",
+          "required": true
+        }
+      ],
+      "key": "orientation_checklist",
+      "category": "onboarding",
+      "order": 60
+    }
+  ]
+}

@@ -108,10 +108,14 @@ export const list = query({
     const actorIds = new Set(events.map((e) => e.actorId))
     const names = new Map<string, string>()
     for (const actorId of actorIds) {
-      // 1. Check tenantMembers
+      // 1. Check tenantMembers — scoped to THIS tenant: a user can belong to
+      // several tenants (qa/admin accounts especially), so an unscoped
+      // by_clerk_user_id unique() crashes with "more than one result".
       const member = await ctx.db
         .query('tenantMembers')
-        .withIndex('by_clerk_user_id', (q) => q.eq('clerkUserId', actorId))
+        .withIndex('by_tenant_user', (q) =>
+          q.eq('tenantId', tenantId).eq('clerkUserId', actorId),
+        )
         .unique()
       if (member) {
         names.set(actorId, member.displayName)

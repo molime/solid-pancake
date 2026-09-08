@@ -32,7 +32,11 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
   const role = member?.role ?? 'org:caregiver'
-  const agencyLogo = resolveAgencyLogo(tenantName)
+  const employerInfo = useQuery(
+    api.tenantSettings.getEmployerInfo,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
+  const agencyLogo = resolveAgencyLogo(tenantName, employerInfo?.legalName)
 
   return (
     <header className="h-16 bg-atria-surface border-b border-atria-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
@@ -71,9 +75,10 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
             role === 'org:coordinator' && 'bg-atria-info-bg text-atria-info',
             role === 'org:caregiver' &&
               'bg-atria-success-bg text-atria-success',
+            role === 'org:hr' && 'bg-atria-warning-bg text-atria-warning',
           )}
         >
-          {role.replace('org:', '')}
+          {role === 'org:caregiver' ? 'employee' : role.replace('org:', '')}
         </span>
         <button
           onClick={handleSignOut}

@@ -1,0 +1,70 @@
+{
+  "steps": [
+    {
+      "name": "pack: apply button visible (no caregiver requirements)",
+      "pass": true
+    },
+    {
+      "name": "pack: first apply result",
+      "pass": true,
+      "detail": "Applied the CA ILS/SLS credential pack: 10 requirements created."
+    },
+    {
+      "name": "pack: idempotent re-apply (mutation level)",
+      "pass": true,
+      "detail": "{\"counts\":{\"created\":0,\"skipped\":10},\"message\":\"All 10 pack requirements already exist — nothing to do.\",\"status\":\"already-applied\"}"
+    },
+    {
+      "name": "pack: button hidden after apply",
+      "pass": true
+    },
+    {
+      "name": "obligations: seeded via UI",
+      "pass": true,
+      "detail": "Seeded 9 standard CA obligations."
+    },
+    {
+      "name": "obligations: 9 standard rows",
+      "pass": true,
+      "detail": "count=9"
+    },
+    {
+      "name": "obligations: Due soon badge renders",
+      "pass": true
+    },
+    {
+      "name": "obligations: Overdue badge renders",
+      "pass": true
+    },
+    {
+      "name": "obligations: On track badge renders",
+      "pass": true
+    },
+    {
+      "name": "obligations: complete dialog submitted",
+      "pass": true,
+      "detail": "evidence: Live-in caregiver attestation — live-in-attestation-qa.pdf"
+    },
+    {
+      "name": "obligations: due date rolled forward by cadence",
+      "pass": true,
+      "detail": "Workers' compensation insurance certificate: due=08/17/2027, expected ~8/17/2027, cadence=12mo"
+    },
+    {
+      "name": "obligations: status flipped to On track",
+      "pass": true,
+      "detail": "badge=On track"
+    },
+    {
+      "name": "obligations: backend completedAt/notes stored",
+      "pass": true,
+      "detail": "{\"completedAt\":\"2026-08-18T04:05:23.498Z\",\"notes\":\"QA: completed during stage-2 e2e verification\",\"evidenceItemId\":\"n578m8qtx97z6yp759admzrd3h8cp9aa\"}"
+    },
+    {
+      "name": "no pageerrors/console errors",
+      "pass": true,
+      "detail": ""
+    }
+  ],
+  "bugs": []
+}

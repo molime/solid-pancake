@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { SignedInApplyFlowBranding } from '../components/application/ApplyFlowBranding'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useClerk } from '@clerk/react'
 import { clearSessionData } from '@/shared/lib/clearSession'
@@ -55,6 +56,11 @@ const DOCUMENT_LABELS: Record<string, { title: string; hint: string; expiry: boo
     hint: 'Upload your car insurance policy document. Required only if you will transport clients in your personal vehicle.',
     expiry: true,
   },
+  personnel_record: {
+    title: 'Upload personnel record (HCS 501)',
+    hint: 'Download the blank HCS 501 form, fill it out completely, and upload the completed form here. This is required now that you have been hired.',
+    expiry: false,
+  },
   required: {
     title: 'Upload required document',
     hint: 'Upload the requested document.',
@@ -93,11 +99,16 @@ export function DocumentUploadPage() {
     api.candidates.getMyApplication,
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
+  const employerInfo = useQuery(
+    api.tenantSettings.getEmployerInfo,
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
+  )
   const generateUploadUrl = useMutation(api.files.generateUploadUrl)
   const attachDocument = useMutation(api.candidates.attachCandidateDocument)
   const savePrefilledDocument = useMutation(api.candidates.savePrefilledDocument)
   const saveSignedPrefilledDocument = useMutation(api.candidates.saveSignedPrefilledDocument)
   const skipTask = useMutation(api.candidates.skipCandidateTask)
+  const completeTaskByType = useMutation(api.candidates.completeCandidateTaskByType)
 
   const [file, setFile] = useState<File | null>(null)
   const [expiresAt, setExpiresAt] = useState('')
@@ -105,6 +116,7 @@ export function DocumentUploadPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [isSkipping, setIsSkipping] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isMarkingComplete, setIsMarkingComplete] = useState(false)
   const [photoIdType, setPhotoIdType] = useState('')
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
@@ -123,10 +135,24 @@ export function DocumentUploadPage() {
   const isMultiUpload = documentType === 'additional_certifications'
   const isHealthScreen = documentType === 'health_screen'
   const isBackgroundCheck = documentType === 'background_check'
+  const isPersonnelRecord = documentType === 'personnel_record'
+  const isGoldenAges =
+    (tenantName ?? '').toLowerCase().includes('golden') ||
+    (employerInfo?.legalName ?? '').toLowerCase().includes('golden')
+  const isGoldenAgesBackgroundCheck = isBackgroundCheck && isGoldenAges
+  const isGoldenAgesHealthScreen = isHealthScreen && isGoldenAges
   // Signed uploads for these types are also linked to the prefilled document
   // record — block submit until the candidate profile query has loaded so the
   // link is never silently skipped.
-  const needsPrefilledLink = isHealthScreen || isBackgroundCheck
+  const needsPrefilledLink =
+    isHealthScreen || (isBackgroundCheck && !isGoldenAgesBackgroundCheck) || isPersonnelRecord
+
+  const displayMeta = isGoldenAgesBackgroundCheck
+    ? {
+        title: 'Complete DOJ background check',
+        hint: 'Golden Ages Home Care requires applicants to register for fingerprints through the California Department of Justice portal. Follow the link below, then mark this step complete.',
+      }
+    : meta
 
   const PHOTO_ID_TYPES = [
     { value: 'passport', label: 'Passport (US)' },
@@ -172,17 +198,25 @@ export function DocumentUploadPage() {
     if (isHealthScreen) {
       const availability = String(personal.availability ?? '')
       const daysOfWeek = Array.isArray(personal.daysOfWeek) ? (personal.daysOfWeek as unknown[]) : []
+      const fullName = `${personal.firstName ?? ''} ${personal.lastName ?? ''}`.trim()
+      const fullAddress = `${address.street ?? ''} ${address.apt ?? ''}, ${address.city ?? ''}, ${address.state ?? ''} ${address.zip ?? ''}`.trim()
       return {
         facilityName: agencyName,
         facilityAddress: agencyAddress ?? '',
-        personName: `${personal.firstName ?? ''} ${personal.lastName ?? ''}`.trim(),
+        personName: fullName,
+        firstName: personal.firstName ?? '',
+        lastName: personal.lastName ?? '',
         age: calculateAge(personal.dateOfBirth as string | undefined),
+        dateOfBirth: formatDateUS(String(personal.dateOfBirth ?? '')),
         positionTitle: personal.positionApplyingFor ?? '',
         workDaysPerWeek: daysOfWeek.length > 0 ? String(daysOfWeek.length) : '5',
         workHoursPerDay:
           availability === 'part_time' ? String(personal.customHours ?? '') || '8' : '8',
-        applicantSignature: `${personal.firstName ?? ''} ${personal.lastName ?? ''}`.trim(),
-        applicantAddress: `${address.street ?? ''} ${address.apt ?? ''}, ${address.city ?? ''}, ${address.state ?? ''} ${address.zip ?? ''}`.trim(),
+        applicantSignature: fullName,
+        applicantAddress: fullAddress,
+        address: fullAddress,
+        phone: (personal.homePhone as string | undefined) ?? (personal.cellPhone as string | undefined) ?? '',
+        email: personal.email ?? '',
         date: todayUs,
       }
     }
@@ -208,14 +242,21 @@ export function DocumentUploadPage() {
     setIsGenerating(true)
     setError('')
     try {
-      const mapping = getMapping(isHealthScreen ? 'health_screen' : 'live_scan')
+      const mappingKey = isHealthScreen
+        ? isGoldenAgesHealthScreen
+          ? 'golden_ages_health_screen'
+          : 'health_screen'
+        : 'live_scan'
+      const mapping = getMapping(mappingKey)
       if (!mapping) {
         throw new Error('PDF template mapping not found.')
       }
       const data = buildPrefilledData()
       const bytes = await generatePrefilledPdf(mapping, data)
       const filename = isHealthScreen
-        ? 'lic_503_health_screen_prefilled.pdf'
+        ? isGoldenAgesHealthScreen
+          ? 'golden_ages_health_screen_prefilled.pdf'
+          : 'lic_503_health_screen_prefilled.pdf'
         : 'lic_9163_live_scan_prefilled.pdf'
       saveAndDownload(bytes, filename)
       const getUploadUrl = async () => {
@@ -269,10 +310,10 @@ export function DocumentUploadPage() {
         expiresAt: meta.expiry ? expiresAt : undefined,
         photoIdType: isPhotoId ? photoIdType : undefined,
       })
-      if ((isHealthScreen || isBackgroundCheck) && candidateId) {
+      if ((isHealthScreen || isBackgroundCheck || isPersonnelRecord) && candidateId) {
         await saveSignedPrefilledDocument({
           clerkOrgId: orgId,
-          documentType: isHealthScreen ? 'health_screen' : 'live_scan',
+          documentType: isHealthScreen ? 'health_screen' : isPersonnelRecord ? 'hcs_501' : 'live_scan',
           storageId,
         })
       }
@@ -291,6 +332,18 @@ export function DocumentUploadPage() {
 
   const handleDone = () => {
     navigate('/onboarding', { replace: true })
+  }
+
+  const handleMarkBackgroundCheckComplete = async () => {
+    setIsMarkingComplete(true)
+    setError('')
+    try {
+      await completeTaskByType({ clerkOrgId: orgId, taskType: 'background_check' })
+      navigate('/onboarding', { replace: true })
+    } catch (err) {
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Could not complete this step. Please try again.')
+      setIsMarkingComplete(false)
+    }
   }
 
   return (
@@ -316,8 +369,8 @@ export function DocumentUploadPage() {
             </button>
           </div>
 
-          <h1 className='mb-1 text-2xl font-semibold text-atria-ink'>{meta.title}</h1>
-          <p className='mb-6 text-base text-atria-text-secondary'>{meta.hint}</p>
+          <h1 className='mb-1 text-2xl font-semibold text-atria-ink'>{displayMeta.title}</h1>
+          <p className='mb-6 text-base text-atria-text-secondary'>{displayMeta.hint}</p>
 
           {isHealthScreen && (
             <div className='mb-6 rounded-[var(--radius-atria-md)] border border-atria-info/30 bg-atria-info/10 p-4'>
@@ -337,7 +390,40 @@ export function DocumentUploadPage() {
             </div>
           )}
 
-          {isBackgroundCheck && (
+          {isPersonnelRecord && (
+            <div className='mb-6 rounded-[var(--radius-atria-md)] border border-atria-info/30 bg-atria-info/10 p-4'>
+              <p className='text-sm font-medium text-atria-info'>Before you upload</p>
+              <p className='mt-1 text-sm text-atria-ink'>
+                Download the blank HCS 501 form below, fill it out completely, then come back here and upload the completed form. It goes into your personnel file, where HR, admin, and coordinators can review it.
+              </p>
+              <a
+                href='/templates/hcs_501_personnel_record.pdf'
+                download='hcs_501_personnel_record.pdf'
+                className='mt-3 block w-full rounded-[var(--radius-atria-md)] bg-atria-surface-2 px-4 py-2.5 text-center text-sm font-medium text-atria-accent hover:bg-atria-surface-3 hover:underline'
+              >
+                Download blank HCS 501 form
+              </a>
+            </div>
+          )}
+
+          {isGoldenAgesBackgroundCheck && (
+            <div className='mb-6 rounded-[var(--radius-atria-md)] border border-atria-info/30 bg-atria-info/10 p-4'>
+              <p className='text-sm font-medium text-atria-info'>California DOJ background check registration</p>
+              <p className='mt-1 text-sm text-atria-ink'>
+                Golden Ages Home Care uses the California Department of Justice Guardian applicant portal. Click the link below to complete your background check registration. You will receive instructions on how to submit your fingerprints and bring any required form to the location you choose.
+              </p>
+              <a
+                href='https://guardian.dss.ca.gov/applicant'
+                target='_blank'
+                rel='noopener noreferrer'
+                className='mt-3 block text-sm font-medium text-atria-accent hover:underline'
+              >
+                Go to applicant portal →
+              </a>
+            </div>
+          )}
+
+          {isBackgroundCheck && !isGoldenAgesBackgroundCheck && (
             <div className='mb-6 rounded-[var(--radius-atria-md)] border border-atria-info/30 bg-atria-info/10 p-4'>
               <p className='text-sm font-medium text-atria-info'>Live Scan instructions</p>
               <p className='mt-1 text-sm text-atria-ink'>
@@ -398,110 +484,126 @@ export function DocumentUploadPage() {
             </div>
           )}
 
-          <div
-            className={cn(
-              'mb-6 flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[var(--radius-atria-md)] border-2 border-dashed p-8 transition-colors',
-              file ? 'border-atria-accent bg-atria-accent-quiet' : 'border-atria-border bg-atria-surface-2 hover:bg-atria-surface-3',
-            )}
-            onClick={() => inputRef.current?.click()}
-          >
-            <input
-              ref={inputRef}
-              type='file'
-              accept={ALLOWED_TYPES.join(',')}
-              className='hidden'
-              onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
-            />
-            <svg className='h-8 w-8 text-atria-text-secondary' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.5' aria-hidden>
-              <path d='M12 16.5V4.5m0 0-4 4m4-4 4 4M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4' />
-            </svg>
-            <p className='text-center text-sm text-atria-text-secondary'>
-              {file ? file.name : 'Tap to choose a file or take a photo'}
-            </p>
-          </div>
-
-          {file && (
-            <div className='mb-6 flex items-center gap-3 rounded-[var(--radius-atria-sm)] border border-atria-border bg-atria-surface-2 p-3'>
-              <div className='flex h-10 w-10 items-center justify-center rounded-[var(--radius-atria-sm)] bg-atria-surface-3 text-atria-text-secondary'>
-                📄
-              </div>
-              <div className='min-w-0 flex-1'>
-                <p className='truncate text-sm font-medium text-atria-ink'>{file.name}</p>
-                <p className='text-xs text-atria-text-muted'>{(file.size / 1024).toFixed(1)} KB · Ready to upload</p>
-              </div>
-              <button
-                className='text-sm text-atria-danger hover:underline'
-                onClick={() => setFile(null)}
+          {!isGoldenAgesBackgroundCheck && (
+            <>
+              <div
+                className={cn(
+                  'mb-6 flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[var(--radius-atria-md)] border-2 border-dashed p-8 transition-colors',
+                  file ? 'border-atria-accent bg-atria-accent-quiet' : 'border-atria-border bg-atria-surface-2 hover:bg-atria-surface-3',
+                )}
+                onClick={() => inputRef.current?.click()}
               >
-                Remove
-              </button>
-            </div>
-          )}
+                <input
+                  ref={inputRef}
+                  type='file'
+                  accept={ALLOWED_TYPES.join(',')}
+                  className='hidden'
+                  onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
+                />
+                <svg className='h-8 w-8 text-atria-text-secondary' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.5' aria-hidden>
+                  <path d='M12 16.5V4.5m0 0-4 4m4-4 4 4M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4' />
+                </svg>
+                <p className='text-center text-sm text-atria-text-secondary'>
+                  {file ? file.name : 'Tap to choose a file or take a photo'}
+                </p>
+              </div>
 
-          {meta.expiry && (
-            <FieldGroup
-              label='EXPIRY DATE *'
-              htmlFor='expiresAt'
-              helperText='When does this document expire?'
-              className='mb-6'
-            >
-              <USDateInput
-                id='expiresAt'
-                value={expiresAt}
-                onChange={(iso) => setExpiresAt(iso)}
-              />
-            </FieldGroup>
+              {file && (
+                <div className='mb-6 flex items-center gap-3 rounded-[var(--radius-atria-sm)] border border-atria-border bg-atria-surface-2 p-3'>
+                  <div className='flex h-10 w-10 items-center justify-center rounded-[var(--radius-atria-sm)] bg-atria-surface-3 text-atria-text-secondary'>
+                    📄
+                  </div>
+                  <div className='min-w-0 flex-1'>
+                    <p className='truncate text-sm font-medium text-atria-ink'>{file.name}</p>
+                    <p className='text-xs text-atria-text-muted'>{(file.size / 1024).toFixed(1)} KB · Ready to upload</p>
+                  </div>
+                  <button
+                    className='text-sm text-atria-danger hover:underline'
+                    onClick={() => setFile(null)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+
+              {meta.expiry && (
+                <FieldGroup
+                  label='EXPIRY DATE *'
+                  htmlFor='expiresAt'
+                  helperText='When does this document expire?'
+                  className='mb-6'
+                >
+                  <USDateInput
+                    id='expiresAt'
+                    value={expiresAt}
+                    onChange={(iso) => setExpiresAt(iso)}
+                  />
+                </FieldGroup>
+              )}
+
+              {isMultiUpload && uploadedFiles.length > 0 && (
+                <div className='mb-4 space-y-2'>
+                  <p className='text-sm font-medium text-atria-ink'>Uploaded documents:</p>
+                  {uploadedFiles.map((name, i) => (
+                    <div key={i} className='flex items-center gap-3 rounded-[var(--radius-atria-sm)] border border-atria-border bg-atria-surface-2 p-3'>
+                      <div className='flex h-8 w-8 items-center justify-center rounded-[var(--radius-atria-sm)] bg-atria-success/20 text-atria-success'>
+                        <svg className='h-4 w-4' viewBox='0 0 24 24' fill='currentColor' aria-hidden>
+                          <path d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z' />
+                        </svg>
+                      </div>
+                      <p className='truncate text-sm text-atria-ink'>{name}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {isMultiUpload && uploadedFiles.length > 0 ? (
+                <div className='flex gap-3'>
+                  <Button
+                    variant='secondary'
+                    size='lg'
+                    className='flex-1'
+                    disabled={isUploading}
+                    onClick={() => inputRef.current?.click()}
+                  >
+                    Upload another
+                  </Button>
+                  <Button
+                    variant='primary'
+                    size='lg'
+                    className='flex-1'
+                    onClick={handleDone}
+                  >
+                    Done
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant='primary'
+                  size='lg'
+                  className='w-full'
+                  disabled={!file || isUploading || (isPhotoId && !photoIdType) || (meta.expiry && !expiresAt) || (needsPrefilledLink && !candidateId)}
+                  onClick={handleSubmit}
+                >
+                  {isUploading ? 'Uploading...' : isMultiUpload ? 'Upload document' : 'Submit document'}
+                </Button>
+              )}
+            </>
           )}
 
           {error && (
             <p className='mb-4 text-sm text-atria-danger'>{error}</p>
           )}
 
-          {isMultiUpload && uploadedFiles.length > 0 && (
-            <div className='mb-4 space-y-2'>
-              <p className='text-sm font-medium text-atria-ink'>Uploaded documents:</p>
-              {uploadedFiles.map((name, i) => (
-                <div key={i} className='flex items-center gap-3 rounded-[var(--radius-atria-sm)] border border-atria-border bg-atria-surface-2 p-3'>
-                  <div className='flex h-8 w-8 items-center justify-center rounded-[var(--radius-atria-sm)] bg-atria-success/20 text-atria-success'>
-                    <svg className='h-4 w-4' viewBox='0 0 24 24' fill='currentColor' aria-hidden>
-                      <path d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z' />
-                    </svg>
-                  </div>
-                  <p className='truncate text-sm text-atria-ink'>{name}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {isMultiUpload && uploadedFiles.length > 0 ? (
-            <div className='flex gap-3'>
-              <Button
-                variant='secondary'
-                size='lg'
-                className='flex-1'
-                disabled={isUploading}
-                onClick={() => inputRef.current?.click()}
-              >
-                Upload another
-              </Button>
-              <Button
-                variant='primary'
-                size='lg'
-                className='flex-1'
-                onClick={handleDone}
-              >
-                Done
-              </Button>
-            </div>
-          ) : (
+          {isGoldenAgesBackgroundCheck && (
             <Button
               variant='primary'
               size='lg'
               className='w-full'
-              disabled={!file || isUploading || (isPhotoId && !photoIdType) || (meta.expiry && !expiresAt) || (needsPrefilledLink && !candidateId)}
-              onClick={handleSubmit}
+              disabled={isMarkingComplete}
+              onClick={handleMarkBackgroundCheckComplete}
             >
-              {isUploading ? 'Uploading...' : isMultiUpload ? 'Upload document' : 'Submit document'}
+              {isMarkingComplete ? 'Completing...' : 'I have completed my DOJ registration →'}
             </Button>
           )}
 
@@ -539,15 +641,7 @@ export function DocumentUploadPage() {
           )}
         </CardContent>
       </Card>
-      <div className='mt-6 flex flex-col items-center gap-2'>
-        {/* TODO: resolve via resolveAgencyLogo(tenantName) when multi-agency support is added */}
-        <img
-          src="/agency-logo-individualschoice.jpeg"
-          alt="Agency logo"
-          className='h-10 w-auto object-contain opacity-70'
-        />
-        <p className='text-xs text-atria-text-muted'>Powered by ATRIA-X Digital Solutions</p>
-      </div>
+      <SignedInApplyFlowBranding />
     </div>
   )
 }

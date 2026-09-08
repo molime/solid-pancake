@@ -19,9 +19,23 @@ export function CandidateOnboardingIndex() {
     api.agencyConfig.hasProduct,
     clerkOrgId ? { clerkOrgId, productKey: 'full_platform' } : 'skip',
   )
+  const hasTrainingProduct = useQuery(
+    api.agencyConfig.hasProduct,
+    clerkOrgId ? { clerkOrgId, productKey: 'training' } : 'skip',
+  )
+  const hasDynamicApplicationForms = useQuery(
+    api.forms.hasApplicationForms,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
 
   useEffect(() => {
-    if (!data || !clerkOrgId) return
+    if (
+      !data ||
+      !clerkOrgId ||
+      hasDynamicApplicationForms === undefined ||
+      hasTrainingProduct === undefined
+    )
+      return
 
     if (candidate?.requiresPasswordChange) {
       navigate('/onboarding/profile?forcePasswordChange=true', { replace: true })
@@ -31,7 +45,11 @@ export function CandidateOnboardingIndex() {
     const status = data.candidate?.status ?? 'invited'
 
     if (status === 'invited' || status === 'new' || status === 'application_draft') {
-      navigate('/onboarding/application', { replace: true })
+      if (hasDynamicApplicationForms) {
+        navigate('/onboarding/application-dynamic', { replace: true })
+      } else {
+        navigate('/onboarding/application', { replace: true })
+      }
       return
     }
 
@@ -50,14 +68,26 @@ export function CandidateOnboardingIndex() {
           navigate('/caregiver/today', { replace: true })
         }
       } else {
-        navigate('/onboarding/training', { replace: true })
+        // Agencies with the Training module use the new /training hub.
+        navigate(hasTrainingProduct ? '/training' : '/onboarding/training', {
+          replace: true,
+        })
       }
       return
     }
 
     // applied, hr_review, accepted, rejected, withdrawn -> show onboarding checklist page
     navigate('/onboarding/checklist', { replace: true })
-  }, [data, clerkOrgId, navigate, completions, candidate, hasFullPlatform])
+  }, [
+    data,
+    clerkOrgId,
+    navigate,
+    completions,
+    candidate,
+    hasFullPlatform,
+    hasTrainingProduct,
+    hasDynamicApplicationForms,
+  ])
 
   if (isLoading || !clerkOrgId) return <AppLoader fullScreen />
   return <AppLoader fullScreen />
