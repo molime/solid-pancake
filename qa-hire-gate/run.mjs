@@ -20,7 +20,10 @@ mkdirSync(SHOTS, { recursive: true })
 
 const TS = Date.now()
 const DEFAULT_EMAIL = `hire.gate.${TS}@gmail.com`
-const PASSWORD = 'HireGate2026!QA'
+const PASSWORD = process.env.QA_HIRE_GATE_PASSWORD
+if (!PASSWORD) {
+  throw new Error('Set QA_HIRE_GATE_PASSWORD in the environment before running this script.')
+}
 const results = []
 const check = (name, ok, extra = '') => {
   results.push({ name, ok, extra })
