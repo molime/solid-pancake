@@ -264,19 +264,21 @@ export function StepPlayer({
 
   const needsScrollEnforcement =
     step.type === 'text' || step.type === 'policy' || step.type === 'slides'
+  // Every non-quiz step requires the learner's acknowledgment checkbox so the
+  // completion record is consistent across slides, text, and video steps.
   const canProceed =
     step.type === 'quiz'
       ? false // quiz calls onComplete when passed
       : needsScrollEnforcement
         ? scrolledToBottom && agreed && secondsRemaining === 0
-        : true
+        : agreed && secondsRemaining === 0
 
   const getBlocker = ():
     | { key: 'scroll'; message: string }
     | { key: 'timer'; message: string }
     | { key: 'checkbox'; message: string }
     | { key: 'ready'; message: string } => {
-    if (!scrolledToBottom) {
+    if (needsScrollEnforcement && !scrolledToBottom) {
       return {
         key: 'scroll',
         message:
@@ -297,7 +299,11 @@ export function StepPlayer({
     return {
       key: 'ready',
       message:
-        step.type === 'slides' ? 'All slides viewed' : 'All cards reviewed',
+        step.type === 'slides'
+          ? 'All slides viewed'
+          : step.type === 'text' || step.type === 'policy'
+            ? 'All cards reviewed'
+            : 'Section acknowledged',
     }
   }
 
@@ -395,7 +401,7 @@ export function StepPlayer({
         />
       )}
 
-      {(step.type === 'text' || step.type === 'policy' || step.type === 'slides') && (
+      {step.type !== 'quiz' && (
         <>
           <div className="mb-4 flex items-center justify-between">
             <p
