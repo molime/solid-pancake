@@ -347,10 +347,9 @@ export function StepPlayer({
           style={{ opacity: 0, animationDelay: '0.05s' }}
         >
           <div className="flex items-center gap-2">
-            <span className="text-lg training-animate-float">🎧</span>
+            <span className="text-lg training-animate-float">📖</span>
             <p className="text-sm font-medium text-atria-info">
-              View every slide to continue. Use the Listen button to hear the
-              narration.
+              View every slide to continue.
             </p>
           </div>
         </div>

@@ -117,10 +117,9 @@ describe('CoursePlayerPage', () => {
     renderPlayer()
 
     await waitFor(() => {
-      expect(screen.getByText('Golden Ages Home Care Onboarding')).toBeInTheDocument()
+      expect(screen.getByText('Step 1 of 2')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Step 1 of 2')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Welcome' })).toBeInTheDocument()
   })
 

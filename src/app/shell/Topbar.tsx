@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { cn } from '@/shared/lib/cn'
-import { Menu, LogOut, Building2 } from 'lucide-react'
+import { Menu, LogOut, Building2, ChevronLeft } from 'lucide-react'
 import { useTenant } from '@/app/useTenant'
 import { resolveAgencyLogo } from './agencyLogo'
 
@@ -14,6 +14,18 @@ function breadcrumbFromPath(path: string): string {
   return segments
     .map((s) => s.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()))
     .join(' › ')
+}
+
+// The course player lives at /training/<courseId> where courseId is a Convex
+// document id — rendering it as a breadcrumb shows meaningless gibberish.
+// Show a "Back to training" button there instead.
+function isCoursePlayerPath(path: string): boolean {
+  const segments = path.split('/').filter(Boolean)
+  return (
+    segments.length === 2 &&
+    segments[0] === 'training' &&
+    segments[1] !== 'admin'
+  )
 }
 
 export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
@@ -49,7 +61,18 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           <Menu className="h-5 w-5" />
         </button>
         <span className="text-sm font-medium text-atria-ink">
-          {breadcrumbFromPath(location.pathname)}
+          {isCoursePlayerPath(location.pathname) ? (
+            <button
+              type="button"
+              onClick={() => navigate('/training')}
+              className="flex items-center gap-1.5 text-atria-text-secondary hover:text-atria-ink transition-colors"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Back to training
+            </button>
+          ) : (
+            breadcrumbFromPath(location.pathname)
+          )}
         </span>
       </div>
 
