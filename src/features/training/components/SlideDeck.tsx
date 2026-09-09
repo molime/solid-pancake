@@ -40,8 +40,18 @@ function useSpeechSynthesis() {
   }, [])
 
   const pickBestVoice = useCallback((voices: SpeechSynthesisVoice[]) => {
-    // Prefer known natural-sounding system voices, then any local en-US voice.
+    // Prefer modern "natural"/neural voices first — they sound like a real
+    // instructor rather than a robotic reader. Edge/Chrome expose these as
+    // online voices (localService=false), so do not require localService here.
     const preferredNames = [
+      'Microsoft Aria',
+      'Microsoft Jenny',
+      'Microsoft Natasha',
+      'Microsoft Sonia',
+      'Microsoft Libby',
+      'Microsoft Ana',
+      'Microsoft Guy',
+      'Google US English',
       'Samantha',
       'Ava',
       'Allison',
@@ -50,16 +60,13 @@ function useSpeechSynthesis() {
       'Karen',
       'Daniel',
       'Alex',
-      'Fred',
       'Tessa',
       'Moira',
       'Fiona',
       'Microsoft Zira',
+      'Microsoft Eva',
       'Microsoft David',
       'Microsoft Mark',
-      'Microsoft Eva',
-      'Microsoft Jenny',
-      'Google US English',
       'Apple Samantha',
     ]
     for (const name of preferredNames) {
@@ -72,7 +79,7 @@ function useSpeechSynthesis() {
       if (match) return match
     }
     return (
-      voices.find((v) => v.lang === 'en-US' && v.localService) ??
+      voices.find((v) => v.lang === 'en-US') ??
       voices.find((v) => typeof v.lang === 'string' && v.lang.startsWith('en')) ??
       voices[0]
     )
