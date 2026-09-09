@@ -1,32 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useClerk } from '@clerk/react'
-import { clearSessionData } from '@/shared/lib/clearSession'
 import { getStoredClerkOrgId, useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
-import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { cn } from '@/shared/lib/cn'
 import { StepPlayer } from '../components/StepPlayer'
 import type { CourseDetail, TrainingStep } from '../model/courseTypes'
-import { Award, CheckCircle2, ChevronLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { Award, CheckCircle2, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 
 export function CoursePlayerPage() {
   const { courseId } = useParams<{ courseId: string }>()
   const navigate = useNavigate()
-  const { signOut } = useClerk()
   const { clerkOrgId } = useTenant()
   const effectiveClerkOrgId = clerkOrgId ?? getStoredClerkOrgId() ?? undefined
   const [outlineOpen, setOutlineOpen] = useState(true)
-
-  const handleSignOut = () => {
-    clearSessionData()
-    signOut(() => navigate('/sign-in'))
-  }
 
   const courseData = useQuery(
     api.training.getCourse,
@@ -136,38 +127,6 @@ export function CoursePlayerPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-atria-bg">
-      {/* Header */}
-      <header className="sticky top-0 z-30 border-b border-atria-border bg-atria-surface/95 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 lg:px-6">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleBackToHub}
-              className="flex items-center gap-1.5 text-sm text-atria-text-secondary hover:text-atria-ink"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              <span className="hidden sm:inline">Back to training</span>
-            </button>
-          </div>
-
-          <div className="flex flex-col items-center">
-            <AtriaLogo className="h-10 w-auto" />
-            <span className="text-[10px] font-medium uppercase tracking-wider text-atria-text-muted">
-              {course.title}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="text-xs text-atria-text-muted hover:text-atria-ink hover:underline"
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
-
       {/* Main workspace */}
       <main className="mx-auto flex w-full max-w-7xl flex-1 gap-6 p-4 lg:p-6">
         {/* Outline sidebar */}

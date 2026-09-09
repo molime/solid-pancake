@@ -9,6 +9,10 @@ interface SlideDeckProps {
   onAllViewed: () => void
 }
 
+// Narration is temporarily hidden — browser speech synthesis sounds too
+// robotic. Flip to true to re-enable the Listen button.
+const SHOW_NARRATION = false
+
 function useSpeechSynthesis() {
   const synthRef = useRef<SpeechSynthesis | null>(
     typeof window !== 'undefined' ? window.speechSynthesis : null,
@@ -180,7 +184,10 @@ export function SlideDeck({ slides, onAllViewed }: SlideDeckProps) {
       <div className="p-6">
         <div className="mb-4 flex items-start justify-between gap-4">
           <h3 className="text-xl font-bold text-atria-ink">{slide.title}</h3>
-          {available && (
+          {/* Narration hidden for now — browser TTS sounds too robotic.
+              Re-enable by setting SHOW_NARRATION to true once we have a
+              natural-sounding voice solution. */}
+          {SHOW_NARRATION && available && (
             <button
               type="button"
               onClick={toggleNarration}
@@ -205,7 +212,7 @@ export function SlideDeck({ slides, onAllViewed }: SlideDeckProps) {
               )}
             </button>
           )}
-          {!available && (
+          {SHOW_NARRATION && !available && (
             <span className="flex shrink-0 items-center gap-1.5 text-xs text-atria-text-muted">
               <VolumeX className="h-4 w-4" />
               Audio unavailable

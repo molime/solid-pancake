@@ -117,31 +117,19 @@ describe('SlideDeck', () => {
     await waitFor(() => expect(onAllViewed).toHaveBeenCalledTimes(1))
   })
 
-  it('plays and stops narration when the Listen button is toggled', async () => {
-    const user = userEvent.setup()
+  // Narration is temporarily hidden (SHOW_NARRATION = false) because browser
+  // TTS sounds too robotic. These tests assert the hidden state; restore the
+  // original narration tests when the feature is re-enabled.
+  it('hides the Listen button while narration is disabled', () => {
     render(<SlideDeck slides={slides} onAllViewed={vi.fn()} />)
 
-    const listenButton = screen.getByRole('button', { name: /Read slide aloud/i })
-    await user.click(listenButton)
-    expect(mockSynth.speak).toHaveBeenCalledTimes(1)
-
-    const stopButton = await screen.findByRole('button', { name: /Stop narration/i })
-    await user.click(stopButton)
-    expect(mockSynth.cancel).toHaveBeenCalled()
+    expect(
+      screen.queryByRole('button', { name: /Read slide aloud/i }),
+    ).not.toBeInTheDocument()
+    expect(mockSynth.speak).not.toHaveBeenCalled()
   })
 
-  it('falls back to body text when narration is not provided', async () => {
-    const user = userEvent.setup()
-    render(<SlideDeck slides={slides} onAllViewed={vi.fn()} />)
-
-    await user.click(screen.getByRole('button', { name: /Next/i }))
-    await user.click(screen.getByRole('button', { name: /Read slide aloud/i }))
-
-    const spoken = (mockSynth.speak as ReturnType<typeof vi.fn>).mock.calls[0][0] as MockUtterance
-    expect(spoken.text).toBe('Body of the second slide.')
-  })
-
-  it('shows an unavailable audio state when the browser has no speech synthesis', async () => {
+  it('does not show an unavailable audio state while narration is disabled', () => {
     Object.defineProperty(window, 'speechSynthesis', {
       value: null,
       writable: true,
@@ -149,6 +137,6 @@ describe('SlideDeck', () => {
     })
 
     render(<SlideDeck slides={slides} onAllViewed={vi.fn()} />)
-    expect(screen.getByText('Audio unavailable')).toBeInTheDocument()
+    expect(screen.queryByText('Audio unavailable')).not.toBeInTheDocument()
   })
 })
