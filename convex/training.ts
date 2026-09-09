@@ -866,3 +866,70 @@ export const ensureTrainingProductInternal = internalMutation({
     return true
   },
 })
+
+// Helper for testing/support: wipe one user's progress for one course,
+// including the issued certificate records so the flow can be retested
+// end to end.
+export const resetUserCourseProgressInternal = internalMutation({
+  args: {
+    tenantId: v.id('tenants'),
+    clerkUserId: v.string(),
+    courseKey: v.string(),
+  },
+  handler: async (ctx, { tenantId, clerkUserId, courseKey }) => {
+    const course = await ctx.db
+      .query('trainingCourses')
+      .withIndex('by_tenant_key', (q) =>
+        q.eq('tenantId', tenantId).eq('courseKey', courseKey),
+      )
+      .first()
+    if (!course) throw new ConvexError('Course not found.')
+
+    const stepCompletions = await ctx.db
+      .query('trainingStepCompletions')
+      .withIndex('by_tenant_user_course_step', (q) =>
+        q
+          .eq('tenantId', tenantId)
+          .eq('clerkUserId', clerkUserId)
+          .eq('courseId', course._id),
+      )
+      .collect()
+    for (const sc of stepCompletions) await ctx.db.delete(sc._id)
+
+    const courseCompletions = await ctx.db
+      .query('platformTrainingCompletions')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', tenantId).eq('clerkUserId', clerkUserId),
+      )
+      .filter((q) => q.eq(q.field('trainingId'), courseKey))
+      .collect()
+    for (const cc of courseCompletions) await ctx.db.delete(cc._id)
+
+    const certificateLinkedId = `training-cert-${courseKey}-${clerkUserId}`
+    const certificateFiles = await ctx.db
+      .query('files')
+      .withIndex('by_tenant_linked', (q) =>
+        q
+          .eq('tenantId', tenantId)
+          .eq('linkedType', 'complianceDoc')
+          .eq('linkedId', certificateLinkedId),
+      )
+      .collect()
+    for (const f of certificateFiles) {
+      const archiveItems = await ctx.db
+        .query('documentArchiveItems')
+        .withIndex('by_tenant_created', (q) => q.eq('tenantId', tenantId))
+        .filter((q) => q.eq(q.field('fileId'), f._id))
+        .collect()
+      for (const item of archiveItems) await ctx.db.delete(item._id)
+      await ctx.db.delete(f._id)
+    }
+
+    return {
+      reset: true,
+      stepCompletionsDeleted: stepCompletions.length,
+      courseCompletionsDeleted: courseCompletions.length,
+      certificateFilesDeleted: certificateFiles.length,
+    }
+  },
+})
