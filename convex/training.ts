@@ -363,10 +363,29 @@ export const getCourseCertificate = query({
       )
       .first()
 
+    // The certificate must show the employee's name, not their Clerk user id.
+    const member = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', tenantId).eq('clerkUserId', identity.subject),
+      )
+      .first()
+    let recipientName = member?.displayName
+    if (!recipientName) {
+      const profile = await ctx.db
+        .query('employeeProfiles')
+        .withIndex('by_tenant_clerk_user', (q) =>
+          q.eq('tenantId', tenantId).eq('clerkUserId', identity.subject),
+        )
+        .first()
+      recipientName = profile?.displayName
+    }
+
     return {
       course,
       completion,
       file,
+      recipientName: recipientName ?? null,
     }
   },
 })

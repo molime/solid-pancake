@@ -105,9 +105,17 @@ export const CATEGORY_LABELS: Record<TrainingCourse['category'], string> = {
 }
 
 export const CATEGORY_COLORS: Record<TrainingCourse['category'], string> = {
-  agency_onboarding: 'bg-atria-info text-atria-info',
-  regulatory: 'bg-atria-warning text-atria-warning',
-  safety: 'bg-atria-danger text-atria-danger',
-  skills: 'bg-atria-success text-atria-success',
-  other: 'bg-atria-neutral text-atria-neutral',
+  agency_onboarding: 'bg-atria-info-bg text-atria-info',
+  regulatory: 'bg-atria-warning-bg text-atria-warning',
+  safety: 'bg-atria-danger-bg text-atria-danger',
+  skills: 'bg-atria-success-bg text-atria-success',
+  other: 'bg-atria-neutral-bg text-atria-neutral',
+}
+
+export const CATEGORY_ICON_COLORS: Record<TrainingCourse['category'], string> = {
+  agency_onboarding: 'bg-atria-info',
+  regulatory: 'bg-atria-warning',
+  safety: 'bg-atria-danger',
+  skills: 'bg-atria-success',
+  other: 'bg-atria-neutral',
 }
