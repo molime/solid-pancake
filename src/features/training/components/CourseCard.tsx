@@ -1,4 +1,4 @@
-import { Clock, Play, CheckCircle2, Lock, AlertCircle } from 'lucide-react'
+import { Clock, Play, CheckCircle2, Lock, AlertCircle, GraduationCap, ShieldAlert, HeartPulse, Sparkles, BookOpen } from 'lucide-react'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { cn } from '@/shared/lib/cn'
@@ -6,8 +6,17 @@ import type { CourseWithProgress } from '../model/courseTypes'
 import {
   CATEGORY_LABELS,
   CATEGORY_COLORS,
+  CATEGORY_ICON_COLORS,
 } from '../model/courseTypes'
 import { CourseProgress } from './CourseProgress'
+
+const CATEGORY_ICONS = {
+  agency_onboarding: GraduationCap,
+  regulatory: BookOpen,
+  safety: ShieldAlert,
+  skills: HeartPulse,
+  other: Sparkles,
+} as const
 
 function getExpiryStatus(expiresAt: string | null | undefined) {
   if (!expiresAt) return null
@@ -27,25 +36,37 @@ export function CourseCard({
   onStart: () => void
 }) {
   const categoryClass = CATEGORY_COLORS[course.category]
+  const CategoryIcon = CATEGORY_ICONS[course.category]
+  const iconColorClass = CATEGORY_ICON_COLORS[course.category]
   const expiryStatus = course.isCompleted ? getExpiryStatus(course.expiresAt) : null
 
   return (
     <Card
       className={cn(
-        'flex flex-col transition-all',
+        'flex flex-col transition-all hover:border-atria-border-strong',
         !course.isAssignable && 'opacity-70',
       )}
     >
       <CardContent className="flex flex-1 flex-col p-5">
         <div className="mb-3 flex items-start justify-between gap-3">
-          <span
-            className={cn(
-              'rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide',
-              categoryClass,
-            )}
-          >
-            {CATEGORY_LABELS[course.category]}
-          </span>
+          <div className="flex items-center gap-2.5">
+            <span
+              className={cn(
+                'flex h-9 w-9 items-center justify-center rounded-[var(--radius-atria-md)] text-white',
+                iconColorClass,
+              )}
+            >
+              <CategoryIcon className="h-5 w-5" />
+            </span>
+            <span
+              className={cn(
+                'rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide',
+                categoryClass,
+              )}
+            >
+              {CATEGORY_LABELS[course.category]}
+            </span>
+          </div>
           {course.isCompleted && !expiryStatus && (
             <CheckCircle2 className="h-5 w-5 shrink-0 text-atria-success" />
           )}

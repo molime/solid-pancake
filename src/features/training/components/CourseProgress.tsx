@@ -13,7 +13,9 @@ export function CourseProgress({
         <div
           className={cn(
             'h-full rounded-full transition-all duration-500',
-            completed ? 'bg-atria-success' : 'bg-atria-accent',
+            completed
+              ? 'bg-atria-success'
+              : 'bg-gradient-to-r from-atria-accent to-atria-info',
           )}
           style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
         />

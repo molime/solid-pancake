@@ -63,14 +63,14 @@ export function TrainingCertificatePage() {
     )
   }
 
-  const { course, completion, file } = certificateData
+  const { course, completion, file, recipientName } = certificateData
   const completedAt = completion.completedAt
   const expiresAt =
     completion.expiresAt ??
     new Date(
       new Date(completedAt).getTime() + 365 * 24 * 60 * 60 * 1000,
     ).toISOString()
-  const recipientName = file?.uploadedBy ?? 'Caregiver'
+  const displayName = recipientName ?? 'Caregiver'
 
   const handlePrint = () => {
     window.print()
@@ -79,7 +79,7 @@ export function TrainingCertificatePage() {
   const handleDownloadText = () => {
     const text =
       `TRAINING CERTIFICATE\n\n` +
-      `Recipient: ${recipientName}\n` +
+      `Recipient: ${displayName}\n` +
       `Course: ${course.title}\n` +
       `Completed: ${formatDateUS(completedAt)}\n` +
       `Valid until: ${formatDateUS(expiresAt)}\n\n` +
@@ -138,7 +138,7 @@ export function TrainingCertificatePage() {
               This certifies that
             </p>
             <p className="mb-6 text-xl font-semibold text-atria-ink md:text-2xl">
-              {recipientName}
+              {displayName}
             </p>
             <p className="mb-8 text-base text-atria-text-secondary print:text-atria-ink">
               has successfully completed all required training on{' '}
