@@ -161,6 +161,7 @@ export const listDocumentArchive = query({
     const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
       'org:admin',
       'org:hr',
+      'org:coordinator',
     ])
 
     let items = await ctx.db

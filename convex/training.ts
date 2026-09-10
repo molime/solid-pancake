@@ -88,8 +88,12 @@ async function createCertificateDocument(
   completedAt: string,
   expiresAt: string,
 ) {
+  const profile = await ctx.db.get(employeeProfileId)
+  const recipientName = profile?.displayName ?? 'Employee'
   const certificateText =
     `TRAINING CERTIFICATE\n\n` +
+    `Issued by: ATRIA-X Digital Solutions\n` +
+    `Recipient: ${recipientName}\n` +
     `Course: ${course.title}\n` +
     `Completed: ${completedAt}\n` +
     `Valid until: ${expiresAt}\n\n` +
@@ -390,8 +394,77 @@ export const getCourseCertificate = query({
   },
 })
 
-export const listCompletions = query({
-  args: { clerkOrgId: v.string() },
+// Lets admin/HR/coordinator staff download an issued training certificate
+// from the employee profile. The file record only stores metadata, so the
+// text is regenerated from the completion + course + employee records.
+export const getCertificateText = query({
+  args: { clerkOrgId: v.string(), archiveItemId: v.id('documentArchiveItems') },
+  handler: async (ctx, { clerkOrgId, archiveItemId }) => {
+    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+
+    const item = await ctx.db.get(archiveItemId)
+    if (!item) throw new ConvexError('Document not found.')
+    assertTenantDoc(item, tenantId)
+    if (item.category !== TRAINING_CERTIFICATE_CATEGORY) {
+      throw new ConvexError('Document is not a training certificate.')
+    }
+
+    const file = await ctx.db.get(item.fileId)
+    if (!file) throw new ConvexError('Certificate file not found.')
+
+    // linkedId is `training-cert-${courseKey}-${clerkUserId}`
+    const match = file.linkedId.match(/^training-cert-(.+)-(user_[A-Za-z0-9]+)$/)
+    if (!match) throw new ConvexError('Certificate link is malformed.')
+    const [, courseKey, clerkUserId] = match
+
+    const course = await ctx.db
+      .query('trainingCourses')
+      .withIndex('by_tenant_key', (q) =>
+        q.eq('tenantId', tenantId).eq('courseKey', courseKey),
+      )
+      .first()
+    const completion = await ctx.db
+      .query('platformTrainingCompletions')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', tenantId).eq('clerkUserId', clerkUserId),
+      )
+      .filter((q) => q.eq(q.field('trainingId'), courseKey))
+      .first()
+    const member = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', tenantId).eq('clerkUserId', clerkUserId),
+      )
+      .first()
+    const recipientName = member?.displayName ?? 'Employee'
+
+    const completedAt = completion?.completedAt ?? file.createdAt
+    const expiresAt =
+      item.expiresAt ??
+      completion?.expiresAt ??
+      new Date(
+        new Date(completedAt).getTime() + 365 * 24 * 60 * 60 * 1000,
+      ).toISOString()
+
+    return {
+      fileName: file.fileName,
+      text:
+        `TRAINING CERTIFICATE\n\n` +
+        `Issued by: ATRIA-X Digital Solutions\n` +
+        `Recipient: ${recipientName}\n` +
+        `Course: ${course?.title ?? courseKey}\n` +
+        `Completed: ${completedAt}\n` +
+        `Valid until: ${expiresAt}\n\n` +
+        `This certificate verifies the holder has completed the required training.`,
+    }
+  },
+})
+
+export const listCompletions = query({  args: { clerkOrgId: v.string() },
   handler: async (ctx, { clerkOrgId }) => {
     const { tenantId } = await requireTenantRole(ctx, clerkOrgId, ADMIN_ROLES)
 

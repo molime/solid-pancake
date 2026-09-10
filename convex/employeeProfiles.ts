@@ -239,6 +239,7 @@ export const listEmployeeProfiles = query({
     const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
       'org:admin',
       'org:hr',
+      'org:coordinator',
     ])
 
     const profiles = await ctx.db
@@ -280,6 +281,7 @@ export const getEmployeeProfileDetail = query({
     const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
       'org:admin',
       'org:hr',
+      'org:coordinator',
     ])
 
     const member = await ctx.db.get(memberId)

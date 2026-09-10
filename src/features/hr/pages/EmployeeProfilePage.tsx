@@ -18,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/ui/Table'
-import { ArrowLeft, User, FileText, ClipboardCheck, ClipboardList, UserCheck } from 'lucide-react'
+import { ArrowLeft, User, FileText, ClipboardCheck, ClipboardList, UserCheck, Download } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import type { Id } from '../../../../convex/_generated/dataModel'
@@ -28,14 +28,14 @@ import { HiringTab } from '../components/HiringTab'
 import { De34EmployeeSection } from '../components/De34EmployeeSection'
 import { caseStatusVariant } from '../lib/caseStatus'
 import { cn } from '@/shared/lib/cn'
-import { formatDateUS } from '@/shared/format'
+import { formatDateUS, formatDocumentCategoryLabel } from '@/shared/format'
 
 const TABS = [
   { value: 'profile', label: 'Profile', icon: User },
   { value: 'hiring', label: 'Hiring', icon: UserCheck },
   { value: 'documents', label: 'Documents', icon: FileText },
-  { value: 'cases', label: 'Cases', icon: ClipboardCheck },
-  { value: 'supervision', label: 'Supervision', icon: ClipboardList },
+  { value: 'cases', label: 'Cases', icon: ClipboardCheck, hrOnly: true },
+  { value: 'supervision', label: 'Supervision', icon: ClipboardList, hrOnly: true },
 ] as const
 
 type TabValue = (typeof TABS)[number]['value']
@@ -83,10 +83,10 @@ function ProfileTab({
 }
 
 function DocumentsTab({
-  clerkUserId,
+  employeeProfileId,
   clerkOrgId,
 }: {
-  clerkUserId: string
+  employeeProfileId: string
   clerkOrgId: string
 }) {
   const documents = useQuery(
@@ -94,7 +94,7 @@ function DocumentsTab({
     clerkOrgId
       ? {
           clerkOrgId,
-          linkedTo: { subjectType: 'employee', subjectId: clerkUserId },
+          linkedTo: { subjectType: 'employee', subjectId: employeeProfileId },
         }
       : 'skip',
   )
@@ -116,12 +116,17 @@ function DocumentsTab({
           <TableHeader>CATEGORY</TableHeader>
           <TableHeader>STATUS</TableHeader>
           <TableHeader>EXPIRES</TableHeader>
+          <TableHeader />
         </TableRow>
       </TableHead>
       <TableBody>
         {documents.map((doc) => (
           <TableRow key={doc._id}>
-            <TableCell className="font-medium">{doc.category}</TableCell>
+            <TableCell className="font-medium">
+              {doc.category === 'training_certificate'
+                ? 'Training Certificate'
+                : formatDocumentCategoryLabel(doc.category)}
+            </TableCell>
             <TableCell>
               <StatusBadge
                 variant={
@@ -136,10 +141,56 @@ function DocumentsTab({
               </StatusBadge>
             </TableCell>
             <TableCell>{doc.expiresAt ? formatDateUS(doc.expiresAt) : '—'}</TableCell>
+            <TableCell>
+              {doc.category === 'training_certificate' && (
+                <CertificateDownloadButton
+                  clerkOrgId={clerkOrgId}
+                  archiveItemId={doc._id}
+                />
+              )}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
     </Table>
+  )
+}
+
+function CertificateDownloadButton({
+  clerkOrgId,
+  archiveItemId,
+}: {
+  clerkOrgId: string
+  archiveItemId: Id<'documentArchiveItems'>
+}) {
+  const certificate = useQuery(api.training.getCertificateText, {
+    clerkOrgId,
+    archiveItemId,
+  })
+
+  const handleDownload = () => {
+    if (!certificate) return
+    const blob = new Blob([certificate.text], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = certificate.fileName
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleDownload}
+      disabled={!certificate}
+      className="inline-flex items-center gap-1 text-xs font-medium text-atria-accent hover:underline disabled:opacity-50"
+    >
+      <Download className="h-3.5 w-3.5" />
+      Download
+    </button>
   )
 }
 
@@ -365,6 +416,10 @@ export function EmployeeProfilePage() {
       ? { clerkOrgId, memberId: memberId as Id<'tenantMembers'> }
       : 'skip',
   )
+  const viewer = useQuery(
+    api.members.me,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
 
   const [activeTab, setActiveTab] = useState<TabValue>('profile')
 
@@ -377,6 +432,13 @@ export function EmployeeProfilePage() {
   }
 
   const { member, profile } = detail
+  // Cases and Supervision tabs query admin/HR-only endpoints; hide them for
+  // coordinators so the page never fires queries they cannot access.
+  const isHrViewer =
+    viewer?.role === 'org:admin' || viewer?.role === 'org:hr'
+  const visibleTabs = TABS.filter(
+    (t) => !('hrOnly' in t && t.hrOnly) || isHrViewer,
+  )
   const pill = adpStatusPill(profile?.adpSyncStatus ?? 'pending_credentials')
 
   return (
@@ -421,7 +483,7 @@ export function EmployeeProfilePage() {
       )}
 
       <div className="flex flex-wrap gap-2">
-        {TABS.map((tab) => {
+        {visibleTabs.map((tab) => {
           const Icon = tab.icon
           return (
             <button
@@ -462,8 +524,8 @@ export function EmployeeProfilePage() {
           {activeTab === 'hiring' && profile?.clerkUserId && clerkOrgId && (
             <HiringTab clerkOrgId={clerkOrgId} clerkUserId={profile.clerkUserId} />
           )}
-          {activeTab === 'documents' && profile?.clerkUserId && clerkOrgId && (
-            <DocumentsTab clerkUserId={profile.clerkUserId} clerkOrgId={clerkOrgId} />
+          {activeTab === 'documents' && profile && clerkOrgId && (
+            <DocumentsTab employeeProfileId={profile._id} clerkOrgId={clerkOrgId} />
           )}
           {activeTab === 'cases' && profile?.clerkUserId && clerkOrgId && (
             <CasesTab clerkUserId={profile.clerkUserId} clerkOrgId={clerkOrgId} />
