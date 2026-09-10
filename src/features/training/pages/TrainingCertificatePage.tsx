@@ -79,6 +79,7 @@ export function TrainingCertificatePage() {
   const handleDownloadText = () => {
     const text =
       `TRAINING CERTIFICATE\n\n` +
+      `Issued by: ATRIA-X Digital Solutions\n` +
       `Recipient: ${displayName}\n` +
       `Course: ${course.title}\n` +
       `Completed: ${formatDateUS(completedAt)}\n` +
@@ -166,8 +167,14 @@ export function TrainingCertificatePage() {
 
             <div className="flex flex-col items-center gap-2">
               <AtriaLogo />
-              <p className="text-sm text-atria-text-secondary print:text-atria-ink">
-                Golden Ages Home Care · ATRIA-X Digital Solutions
+              <p className="text-xs font-medium uppercase tracking-wide text-atria-text-muted print:text-atria-ink">
+                Issued by
+              </p>
+              <p className="text-sm font-semibold text-atria-ink print:text-atria-ink">
+                ATRIA-X Digital Solutions
+              </p>
+              <p className="text-xs text-atria-text-muted print:text-atria-ink">
+                on behalf of Golden Ages Home Care
               </p>
             </div>
 

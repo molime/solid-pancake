@@ -886,7 +886,7 @@ export function AppRouter() {
         <Route
           path="hr/employees"
           element={
-            <TenantRoleRouteGuard allowedRoles={['org:admin', 'org:hr']}>
+            <TenantRoleRouteGuard allowedRoles={['org:admin', 'org:hr', 'org:coordinator']}>
               <RouteSuspense>
                 <EmployeesPage />
               </RouteSuspense>
@@ -896,7 +896,7 @@ export function AppRouter() {
         <Route
           path="hr/employees/:memberId"
           element={
-            <TenantRoleRouteGuard allowedRoles={['org:admin', 'org:hr']}>
+            <TenantRoleRouteGuard allowedRoles={['org:admin', 'org:hr', 'org:coordinator']}>
               <RouteSuspense>
                 <EmployeeProfilePage />
               </RouteSuspense>

@@ -178,7 +178,7 @@ const navItems: NavItem[] = [
     label: 'Employees',
     path: '/hr/employees',
     icon: <Building2 className="h-4 w-4" />,
-    roles: ['org:admin', 'org:hr'],
+    roles: ['org:admin', 'org:hr', 'org:coordinator'],
   },
   {
     label: 'Cases',
