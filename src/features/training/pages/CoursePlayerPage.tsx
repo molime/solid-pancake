@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/shared/ui/Card'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { cn } from '@/shared/lib/cn'
 import { StepPlayer } from '../components/StepPlayer'
+import { RotateToLandscape } from '../components/RotateToLandscape'
 import type { CourseDetail, TrainingStep } from '../model/courseTypes'
 import { Award, CheckCircle2, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 
@@ -127,6 +128,7 @@ export function CoursePlayerPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-atria-bg">
+      <RotateToLandscape />
       {/* Main workspace */}
       <main className="mx-auto flex w-full max-w-7xl flex-1 gap-6 p-4 lg:p-6">
         {/* Outline sidebar */}

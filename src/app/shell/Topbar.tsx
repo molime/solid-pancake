@@ -7,6 +7,7 @@ import { cn } from '@/shared/lib/cn'
 import { Menu, LogOut, Building2, ChevronLeft } from 'lucide-react'
 import { useTenant } from '@/app/useTenant'
 import { resolveAgencyLogo } from './agencyLogo'
+import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 
 function breadcrumbFromPath(path: string): string {
   if (path === '/') return 'Dashboard'
@@ -50,9 +51,11 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   )
   const agencyLogo = resolveAgencyLogo(tenantName, employerInfo?.legalName)
 
+  const coursePlayer = isCoursePlayerPath(location.pathname)
+
   return (
-    <header className="h-16 bg-atria-surface border-b border-atria-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
-      <div className="flex items-center gap-3">
+    <header className="h-16 bg-atria-surface border-b border-atria-border flex items-center justify-between gap-3 px-4 lg:px-6 sticky top-0 z-30">
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <button
           className="lg:hidden p-2 -ml-2 text-atria-muted hover:text-atria-ink"
           aria-label="Open navigation"
@@ -60,36 +63,39 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <span className="text-sm font-medium text-atria-ink">
-          {isCoursePlayerPath(location.pathname) ? (
-            <button
-              type="button"
-              onClick={() => navigate('/training')}
-              className="flex items-center gap-1.5 text-atria-text-secondary hover:text-atria-ink transition-colors"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Back to training
-            </button>
-          ) : (
-            breadcrumbFromPath(location.pathname)
-          )}
-        </span>
+        {/* The sidebar (which carries the Atria brand on desktop) is hidden on
+            phones, so show the logo here on small screens. */}
+        <AtriaLogo className="h-8 w-auto lg:hidden" />
+        {coursePlayer ? (
+          <button
+            type="button"
+            onClick={() => navigate('/training')}
+            className="flex items-center gap-1.5 text-sm font-medium text-atria-text-secondary hover:text-atria-ink transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Back to training</span>
+          </button>
+        ) : (
+          <span className="hidden truncate text-sm font-medium text-atria-ink sm:block">
+            {breadcrumbFromPath(location.pathname)}
+          </span>
+        )}
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-4">
         {!isLoading && agencyLogo && (
           <img
             src={agencyLogo}
             alt={`${tenantName} logo`}
-            className="h-8 w-auto object-contain"
+            className="h-7 w-auto object-contain sm:h-8"
           />
         )}
         <button
           onClick={() => navigate('/select-agency')}
           className="flex items-center gap-2 px-3 py-1.5 text-sm border border-atria-border rounded-md hover:bg-atria-bg transition-colors text-atria-ink"
         >
-          <Building2 className="h-4 w-4 text-atria-muted" />
-          <span className="max-w-[160px] truncate">{tenantName ?? 'Select agency'}</span>
+          <Building2 className="h-4 w-4 shrink-0 text-atria-muted" />
+          <span className="max-w-[104px] truncate sm:max-w-[160px]">{tenantName ?? 'Select agency'}</span>
         </button>
         <span
           className={cn(
@@ -111,11 +117,15 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           <LogOut className="h-4 w-4" />
           <span className="hidden sm:inline">Sign out</span>
         </button>
-        <div className="h-8 w-8 rounded-full bg-atria-sidebar flex items-center justify-center">
+        <button
+          onClick={() => navigate('/account')}
+          className="h-8 w-8 rounded-full bg-atria-sidebar flex items-center justify-center transition-opacity hover:opacity-80"
+          aria-label="Account settings"
+        >
           <span className="text-white text-xs font-semibold">
             {user?.firstName?.[0] ?? 'U'}
           </span>
-        </div>
+        </button>
       </div>
     </header>
   )

@@ -108,6 +108,10 @@ describe('Topbar', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    // The Atria brand mark is always present; only the agency logo is gated
+    // on tenant loading.
+    expect(
+      screen.queryByRole('img', { name: /logo/i }),
+    ).not.toBeInTheDocument()
   })
 })

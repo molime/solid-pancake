@@ -74,7 +74,7 @@ describe('Sidebar', () => {
 
     const logo = screen.getByAltText('ATRIA-X')
     expect(logo).toBeInTheDocument()
-    expect(logo).toHaveAttribute('src', '/atria-logo-horizontal.png')
+    expect(logo).toHaveAttribute('src', '/atria-logo-horizontal-trim.png')
   })
 
   it('shows all nav items for org:admin', () => {
@@ -126,6 +126,8 @@ describe('Sidebar', () => {
     expect(screen.getByText('Knowledge')).toBeInTheDocument()
     expect(screen.getByText('Compliance')).toBeInTheDocument()
     expect(screen.getByText('Notifications')).toBeInTheDocument()
+    // Coordinators can view employee profiles (e.g. training certificates).
+    expect(screen.getByText('Employees')).toBeInTheDocument()
 
     expect(screen.queryByText('Today')).not.toBeInTheDocument()
     expect(screen.queryByText('Team')).not.toBeInTheDocument()
@@ -136,7 +138,6 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Reporting')).not.toBeInTheDocument()
     expect(screen.queryByText('Availability')).not.toBeInTheDocument()
     expect(screen.queryByText('Candidates')).not.toBeInTheDocument()
-    expect(screen.queryByText('Employees')).not.toBeInTheDocument()
     expect(screen.queryByText('Cases')).not.toBeInTheDocument()
   })
 

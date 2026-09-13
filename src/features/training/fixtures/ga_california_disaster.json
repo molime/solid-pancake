@@ -3,26 +3,26 @@
   "title": "California Fire, Earthquake & Evacuation",
   "description": "Prepare for and respond to fires, earthquakes, severe weather, and power outages.",
   "category": "regulatory",
-  "durationMinutes": 15,
+  "durationMinutes": 30,
   "passingScore": 80,
   "steps": [
     {
       "id": "h6_fire_video",
       "title": "Video: Home Fire Safety & Escape Planning",
       "type": "video",
-      "content": "https://www.youtube.com/embed/pCAqm8U8k60",
+      "content": "https://www.youtube.com/embed/2CFiL0FAggg",
       "required": true,
-      "minDurationSec": 0,
-      "caption": "FEMA fire-emergency guidance for families and caregivers."
+      "minDurationSec": 268,
+      "caption": "Fire Safety Research Institute guidance on planning and practicing a home fire escape."
     },
     {
       "id": "h6_earthquake_video",
       "title": "Video: Earthquake Safety",
       "type": "video",
-      "content": "https://www.youtube.com/embed/d08QUmxzdKU",
+      "content": "https://www.youtube.com/embed/M3WHIHgy75c",
       "required": true,
-      "minDurationSec": 0,
-      "caption": "Drop, cover, and hold-on demonstration for earthquake response."
+      "minDurationSec": 288,
+      "caption": "Official Drop, Cover, and Hold On demonstration for earthquake safety."
     },
     {
       "id": "h6_disaster_slides",
@@ -41,6 +41,15 @@
       "minDurationSec": 34
     },
     {
+      "id": "h6_kit_video",
+      "title": "Video: Building an Emergency Kit",
+      "type": "video",
+      "content": "https://www.youtube.com/embed/X-WeYWf2QQ0",
+      "required": true,
+      "minDurationSec": 243,
+      "caption": "Step-by-step guidance on building a disaster preparedness kit for seniors."
+    },
+    {
       "id": "h6_missing",
       "title": "Scenario: Missing Client or Power Outage",
       "type": "text",
@@ -52,9 +61,9 @@
       "id": "h6_quiz",
       "title": "Module 3 Check: Disasters & Evacuation",
       "type": "quiz",
-      "content": "{\"questions\": [{\"question\": \"What is the first thing to do in a fire emergency?\", \"options\": [\"Call the office\", \"Gather belongings\", \"Sound the alarm and get everyone out\", \"Try to extinguish the fire\"], \"correct\": 2}, {\"question\": \"During an earthquake indoors, you should:\", \"options\": [\"Run outside immediately\", \"Drop, cover, and hold on\", \"Stand in a doorway\", \"Get in the car\"], \"correct\": 1}, {\"question\": \"How much water should be in a 3-day disaster kit per person per day?\", \"options\": [\"1 cup\", \"1 quart\", \"1 gallon\", \"3 gallons\"], \"correct\": 2}, {\"question\": \"What should you do if a client is missing?\", \"options\": [\"Wait to see if they return\", \"Search the home, ask neighbors, call the office and 911 if needed\", \"Go home for the day\", \"Tell the family later\"], \"correct\": 1}, {\"question\": \"During a power outage, you should avoid:\", \"options\": [\"Flashlights\", \"Candles\", \"Closing the refrigerator door\", \"Reporting to the office\"], \"correct\": 1}]}",
+      "content": "{\"questions\":[{\"question\":\"What is the first thing to do in a fire emergency?\",\"options\":[\"Call the office\",\"Gather belongings\",\"Sound the alarm and get everyone out\",\"Try to extinguish the fire\"],\"correct\":2},{\"question\":\"During an earthquake indoors, you should:\",\"options\":[\"Run outside immediately\",\"Drop, cover, and hold on\",\"Stand in a doorway\",\"Get in the car\"],\"correct\":1},{\"question\":\"How much water should be in a 3-day disaster kit per person per day?\",\"options\":[\"1 cup\",\"1 quart\",\"1 gallon\",\"3 gallons\"],\"correct\":2},{\"question\":\"What should you do if a client is missing?\",\"options\":[\"Wait to see if they return\",\"Search the home, ask neighbors, call the office and 911 if needed\",\"Go home for the day\",\"Tell the family later\"],\"correct\":1},{\"question\":\"During a power outage, you should avoid:\",\"options\":[\"Flashlights\",\"Candles\",\"Closing the refrigerator door\",\"Reporting to the office\"],\"correct\":1},{\"question\":\"During an earthquake, you should:\",\"options\":[\"Run outside immediately\",\"Drop, Cover, and Hold On\",\"Stand next to windows\",\"Use the elevator to evacuate\"],\"correct\":1},{\"question\":\"In a home fire, the first priority is to:\",\"options\":[\"Gather personal belongings\",\"Get everyone out and call 911\",\"Open all the windows\",\"Look for the source of the fire\"],\"correct\":1},{\"question\":\"A disaster kit for a client should include:\",\"options\":[\"Only canned food\",\"Water, medications, a flashlight, and important documents\",\"Candles and matches only\",\"Nothing — shelters provide everything\"],\"correct\":1}]}",
       "required": true,
-      "minDurationSec": 100
+      "minDurationSec": 160
     }
   ]
 }
