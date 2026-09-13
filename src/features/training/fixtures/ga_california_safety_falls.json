@@ -3,7 +3,7 @@
   "title": "California Safety & Fall Prevention",
   "description": "Keep clients, caregivers, and homes safe by preventing falls and reducing hazards.",
   "category": "regulatory",
-  "durationMinutes": 15,
+  "durationMinutes": 85,
   "passingScore": 80,
   "steps": [
     {
@@ -18,10 +18,10 @@
       "id": "h3_fall_video",
       "title": "Video: Preventing Falls at Home",
       "type": "video",
-      "content": "https://www.youtube.com/embed/mLuuIFswxmM",
+      "content": "https://www.youtube.com/embed/gky223VCbzs",
       "required": true,
-      "minDurationSec": 0,
-      "caption": "National Council on Aging guidance on identifying and reducing fall risks in the home."
+      "minDurationSec": 3701,
+      "caption": "Full class on fall-prevention best practices for older adults, from Sun Health."
     },
     {
       "id": "h3_hazards",
@@ -43,10 +43,10 @@
       "id": "h3_transfer_video",
       "title": "Video: Safe Transfer & Body Mechanics",
       "type": "video",
-      "content": "https://www.youtube.com/embed/e_cUoz8Ag5k",
+      "content": "https://www.youtube.com/embed/oB0uPouIcXo",
       "required": true,
-      "minDurationSec": 0,
-      "caption": "Practical guidance on assisting with standing, sitting, and moving safely while protecting your back."
+      "minDurationSec": 379,
+      "caption": "Family Caregiver Alliance instruction on safe transfer skills and body mechanics."
     },
     {
       "id": "h3_body_mechanics",
@@ -60,9 +60,9 @@
       "id": "h3_quiz",
       "title": "Module 1 Check: Safety & Fall Prevention",
       "type": "quiz",
-      "content": "{\"questions\": [{\"question\": \"What is the safest way to lift a client?\", \"options\": [\"Bend at the waist and use your back\", \"Keep feet apart, bend knees, and lift with your legs\", \"Pull the client up by the arms\", \"Twist while lifting\"], \"correct\": 1}, {\"question\": \"Which of the following is a common fall hazard?\", \"options\": [\"Good lighting\", \"Non-slip shoes\", \"Loose throw rugs\", \"Grab bars\"], \"correct\": 2}, {\"question\": \"When should you leave a client's home?\", \"options\": [\"When the client asks you to stay late\", \"If you feel unsafe and have called the office\", \"When the TV is too loud\", \"Only at the end of your scheduled shift\"], \"correct\": 1}, {\"question\": \"What water temperature helps prevent burns?\", \"options\": [\"140\\u00b0F\", \"120\\u00b0F or below\", \"160\\u00b0F\", \"Any temperature the client prefers\"], \"correct\": 1}, {\"question\": \"Which footwear is safest for clients?\", \"options\": [\"Loose slippers\", \"Socks on tile\", \"Well-fitting, non-slip shoes\", \"Bare feet\"], \"correct\": 2}]}",
+      "content": "{\"questions\":[{\"question\":\"What is the safest way to lift a client?\",\"options\":[\"Bend at the waist and use your back\",\"Keep feet apart, bend knees, and lift with your legs\",\"Pull the client up by the arms\",\"Twist while lifting\"],\"correct\":1},{\"question\":\"Which of the following is a common fall hazard?\",\"options\":[\"Good lighting\",\"Non-slip shoes\",\"Loose throw rugs\",\"Grab bars\"],\"correct\":2},{\"question\":\"When should you leave a client's home?\",\"options\":[\"When the client asks you to stay late\",\"If you feel unsafe and have called the office\",\"When the TV is too loud\",\"Only at the end of your scheduled shift\"],\"correct\":1},{\"question\":\"What water temperature helps prevent burns?\",\"options\":[\"140°F\",\"120°F or below\",\"160°F\",\"Any temperature the client prefers\"],\"correct\":1},{\"question\":\"Which footwear is safest for clients?\",\"options\":[\"Loose slippers\",\"Socks on tile\",\"Well-fitting, non-slip shoes\",\"Bare feet\"],\"correct\":2},{\"question\":\"What should you do before helping a client stand from a wheelchair?\",\"options\":[\"Pull them up by the arms\",\"Lock the wheelchair brakes first\",\"Ask them to stand up quickly\",\"Lift with your back bent forward\"],\"correct\":1},{\"question\":\"Which home modification helps prevent falls?\",\"options\":[\"Loose throw rugs in hallways\",\"Grab bars in the bathroom\",\"Dim lighting at night\",\"Cords running across walkways\"],\"correct\":1},{\"question\":\"If a client falls, what should you do first?\",\"options\":[\"Help them up immediately\",\"Check for injuries, then call 911 or the office per policy\",\"Give them water and leave the room\",\"Finish your tasks and report it later\"],\"correct\":1}]}",
       "required": true,
-      "minDurationSec": 100
+      "minDurationSec": 160
     }
   ]
 }

@@ -181,9 +181,9 @@ export function SlideDeck({ slides, onAllViewed }: SlideDeckProps) {
         </div>
       </div>
 
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <div className="mb-4 flex items-start justify-between gap-4">
-          <h3 className="text-xl font-bold text-atria-ink">{slide.title}</h3>
+          <h3 className="text-lg font-bold text-atria-ink sm:text-xl">{slide.title}</h3>
           {/* Narration hidden for now — browser TTS sounds too robotic.
               Re-enable by setting SHOW_NARRATION to true once we have a
               natural-sounding voice solution. */}
@@ -240,7 +240,12 @@ export function SlideDeck({ slides, onAllViewed }: SlideDeckProps) {
             Previous
           </Button>
 
-          <div className="flex flex-1 justify-center gap-1.5">
+          {/* On phones the full dot strip can overflow and push the Next
+              button off-screen — show a compact counter instead. */}
+          <span className="text-xs font-medium text-atria-text-muted sm:hidden">
+            {current + 1} / {slides.length}
+          </span>
+          <div className="hidden flex-1 justify-center gap-1.5 sm:flex">
             {slides.map((_, idx) => (
               <button
                 key={idx}

@@ -3,7 +3,7 @@
   "title": "California Outdoor, Vehicle & Personal Safety",
   "description": "Stay safe in the community, on the road, and while visiting clients.",
   "category": "regulatory",
-  "durationMinutes": 15,
+  "durationMinutes": 50,
   "passingScore": 80,
   "steps": [
     {
@@ -16,18 +16,35 @@
     },
     {
       "id": "h4_safety_video",
-      "title": "Video: Caregiver Safety — The 5 Basics",
+      "title": "Video: Safety Tips for Home Visits",
       "type": "video",
-      "content": "https://www.youtube.com/embed/ilHHE5XX_vE",
+      "content": "https://www.youtube.com/embed/kKTlycsav_o",
       "required": true,
-      "minDurationSec": 0,
-      "caption": "Core safety practices for caregivers in the home and community."
+      "minDurationSec": 1130,
+      "caption": "Practical safety tips for protecting yourself and others during home visits."
     },
     {
       "id": "h4_personal_safety",
       "title": "Personal Safety in the Community",
       "type": "slides",
       "content": "[{\"id\":\"ca-h4ps-1\",\"title\":\"Before You Arrive\",\"body\":\"Call clients in advance, ask for directions if needed, and request that pets be secured before you visit.\",\"imageUrl\":\"https://images.unsplash.com/photo-1778502802065-d24cd36b5731?w=800&q=80\",\"narration\":\"Before You Arrive. Call clients in advance, ask for directions if needed, and request that pets be secured before you visit.\"},{\"id\":\"ca-h4ps-2\",\"title\":\"Pets and Strangers\",\"body\":\"If pets are menacing, back away slowly; never run. Cross the street if a group of strangers makes you uncomfortable.\",\"imageUrl\":\"https://images.unsplash.com/photo-1644416225353-adc117940526?w=800&q=80\",\"narration\":\"Pets and Strangers. If pets are menacing, back away slowly; never run. Cross the street if a group of strangers makes you uncomfortable.\"},{\"id\":\"ca-h4ps-3\",\"title\":\"Protecting Belongings\",\"body\":\"It is recommended that staff not carry a purse. Lock valuables in the trunk and out of sight.\",\"imageUrl\":\"https://images.unsplash.com/photo-1772909654709-061813a7e964?w=800&q=80\",\"narration\":\"Protecting Belongings. It is recommended that staff not carry a purse. Lock valuables in the trunk and out of sight.\"},{\"id\":\"ca-h4ps-4\",\"title\":\"Office and Building Safety\",\"body\":\"Use common walkways, avoid isolated stairs, keep drawers closed, and report hazards such as wet floors or damaged cords.\",\"imageUrl\":\"https://images.unsplash.com/photo-1478774199110-310a4d4a6978?w=800&q=80\",\"narration\":\"Office and Building Safety. Use common walkways, avoid isolated stairs, keep drawers closed, and report hazards such as wet floors or damaged cords.\"},{\"id\":\"ca-h4ps-5\",\"title\":\"Incident Reporting\",\"body\":\"Complete an incident report within 24 hours for any threat, bite, accident, or unsafe situation. Seek medical attention as needed.\",\"imageUrl\":\"https://images.unsplash.com/photo-1455390582262-044cdead277a?w=800&q=80\",\"narration\":\"Incident Reporting. Complete an incident report within 24 hours for any threat, bite, accident, or unsafe situation. Seek medical attention as needed.\"}]",
+      "required": true,
+      "minDurationSec": 100
+    },
+    {
+      "id": "h4_heat_video",
+      "title": "Video: Heat Illness Prevention",
+      "type": "video",
+      "content": "https://www.youtube.com/embed/3ZcSoWxdQP4",
+      "required": true,
+      "minDurationSec": 958,
+      "caption": "Cal/OSHA-compliant training on recognizing, preventing, and responding to heat illness."
+    },
+    {
+      "id": "h4_quiz",
+      "title": "Module 5 Check: Outdoor & Personal Safety",
+      "type": "quiz",
+      "content": "{\"questions\":[{\"question\":\"Before leaving for a home visit, you should:\",\"options\":[\"Tell no one where you are going\",\"Charge your phone and make sure the office knows your schedule\",\"Park in the darkest spot available\",\"Wear headphones while walking\"],\"correct\":1},{\"question\":\"Signs of heat illness include:\",\"options\":[\"Feeling unusually cold\",\"Dizziness, headache, heavy sweating, or confusion\",\"Extra energy and focus\",\"Increased appetite\"],\"correct\":1},{\"question\":\"When may you transport a client in a vehicle?\",\"options\":[\"Whenever the client asks nicely\",\"Only with written agency and client consent\",\"Whenever you have a full tank of gas\",\"Only on weekends\"],\"correct\":1},{\"question\":\"If a situation during a visit feels unsafe, you should:\",\"options\":[\"Stay and ignore your instincts\",\"Leave and call the office\",\"Confront the person making you uncomfortable\",\"Post about it on social media\"],\"correct\":1},{\"question\":\"To prevent heat illness while working in hot conditions:\",\"options\":[\"Drink water regularly and take shade or cool-down breaks\",\"Wear extra layers of clothing\",\"Skip breaks to finish faster\",\"Only work at midday\"],\"correct\":0}]}",
       "required": true,
       "minDurationSec": 100
     }

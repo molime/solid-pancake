@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   FileCheck2,
   GraduationCap,
+  User,
 } from 'lucide-react'
 import { cn } from '@/shared/lib/cn'
 import { useQuery } from 'convex/react'
@@ -223,6 +224,18 @@ const navItems: NavItem[] = [
     path: '/onboarding/profile',
     icon: <Users className="h-4 w-4" />,
     roles: ['org:candidate'],
+  },
+  {
+    label: 'Account',
+    path: '/account',
+    icon: <User className="h-4 w-4" />,
+    roles: [
+      'org:admin',
+      'org:coordinator',
+      'org:hr',
+      'org:caregiver',
+      'org:candidate',
+    ],
   },
 ]
 

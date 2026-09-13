@@ -207,6 +207,11 @@ const AllowedDomainsSettingsPage = lazy(() =>
     }),
   ),
 )
+const AccountSettingsPage = lazy(() =>
+  import('@/features/settings/pages/AccountSettingsPage').then((module) => ({
+    default: module.AccountSettingsPage,
+  })),
+)
 const SchedulingPage = lazy(() =>
   import('@/features/scheduling/pages/SchedulingPage').then((module) => ({
     default: module.SchedulingPage,
@@ -941,6 +946,16 @@ export function AppRouter() {
                 <AllowedDomainsSettingsPage />
               </RouteSuspense>
             </TenantRoleRouteGuard>
+          }
+        />
+        {/* Account self-service (profile, password, MFA) is available to
+            every signed-in user regardless of role. */}
+        <Route
+          path="account/*"
+          element={
+            <RouteSuspense>
+              <AccountSettingsPage />
+            </RouteSuspense>
           }
         />
         <Route

@@ -3,7 +3,7 @@
   "title": "California Infection Control & Standard Precautions",
   "description": "Break the chain of infection with hand hygiene, PPE, and exposure-response practices.",
   "category": "regulatory",
-  "durationMinutes": 15,
+  "durationMinutes": 30,
   "passingScore": 80,
   "steps": [
     {
@@ -20,7 +20,7 @@
       "type": "video",
       "content": "https://www.youtube.com/embed/BaHTZdJWYVw",
       "required": true,
-      "minDurationSec": 0,
+      "minDurationSec": 311,
       "caption": "CDC guidance on proper hand-washing and sanitizer use to prevent infections."
     },
     {
@@ -32,12 +32,21 @@
       "minDurationSec": 44
     },
     {
+      "id": "h7_handedu_video",
+      "title": "Video: Hand Hygiene Education",
+      "type": "video",
+      "content": "https://www.youtube.com/embed/n5kb8bbwdfU",
+      "required": true,
+      "minDurationSec": 341,
+      "caption": "Public health training on hand hygiene technique and key moments in care settings."
+    },
+    {
       "id": "h7_infection_video",
       "title": "Video: Infection Control Basics",
       "type": "video",
       "content": "https://www.youtube.com/embed/-PQ8em7Fi5U",
       "required": true,
-      "minDurationSec": 0,
+      "minDurationSec": 71,
       "caption": "Overview of standard precautions and how to break the chain of infection."
     },
     {
@@ -68,9 +77,9 @@
       "id": "h7_quiz",
       "title": "Module 4 Check: Infection Control",
       "type": "quiz",
-      "content": "{\"questions\": [{\"question\": \"How long should you wash your hands?\", \"options\": [\"5 seconds\", \"10 seconds\", \"20 seconds\", \"1 minute\"], \"correct\": 2}, {\"question\": \"Which PPE is used when contact with blood is likely?\", \"options\": [\"Mask only\", \"Gloves\", \"Gown only\", \"No PPE needed\"], \"correct\": 1}, {\"question\": \"What should you do after a needlestick?\", \"options\": [\"Wait until end of shift\", \"Wash/flush the area and report immediately\", \"Ignore it if no blood is visible\", \"Ask the client what to do\"], \"correct\": 1}, {\"question\": \"Standard precautions apply to:\", \"options\": [\"Only clients known to be infectious\", \"All blood and certain body fluids\", \"Only hospital patients\", \"Only clients with HIV\"], \"correct\": 1}, {\"question\": \"When should alcohol-based hand rub be used?\", \"options\": [\"When hands are visibly dirty\", \"After using the toilet\", \"When hands are not visibly soiled\", \"Only before eating\"], \"correct\": 2}]}",
+      "content": "{\"questions\":[{\"question\":\"How long should you wash your hands?\",\"options\":[\"5 seconds\",\"10 seconds\",\"20 seconds\",\"1 minute\"],\"correct\":2},{\"question\":\"Which PPE is used when contact with blood is likely?\",\"options\":[\"Mask only\",\"Gloves\",\"Gown only\",\"No PPE needed\"],\"correct\":1},{\"question\":\"What should you do after a needlestick?\",\"options\":[\"Wait until end of shift\",\"Wash/flush the area and report immediately\",\"Ignore it if no blood is visible\",\"Ask the client what to do\"],\"correct\":1},{\"question\":\"Standard precautions apply to:\",\"options\":[\"Only clients known to be infectious\",\"All blood and certain body fluids\",\"Only hospital patients\",\"Only clients with HIV\"],\"correct\":1},{\"question\":\"When should alcohol-based hand rub be used?\",\"options\":[\"When hands are visibly dirty\",\"After using the toilet\",\"When hands are not visibly soiled\",\"Only before eating\"],\"correct\":2},{\"question\":\"When should you perform hand hygiene?\",\"options\":[\"Only when your hands look dirty\",\"Before and after every client contact\",\"Once per shift\",\"Only after using the bathroom\"],\"correct\":1},{\"question\":\"Standard precautions mean:\",\"options\":[\"Only treating diagnosed infections as contagious\",\"Treating all blood and body fluids as potentially infectious\",\"Wearing gloves only with certain clients\",\"Skipping hand hygiene when wearing gloves\"],\"correct\":1},{\"question\":\"If you are exposed to a client's blood, you should:\",\"options\":[\"Say nothing and keep working\",\"Wash the area and report the exposure to the office immediately\",\"Wait until your next shift to mention it\",\"Just wear gloves next time\"],\"correct\":1}]}",
       "required": true,
-      "minDurationSec": 100
+      "minDurationSec": 160
     }
   ]
 }

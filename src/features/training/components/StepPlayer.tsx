@@ -235,9 +235,12 @@ export function StepPlayer({
       ? 0
       : Math.min(1, step.minDurationSec)
     : step.minDurationSec ?? 0
-  // Never force a learner to wait more than one minute per step, even if a
-  // legacy course record has a larger value.
-  const minDurationSec = Math.min(rawMinDurationSec, 60)
+  // Non-video steps never force a wait longer than one minute, even if a
+  // legacy course record has a larger value. Video steps are the exception:
+  // their timer matches the video length so learners cannot skip ahead of the
+  // content (client requirement for the Golden Ages training hub).
+  const minDurationSec =
+    step.type === 'video' ? rawMinDurationSec : Math.min(rawMinDurationSec, 60)
 
   const [scrolledToBottom, setScrolledToBottom] = useState(false)
   const [agreed, setAgreed] = useState(false)

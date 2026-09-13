@@ -30,7 +30,7 @@ export function AppShell() {
           {!hideChrome && (
             <Topbar onMenuClick={() => setMobileNavOpen(true)} />
           )}
-          <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6">
             <Outlet />
           </main>
         </div>

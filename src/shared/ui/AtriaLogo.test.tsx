@@ -6,7 +6,7 @@ describe('AtriaLogo', () => {
   it('renders the horizontal logo image', () => {
     render(<AtriaLogo />)
 
-    expect(screen.getByAltText('ATRIA-X')).toHaveAttribute('src', '/atria-logo-horizontal.png')
+    expect(screen.getByAltText('ATRIA-X')).toHaveAttribute('src', '/atria-logo-horizontal-trim.png')
   })
 
   it('renders at the default h-28 height', () => {
