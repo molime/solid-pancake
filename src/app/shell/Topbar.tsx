@@ -83,11 +83,13 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
       </div>
 
       <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+        {/* Agency logo is redundant on phones (the agency-name button sits
+            right next to it) and crowds the header — desktop only. */}
         {!isLoading && agencyLogo && (
           <img
             src={agencyLogo}
             alt={`${tenantName} logo`}
-            className="h-7 w-auto object-contain sm:h-8"
+            className="hidden h-8 w-auto object-contain sm:block"
           />
         )}
         <button
