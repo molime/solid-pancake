@@ -13,7 +13,21 @@ export function AccountSettingsPage() {
         </p>
       </div>
       <div className="flex justify-center overflow-x-auto">
-        <UserProfile routing="path" path="/account" />
+        {/* API keys are an instance-level Clerk feature for programmatic API
+            access — not something agency staff should manage here. Email
+            aliases are also hidden: accounts are agency-provisioned and a
+            secondary email would let sign-in/password-reset escape to an
+            unmanaged address. */}
+        <UserProfile
+          routing="path"
+          path="/account"
+          apiKeysProps={{ hide: true }}
+          appearance={{
+            elements: {
+              profileSection__emailAddresses: { display: 'none' },
+            },
+          }}
+        />
       </div>
     </div>
   )
