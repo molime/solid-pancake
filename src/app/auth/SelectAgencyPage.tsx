@@ -319,6 +319,7 @@ export function SelectAgencyPage() {
               dbTenants.map((tenant) => (
                 <Card
                   key={tenant.clerkOrgId}
+                  data-testid={`agency-card-${tenant.clerkOrgId}`}
                   className="transition-colors cursor-pointer hover:border-atria-accent"
                 >
                   <CardContent className="p-4">

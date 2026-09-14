@@ -89,8 +89,17 @@ test.describe('QA Logs access restriction', { tag: '@auth' }, () => {
     await expect(logsLink).toBeVisible({ timeout: 15000 })
     await expect(logsLink).toHaveAttribute('href', '/logs')
 
-    // --- Item 3: /audit shows the audit-readiness dashboard -------------
+    // --- Item 3: /audit shows the simplified audit-readiness dashboard -----
     await page.goto('/audit')
+    await expect(
+      page.getByRole('heading', { name: 'Audit readiness' }),
+    ).toBeVisible({ timeout: 15000 })
+    await expect(
+      page.getByText('One look at how your agency is doing.'),
+    ).toBeVisible()
+
+    // The full view (?view=full) keeps the classic KPI dashboard.
+    await page.goto('/audit?view=full')
     await expect(
       page.getByRole('heading', { name: 'Audit Trail' }),
     ).toBeVisible({ timeout: 15000 })
