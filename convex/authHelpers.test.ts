@@ -352,6 +352,7 @@ describe('getMyTenant', () => {
       {
         clerkOrgId,
         tenantName: 'Care Agency',
+        slug: 'care-agency',
         agencyAddress: null,
         role: 'org:caregiver',
       },
@@ -388,6 +389,7 @@ describe('getMyTenant', () => {
       {
         clerkOrgId,
         tenantName: 'Care Agency',
+        slug: 'care-agency-addr',
         agencyAddress: '750 N CAPITOL AVE, STE A3, SAN JOSE, CA 95133',
         role: 'org:caregiver',
       },

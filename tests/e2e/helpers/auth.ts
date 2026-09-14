@@ -175,6 +175,19 @@ async function selectOrgIfAsked(page: Page, orgId: string, role?: string) {
     .catch(() => {})
   if (!page.url().includes('/select-agency')) return
 
+  // Prefer the DB-tenant card matching the requested org — multi-tenant
+  // no-org users (candidates/caregivers accumulate memberships across runs)
+  // must land on the tenant the spec is exercising, not an arbitrary card.
+  const matchingDbCard = page
+    .locator(`[data-testid="agency-card-${orgId}"]`)
+    .first()
+  if (await matchingDbCard.isVisible().catch(() => false)) {
+    await matchingDbCard.click()
+    await page.waitForLoadState('networkidle')
+    await expect(page).not.toHaveURL(/select-agency/, { timeout: 30000 })
+    return
+  }
+
   // Multi-tenant no-org case: DB-resolved tenant cards carry "Role:" text
   // with a tenant name other than the org-member fixture agency. Click the
   // first one — a single tenant would have auto-redirected above.

@@ -325,10 +325,15 @@ test.describe('dev invitation bypass for restricted emails', { tag: '@auth' }, (
 
     await page.getByTestId('candidate-name-input').fill('E2E Bypass Candidate')
     await page.getByTestId('candidate-email-input').fill(bypassEmail)
+    // The dev Clerk instance no longer rejects gmail invitations, so the
+    // automatic restricted-domain fallback never triggers. Drive the same
+    // manual-setup flow explicitly via the modal's checkbox.
+    await page
+      .getByLabel('Create account manually and share sign-in link with candidate')
+      .check()
     await page.getByTestId('send-invitation-button').click()
 
-    // Restricted (gmail) domains fall back to manual account setup; the modal
-    // then shows the shareable sign-in link card.
+    // Manual setup shows the shareable sign-in link card.
     const manualCard = page.getByTestId('manual-setup-card')
     await expect(manualCard).toBeVisible({ timeout: 15000 })
 

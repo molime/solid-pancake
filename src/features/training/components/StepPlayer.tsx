@@ -246,10 +246,14 @@ export function StepPlayer({
   const [agreed, setAgreed] = useState(false)
   const [secondsRemaining, setSecondsRemaining] = useState(minDurationSec)
 
-  // Reset timer when the step changes (including speed-run toggles).
-  useEffect(() => {
+  // Reset the timer when the step changes (including speed-run toggles) by
+  // adjusting state during render — the React-endorsed alternative to a
+  // setState-in-effect reset.
+  const [prevMinDurationSec, setPrevMinDurationSec] = useState(minDurationSec)
+  if (prevMinDurationSec !== minDurationSec) {
+    setPrevMinDurationSec(minDurationSec)
     setSecondsRemaining(minDurationSec)
-  }, [minDurationSec])
+  }
 
   useEffect(() => {
     if (secondsRemaining <= 0) return
@@ -291,7 +295,13 @@ export function StepPlayer({
       }
     }
     if (secondsRemaining > 0) {
-      return { key: 'timer', message: `⏳ ${secondsRemaining}s remaining` }
+      // Video steps can carry long waits (the video length), so render the
+      // countdown as m:ss instead of raw seconds.
+      const minutes = Math.floor(secondsRemaining / 60)
+      const seconds = secondsRemaining % 60
+      const label =
+        minutes > 0 ? `${minutes}m ${seconds.toString().padStart(2, '0')}s` : `${seconds}s`
+      return { key: 'timer', message: `⏳ ${label} remaining` }
     }
     if (!agreed) {
       return {

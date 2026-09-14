@@ -179,6 +179,9 @@ test.describe('phase1 lifecycle', { tag: '@auth' }, () => {
     await expect(page.locator('[data-testid="shift-success-screen"]')).toBeVisible({ timeout: 15000 })
 
     // ---- Coordinator: approve -> billing ready ----
+    // The fixture caregiver has no issued Live Scan credential, so approval
+    // succeeds but the billing line is compliance-blocked (the designed
+    // outcome — the block can later be released from Billing).
     await signOut(page)
     await signInWithClerk(page, E2E_COORDINATOR_EMAIL, E2E_COORDINATOR_PASSWORD, E2E_ORG_ID, 'org:coordinator')
     await page.goto('/coordinator/review')
@@ -194,6 +197,10 @@ test.describe('phase1 lifecycle', { tag: '@auth' }, () => {
     await resubmittedRow.locator('button:has-text("Review")').click()
     await expect(page.locator('[data-testid="approve-button"]')).toBeVisible()
     await page.locator('[data-testid="approve-button"]').click()
+    // The blocked approval keeps us on the detail view with a warning banner;
+    // go back to the queue to find the shift under Approved.
+    await expect(page.getByText('Billing blocked')).toBeVisible()
+    await page.getByRole('button', { name: /Back to Documentation/ }).click()
 
     // Approved shifts appear under the Approved filter and are billing_ready.
     await page.locator('[data-testid="filter-approved"]:visible').click()

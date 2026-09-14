@@ -43,7 +43,9 @@ async function fillPersonalInfo(page: import('@playwright/test').Page) {
   await page.locator('#dateOfBirth').fill('06/15/1990')
   await page.locator('#gender').selectOption('female')
   await page.locator('#availability').selectOption('full_time')
-  await page.locator('#shift-morning').check()
+  // Shift radios come from the tenant's shift templates when configured, so
+  // the stable #shift-morning id is not guaranteed — pick the first option.
+  await page.locator('input[name="shift"]').first().check()
   await page.locator('#day-monday').check()
   await page.locator('#day-tuesday').check()
   await page.getByLabel('I am 18 years of age or older').check()
