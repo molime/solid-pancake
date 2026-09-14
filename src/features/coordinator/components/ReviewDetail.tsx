@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from 'convex/react'
+import { useMutation, useQuery, useConvex } from 'convex/react'
 import { useState } from 'react'
 import { api } from '../../../../convex/_generated/api'
 import type { Doc, Id } from '../../../../convex/_generated/dataModel'
@@ -46,6 +46,8 @@ export function ReviewDetail({
   const approve = useMutation(api.reviews.approve)
   const requestCorrection = useMutation(api.reviews.requestCorrection)
   const escalateToSupervisor = useMutation(api.reviews.escalateToSupervisor)
+  const releaseBillingBlock = useMutation(api.billing.releaseBillingBlock)
+  const convex = useConvex()
   const member = useQuery(
     api.members.me,
     clerkOrgId ? { clerkOrgId } : 'skip',
@@ -108,12 +110,22 @@ export function ReviewDetail({
     if (!overrideReason.trim()) return
     setIsSubmitting(true)
     try {
-      await approve({
+      // The plain approval already moved the shift to billing_ready with a
+      // compliance-blocked billing line — re-approving is rejected ("Only
+      // submitted shifts can be approved"). The override therefore releases
+      // that block instead, leaving the line billable.
+      const blockedLine = await convex.query(
+        api.billing.getBlockedLineForShift,
+        { clerkOrgId, shiftId },
+      )
+      if (!blockedLine) {
+        setError('No blocked billing line found for this shift.')
+        return
+      }
+      await releaseBillingBlock({
         clerkOrgId,
-        shiftId,
-        comment,
-        complianceOverride: true,
-        complianceOverrideReason: overrideReason.trim(),
+        billingLineId: blockedLine._id,
+        reason: overrideReason.trim(),
       })
       setComment('')
       setOverrideReason('')

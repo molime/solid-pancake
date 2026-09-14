@@ -303,6 +303,29 @@ export const createPerPatientInvoices = mutation({
   },
 })
 
+// Returns the compliance-blocked billing line for a shift, if any. Used by
+// the review detail's "Approve with compliance override" flow to release the
+// block created by a plain approval of a compliance-blocked caregiver.
+export const getBlockedLineForShift = query({
+  args: { clerkOrgId: v.string(), shiftId: v.id('shifts') },
+  handler: async (ctx, { clerkOrgId, shiftId }) => {
+    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, BILLING_ROLES)
+
+    const line = await ctx.db
+      .query('billingLines')
+      .withIndex('by_tenant_export_batch', (q) => q.eq('tenantId', tenantId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field('shiftId'), shiftId),
+          q.neq(q.field('blockedReason'), undefined),
+        ),
+      )
+      .first()
+
+    return line ? { _id: line._id, blockedReason: line.blockedReason } : null
+  },
+})
+
 export const releaseBillingBlock = mutation({
   args: {
     clerkOrgId: v.string(),

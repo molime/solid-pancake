@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test'
 import {
+  E2E_ADMIN_EMAIL,
+  E2E_ADMIN_PASSWORD,
   E2E_CAREGIVER_EMAIL,
   E2E_CAREGIVER_PASSWORD,
   E2E_COORDINATOR_EMAIL,
@@ -178,12 +180,12 @@ test.describe('phase1 lifecycle', { tag: '@auth' }, () => {
     await resubmitClockOutButton.click()
     await expect(page.locator('[data-testid="shift-success-screen"]')).toBeVisible({ timeout: 15000 })
 
-    // ---- Coordinator: approve -> billing ready ----
-    // The fixture caregiver has no issued Live Scan credential, so approval
-    // succeeds but the billing line is compliance-blocked (the designed
-    // outcome — the block can later be released from Billing).
+    // ---- Admin: blocked approve, then compliance override -> billing ready ----
+    // The fixture caregiver has no issued Live Scan credential, so the first
+    // approval succeeds but creates a compliance-blocked billing line. The
+    // admin-only override then releases that block.
     await signOut(page)
-    await signInWithClerk(page, E2E_COORDINATOR_EMAIL, E2E_COORDINATOR_PASSWORD, E2E_ORG_ID, 'org:coordinator')
+    await signInWithClerk(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD, E2E_ORG_ID, 'org:admin')
     await page.goto('/coordinator/review')
     await expect(page).toHaveURL(/coordinator\/review/)
 
@@ -197,10 +199,14 @@ test.describe('phase1 lifecycle', { tag: '@auth' }, () => {
     await resubmittedRow.locator('button:has-text("Review")').click()
     await expect(page.locator('[data-testid="approve-button"]')).toBeVisible()
     await page.locator('[data-testid="approve-button"]').click()
-    // The blocked approval keeps us on the detail view with a warning banner;
-    // go back to the queue to find the shift under Approved.
+    // The blocked approval shows the warning banner with the admin override.
     await expect(page.getByText('Billing blocked')).toBeVisible()
-    await page.getByRole('button', { name: /Back to Documentation/ }).click()
+    await expect(page.locator('[data-testid="compliance-override-button"]')).toBeVisible()
+    await page.locator('[data-testid="compliance-override-button"]').click()
+    await page.locator('[data-testid="compliance-override-reason-input"]').fill('E2E fixture: Live Scan clearance verified outside the system.')
+    await page.locator('[data-testid="compliance-override-submit-button"]').click()
+    // A successful override returns us to the review queue.
+    await expect(page.locator('[data-testid="filter-pending"]')).toBeVisible({ timeout: 15000 })
 
     // Approved shifts appear under the Approved filter and are billing_ready.
     await page.locator('[data-testid="filter-approved"]:visible').click()

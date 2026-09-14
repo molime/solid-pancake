@@ -253,6 +253,42 @@ describe('releaseBillingBlock', () => {
   })
 })
 
+describe('getBlockedLineForShift', () => {
+  it('returns the blocked line for a shift and null when unblocked', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_blocked_line_query'
+    const adminId = 'user_admin_blocked_line'
+    const { tenantId } = await seedTenant(t, { clerkOrgId, adminId })
+
+    const blocked = await seedClientWithLine(t, {
+      tenantId,
+      caregiverId: 'user_cg_blq',
+      clientName: 'Jane Doe',
+      createdAt: '2026-07-10T12:00:00.000Z',
+      blocked: true,
+    })
+    const clean = await seedClientWithLine(t, {
+      tenantId,
+      caregiverId: 'user_cg_blq',
+      clientName: 'Jane Doe',
+      createdAt: '2026-07-11T12:00:00.000Z',
+    })
+
+    const found = await asAdmin(t, adminId, clerkOrgId).query(
+      api.billing.getBlockedLineForShift,
+      { clerkOrgId, shiftId: blocked.shiftId },
+    )
+    expect(found?._id).toBe(blocked.lineId)
+    expect(found?.blockedReason).toBe('Missing documentation.')
+
+    const none = await asAdmin(t, adminId, clerkOrgId).query(
+      api.billing.getBlockedLineForShift,
+      { clerkOrgId, shiftId: clean.shiftId },
+    )
+    expect(none).toBeNull()
+  })
+})
+
 describe('invoice status lifecycle', () => {
   async function seedInvoice(
     t: ReturnType<typeof createTestConvex>,
