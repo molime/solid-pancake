@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   BadgeCheck,
   Banknote,
+  CreditCard,
   BarChart3,
   Bell,
   LifeBuoy,
@@ -155,6 +156,12 @@ const navItems: NavItem[] = [
     label: 'Payroll',
     path: '/billing/payroll',
     icon: <Banknote className="h-4 w-4" />,
+    roles: ['org:admin'],
+  },
+  {
+    label: 'Subscription',
+    path: '/subscription',
+    icon: <CreditCard className="h-4 w-4" />,
     roles: ['org:admin'],
   },
   {

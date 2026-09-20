@@ -1023,6 +1023,7 @@ export const upsertPricingPlan = mutation({
       v.array(v.object({ upTo: v.number(), monthlyPrice: v.number() })),
     ),
     alertThreshold: v.optional(v.number()),
+    includedProducts: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     await requirePlatformAdmin(ctx)
@@ -1052,10 +1053,29 @@ export const upsertPricingPlan = mutation({
       ...(args.alertThreshold !== undefined
         ? { alertThreshold: args.alertThreshold }
         : {}),
+      ...(args.includedProducts !== undefined
+        ? { includedProducts: args.includedProducts }
+        : {}),
     }
 
     const existing = await getPlanByKey(ctx, args.key)
     if (existing) {
+      // A plan that live subscriptions still reference cannot be deactivated
+      // — reassign those tenants to another plan first.
+      if (args.active === false) {
+        const referencing = await ctx.db
+          .query('tenantSubscriptions')
+          .filter((q) => q.eq(q.field('planKey'), args.key))
+          .collect()
+        const blocking = referencing.filter((sub) =>
+          ['active', 'trialing', 'past_due'].includes(sub.status),
+        )
+        if (blocking.length > 0) {
+          throw new ConvexError(
+            `Plan '${args.key}' cannot be deactivated while ${blocking.length} subscription(s) still reference it.`,
+          )
+        }
+      }
       await ctx.db.patch(existing._id, {
         label: args.label,
         basePrice: args.basePrice,
@@ -1087,6 +1107,7 @@ const DEFAULT_PLANS = [
     includedSeats: 10,
     perSeatPrice: 20,
     active: true,
+    includedProducts: ['hiring'],
   },
   {
     key: 'professional',
@@ -1095,6 +1116,7 @@ const DEFAULT_PLANS = [
     includedSeats: 25,
     perSeatPrice: 18,
     active: true,
+    includedProducts: ['hiring', 'training'],
   },
   {
     key: 'enterprise',
@@ -1103,6 +1125,7 @@ const DEFAULT_PLANS = [
     includedSeats: 50,
     perSeatPrice: 15,
     active: true,
+    includedProducts: ['hiring', 'training', 'full_platform'],
   },
 ]
 
@@ -1115,6 +1138,10 @@ export const seedPricingPlans = mutation({
       const existing = await getPlanByKey(ctx, plan.key)
       if (!existing) {
         await ctx.db.insert('pricingPlans', plan)
+      } else if (!existing.includedProducts) {
+        await ctx.db.patch(existing._id, {
+          includedProducts: plan.includedProducts,
+        })
       }
     }
 
@@ -1185,6 +1212,32 @@ export const setTenantSubscription = mutation({
       'subscription_updated',
       { planKey: args.planKey, status: args.status },
     )
+
+    // Sync feature flags with the plan: products the plan includes are
+    // activated, the other known products are deactivated. The owner can
+    // still override individual products afterwards via setTenantProduct.
+    if (plan.includedProducts) {
+      for (const product of DEFAULT_PRODUCTS) {
+        const active = plan.includedProducts.includes(product.key)
+        const existingProduct = await ctx.db
+          .query('agencyProducts')
+          .withIndex('by_tenant_product', (q) =>
+            q.eq('tenantId', args.tenantId).eq('productKey', product.key),
+          )
+          .first()
+        if (existingProduct) {
+          if (existingProduct.active !== active) {
+            await ctx.db.patch(existingProduct._id, { active })
+          }
+        } else {
+          await ctx.db.insert('agencyProducts', {
+            tenantId: args.tenantId,
+            productKey: product.key,
+            active,
+          })
+        }
+      }
+    }
 
     return subscriptionId
   },

@@ -1,30 +1,20 @@
 import { useOrganization, useUser } from '@clerk/react'
-import { useMutation, useQuery } from 'convex/react'
+import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
-import { Button } from '@/shared/ui/Button'
-import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import {
   AlertTriangle,
   Bell,
-  Database,
   Search,
   XCircle,
 } from 'lucide-react'
-import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 
 export function DashboardPage() {
   const { organization } = useOrganization()
   const { user } = useUser()
   const clerkOrgId = organization?.id
-  const seedAgency = useMutation(api.seed.seedAgency)
-  const [seedMessage, setSeedMessage] = useState('')
-  const [seedStatus, setSeedStatus] = useState<
-    'seeded' | 'already-seeded' | ''
-  >('')
-  const [seeding, setSeeding] = useState(false)
   const member = useQuery(api.members.me, clerkOrgId ? { clerkOrgId } : 'skip')
   const caregivers = useQuery(
     api.members.listCaregivers,
@@ -32,7 +22,6 @@ export function DashboardPage() {
   )
   const canViewDashboard =
     member?.role === 'org:admin' || member?.role === 'org:coordinator'
-  const canSeedDemo = member?.role === 'org:admin'
 
   const stats = useQuery(
     api.shiftQueries.dashboardStats,
@@ -42,26 +31,6 @@ export function DashboardPage() {
     api.compliance.getComplianceOverview,
     clerkOrgId && canViewDashboard ? { clerkOrgId } : 'skip',
   )
-
-  const handleSeedDemo = async () => {
-    if (!clerkOrgId || !user || !canSeedDemo) return
-    setSeeding(true)
-    try {
-      const result = await seedAgency({
-        clerkOrgId,
-        caregiverIds: [user.id, 'demo-caregiver-2'],
-      })
-      setSeedMessage(result.message)
-      setSeedStatus(result.status)
-    } catch (error) {
-      setSeedMessage(
-        error instanceof Error ? sanitizeConvexError(error.message) : 'Unable to seed demo data.',
-      )
-      setSeedStatus('')
-    } finally {
-      setSeeding(false)
-    }
-  }
 
   if (member?.role === 'org:caregiver') {
     return <Navigate to="/caregiver/today" replace />
@@ -97,42 +66,6 @@ export function DashboardPage() {
           </button>
         </div>
       </div>
-
-      {seedMessage && (
-        <div
-          className={`rounded-md border px-4 py-3 ${
-            seedStatus === 'already-seeded'
-              ? 'bg-atria-warning-bg border-atria-warning/20'
-              : 'bg-atria-accent/10 border-atria-accent/20'
-          }`}
-        >
-          <p className="text-sm text-atria-ink font-medium">{seedMessage}</p>
-        </div>
-      )}
-
-      {stats &&
-        stats.inProgress === 0 &&
-        stats.submitted === 0 &&
-        stats.needsCorrection === 0 &&
-        stats.billingReady === 0 &&
-        canSeedDemo && (
-          <div className="rounded-md bg-atria-bg border border-atria-border px-4 py-6 text-center">
-            <p className="text-sm text-atria-muted">
-              No demo data yet. Ask an agency admin to seed demo data or create
-              clients and shifts from the Clients area.
-            </p>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="mt-4"
-              disabled={seeding}
-              onClick={handleSeedDemo}
-            >
-              <Database className="h-4 w-4" />
-              {seeding ? 'Seeding…' : 'Seed demo data'}
-            </Button>
-          </div>
-        )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
