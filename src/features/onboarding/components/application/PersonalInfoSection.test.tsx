@@ -11,11 +11,11 @@ function renderSection(overrides: Partial<ReturnType<typeof createDefaultApplica
 }
 
 describe('PersonalInfoSection transport question', () => {
-  it('renders the transport question with Yes and No options', () => {
+  it('renders the personal vehicle question with Yes and No options', () => {
     renderSection()
 
     expect(
-      screen.getByText('Do you plan to use your personal vehicle to transport clients?'),
+      screen.getByText('Do you have a personal vehicle that you use for work?'),
     ).toBeInTheDocument()
     expect(screen.getByLabelText('Yes')).toBeInTheDocument()
     expect(screen.getByLabelText('No')).toBeInTheDocument()
@@ -51,8 +51,8 @@ describe('PersonalInfoSection transport question', () => {
     )
   })
 
-  it('shows the mileage reimbursement info box only when Yes is selected', () => {
-    const infoText = /reimbursed for mileage when transporting clients/
+  it('shows the car insurance requirement info box only when Yes is selected', () => {
+    const infoText = /car insurance policy as part of the hiring requirements/
 
     const { unmount } = render(
       <PersonalInfoSection

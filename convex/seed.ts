@@ -1010,6 +1010,8 @@ async function seedE2ECandidateFixtures(
     'cpr_certificate',
     'health_screen',
     'background_check',
+    'soc_341a',
+    'personnel_record',
     'employment_agreement',
     'additional_certifications',
     'car_insurance',

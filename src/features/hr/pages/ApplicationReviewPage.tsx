@@ -369,7 +369,10 @@ export function ApplicationReviewPage() {
   const savePrefilledDocument = useMutation(api.candidates.savePrefilledDocument)
 
   const candidate = detail?.candidate
-  const application = detail?.applications?.[0]
+  // Mutations (sendOffer, saveI9Section2ForHR, reviewApplication) write to the
+  // LATEST application row — read the same row here or edits appear unsaved
+  // when a candidate has more than one application.
+  const application = detail?.applications?.at(-1)
   const fields = (application?.fields ?? {}) as Record<string, unknown>
 
   const dynamicFormSubmissions = (fields.dynamicFormSubmissions ?? []) as {
@@ -404,6 +407,28 @@ export function ApplicationReviewPage() {
   const [confirmReject, setConfirmReject] = useState(false)
   const { toast, show, hide } = useHrToast()
 
+  // Re-sync the offer fields once saved data loads (the useState initializers
+  // run before the query resolves) and after each save. The key only changes
+  // when persisted values change, so in-progress edits are never wiped.
+  const [offerSourceKey, setOfferSourceKey] = useState<string | null>(null)
+  const nextOfferKey = JSON.stringify([
+    fields.payRate ?? null,
+    fields.startDate ?? null,
+    fields.schedule ?? null,
+    fields.supervisor ?? null,
+    fields.clientName ?? null,
+    fields.offerExpiresAt ?? null,
+  ])
+  if (offerSourceKey !== nextOfferKey) {
+    setOfferSourceKey(nextOfferKey)
+    setPayRate(String(fields.payRate || '$22.00 / hr'))
+    setStartDate(String(fields.startDate || ''))
+    setSchedule(String(fields.schedule || 'Flexible, based on availability'))
+    setSupervisor(String(fields.supervisor || 'Your assigned coordinator'))
+    setClientName(String(fields.clientName || ''))
+    setExpiresAt(String(fields.offerExpiresAt || ''))
+  }
+
   const todayIso = new Date().toISOString().split('T')[0]
   const [employerName, setEmployerName] = useState(organization?.name ?? '')
   const [ein, setEin] = useState('')
@@ -420,23 +445,40 @@ export function ApplicationReviewPage() {
 
   const [bgResultFile, setBgResultFile] = useState<File | null>(null)
 
+  const editI9Section2 = (patch: Partial<typeof i9Section2>) => {
+    setI9Dirty(true)
+    setI9Section2((prev) => ({ ...prev, ...patch }))
+  }
+  const editW4Employer = (apply: () => void) => {
+    setW4Dirty(true)
+    apply()
+  }
+
   // Sync W-4 employer fields and I-9 Section 2 from saved data when it loads,
   // without overriding user edits (render-time derived state avoids cascading effects).
+  // Once the user edits a block, its dirty flag stops the sync from wiping
+  // in-progress input when late-resolving queries flip the source key.
   const [w4SourceKey, setW4SourceKey] = useState<string | null>(null)
   const [i9SourceKey, setI9SourceKey] = useState<string | null>(null)
+  const [w4Dirty, setW4Dirty] = useState(false)
+  const [i9Dirty, setI9Dirty] = useState(false)
   const nextW4Key = `${prefilledDocs?.map((d) => d._id).join(',') ?? 'loading'}|${w4ForHR?.agencyEin ?? ''}`
   const nextI9Key = JSON.stringify(fields.i9Section2)
   const initialW4Employer = getInitialW4EmployerData(prefilledDocs, organization?.name, w4ForHR?.agencyEin)
   const initialI9Section2 = getInitialI9Section2(fields)
   if (w4SourceKey !== nextW4Key) {
     setW4SourceKey(nextW4Key)
-    setEmployerName(initialW4Employer.employerName)
-    setEin(initialW4Employer.ein)
-    setFirstDateOfEmployment(initialW4Employer.firstDateOfEmployment)
+    if (!w4Dirty) {
+      setEmployerName(initialW4Employer.employerName)
+      setEin(initialW4Employer.ein)
+      setFirstDateOfEmployment(initialW4Employer.firstDateOfEmployment)
+    }
   }
   if (i9SourceKey !== nextI9Key) {
     setI9SourceKey(nextI9Key)
-    setI9Section2(initialI9Section2)
+    if (!i9Dirty) {
+      setI9Section2(initialI9Section2)
+    }
   }
   const [isUploadingBgResult, setIsUploadingBgResult] = useState(false)
   const bgResultInputRef = useRef<HTMLInputElement>(null)
@@ -656,6 +698,8 @@ export function ApplicationReviewPage() {
   const handleSaveW4EmployerSection = async () => {
     if (!clerkOrgId || !candidateId) return
     setIsGeneratingW4(true)
+    // Save the data first — a PDF regeneration failure must not report the
+    // employer section itself as unsaved.
     try {
       await saveW4EmployerSection({
         clerkOrgId,
@@ -664,7 +708,18 @@ export function ApplicationReviewPage() {
         ein,
         firstDateOfEmployment,
       })
+      setW4Dirty(false)
+    } catch (err) {
+      show(
+        'danger',
+        'Could not save W-4 employer section',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
+      )
+      setIsGeneratingW4(false)
+      return
+    }
 
+    try {
       const w4Data = w4ForHR?.application?.fields
       if (w4Data && typeof w4Data === 'object') {
         const candidateW4 = ((w4Data as Record<string, unknown>).w4 ?? {}) as Record<string, unknown>
@@ -692,13 +747,12 @@ export function ApplicationReviewPage() {
           )
         }
       }
-
       show('success', 'W-4 employer section saved', 'The prefilled W-4 PDF has been regenerated.')
     } catch (err) {
       show(
-        'danger',
-        'Could not save W-4 employer section',
-        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
+        'warning',
+        'W-4 employer section saved',
+        `The data was saved, but the PDF could not be regenerated: ${err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.'}`,
       )
     } finally {
       setIsGeneratingW4(false)
@@ -713,6 +767,7 @@ export function ApplicationReviewPage() {
         candidateId: candidateId as Id<'candidates'>,
         section2: i9Section2,
       })
+      setI9Dirty(false)
       show('success', 'I-9 Section 2 saved')
     } catch (err) {
       show(
@@ -933,7 +988,7 @@ export function ApplicationReviewPage() {
                   <Input
                     id="i9-doc-title"
                     value={i9Section2.documentTitle}
-                    onChange={(e) => setI9Section2((prev) => ({ ...prev, documentTitle: e.target.value }))}
+                    onChange={(e) => editI9Section2({ documentTitle: e.target.value })}
                     placeholder="e.g. US Passport"
                   />
                 </FieldGroup>
@@ -941,7 +996,7 @@ export function ApplicationReviewPage() {
                   <Input
                     id="i9-doc-number"
                     value={i9Section2.documentNumber}
-                    onChange={(e) => setI9Section2((prev) => ({ ...prev, documentNumber: e.target.value }))}
+                    onChange={(e) => editI9Section2({ documentNumber: e.target.value })}
                   />
                 </FieldGroup>
                 <FieldGroup label="EXPIRATION DATE" htmlFor="i9-expiration">
@@ -949,7 +1004,7 @@ export function ApplicationReviewPage() {
                     id="i9-expiration"
                     type="date"
                     value={i9Section2.expirationDate}
-                    onChange={(e) => setI9Section2((prev) => ({ ...prev, expirationDate: e.target.value }))}
+                    onChange={(e) => editI9Section2({ expirationDate: e.target.value })}
                   />
                 </FieldGroup>
                 <FieldGroup label="DATE VERIFIED" htmlFor="i9-date">
@@ -957,14 +1012,14 @@ export function ApplicationReviewPage() {
                     id="i9-date"
                     type="date"
                     value={i9Section2.date}
-                    onChange={(e) => setI9Section2((prev) => ({ ...prev, date: e.target.value }))}
+                    onChange={(e) => editI9Section2({ date: e.target.value })}
                   />
                 </FieldGroup>
                 <FieldGroup label="EMPLOYER SIGNATURE" htmlFor="i9-signature" className="sm:col-span-2">
                   <Input
                     id="i9-signature"
                     value={i9Section2.employerSignature}
-                    onChange={(e) => setI9Section2((prev) => ({ ...prev, employerSignature: e.target.value }))}
+                    onChange={(e) => editI9Section2({ employerSignature: e.target.value })}
                     placeholder="Type full name"
                   />
                 </FieldGroup>
@@ -1001,14 +1056,14 @@ export function ApplicationReviewPage() {
                   <Input
                     id="w4-employer-name"
                     value={employerName}
-                    onChange={(e) => setEmployerName(e.target.value)}
+                    onChange={(e) => editW4Employer(() => setEmployerName(e.target.value))}
                   />
                 </FieldGroup>
                 <FieldGroup label="EIN" htmlFor="w4-ein">
                   <Input
                     id="w4-ein"
                     value={ein}
-                    onChange={(e) => setEin(e.target.value)}
+                    onChange={(e) => editW4Employer(() => setEin(e.target.value))}
                     placeholder="XX-XXXXXXX"
                   />
                 </FieldGroup>
@@ -1017,7 +1072,7 @@ export function ApplicationReviewPage() {
                     id="w4-start-date"
                     type="date"
                     value={firstDateOfEmployment}
-                    onChange={(e) => setFirstDateOfEmployment(e.target.value)}
+                    onChange={(e) => editW4Employer(() => setFirstDateOfEmployment(e.target.value))}
                   />
                 </FieldGroup>
               </div>
@@ -1064,7 +1119,7 @@ export function ApplicationReviewPage() {
 
             <SectionBlock title="Prefilled documents">
               <div className="space-y-2">
-                {(['health_screen', 'live_scan', 'criminal_record', 'i9', 'w4', 'de_34', 'bcia_8016', 'hcs_501'] as const).map((type) => {
+                {(['health_screen', 'live_scan', 'criminal_record', 'i9', 'w4', 'de_34', 'bcia_8016', 'lic_501', 'soc_341a', 'hcs_501'] as const).map((type) => {
                   const doc = prefilledDocByType.get(type)
                   const hasSigned = !!doc?.uploadedSignedStorageId
                   const isOnlineForm = type === 'criminal_record' || type === 'i9' || type === 'w4' || type === 'bcia_8016'
@@ -1082,6 +1137,8 @@ export function ApplicationReviewPage() {
                           {type === 'w4' && 'W-4 Tax Withholding'}
                           {type === 'de_34' && 'DE 34 — Report of New Employee(s)'}
                           {type === 'bcia_8016' && 'BCIA 8016 — Live Scan Request'}
+                          {type === 'lic_501' && 'LIC 501 — Personnel Record'}
+                          {type === 'soc_341a' && 'SOC 341A — Abuse Reporting Statement'}
                           {type === 'hcs_501' && 'HCS 501 — Personnel Record'}
                         </span>
                         <PrefilledDocumentDownloadButton
@@ -1211,7 +1268,7 @@ export function ApplicationReviewPage() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-medium text-atria-ink">
-                    Client transport in personal vehicle
+                    Car insurance policy
                   </p>
                   <StatusBadge variant={carInsuranceBadge.variant}>
                     {carInsuranceBadge.label}
@@ -1219,7 +1276,7 @@ export function ApplicationReviewPage() {
                 </div>
                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <ApplicationField
-                    label="TRANSPORT CLIENTS"
+                    label="PERSONAL VEHICLE"
                     value={
                       canTransportClients === true
                         ? 'Yes'
@@ -1243,14 +1300,14 @@ export function ApplicationReviewPage() {
                 </div>
                 {carInsuranceStatus === 'missing' && (
                   <p className="mt-3 text-sm text-atria-danger">
-                    This applicant plans to transport clients but has not uploaded a car insurance
-                    policy yet.
+                    This applicant has not uploaded a car insurance policy yet. A valid policy
+                    is part of the hiring requirements.
                   </p>
                 )}
                 {carInsuranceStatus === 'expired' && (
                   <p className="mt-3 text-sm text-atria-danger">
                     This car insurance policy has expired. Request an updated policy before
-                    allowing client transport.
+                    hiring.
                   </p>
                 )}
                 {carInsuranceStatus === 'expiring_soon' && (

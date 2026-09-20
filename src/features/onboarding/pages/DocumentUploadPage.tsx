@@ -53,12 +53,17 @@ const DOCUMENT_LABELS: Record<string, { title: string; hint: string; expiry: boo
   },
   car_insurance: {
     title: 'Car Insurance Policy',
-    hint: 'Upload your car insurance policy document. Required only if you will transport clients in your personal vehicle.',
+    hint: 'Upload your car insurance policy document. Required as part of the hiring requirements.',
     expiry: true,
   },
+  soc_341a: {
+    title: 'Upload signed SOC 341A statement',
+    hint: 'Download the SOC 341A form, read it carefully, sign and date it, and upload the signed form here. JPG, PNG, or PDF. Max 10MB.',
+    expiry: false,
+  },
   personnel_record: {
-    title: 'Upload personnel record (HCS 501)',
-    hint: 'Download the blank HCS 501 form, fill it out completely, and upload the completed form here. This is required now that you have been hired.',
+    title: 'Upload personnel record (LIC 501)',
+    hint: 'Download the prefilled LIC 501 form below, complete the remaining sections by hand, sign it, and upload the completed form here. JPG, PNG, or PDF. Max 10MB.',
     expiry: false,
   },
   required: {
@@ -136,6 +141,7 @@ export function DocumentUploadPage() {
   const isHealthScreen = documentType === 'health_screen'
   const isBackgroundCheck = documentType === 'background_check'
   const isPersonnelRecord = documentType === 'personnel_record'
+  const isSoc341a = documentType === 'soc_341a'
   const isGoldenAges =
     (tenantName ?? '').toLowerCase().includes('golden') ||
     (employerInfo?.legalName ?? '').toLowerCase().includes('golden')
@@ -145,7 +151,7 @@ export function DocumentUploadPage() {
   // record — block submit until the candidate profile query has loaded so the
   // link is never silently skipped.
   const needsPrefilledLink =
-    isHealthScreen || (isBackgroundCheck && !isGoldenAgesBackgroundCheck) || isPersonnelRecord
+    isHealthScreen || (isBackgroundCheck && !isGoldenAgesBackgroundCheck) || isPersonnelRecord || isSoc341a
 
   const displayMeta = isGoldenAgesBackgroundCheck
     ? {
@@ -235,6 +241,24 @@ export function DocumentUploadPage() {
       }
     }
 
+    if (isPersonnelRecord) {
+      // LIC 501 — only the fields we know at application time; the employee
+      // completes position details, education, and signature by hand.
+      const fullAddress = `${address.street ?? ''} ${address.apt ?? ''}, ${address.city ?? ''}, ${address.state ?? ''} ${address.zip ?? ''}`.trim()
+      return {
+        facilityName: agencyName,
+        facilityAddress: agencyAddress ?? '',
+        lastName: personal.lastName ?? '',
+        firstName: personal.firstName ?? '',
+        middleName: personal.middleInitial ?? '',
+        phone: (personal.cellPhone as string | undefined) ?? (personal.homePhone as string | undefined) ?? '',
+        address: fullAddress,
+        socialSecurityNumber: personal.ssn ?? w4.ssn ?? i9.ssn ?? '',
+        positionTitle: personal.positionApplyingFor ?? '',
+        date: todayUs,
+      }
+    }
+
     return {}
   }
 
@@ -242,22 +266,26 @@ export function DocumentUploadPage() {
     setIsGenerating(true)
     setError('')
     try {
-      const mappingKey = isHealthScreen
-        ? isGoldenAgesHealthScreen
-          ? 'golden_ages_health_screen'
-          : 'health_screen'
-        : 'live_scan'
+      const mappingKey = isPersonnelRecord
+        ? 'lic_501'
+        : isHealthScreen
+          ? isGoldenAgesHealthScreen
+            ? 'golden_ages_health_screen'
+            : 'health_screen'
+          : 'live_scan'
       const mapping = getMapping(mappingKey)
       if (!mapping) {
         throw new Error('PDF template mapping not found.')
       }
       const data = buildPrefilledData()
       const bytes = await generatePrefilledPdf(mapping, data)
-      const filename = isHealthScreen
-        ? isGoldenAgesHealthScreen
-          ? 'golden_ages_health_screen_prefilled.pdf'
-          : 'lic_503_health_screen_prefilled.pdf'
-        : 'lic_9163_live_scan_prefilled.pdf'
+      const filename = isPersonnelRecord
+        ? 'lic_501_personnel_record_prefilled.pdf'
+        : isHealthScreen
+          ? isGoldenAgesHealthScreen
+            ? 'golden_ages_health_screen_prefilled.pdf'
+            : 'lic_503_health_screen_prefilled.pdf'
+          : 'lic_9163_live_scan_prefilled.pdf'
       saveAndDownload(bytes, filename)
       const getUploadUrl = async () => {
         const { url } = await generateUploadUrl({ clerkOrgId: orgId })
@@ -266,7 +294,7 @@ export function DocumentUploadPage() {
       await saveAndUpload(
         bytes,
         filename,
-        isHealthScreen ? 'health_screen' : 'live_scan',
+        isPersonnelRecord ? 'lic_501' : isHealthScreen ? 'health_screen' : 'live_scan',
         orgId,
         getUploadUrl,
         savePrefilledDocument,
@@ -310,10 +338,16 @@ export function DocumentUploadPage() {
         expiresAt: meta.expiry ? expiresAt : undefined,
         photoIdType: isPhotoId ? photoIdType : undefined,
       })
-      if ((isHealthScreen || isBackgroundCheck || isPersonnelRecord) && candidateId) {
+      if ((isHealthScreen || isBackgroundCheck || isPersonnelRecord || isSoc341a) && candidateId) {
         await saveSignedPrefilledDocument({
           clerkOrgId: orgId,
-          documentType: isHealthScreen ? 'health_screen' : isPersonnelRecord ? 'hcs_501' : 'live_scan',
+          documentType: isHealthScreen
+            ? 'health_screen'
+            : isPersonnelRecord
+              ? 'lic_501'
+              : isSoc341a
+                ? 'soc_341a'
+                : 'live_scan',
           storageId,
         })
       }
@@ -394,14 +428,32 @@ export function DocumentUploadPage() {
             <div className='mb-6 rounded-[var(--radius-atria-md)] border border-atria-info/30 bg-atria-info/10 p-4'>
               <p className='text-sm font-medium text-atria-info'>Before you upload</p>
               <p className='mt-1 text-sm text-atria-ink'>
-                Download the blank HCS 501 form below, fill it out completely, then come back here and upload the completed form. It goes into your personnel file, where HR, admin, and coordinators can review it.
+                Download the LIC 501 form below — we have already filled in everything we know. PRINT it, complete the remaining sections by hand, sign and date it, then come back here and upload the finished form. It goes into your personnel file, where HR, admin, and coordinators can review it.
+              </p>
+              <Button
+                variant='secondary'
+                size='md'
+                className='mt-3 w-full'
+                disabled={isGenerating}
+                onClick={handleDownloadPrefilled}
+              >
+                {isGenerating ? 'Generating...' : 'Download prefilled LIC 501 Personnel Record form'}
+              </Button>
+            </div>
+          )}
+
+          {isSoc341a && (
+            <div className='mb-6 rounded-[var(--radius-atria-md)] border border-atria-info/30 bg-atria-info/10 p-4'>
+              <p className='text-sm font-medium text-atria-info'>Before you upload</p>
+              <p className='mt-1 text-sm text-atria-ink'>
+                Download the official SOC 341A form below, read it carefully, sign and date it, then come back here and upload the signed form. California law requires this statement for every employee.
               </p>
               <a
-                href='/templates/hcs_501_personnel_record.pdf'
-                download='hcs_501_personnel_record.pdf'
+                href='/templates/soc_341a.pdf'
+                download='soc_341a.pdf'
                 className='mt-3 block w-full rounded-[var(--radius-atria-md)] bg-atria-surface-2 px-4 py-2.5 text-center text-sm font-medium text-atria-accent hover:bg-atria-surface-3 hover:underline'
               >
-                Download blank HCS 501 form
+                Download SOC 341A form
               </a>
             </div>
           )}

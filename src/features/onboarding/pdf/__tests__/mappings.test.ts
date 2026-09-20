@@ -19,6 +19,7 @@ describe('PDF coordinate mappings', () => {
       'hcs_501',
       'health_screen',
       'i9',
+      'lic_501',
       'live_scan',
       'w4',
     ])
@@ -221,6 +222,18 @@ describe('PDF coordinate mappings', () => {
         'employer1From',
         'employer1To',
         'signatureDate',
+      ],
+      lic_501: [
+        'date',
+        'facilityName',
+        'facilityAddress',
+        'lastName',
+        'firstName',
+        'middleName',
+        'phone',
+        'address',
+        'socialSecurityNumber',
+        'positionTitle',
       ],
     }
 

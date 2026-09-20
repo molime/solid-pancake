@@ -22,7 +22,8 @@ vi.mock('@clerk/react', () => ({
 vi.mock('convex/react', () => ({
   useConvexAuth: () => ({ isLoading: false, isAuthenticated: true }),
   useMutation: () => acknowledgeMock,
-  useQuery: () => undefined,
+  // Employer info loaded, no legal name set (non-Golden Ages tenant).
+  useQuery: () => ({}),
 }))
 
 describe('EmploymentAgreementPage', () => {

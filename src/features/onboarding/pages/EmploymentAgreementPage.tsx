@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useClerk } from '@clerk/react'
 import { clearSessionData } from '@/shared/lib/clearSession'
 import { useTenant } from '@/app/useTenant'
-import { useMutation } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
@@ -21,6 +21,8 @@ import {
   HIPAA_TEXT,
   ABUSE_NOTICE_TEXT,
   LEGAL_VALIDITY_TEXT,
+  GOLDEN_AGES_EMPLOYEE_CONTRACT_TEXT,
+  GOLDEN_AGES_HIPAA_TEXT,
 } from '../components/application/legalText'
 
 type AgreementKey = 'employeeContract' | 'employeeRights' | 'hipaa' | 'abuseNotice'
@@ -31,23 +33,25 @@ type AgreementState = {
   date: string
 }
 
-const AGREEMENTS: Record<AgreementKey, { title: string; body: string }> = {
-  employeeContract: {
-    title: 'Employee Contract',
-    body: EMPLOYEE_CONTRACT_TEXT,
-  },
-  employeeRights: {
-    title: 'Employee Rights (LIC 9052)',
-    body: EMPLOYEE_RIGHTS_TEXT,
-  },
-  hipaa: {
-    title: 'HIPAA Confidentiality Notice',
-    body: HIPAA_TEXT,
-  },
-  abuseNotice: {
-    title: 'Abuse Notice (SOC 341A)',
-    body: ABUSE_NOTICE_TEXT,
-  },
+function agreementsFor(isGoldenAges: boolean): Record<AgreementKey, { title: string; body: string }> {
+  return {
+    employeeContract: {
+      title: 'Employee Contract',
+      body: isGoldenAges ? GOLDEN_AGES_EMPLOYEE_CONTRACT_TEXT : EMPLOYEE_CONTRACT_TEXT,
+    },
+    employeeRights: {
+      title: 'Employee Rights (LIC 9052)',
+      body: EMPLOYEE_RIGHTS_TEXT,
+    },
+    hipaa: {
+      title: 'HIPAA Confidentiality Notice',
+      body: isGoldenAges ? GOLDEN_AGES_HIPAA_TEXT : HIPAA_TEXT,
+    },
+    abuseNotice: {
+      title: 'Abuse Notice (SOC 341A)',
+      body: ABUSE_NOTICE_TEXT,
+    },
+  }
 }
 
 export function EmploymentAgreementPage() {
@@ -58,7 +62,11 @@ export function EmploymentAgreementPage() {
     clearSessionData()
     signOut(() => navigate('/sign-in'))
   }
-  const { clerkOrgId, isLoading } = useTenant()
+  const { clerkOrgId, tenantName, isLoading } = useTenant()
+  const employerInfo = useQuery(
+    api.tenantSettings.getEmployerInfo,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
   const acknowledge = useMutation(api.candidates.acknowledgeBackgroundCheck)
 
   const today = new Date().toISOString().split('T')[0]
@@ -72,7 +80,14 @@ export function EmploymentAgreementPage() {
   const [error, setError] = useState('')
   const [legalValidityAccepted, setLegalValidityAccepted] = useState(false)
 
-  if (isLoading || !clerkOrgId) return null
+  if (isLoading || !clerkOrgId || employerInfo === undefined) return null
+
+  // Golden Ages candidates sign Golden Ages documents — the same swap the
+  // application's AcknowledgmentsSection already performs.
+  const isGoldenAges =
+    (employerInfo?.legalName ?? '').toLowerCase().includes('golden') ||
+    (tenantName ?? '').toLowerCase().includes('golden')
+  const AGREEMENTS = agreementsFor(isGoldenAges)
 
   const updateAgreement = (key: AgreementKey, patch: Partial<AgreementState>) => {
     setAgreements((prev) => ({

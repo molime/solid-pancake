@@ -186,6 +186,28 @@ const BCIA_8016_MAPPING: PdfFieldMapping = {
   ],
 }
 
+// LIC 501 (3/99) — CDSS Personnel Record ("Form to be completed by employee").
+// Coordinates come from the agency-annotated FreeText boxes in
+// personnel-record2.pdf (converted to PyMuPDF top-left origin via toPdfY).
+// Only fields we have data for at application time are prefilled; position
+// details (supervisor/salary/hours/start date), education, and the signature
+// are completed by the employee by hand.
+const LIC_501_MAPPING: PdfFieldMapping = {
+  page: 0,
+  fields: [
+    { key: 'date', x: 427.5, y: toPdfY(54.75, 9), fontSize: 9, maxWidth: 60 },
+    { key: 'facilityName', x: 447, y: toPdfY(79.5, 9), fontSize: 9, maxWidth: 140 },
+    { key: 'facilityAddress', x: 418.5, y: toPdfY(103.5, 8), fontSize: 8, maxWidth: 190 },
+    { key: 'lastName', x: 34.5, y: toPdfY(167.25, 10), fontSize: 10, maxWidth: 105 },
+    { key: 'firstName', x: 145.5, y: toPdfY(167.25, 10), fontSize: 10, maxWidth: 62 },
+    { key: 'middleName', x: 213, y: toPdfY(167.25, 10), fontSize: 10, maxWidth: 65 },
+    { key: 'phone', x: 437.25, y: toPdfY(170.25, 10), fontSize: 10, maxWidth: 135 },
+    { key: 'address', x: 27.75, y: toPdfY(196.5, 10), fontSize: 10, maxWidth: 400 },
+    { key: 'socialSecurityNumber', x: 33, y: toPdfY(230.25, 10), fontSize: 10, maxWidth: 200 },
+    { key: 'positionTitle', x: 36.75, y: toPdfY(369, 10), fontSize: 10, maxWidth: 270 },
+  ],
+}
+
 // HCS 501 — Home Care Organization Personnel Record.
 const HCS_501_MAPPING: PdfFieldMapping = {
   page: 0,
@@ -269,7 +291,8 @@ export const MAPPINGS: Record<
   | 'i9'
   | 'de_34'
   | 'bcia_8016'
-  | 'hcs_501',
+  | 'hcs_501'
+  | 'lic_501',
   PdfFieldMapping
 > = {
   health_screen: HEALTH_SCREEN_MAPPING,
@@ -281,6 +304,7 @@ export const MAPPINGS: Record<
   de_34: DE_34_MAPPING,
   bcia_8016: BCIA_8016_MAPPING,
   hcs_501: HCS_501_MAPPING,
+  lic_501: LIC_501_MAPPING,
 }
 
 export function getMapping(type: string): PdfFieldMapping | undefined {

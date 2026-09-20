@@ -69,15 +69,21 @@ const TASK_META: Record<string, { label: string; shortLabel: string; actionLabel
     actionLabel: 'Upload car insurance',
     due: 'Due in 3 days',
   },
+  soc_341a: {
+    label: 'Suspected abuse reporting statement (SOC 341A)',
+    shortLabel: 'SOC 341A',
+    actionLabel: 'Upload signed SOC 341A',
+    due: 'Due in 3 days',
+  },
   personnel_record: {
-    label: 'Personnel record (HCS 501)',
+    label: 'Personnel record (LIC 501)',
     shortLabel: 'Personnel record',
     actionLabel: 'Upload personnel record',
-    due: 'Required now that you are hired',
+    due: 'Due in 3 days',
   },
 }
 
-const UPLOAD_TYPES = new Set(['photo_id', 'tax_id_ssn', 'cpr_certificate', 'health_screen', 'background_check', 'additional_certifications', 'car_insurance', 'personnel_record'])
+const UPLOAD_TYPES = new Set(['photo_id', 'tax_id_ssn', 'cpr_certificate', 'health_screen', 'background_check', 'additional_certifications', 'car_insurance', 'soc_341a', 'personnel_record'])
 
 function getTaskRoute(task: Doc<'candidateTasks'>, hasTrainingProduct: boolean | undefined) {
   if (task.type === 'form_submission') return '/onboarding/application'
