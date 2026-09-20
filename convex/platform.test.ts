@@ -1448,3 +1448,130 @@ describe('monthly recurring billing (period advancement)', () => {
     expect(subscription?.currentPeriodEnd).toBe('2030-02-01')
   })
 })
+
+describe('plan includedProducts', () => {
+  it('syncs agencyProducts when the subscription plan is set', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    await asAdmin.mutation(api.platform.seedPricingPlans, {})
+    const tenantId = await seedTenant(t)
+
+    // Starter includes only hiring.
+    await asAdmin.mutation(api.platform.setTenantSubscription, {
+      tenantId,
+      planKey: 'starter',
+      status: 'active',
+      billingEmails: ['billing@example.com'],
+      currentPeriodStart: '2026-09-01',
+      currentPeriodEnd: '2026-09-30',
+    })
+
+    let products = await t.run(async (ctx) =>
+      ctx.db
+        .query('agencyProducts')
+        .withIndex('by_tenant_product', (q) => q.eq('tenantId', tenantId))
+        .collect(),
+    )
+    expect(
+      Object.fromEntries(products.map((p) => [p.productKey, p.active])),
+    ).toEqual({ hiring: true, training: false, full_platform: false })
+
+    // Upgrading to professional adds training.
+    await asAdmin.mutation(api.platform.setTenantSubscription, {
+      tenantId,
+      planKey: 'professional',
+      status: 'active',
+      billingEmails: ['billing@example.com'],
+      currentPeriodStart: '2026-10-01',
+      currentPeriodEnd: '2026-10-31',
+    })
+
+    products = await t.run(async (ctx) =>
+      ctx.db
+        .query('agencyProducts')
+        .withIndex('by_tenant_product', (q) => q.eq('tenantId', tenantId))
+        .collect(),
+    )
+    expect(
+      Object.fromEntries(products.map((p) => [p.productKey, p.active])),
+    ).toEqual({ hiring: true, training: true, full_platform: false })
+  })
+
+  it('blocks deactivating a plan referenced by a live subscription', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    await asAdmin.mutation(api.platform.seedPricingPlans, {})
+    const tenantId = await seedTenant(t)
+
+    await asAdmin.mutation(api.platform.setTenantSubscription, {
+      tenantId,
+      planKey: 'starter',
+      status: 'active',
+      billingEmails: ['billing@example.com'],
+      currentPeriodStart: '2026-09-01',
+      currentPeriodEnd: '2026-09-30',
+    })
+
+    await expect(
+      asAdmin.mutation(api.platform.upsertPricingPlan, {
+        key: 'starter',
+        label: 'Starter',
+        basePrice: 199,
+        includedSeats: 10,
+        perSeatPrice: 20,
+        active: false,
+      }),
+    ).rejects.toThrow(/cannot be deactivated/i)
+
+    // Once the subscription moves to another plan, deactivation succeeds.
+    await asAdmin.mutation(api.platform.setTenantSubscription, {
+      tenantId,
+      planKey: 'enterprise',
+      status: 'active',
+      billingEmails: ['billing@example.com'],
+      currentPeriodStart: '2026-10-01',
+      currentPeriodEnd: '2026-10-31',
+    })
+    await asAdmin.mutation(api.platform.upsertPricingPlan, {
+      key: 'starter',
+      label: 'Starter',
+      basePrice: 199,
+      includedSeats: 10,
+      perSeatPrice: 20,
+      active: false,
+    })
+  })
+
+  it('stores includedProducts via upsertPricingPlan and seeds defaults with them', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+
+    await asAdmin.mutation(api.platform.seedPricingPlans, {})
+    let plans = await asAdmin.query(api.platform.getPricingPlans, {})
+    const starter = plans.find((p) => p.key === 'starter')
+    expect(starter?.includedProducts).toEqual(['hiring'])
+    const enterprise = plans.find((p) => p.key === 'enterprise')
+    expect(enterprise?.includedProducts).toEqual([
+      'hiring',
+      'training',
+      'full_platform',
+    ])
+
+    await asAdmin.mutation(api.platform.upsertPricingPlan, {
+      key: 'basic_ga',
+      label: 'Basic GA',
+      basePrice: 99,
+      includedSeats: 5,
+      perSeatPrice: 10,
+      active: true,
+      includedProducts: ['hiring'],
+    })
+    plans = await asAdmin.query(api.platform.getPricingPlans, {})
+    expect(plans.find((p) => p.key === 'basic_ga')?.includedProducts).toEqual([
+      'hiring',
+    ])
+  })
+})

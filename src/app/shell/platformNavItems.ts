@@ -10,6 +10,7 @@ import {
 
 export const NAV_ITEMS = [
   { to: '/platform/subscriptions', label: 'Subscriptions', icon: CreditCard },
+  { to: '/platform/plans', label: 'Plans', icon: FileText },
   { to: '/platform/agencies', label: 'Agencies', icon: Building2 },
   { to: '/platform/health', label: 'Tenant Health', icon: HeartPulse },
   { to: '/platform/reports', label: 'Reports', icon: BarChart3 },

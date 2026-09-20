@@ -93,6 +93,11 @@ const PayrollPage = lazy(() =>
     default: module.PayrollPage,
   })),
 )
+const SubscriptionPage = lazy(() =>
+  import('@/features/billing/pages/SubscriptionPage').then((module) => ({
+    default: module.SubscriptionPage,
+  })),
+)
 const AuditTrailPage = lazy(() =>
   import('@/features/reporting/pages/AuditTrailPage').then((module) => ({
     default: module.AuditTrailPage,
@@ -174,6 +179,11 @@ const PlatformSupportPage = lazy(() =>
 const PlatformBillingPage = lazy(() =>
   import('@/features/platform/pages/PlatformBillingPage').then((module) => ({
     default: module.PlatformBillingPage,
+  })),
+)
+const PlatformPlansPage = lazy(() =>
+  import('@/features/platform/pages/PlatformPlansPage').then((module) => ({
+    default: module.PlatformPlansPage,
   })),
 )
 const PlatformInvoiceCreatePage = lazy(() =>
@@ -595,6 +605,14 @@ export function AppRouter() {
           }
         />
         <Route
+          path="platform/plans"
+          element={
+            <RouteSuspense>
+              <PlatformPlansPage />
+            </RouteSuspense>
+          }
+        />
+        <Route
           path="platform/billing/create"
           element={
             <RouteSuspense>
@@ -810,6 +828,16 @@ export function AppRouter() {
             >
               <RouteSuspense>
                 <PayrollPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="subscription"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:admin']}>
+              <RouteSuspense>
+                <SubscriptionPage />
               </RouteSuspense>
             </TenantRoleRouteGuard>
           }

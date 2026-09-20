@@ -820,6 +820,9 @@ export default defineSchema({
     ),
     // Optional soft alert threshold (active seats) — warning only, no block.
     alertThreshold: v.optional(v.number()),
+    // Product keys (agencyProducts) this plan unlocks. Synced onto the
+    // tenant whenever its subscription is set to this plan.
+    includedProducts: v.optional(v.array(v.string())),
   }).index('by_key', ['key']),
 
   // Per-tenant platform subscription (one per tenant, keyed by tenantId).
