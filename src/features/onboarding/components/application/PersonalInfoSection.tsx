@@ -362,7 +362,7 @@ export function PersonalInfoSection({ value, onChange, showErrors, shiftTemplate
       </FieldGroup>
 
       <FieldGroup
-        label='Do you plan to use your personal vehicle to transport clients?'
+        label='Do you have a personal vehicle that you use for work?'
         htmlFor='canTransportClients-yes'
         helperText='Optional — your answer does not affect your application.'
       >
@@ -395,8 +395,8 @@ export function PersonalInfoSection({ value, onChange, showErrors, shiftTemplate
       {value.canTransportClients === true && (
         <div className='rounded-[var(--radius-atria-md)] border border-atria-info/30 bg-atria-info/10 p-4'>
           <p className='text-sm text-atria-ink'>
-            Please note: You will be reimbursed for mileage when transporting clients in your
-            personal vehicle. You will need to provide a valid car insurance policy.
+            Please note: You will need to provide a valid car insurance policy as part of
+            the hiring requirements.
           </p>
         </div>
       )}

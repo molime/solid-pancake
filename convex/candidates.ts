@@ -53,6 +53,8 @@ const CANDIDATE_TASK_TYPES = [
   'cpr_certificate',
   'health_screen',
   'background_check',
+  'soc_341a',
+  'personnel_record',
   'employment_agreement',
   'additional_certifications',
   'car_insurance',
@@ -1344,16 +1346,16 @@ export const sendOffer = mutation({
     // are enforced at hire time (hireCandidate), not here, so HR can send an
     // offer while documents are still being finalised.
 
-    if (latest.fields) {
-      const offerFields: Record<string, unknown> = { ...(latest.fields as Record<string, unknown> | undefined) }
-      if (args.payRate !== undefined) offerFields.payRate = args.payRate
-      if (args.startDate !== undefined) offerFields.startDate = args.startDate
-      if (args.schedule !== undefined) offerFields.schedule = args.schedule
-      if (args.supervisor !== undefined) offerFields.supervisor = args.supervisor
-      if (args.clientName !== undefined) offerFields.clientName = args.clientName
-      if (args.expiresAt !== undefined) offerFields.offerExpiresAt = args.expiresAt
-      await ctx.db.patch(latest._id, { fields: offerFields })
-    }
+    // Always persist the offer fields — never silently drop them when the
+    // application row has no fields object yet.
+    const offerFields: Record<string, unknown> = { ...((latest.fields ?? {}) as Record<string, unknown>) }
+    if (args.payRate !== undefined) offerFields.payRate = args.payRate
+    if (args.startDate !== undefined) offerFields.startDate = args.startDate
+    if (args.schedule !== undefined) offerFields.schedule = args.schedule
+    if (args.supervisor !== undefined) offerFields.supervisor = args.supervisor
+    if (args.clientName !== undefined) offerFields.clientName = args.clientName
+    if (args.expiresAt !== undefined) offerFields.offerExpiresAt = args.expiresAt
+    await ctx.db.patch(latest._id, { fields: offerFields })
 
     await ctx.db.patch(candidate._id, { status: 'offer_sent' })
 
@@ -1614,20 +1616,27 @@ export const hireCandidate = mutation({
     // Ages caregivers are prompted for it through this checklist task (and
     // their dashboard stays gated on the upload — see
     // PersonnelRecordRouteGuard).
-    const lastTask = await ctx.db
+    // The personnel_record task is part of the standard application
+    // checklist now — only append it at hire time when it does not exist yet
+    // (e.g. candidates created before it joined the checklist).
+    const allCandidateTasks = await ctx.db
       .query('candidateTasks')
       .withIndex('by_tenant_candidate_order', (q) =>
         q.eq('tenantId', tenantId).eq('candidateId', candidate._id),
       )
-      .order('desc')
-      .first()
-    await ctx.db.insert('candidateTasks', {
-      tenantId,
-      candidateId: candidate._id,
-      type: 'personnel_record',
-      status: 'pending',
-      order: (lastTask?.order ?? -1) + 1,
-    })
+      .collect()
+    const personnelRecordTask = allCandidateTasks.find(
+      (task) => task.type === 'personnel_record',
+    )
+    if (!personnelRecordTask) {
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId: candidate._id,
+        type: 'personnel_record',
+        status: 'pending',
+        order: (allCandidateTasks[allCandidateTasks.length - 1]?.order ?? -1) + 1,
+      })
+    }
 
     await ctx.db.patch(candidate._id, { status: 'hired' })
 
@@ -2724,6 +2733,8 @@ export const createCandidateRecord = internalMutation({
       'cpr_certificate',
       'health_screen',
       'background_check',
+      'soc_341a',
+      'personnel_record',
       'employment_agreement',
       'additional_certifications',
       'car_insurance',

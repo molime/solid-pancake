@@ -346,15 +346,15 @@ test.describe('onboarding application and document upload', { tag: '@auth' }, ()
     // Session 30: the transport question appears in personal info, and
     // answering Yes reveals the mileage/insurance note (No hides it again).
     await expect(
-      page.getByText('Do you plan to use your personal vehicle to transport clients?'),
+      page.getByText('Do you have a personal vehicle that you use for work?'),
     ).toBeVisible()
     await page.locator('#canTransportClients-yes').check()
-    await expect(page.getByText(/reimbursed for mileage/)).toBeVisible()
+    await expect(page.getByText(/car insurance policy as part of the hiring requirements/)).toBeVisible()
     await page.locator('#canTransportClients-no').check()
-    await expect(page.getByText(/reimbursed for mileage/)).toBeHidden()
+    await expect(page.getByText(/car insurance policy as part of the hiring requirements/)).toBeHidden()
     // Final answer: Yes — the car insurance checklist step must appear.
     await page.locator('#canTransportClients-yes').check()
-    await expect(page.getByText(/reimbursed for mileage/)).toBeVisible()
+    await expect(page.getByText(/car insurance policy as part of the hiring requirements/)).toBeVisible()
 
     await completeApplicationAndSubmit(page)
 
@@ -441,6 +441,8 @@ test.describe('onboarding application and document upload', { tag: '@auth' }, ()
     await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'cpr_certificate', 'Upload CPR certificate', '2027-12-31')
     await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'health_screen', 'Upload signed health screen')
     await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'background_check', 'Upload stamped Live Scan receipt')
+    await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'soc_341a', 'SOC 341A — Abuse Reporting Statement')
+    await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'personnel_record', 'LIC 501 — Personnel Record')
     // Signing the acknowledgment completes the background check and the
     // employment agreement steps.
     await callConvexMutation(candidateToken, 'candidates:acknowledgeBackgroundCheck', {

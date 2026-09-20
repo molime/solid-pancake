@@ -24,6 +24,7 @@ const TEMPLATE_NAMES: Record<
   de_34: 'de_34_new_hire',
   bcia_8016: 'bcia_8016_live_scan',
   hcs_501: 'hcs_501_personnel_record',
+  lic_501: 'lic_501_personnel_record',
 }
 
 // Whiteout rectangles remove residual agency data from the scanned templates
@@ -73,6 +74,7 @@ const WHITEOUT_AREAS: Record<
   de_34: [],
   bcia_8016: [],
   hcs_501: [],
+  lic_501: [],
 }
 
 function applyWhiteout(doc: PDFDocument, mappingKey: keyof typeof MAPPINGS) {

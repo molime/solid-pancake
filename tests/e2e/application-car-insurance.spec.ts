@@ -13,7 +13,7 @@ import { callConvexMutation, resetE2ECandidate } from './helpers/seed'
 import { e2eCredentialsAvailable, mockE2EEnabled } from './helpers/env'
 import { attachCandidateDocumentForE2E, minimalPdfBuffer } from './helpers/upload'
 
-const MILEAGE_NOTE = 'reimbursed for mileage'
+const MILEAGE_NOTE = 'car insurance policy as part of the hiring requirements'
 
 function datePlusDays(days: number): string {
   const date = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
@@ -137,6 +137,8 @@ async function completePrecedingTasks(token: string) {
   await attachCandidateDocumentForE2E(token, E2E_ORG_ID, 'cpr_certificate', 'Upload CPR certificate', datePlusDays(365))
   await attachCandidateDocumentForE2E(token, E2E_ORG_ID, 'health_screen', 'Upload signed health screen')
   await attachCandidateDocumentForE2E(token, E2E_ORG_ID, 'background_check', 'Upload stamped Live Scan receipt')
+  await attachCandidateDocumentForE2E(token, E2E_ORG_ID, 'soc_341a', 'SOC 341A — Abuse Reporting Statement')
+  await attachCandidateDocumentForE2E(token, E2E_ORG_ID, 'personnel_record', 'LIC 501 — Personnel Record')
   // Completes employment_agreement (background_check must be uploaded first).
   await callConvexMutation(token, 'candidates:acknowledgeBackgroundCheck', {
     clerkOrgId: E2E_ORG_ID,
@@ -201,7 +203,7 @@ test.describe('application car insurance (transport clients)', { tag: '@auth' },
     await acceptJobDescriptionAndLegalValidity(page)
 
     await expect(
-      page.getByText('Do you plan to use your personal vehicle to transport clients?'),
+      page.getByText('Do you have a personal vehicle that you use for work?'),
     ).toBeVisible()
     await expect(page.getByText(MILEAGE_NOTE)).toBeHidden()
 
