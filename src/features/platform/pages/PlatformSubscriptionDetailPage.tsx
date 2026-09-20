@@ -120,6 +120,10 @@ function PlatformSubscriptionDetailContent() {
   const createStripeCustomerForTenant = useAction(
     api.platformStripe.createStripeCustomerForTenant,
   );
+  const sendPaymentSetupEmailAction = useAction(
+    api.platformStripe.sendPaymentSetupEmail,
+  );
+  const updateTenantInfo = useMutation(api.platform.updateTenantInfo);
 
   useEffect(() => {
     if (isAdmin) {
@@ -227,6 +231,47 @@ function PlatformSubscriptionDetailContent() {
       );
     } finally {
       setBusy(false);
+    }
+  };
+
+  const [setupEmailMessage, setSetupEmailMessage] = useState("");
+  const handleSendSetupEmail = async () => {
+    if (!tenantId) return;
+    setBusy(true);
+    setError("");
+    setSetupEmailMessage("");
+    try {
+      const { sentTo } = await sendPaymentSetupEmailAction({ tenantId });
+      setSetupEmailMessage(`Payment setup link emailed to ${sentTo.join(", ")}.`);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : "Failed to email the payment setup link.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const [paymentMethodBusy, setPaymentMethodBusy] = useState(false);
+  const handlePaymentMethodChange = async (
+    method: "card" | "us_bank_account",
+  ) => {
+    if (!tenantId || method === (detail?.tenant.paymentMethodAllowed ?? "card"))
+      return;
+    setPaymentMethodBusy(true);
+    setError("");
+    try {
+      await updateTenantInfo({ tenantId, paymentMethodAllowed: method });
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : "Failed to update the allowed payment method.",
+      );
+    } finally {
+      setPaymentMethodBusy(false);
     }
   };
 
@@ -476,6 +521,58 @@ function PlatformSubscriptionDetailContent() {
                   label="Stripe customer"
                   value={subscription.stripeCustomerId}
                 />
+              </div>
+            )}
+            {subscription && (
+              <div className="mt-4 max-w-md">
+                <p className="text-sm font-medium text-[#f5f7f6]">
+                  Allowed payment method
+                </p>
+                <div className="mt-2 flex gap-4">
+                  {(
+                    [
+                      ["card", "Card"],
+                      ["us_bank_account", "Bank account (ACH)"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <label
+                      key={value}
+                      className="flex items-center gap-2 text-sm text-[#9aa6a8]"
+                    >
+                      <input
+                        type="radio"
+                        name="paymentMethodAllowed"
+                        className="h-4 w-4"
+                        disabled={paymentMethodBusy}
+                        checked={
+                          (detail?.tenant.paymentMethodAllowed ?? "card") ===
+                          value
+                        }
+                        onChange={() => handlePaymentMethodChange(value)}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-3">
+                  <button
+                    onClick={handleSendSetupEmail}
+                    disabled={busy || subscription.billingEmails.length === 0}
+                    className={ghostButtonClass}
+                  >
+                    {busy ? "Working…" : "Email card-link request"}
+                  </button>
+                  {setupEmailMessage && (
+                    <p className="mt-2 text-sm text-[#22c55e]">
+                      {setupEmailMessage}
+                    </p>
+                  )}
+                  {subscription.billingEmails.length === 0 && (
+                    <p className="mt-2 text-sm text-[#687173]">
+                      Add a billing email to send the payment setup request.
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>

@@ -734,6 +734,69 @@ export const createPaymentSetupSession = action({
   },
 })
 
+/**
+ * Email the tenant's billing contacts a hosted Stripe link where they attach
+ * or replace the payment method for their subscription. Creates the Stripe
+ * customer on first use; every send generates a fresh setup link, so it is
+ * safe to resend when the previous one expires.
+ */
+export const sendPaymentSetupEmail = action({
+  args: { tenantId: v.id('tenants') },
+  handler: async (ctx, args): Promise<{ sentTo: string[] }> => {
+    const identity = await requirePlatformAdminAction(ctx)
+
+    const billing = await ctx.runQuery(
+      internal.platformStripe.getTenantBillingInternal,
+      { tenantId: args.tenantId },
+    )
+    const email = billing.billingEmails[0]
+    if (!email) {
+      throw new ConvexError(
+        'Tenant has no billing emails; add one before sending the payment setup request.',
+      )
+    }
+
+    if (!billing.stripeCustomerId) {
+      const customer: { id: string } = await ctx.runAction(
+        internal._utils.stripe.createStripeCustomer,
+        { name: billing.tenantName, email },
+      )
+      await ctx.runMutation(internal.platformStripe.saveStripeCustomerId, {
+        tenantId: args.tenantId,
+        stripeCustomerId: customer.id,
+      })
+    }
+
+    const session: { url: string } = await ctx.runAction(
+      internal.platformStripe.createPaymentSetupSessionInternal,
+      { tenantId: args.tenantId },
+    )
+
+    const subject = 'Set up your payment method for ATRIA-X'
+    const html =
+      `<p>Hi ${escapeHtml(billing.tenantName)},</p>` +
+      `<p>Your agency's ATRIA-X subscription is almost ready to bill. Please use the secure link below to add or update the payment method we will use for your invoices:</p>` +
+      `<p><a href="${session.url}">Set up your payment method</a></p>` +
+      `<p>If the link has expired, just ask us to send a fresh one — it only takes a moment.</p>` +
+      `<p>— ATRIA-X Platform Billing</p>`
+    for (const to of billing.billingEmails) {
+      await ctx.runAction(internal._utils.resend.sendEmail, {
+        to,
+        subject,
+        html,
+      })
+    }
+
+    await ctx.runMutation(internal.platformStripe.recordStripeAudit, {
+      tenantId: args.tenantId,
+      actorId: identity.subject,
+      action: 'payment_setup_email_sent',
+      metadata: { sentTo: billing.billingEmails },
+    })
+    return { sentTo: billing.billingEmails }
+  },
+})
+
 /** Create (or return existing) Stripe customer for a tenant. */
 export const createStripeCustomerForTenant = action({
   args: { tenantId: v.id('tenants') },

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createHmac } from 'node:crypto'
 import { convexTest } from 'convex-test'
 import schema from './schema'
-import { internal } from './_generated/api'
+import { api, internal } from './_generated/api'
 import { toStripeInvoiceItems } from './platformBilling'
 import { stripeRequest } from './_utils/stripe'
 import { verifyStripeSignature } from './http'
@@ -708,5 +708,119 @@ describe('saveStripeDefaultPaymentMethod', () => {
       { stripeCustomerId: 'cus_unknown', paymentMethodId: 'pm_abc' },
     )
     expect(result).toBeNull()
+  })
+})
+
+describe('sendPaymentSetupEmail', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    delete process.env.STRIPE_SECRET_KEY
+    delete process.env.APP_URL
+  })
+
+  const PLATFORM_ADMIN = { subject: 'platform_admin_1' }
+
+  async function seedTenantWithSubscription(
+    t: ReturnType<typeof createTestConvex>,
+    options: { billingEmails: string[]; stripeCustomerId?: string },
+  ) {
+    await t.run(async (ctx) => {
+      await ctx.db.insert('platformAdmins', {
+        clerkUserId: PLATFORM_ADMIN.subject,
+        createdAt: new Date().toISOString(),
+      })
+    })
+    return t.run(async (ctx) => {
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId: 'org_setup_email',
+        name: 'Setup Email Agency',
+        slug: 'setup-email-agency',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('tenantSubscriptions', {
+        tenantId,
+        planKey: 'starter',
+        status: 'active',
+        billingEmails: options.billingEmails,
+        currentPeriodStart: '2026-09-01',
+        currentPeriodEnd: '2026-09-30',
+        ...(options.stripeCustomerId
+          ? { stripeCustomerId: options.stripeCustomerId }
+          : {}),
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T00:00:00.000Z',
+      })
+      return tenantId
+    })
+  }
+
+  it('rejects when the tenant has no billing emails', async () => {
+    const t = createTestConvex()
+    process.env.STRIPE_SECRET_KEY = 'sk_test_key'
+    process.env.APP_URL = 'http://localhost:5173'
+    const tenantId = await seedTenantWithSubscription(t, { billingEmails: [] })
+
+    await expect(
+      t.withIdentity(PLATFORM_ADMIN).action(
+        api.platformStripe.sendPaymentSetupEmail,
+        { tenantId },
+      ),
+    ).rejects.toThrow(/no billing emails/i)
+  })
+
+  it('creates the customer on first use, emails the setup link, and audits', async () => {
+    const t = createTestConvex()
+    process.env.STRIPE_SECRET_KEY = 'sk_test_key'
+    process.env.APP_URL = 'http://localhost:5173'
+    const tenantId = await seedTenantWithSubscription(t, {
+      billingEmails: ['owner@agency.example.com'],
+    })
+
+    const calls: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        calls.push(url)
+        if (url.includes('/v1/customers')) {
+          return new Response(JSON.stringify({ id: 'cus_test_123' }), {
+            status: 200,
+          })
+        }
+        if (url.includes('/v1/checkout/sessions')) {
+          return new Response(
+            JSON.stringify({ url: 'https://checkout.stripe.com/pay/cs_test' }),
+            { status: 200 },
+          )
+        }
+        throw new Error(`Unexpected fetch: ${url}`)
+      }),
+    )
+
+    const result = await t.withIdentity(PLATFORM_ADMIN).action(
+      api.platformStripe.sendPaymentSetupEmail,
+      { tenantId },
+    )
+
+    expect(result.sentTo).toEqual(['owner@agency.example.com'])
+    expect(calls.some((u) => u.includes('/v1/customers'))).toBe(true)
+    expect(calls.some((u) => u.includes('/v1/checkout/sessions'))).toBe(true)
+
+    const subscription = await t.run(async (ctx) => {
+      const tenant = await ctx.db.get(tenantId)
+      return ctx.db
+        .query('tenantSubscriptions')
+        .withIndex('by_tenant', (q) => q.eq('tenantId', tenant!._id))
+        .unique()
+    })
+    expect(subscription?.stripeCustomerId).toBe('cus_test_123')
+
+    const audit = await t.run(async (ctx) =>
+      ctx.db
+        .query('auditEvents')
+        .filter((q) => q.eq(q.field('action'), 'payment_setup_email_sent'))
+        .first(),
+    )
+    expect(audit).not.toBeNull()
   })
 })
