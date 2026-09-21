@@ -512,6 +512,7 @@ describe('updateTenantInfo', () => {
       name: 'Renamed Agency',
       ein: '12-3456789',
       paymentMethodAllowed: 'us_bank_account',
+      disabledSections: ['billing', 'dashboard'],
     })
 
     const tenant = await t.run((ctx) => ctx.db.get(tenantId))
@@ -520,6 +521,7 @@ describe('updateTenantInfo', () => {
       slug: 'test-agency',
       ein: '12-3456789',
       paymentMethodAllowed: 'us_bank_account',
+      disabledSections: ['billing', 'dashboard'],
     })
 
     const audit = await t.run(async (ctx) =>

@@ -32,6 +32,7 @@ import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { getStoredClerkOrgId, useTenant } from '@/app/useTenant'
 import { AtriaLogo } from '@/shared/ui/AtriaLogo'
+import type { SectionKey } from './sections'
 
 interface NavItem {
   label: string
@@ -41,6 +42,7 @@ interface NavItem {
   exact?: boolean
   requiresProduct?: string
   hiddenWhenProduct?: string
+  section?: SectionKey
 }
 
 const navItems: NavItem[] = [
@@ -52,12 +54,14 @@ const navItems: NavItem[] = [
   },
   {
     label: 'Dashboard',
+    section: 'dashboard',
     path: '/',
     icon: <LayoutDashboard className="h-4 w-4" />,
     roles: ['org:admin', 'org:coordinator'],
   },
   {
     label: 'Admin',
+    section: 'admin',
     path: '/admin',
     icon: <ShieldCheck className="h-4 w-4" />,
     roles: ['org:admin'],
@@ -70,30 +74,35 @@ const navItems: NavItem[] = [
   },
   {
     label: 'Incidents',
+    section: 'incidents',
     path: '/incidents',
     icon: <AlertTriangle className="h-4 w-4" />,
     roles: ['org:admin', 'org:coordinator', 'org:hr'],
   },
   {
     label: 'EVV Export',
+    section: 'evv',
     path: '/evv',
     icon: <FileCheck2 className="h-4 w-4" />,
     roles: ['org:admin', 'org:coordinator', 'org:hr'],
   },
   {
     label: 'Reporting',
+    section: 'reporting',
     path: '/reports',
     icon: <BarChart3 className="h-4 w-4" />,
     roles: ['org:admin'],
   },
   {
     label: 'Audit Trail',
+    section: 'audit',
     path: '/audit',
     icon: <ShieldCheck className="h-4 w-4" />,
     roles: ['org:admin', 'org:hr'],
   },
   {
     label: 'Logs',
+    section: 'logs',
     path: '/logs',
     icon: <ScrollText className="h-4 w-4" />,
     roles: ['org:admin'],
@@ -136,6 +145,7 @@ const navItems: NavItem[] = [
   },
   {
     label: 'Review',
+    section: 'review',
     path: '/coordinator/review',
     icon: <ClipboardCheck className="h-4 w-4" />,
     roles: ['org:coordinator', 'org:admin'],
@@ -148,12 +158,14 @@ const navItems: NavItem[] = [
   },
   {
     label: 'Billing',
+    section: 'billing',
     path: '/billing',
     icon: <FileText className="h-4 w-4" />,
     roles: ['org:admin'],
   },
   {
     label: 'Payroll',
+    section: 'payroll',
     path: '/billing/payroll',
     icon: <Banknote className="h-4 w-4" />,
     roles: ['org:admin'],
@@ -166,6 +178,7 @@ const navItems: NavItem[] = [
   },
   {
     label: 'Clients',
+    section: 'clients',
     path: '/clients',
     icon: <Users className="h-4 w-4" />,
     roles: ['org:admin'],
@@ -196,12 +209,14 @@ const navItems: NavItem[] = [
   },
   {
     label: 'Settings',
+    section: 'settings',
     path: '/settings/geofence',
     icon: <MapPin className="h-4 w-4" />,
     roles: ['org:admin'],
   },
   {
     label: 'Email Domains',
+    section: 'email-domains',
     path: '/settings/allowed-domains',
     icon: <Mail className="h-4 w-4" />,
     roles: ['org:admin'],
@@ -267,11 +282,16 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       ? { clerkOrgId: effectiveClerkOrgId, productKey: 'training' }
       : 'skip',
   )
+  const disabledSections = useQuery(
+    api.agencyConfig.getDisabledSections,
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
+  )
 
   const role = member?.role ?? 'org:caregiver'
 
   const visibleItems = navItems.filter((item) => {
     if (!item.roles.includes(role)) return false
+    if (item.section && disabledSections?.includes(item.section)) return false
     if (item.requiresProduct === 'training' && hasTrainingProduct !== true) {
       return false
     }

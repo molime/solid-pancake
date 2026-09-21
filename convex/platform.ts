@@ -2293,6 +2293,7 @@ export const updateTenantInfo = mutation({
     paymentMethodAllowed: v.optional(
       v.union(v.literal('card'), v.literal('us_bank_account')),
     ),
+    disabledSections: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const identity = await requirePlatformAdmin(ctx)
@@ -2308,6 +2309,9 @@ export const updateTenantInfo = mutation({
       ...(args.paymentMethodAllowed !== undefined
         ? { paymentMethodAllowed: args.paymentMethodAllowed }
         : {}),
+      ...(args.disabledSections !== undefined
+        ? { disabledSections: args.disabledSections }
+        : {}),
     })
     await recordPlatformAudit(ctx, identity, args.tenantId, 'tenant_updated', {
       name: args.name,
@@ -2315,6 +2319,7 @@ export const updateTenantInfo = mutation({
       ein: args.ein,
       address: args.address,
       paymentMethodAllowed: args.paymentMethodAllowed,
+      disabledSections: args.disabledSections,
     })
     return args.tenantId
   },
