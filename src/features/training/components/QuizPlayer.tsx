@@ -12,6 +12,25 @@ const CONFETTI_PIECES = Array.from({ length: 20 }, (_, i) => ({
 
 type QuizResult = { score: number; passed: boolean }
 
+// Shuffle each question's options (Fisher-Yates) and remap the correct index.
+// Applied on mount and on every retake so learners cannot memorize positions.
+function shuffleOptions(questions: QuizQuestion[]): QuizQuestion[] {
+  return questions.map((q) => {
+    const order = q.options.map((_, i) => i)
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      const tmp = order[i]
+      order[i] = order[j]
+      order[j] = tmp
+    }
+    return {
+      ...q,
+      options: order.map((i) => q.options[i]),
+      correct: order.indexOf(q.correct),
+    }
+  })
+}
+
 export function QuizPlayer({
   questions,
   passThreshold,
@@ -29,6 +48,9 @@ export function QuizPlayer({
   const [result, setResult] = useState<QuizResult | null>(null)
   const [streak, setStreak] = useState(0)
   const [showConfetti, setShowConfetti] = useState(false)
+  const [shuffledQuestions, setShuffledQuestions] = useState(() =>
+    shuffleOptions(questions),
+  )
 
   // Dev speed-run: instantly mark the quiz as passed without forcing answers.
   useEffect(() => {
@@ -48,7 +70,7 @@ export function QuizPlayer({
     const next = [...answers]
     next[currentQuestion] = optionIndex
     setAnswers(next)
-    const isCorrect = optionIndex === questions[currentQuestion].correct
+    const isCorrect = optionIndex === shuffledQuestions[currentQuestion].correct
     setFeedback({ correct: isCorrect, index: optionIndex })
     setStreak((s) => (isCorrect ? s + 1 : 0))
   }
@@ -58,7 +80,7 @@ export function QuizPlayer({
     if (currentQuestion < total - 1) {
       setCurrentQuestion((q) => q + 1)
     } else {
-      const correct = questions.filter((q, i) => answers[i] === q.correct).length
+      const correct = shuffledQuestions.filter((q, i) => answers[i] === q.correct).length
       const score = Math.round((correct / total) * 100)
       const passed = score >= passThreshold
       setResult({ score, passed })
@@ -76,6 +98,7 @@ export function QuizPlayer({
     setResult(null)
     setStreak(0)
     setShowConfetti(false)
+    setShuffledQuestions(shuffleOptions(questions))
   }
 
   if (result) {
@@ -113,7 +136,7 @@ export function QuizPlayer({
               style={{ opacity: 0, animationDelay: '0.3s' }}
             >
               You answered{' '}
-              {questions.filter((q, i) => answers[i] === q.correct).length} out
+              {shuffledQuestions.filter((q, i) => answers[i] === q.correct).length} out
               of {questions.length} correctly.
             </p>
           </>
@@ -136,7 +159,7 @@ export function QuizPlayer({
     )
   }
 
-  const question = questions[currentQuestion]
+  const question = shuffledQuestions[currentQuestion]
 
   return (
     <div className="mb-4">

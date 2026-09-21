@@ -298,7 +298,7 @@ function AuditFullView() {
     return (
       <div className="space-y-8">
         <div>
-          <h1 className="text-2xl font-bold text-atria-ink">Audit Trail</h1>
+          <h1 className="text-2xl font-bold text-atria-ink">Audit Ready Center</h1>
           <p className="text-base text-atria-text-secondary">
             Audit-readiness tool for California ILS/SLS compliance
           </p>
@@ -390,7 +390,7 @@ function AuditFullView() {
             <ChevronLeft className="h-4 w-4" />
             Back to overview
           </Link>
-          <h1 className="text-2xl font-bold text-atria-ink">Audit Trail</h1>
+          <h1 className="text-2xl font-bold text-atria-ink">Audit Ready Center</h1>
           <p className="text-base text-atria-text-secondary">
             Audit-readiness tool for California ILS/SLS compliance
           </p>

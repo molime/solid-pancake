@@ -1,9 +1,9 @@
-// QA verification spec for the Logs access restriction:
+// QA verification spec for the audit area:
 //   1. Dashboard no longer renders a "Quick Actions" button.
-//   2. "Logs" sidebar nav item is visible for org:admin ONLY (not
-//      coordinator, caregiver, or HR) and /logs redirects non-admins.
-//   3. /audit renders the audit-readiness dashboard with KPI cards.
-//   4. /logs renders the event log table.
+//   2. The "Logs" sidebar nav item is hidden for every role (the platform
+//      movement log is admin-route-only); /logs redirects non-admins.
+//   3. /audit renders the Audit Ready Center (simple + full views).
+//   4. /logs still renders the event log table for admins.
 //   5. "Download Audit Report" produces a CSV download.
 //   6. All pre-existing admin routes still resolve (no routes dropped).
 // Run with: node scripts/run-playwright-with-env.js qa-logs-access --project=chromium
@@ -84,15 +84,17 @@ test.describe('QA Logs access restriction', { tag: '@auth' }, () => {
     await page.waitForLoadState('networkidle')
     await expect(page.getByText('Quick Actions')).toHaveCount(0)
 
-    // --- Item 2 (admin): Logs nav item visible with /logs href ----------
-    const logsLink = sidebarLink(page, 'Logs')
-    await expect(logsLink).toBeVisible({ timeout: 15000 })
-    await expect(logsLink).toHaveAttribute('href', '/logs')
+    // --- Item 2 (admin): Logs nav item is hidden for everyone ------------
+    await expect(sidebarLink(page, 'Logs')).toHaveCount(0)
+    // The Audit Ready Center keeps its /audit link.
+    await expect(
+      sidebarLink(page, 'Audit Ready Center'),
+    ).toHaveAttribute('href', '/audit')
 
     // --- Item 3: /audit shows the simplified audit-readiness dashboard -----
     await page.goto('/audit')
     await expect(
-      page.getByRole('heading', { name: 'Audit readiness' }),
+      page.getByRole('heading', { name: 'Audit Ready Center' }),
     ).toBeVisible({ timeout: 15000 })
     await expect(
       page.getByText('One look at how your agency is doing.'),
@@ -101,7 +103,7 @@ test.describe('QA Logs access restriction', { tag: '@auth' }, () => {
     // The full view (?view=full) keeps the classic KPI dashboard.
     await page.goto('/audit?view=full')
     await expect(
-      page.getByRole('heading', { name: 'Audit Trail' }),
+      page.getByRole('heading', { name: 'Audit Ready Center' }),
     ).toBeVisible({ timeout: 15000 })
     await expect(
       page.getByText('Audit-readiness tool for California ILS/SLS compliance'),
@@ -193,10 +195,10 @@ test.describe('QA Logs access restriction', { tag: '@auth' }, () => {
       page.locator('aside nav').first(),
     ).toBeVisible({ timeout: 15000 })
     await expect(sidebarLink(page, 'Logs')).toHaveCount(0)
-    await expect(sidebarLink(page, 'Audit Trail')).toHaveCount(0)
+    await expect(sidebarLink(page, 'Audit Ready Center')).toHaveCount(0)
   })
 
-  test('hr: Logs nav hidden, Audit Trail nav kept, /logs redirects away', async ({
+  test('hr: Logs nav hidden, Audit Ready Center nav kept, /logs redirects away', async ({
     page,
   }) => {
     test.setTimeout(180_000)
@@ -216,7 +218,7 @@ test.describe('QA Logs access restriction', { tag: '@auth' }, () => {
       page.locator('aside nav').first(),
     ).toBeVisible({ timeout: 15000 })
     await expect(sidebarLink(page, 'Logs')).toHaveCount(0)
-    await expect(sidebarLink(page, 'Audit Trail')).toBeVisible()
+    await expect(sidebarLink(page, 'Audit Ready Center')).toBeVisible()
 
     await page.goto('/logs')
     await expect(page).not.toHaveURL(/\/logs$/, { timeout: 15000 })

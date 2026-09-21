@@ -408,7 +408,7 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Team')).not.toBeInTheDocument()
   })
 
-  it('shows Logs with /logs href for org:admin', () => {
+  it('does not show the Logs nav item (hidden for all roles)', () => {
     mockSidebarState({
       orgId: 'org_123',
       user: { fullName: 'Admin User', firstName: 'A' },
@@ -421,35 +421,13 @@ describe('Sidebar', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('link', { name: 'Logs' })).toHaveAttribute(
-      'href',
-      '/logs',
-    )
+    expect(screen.queryByRole('link', { name: 'Logs' })).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'Audit Ready Center' }),
+    ).toHaveAttribute('href', '/audit')
   })
 
-  it('renders Logs immediately after Audit Trail in nav order', () => {
-    mockSidebarState({
-      orgId: 'org_123',
-      user: { fullName: 'Admin User', firstName: 'A' },
-      memberRole: 'org:admin',
-    })
-
-    render(
-      <MemoryRouter>
-        <Sidebar />
-      </MemoryRouter>,
-    )
-
-    const links = screen.getAllByRole('link')
-    const auditIndex = links.findIndex((link) =>
-      link.textContent?.includes('Audit Trail'),
-    )
-    expect(auditIndex).toBeGreaterThanOrEqual(0)
-    expect(links[auditIndex + 1]).toHaveTextContent('Logs')
-    expect(links[auditIndex + 1]).toHaveAttribute('href', '/logs')
-  })
-
-  it('hides Logs and Audit Trail for org:coordinator', () => {
+  it('hides Logs and Audit Ready Center for org:coordinator', () => {
     mockSidebarState({
       orgId: 'org_123',
       user: { fullName: 'Coordinator User', firstName: 'C' },
@@ -466,11 +444,11 @@ describe('Sidebar', () => {
       screen.queryByRole('link', { name: 'Logs' }),
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('link', { name: 'Audit Trail' }),
+      screen.queryByRole('link', { name: 'Audit Ready Center' }),
     ).not.toBeInTheDocument()
   })
 
-  it('hides Logs and Audit Trail for org:caregiver', () => {
+  it('hides Logs and Audit Ready Center for org:caregiver', () => {
     mockSidebarState({
       orgId: 'org_123',
       user: { fullName: 'Caregiver User', firstName: 'G' },
@@ -487,7 +465,7 @@ describe('Sidebar', () => {
       screen.queryByRole('link', { name: 'Logs' }),
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('link', { name: 'Audit Trail' }),
+      screen.queryByRole('link', { name: 'Audit Ready Center' }),
     ).not.toBeInTheDocument()
   })
 

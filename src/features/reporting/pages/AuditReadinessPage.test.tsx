@@ -433,7 +433,7 @@ describe('AuditReadinessPage — simple view (default)', () => {
     expect(screen.getByText('overdue by 6 hours')).toBeInTheDocument()
   })
 
-  it('links to the auditors area and hides Logs for non-admins', () => {
+  it('links to the full audit dashboard from the auditors card', () => {
     mockState({
       fixList: { status: 'ready', items: [] },
       member: { role: 'org:hr' },
@@ -442,14 +442,15 @@ describe('AuditReadinessPage — simple view (default)', () => {
     renderPage(['/audit'])
 
     expect(
-      screen.getByRole('link', { name: /full details, tables & exports/i }),
+      screen.getByRole('link', { name: /open full audit dashboard/i }),
     ).toHaveAttribute('href', '/audit?view=full')
+    // The platform movement log is no longer linked from the audit area.
     expect(
       screen.queryByRole('link', { name: /audit trail \(every recorded action\)/i }),
     ).not.toBeInTheDocument()
   })
 
-  it('shows the Logs link to admins', () => {
+  it('shows the same auditors card to admins', () => {
     mockState({
       fixList: { status: 'ready', items: [] },
       member: { role: 'org:admin' },
@@ -458,8 +459,11 @@ describe('AuditReadinessPage — simple view (default)', () => {
     renderPage(['/audit'])
 
     expect(
-      screen.getByRole('link', { name: /audit trail \(every recorded action\)/i }),
-    ).toHaveAttribute('href', '/logs')
+      screen.getByRole('link', { name: /open full audit dashboard/i }),
+    ).toHaveAttribute('href', '/audit?view=full')
+    expect(
+      screen.queryByRole('link', { name: /audit trail \(every recorded action\)/i }),
+    ).not.toBeInTheDocument()
   })
 
   it('downloads the audit packet for the selected period', async () => {
