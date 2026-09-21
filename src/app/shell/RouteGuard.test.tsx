@@ -221,6 +221,10 @@ describe('TenantRouteGuard', () => {
     })
     vi.mocked(useLocation).mockReturnValue({
       pathname: '/billing',
+      search: '',
+      hash: '',
+      state: null,
+      key: 'default',
     } as ReturnType<typeof useLocation>)
     mockQueries({
       'members:checkMembership': true,
@@ -237,7 +241,13 @@ describe('TenantRouteGuard', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/hr')
 
     // Restore the default location for the following tests.
-    vi.mocked(useLocation).mockImplementation(() => ({ pathname: '/' }))
+    vi.mocked(useLocation).mockImplementation(() => ({
+      pathname: '/',
+      search: '',
+      hash: '',
+      state: null,
+      key: 'default',
+    }))
   })
 
   it('redirects to /select-agency when signed in, has org, but is NOT a Convex member', () => {
