@@ -21,7 +21,6 @@ import {
   BarChart3,
   Bell,
   LifeBuoy,
-  ScrollText,
   AlertTriangle,
   FileCheck2,
   GraduationCap,
