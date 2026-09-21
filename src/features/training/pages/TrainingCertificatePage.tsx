@@ -11,6 +11,8 @@ import { AtriaLogo } from '@/shared/ui/AtriaLogo'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { formatDateUS } from '@/shared/format'
 import { Award, Printer, ArrowLeft, Download } from 'lucide-react'
+import { generateCertificatePdf } from '../pdf/certificatePdf'
+import { saveAndDownload } from '@/features/onboarding/pdf/generatePrefilledPdf'
 
 export function TrainingCertificatePage() {
   const { courseId } = useParams<{ courseId: string }>()
@@ -76,24 +78,15 @@ export function TrainingCertificatePage() {
     window.print()
   }
 
-  const handleDownloadText = () => {
-    const text =
-      `TRAINING CERTIFICATE\n\n` +
-      `Issued by: ATRIA-X Digital Solutions\n` +
-      `Recipient: ${displayName}\n` +
-      `Course: ${course.title}\n` +
-      `Completed: ${formatDateUS(completedAt)}\n` +
-      `Valid until: ${formatDateUS(expiresAt)}\n\n` +
-      `This certificate verifies the holder has completed the required training.`
-    const blob = new Blob([text], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${course.title} Certificate.txt`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+  const handleDownloadPdf = async () => {
+    const bytes = await generateCertificatePdf({
+      courseTitle: course.title,
+      recipientName: displayName,
+      completedAt: formatDateUS(completedAt),
+      expiresAt: formatDateUS(expiresAt),
+      agencyName: 'Golden Ages Home Care',
+    })
+    saveAndDownload(bytes, `${course.title} Certificate.pdf`)
   }
 
   return (
@@ -142,7 +135,8 @@ export function TrainingCertificatePage() {
               {displayName}
             </p>
             <p className="mb-8 text-base text-atria-text-secondary print:text-atria-ink">
-              has successfully completed all required training on{' '}
+              has successfully completed the{' '}
+              <strong>{course.title}</strong> training on{' '}
               <strong>{formatDateUS(completedAt)}</strong>.
             </p>
 
@@ -199,10 +193,10 @@ export function TrainingCertificatePage() {
               variant="secondary"
               size="lg"
               className="flex-1"
-              onClick={handleDownloadText}
+              onClick={handleDownloadPdf}
             >
               <Download className="h-4 w-4" />
-              Download text
+              Download PDF
             </Button>
           </div>
         </CardContent>

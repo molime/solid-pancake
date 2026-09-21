@@ -7,7 +7,7 @@ export const GATEABLE_SECTIONS = [
   { key: 'incidents', label: 'Incidents', paths: ['/incidents'] },
   { key: 'evv', label: 'EVV Export', paths: ['/evv'] },
   { key: 'reporting', label: 'Reporting', paths: ['/reports'] },
-  { key: 'audit', label: 'Audit Trail', paths: ['/audit'] },
+  { key: 'audit', label: 'Audit Ready Center', paths: ['/audit'] },
   { key: 'logs', label: 'Logs', paths: ['/logs'] },
   { key: 'review', label: 'Review', paths: ['/coordinator/review'] },
   { key: 'billing', label: 'Billing', paths: ['/billing'] },

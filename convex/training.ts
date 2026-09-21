@@ -460,6 +460,12 @@ export const getCertificateText = query({
         `Completed: ${completedAt}\n` +
         `Valid until: ${expiresAt}\n\n` +
         `This certificate verifies the holder has completed the required training.`,
+      // Structured fields for the client-side certificate PDF.
+      courseTitle: course?.title ?? courseKey,
+      recipientName,
+      completedAt,
+      expiresAt,
+      agencyName: (await ctx.db.get(tenantId))?.name ?? null,
     }
   },
 })

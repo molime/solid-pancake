@@ -94,18 +94,11 @@ const navItems: NavItem[] = [
     roles: ['org:admin'],
   },
   {
-    label: 'Audit Trail',
+    label: 'Audit Ready Center',
     section: 'audit',
     path: '/audit',
     icon: <ShieldCheck className="h-4 w-4" />,
     roles: ['org:admin', 'org:hr'],
-  },
-  {
-    label: 'Logs',
-    section: 'logs',
-    path: '/logs',
-    icon: <ScrollText className="h-4 w-4" />,
-    roles: ['org:admin'],
   },
   {
     label: 'Notifications',

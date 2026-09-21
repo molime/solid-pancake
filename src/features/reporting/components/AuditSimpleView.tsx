@@ -68,7 +68,6 @@ export function AuditSimpleView() {
     api.auditReadiness.getFixList,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
-  const member = useQuery(api.members.me, clerkOrgId ? { clerkOrgId } : 'skip')
 
   const [period, setPeriod] = useState<PacketPeriod>('last_3_months')
   const [downloadingPacket, setDownloadingPacket] = useState(false)
@@ -93,7 +92,7 @@ export function AuditSimpleView() {
     return (
       <div className="space-y-8">
         <div>
-          <h1 className="text-2xl font-bold text-atria-ink">Audit readiness</h1>
+          <h1 className="text-2xl font-bold text-atria-ink">Audit Ready Center</h1>
           <p className="text-base text-atria-text-secondary">
             One look at how your agency is doing.
           </p>
@@ -117,7 +116,7 @@ export function AuditSimpleView() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-atria-ink">Audit readiness</h1>
+        <h1 className="text-2xl font-bold text-atria-ink">Audit Ready Center</h1>
         <p className="text-base text-atria-text-secondary">
           One look at how your agency is doing.
         </p>
@@ -224,27 +223,28 @@ export function AuditSimpleView() {
         </CardContent>
       </Card>
 
-      <div className="rounded-[var(--radius-atria-lg)] border border-dashed border-atria-border px-4 py-3">
-        <p className="text-xs font-medium uppercase tracking-wider text-atria-muted">
-          For auditors / Details
-        </p>
-        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-          <Link
-            to="/audit?view=full"
-            className="text-sm font-medium text-atria-accent hover:underline"
-          >
-            Full details, tables &amp; exports →
+      <Card className="border-atria-accent/40 bg-gradient-to-br from-atria-accent/10 via-atria-surface to-atria-info/10">
+        <CardContent className="flex flex-col gap-4 py-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-atria-text-muted">
+              For auditors
+            </p>
+            <h2 className="mt-1 text-lg font-bold text-atria-ink">
+              Full audit dashboard
+            </h2>
+            <p className="mt-1 max-w-md text-sm text-atria-text-secondary">
+              Compliance KPIs, credential gaps, incident timeliness, the
+              self-inspection checklist, and every export an auditor asks for
+              — all in one place.
+            </p>
+          </div>
+          <Link to="/audit?view=full" className="shrink-0">
+            <Button variant="primary" size="md">
+              Open full audit dashboard →
+            </Button>
           </Link>
-          {member?.role === 'org:admin' && (
-            <Link
-              to="/logs"
-              className="text-sm font-medium text-atria-accent hover:underline"
-            >
-              Audit trail (every recorded action) →
-            </Link>
-          )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

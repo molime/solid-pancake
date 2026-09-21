@@ -29,6 +29,8 @@ import { De34EmployeeSection } from '../components/De34EmployeeSection'
 import { caseStatusVariant } from '../lib/caseStatus'
 import { cn } from '@/shared/lib/cn'
 import { formatDateUS, formatDocumentCategoryLabel } from '@/shared/format'
+import { generateCertificatePdf } from '@/features/training/pdf/certificatePdf'
+import { saveAndDownload } from '@/features/onboarding/pdf/generatePrefilledPdf'
 
 const TABS = [
   { value: 'profile', label: 'Profile', icon: User },
@@ -168,17 +170,19 @@ function CertificateDownloadButton({
     archiveItemId,
   })
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!certificate) return
-    const blob = new Blob([certificate.text], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = certificate.fileName
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    const bytes = await generateCertificatePdf({
+      courseTitle: certificate.courseTitle,
+      recipientName: certificate.recipientName,
+      completedAt: formatDateUS(certificate.completedAt),
+      expiresAt: formatDateUS(certificate.expiresAt),
+      agencyName: certificate.agencyName ?? undefined,
+    })
+    saveAndDownload(
+      bytes,
+      certificate.fileName.replace(/\.txt$/i, '.pdf'),
+    )
   }
 
   return (
