@@ -3,6 +3,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
+import { GATEABLE_SECTIONS, type SectionKey } from "@/app/shell/sections";
 import { Dialog } from "@/shared/ui/Dialog";
 import { formatCurrency, formatDateUS } from "@/shared/format";
 import { sanitizeConvexError } from "@/shared/lib/sanitizeConvexError";
@@ -272,6 +273,28 @@ function PlatformSubscriptionDetailContent() {
       );
     } finally {
       setPaymentMethodBusy(false);
+    }
+  };
+
+  const [sectionBusy, setSectionBusy] = useState<Record<string, boolean>>({});
+  const handleToggleSection = async (key: SectionKey, accessible: boolean) => {
+    if (!tenantId) return;
+    const current = detail?.tenant.disabledSections ?? [];
+    const next = accessible
+      ? current.filter((k) => k !== key)
+      : [...new Set([...current, key])];
+    setSectionBusy((prev) => ({ ...prev, [key]: true }));
+    setError("");
+    try {
+      await updateTenantInfo({ tenantId, disabledSections: next });
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : "Failed to update sections.",
+      );
+    } finally {
+      setSectionBusy((prev) => ({ ...prev, [key]: false }));
     }
   };
 
@@ -687,6 +710,40 @@ function PlatformSubscriptionDetailContent() {
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="rounded-2xl border border-[#2a3437] bg-[#151b1d] p-5">
+            <h2 className="text-lg font-bold text-[#f5f7f6]">Platform sections</h2>
+            <p className="mt-1 text-sm text-[#687173]">
+              Sections this agency can access. Uncheck to hide a section from
+              their sidebar and block its routes.
+            </p>
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {GATEABLE_SECTIONS.map((section) => {
+                const disabled = (
+                  detail?.tenant.disabledSections ?? []
+                ).includes(section.key);
+                return (
+                  <label
+                    key={section.key}
+                    className="flex cursor-pointer items-center justify-between rounded-lg border border-[#2a3437] bg-[#1e2629] px-4 py-3"
+                  >
+                    <span className="text-[15px] font-medium text-[#f5f7f6]">
+                      {section.label}
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={!disabled}
+                      disabled={sectionBusy[section.key]}
+                      onChange={(e) =>
+                        handleToggleSection(section.key, e.target.checked)
+                      }
+                      className="h-5 w-5 accent-[#22c55e] disabled:opacity-50"
+                    />
+                  </label>
+                );
+              })}
+            </div>
           </div>
 
           <div>

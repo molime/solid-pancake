@@ -575,3 +575,15 @@ export const seedDefaultProductsInternal = internalMutation({
 })
 
 
+
+// Sections of the platform this agency cannot access (set per-tenant by the
+// platform owner — e.g. a basic-tier agency). Any authenticated member of the
+// tenant may read this; hiding is enforced in the sidebar and route guard.
+export const getDisabledSections = query({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, { clerkOrgId }) => {
+    const { tenantId } = await requireTenant(ctx, clerkOrgId)
+    const tenant = await ctx.db.get(tenantId)
+    return tenant?.disabledSections ?? []
+  },
+})

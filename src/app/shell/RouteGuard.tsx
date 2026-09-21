@@ -7,6 +7,7 @@ import type { PropsWithChildren } from 'react'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { getStoredClerkOrgId, useTenant } from '@/app/useTenant'
 import { roleHomePath } from '@/app/roleHomePath'
+import { isSectionDisabled, SECTION_FALLBACK_PATH } from './sections'
 
 function signInUrlWithRedirect(redirectPath: string): string {
   const search = new URLSearchParams()
@@ -49,11 +50,16 @@ export function TenantRouteGuard({ children }: PropsWithChildren) {
 
 function TenantMembershipGuard({ children }: PropsWithChildren) {
   const { clerkOrgId, isLoading } = useTenant()
+  const location = useLocation()
   const effectiveClerkOrgId = clerkOrgId ?? getStoredClerkOrgId() ?? undefined
   const [hasAuthorized, setHasAuthorized] = useState(false)
 
   const membership = useQuery(
     api.members.checkMembership,
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
+  )
+  const disabledSections = useQuery(
+    api.agencyConfig.getDisabledSections,
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
 
@@ -75,6 +81,15 @@ function TenantMembershipGuard({ children }: PropsWithChildren) {
 
   if (membership === false) {
     return <Navigate to="/select-agency" replace />
+  }
+
+  // Platform-owner section gating: a disabled section is unreachable even by
+  // direct URL — send the user to a section they do have.
+  if (
+    disabledSections !== undefined &&
+    isSectionDisabled(disabledSections, location.pathname)
+  ) {
+    return <Navigate to={SECTION_FALLBACK_PATH} replace />
   }
 
   return <>{children}</>

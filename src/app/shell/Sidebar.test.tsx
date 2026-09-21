@@ -25,6 +25,7 @@ vi.mock('convex/react', async () => {
 
 import { useOrganization, useUser } from '@clerk/react'
 import { useQuery } from 'convex/react'
+import { getFunctionName } from 'convex/server'
 
 function mockSidebarState(options: {
   orgId?: string
@@ -32,6 +33,7 @@ function mockSidebarState(options: {
   memberRole?: string | null
   isPlatformAdmin?: boolean
   hasTrainingProduct?: boolean
+  disabledSections?: string[]
 }) {
   vi.mocked(useOrganization).mockReturnValue({
     organization: options.orgId ? { id: options.orgId } : null,
@@ -43,6 +45,9 @@ function mockSidebarState(options: {
 
   vi.mocked(useQuery).mockImplementation(((_api: unknown, args: unknown) => {
     if (args === 'skip') return null
+    if (getFunctionName(_api as Parameters<typeof getFunctionName>[0]) === 'agencyConfig:getDisabledSections') {
+      return options.disabledSections ?? []
+    }
     if (args && typeof args === 'object' && 'clerkOrgId' in args) {
       if ('productKey' in args) {
         return options.hasTrainingProduct ?? false
@@ -624,5 +629,30 @@ describe('Sidebar', () => {
     expect(
       screen.queryByRole('link', { name: 'Training' }),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('Sidebar section gating', () => {
+  it('hides sections disabled for the tenant', () => {
+    mockSidebarState({
+      orgId: 'org_123',
+      user: { fullName: 'Admin User', firstName: 'A' },
+      memberRole: 'org:admin',
+      disabledSections: ['dashboard', 'billing', 'incidents'],
+    })
+
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
+    expect(screen.queryByText('Billing')).not.toBeInTheDocument()
+    expect(screen.queryByText('Incidents')).not.toBeInTheDocument()
+    // Allowed sections stay visible.
+    expect(screen.getByText('Compliance')).toBeInTheDocument()
+    expect(screen.getByText('HR Home')).toBeInTheDocument()
+    expect(screen.getByText('Subscription')).toBeInTheDocument()
   })
 })

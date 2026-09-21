@@ -46,6 +46,7 @@ vi.mock('react-router-dom', async () => {
 
 import { useAuth, useOrganization, useOrganizationList } from '@clerk/react'
 import { useQuery } from 'convex/react'
+import { useLocation } from 'react-router-dom'
 
 function mockClerkState(options: {
   authLoaded?: boolean
@@ -196,7 +197,10 @@ describe('TenantRouteGuard', () => {
       orgLoaded: true,
       organization: { id: 'org_123', name: 'Test Agency' },
     })
-    mockMembership(true)
+    mockQueries({
+      'members:checkMembership': true,
+      'agencyConfig:getDisabledSections': [],
+    })
 
     render(
       <TenantRouteGuard>
@@ -206,6 +210,34 @@ describe('TenantRouteGuard', () => {
 
     expect(screen.getByTestId('protected')).toBeInTheDocument()
     expect(screen.queryByTestId('navigate')).not.toBeInTheDocument()
+  })
+
+  it('redirects away from a section the platform owner disabled', () => {
+    mockClerkState({
+      authLoaded: true,
+      isSignedIn: true,
+      orgLoaded: true,
+      organization: { id: 'org_123', name: 'Test Agency' },
+    })
+    vi.mocked(useLocation).mockReturnValue({
+      pathname: '/billing',
+    } as ReturnType<typeof useLocation>)
+    mockQueries({
+      'members:checkMembership': true,
+      'agencyConfig:getDisabledSections': ['billing'],
+    })
+
+    render(
+      <TenantRouteGuard>
+        <div data-testid="protected">Protected</div>
+      </TenantRouteGuard>,
+    )
+
+    expect(screen.queryByTestId('protected')).not.toBeInTheDocument()
+    expect(mockNavigate).toHaveBeenCalledWith('/hr')
+
+    // Restore the default location for the following tests.
+    vi.mocked(useLocation).mockImplementation(() => ({ pathname: '/' }))
   })
 
   it('redirects to /select-agency when signed in, has org, but is NOT a Convex member', () => {
@@ -237,7 +269,10 @@ describe('TenantRouteGuard', () => {
       orgLoaded: false,
       organization: null,
     })
-    mockMembership(true)
+    mockQueries({
+      'members:checkMembership': true,
+      'agencyConfig:getDisabledSections': [],
+    })
 
     render(
       <TenantRouteGuard>

@@ -58,6 +58,9 @@ export default defineSchema({
     paymentMethodAllowed: v.optional(
       v.union(v.literal('card'), v.literal('us_bank_account')),
     ),
+    // Platform sections this agency cannot access (e.g. a basic-tier agency
+    // with Dashboard/Billing/Incidents disabled). Empty/absent = full access.
+    disabledSections: v.optional(v.array(v.string())),
     // Churn/offboarding metadata (soft — set by offboardTenant).
     churnedAt: v.optional(v.number()),
     churnReason: v.optional(v.string()),
