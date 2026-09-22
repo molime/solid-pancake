@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
@@ -17,9 +17,8 @@ import { Link } from 'react-router-dom'
 import { adpStatusPill } from '../lib/adpStatus'
 
 export function EmployeesPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
-  const employees = useQuery(
+  const { clerkOrgId } = useTenant()
+    const employees = useQuery(
     api.employeeProfiles.listEmployeeProfiles,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )

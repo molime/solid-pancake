@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { useMemo, useState } from 'react'
@@ -52,9 +52,8 @@ function lastName(displayName: string): string {
 }
 
 export function SchedulingPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
-
+  const { clerkOrgId } = useTenant()
+  
   const [weekAnchor, setWeekAnchor] = useState(() => getWeekStart(new Date()))
   const [caregiverFilter, setCaregiverFilter] = useState<string>('all')
   const [editorOpen, setEditorOpen] = useState(false)

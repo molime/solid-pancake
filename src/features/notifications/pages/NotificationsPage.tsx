@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { Link } from 'react-router-dom'
 import { api } from '../../../../convex/_generated/api'
@@ -18,9 +18,8 @@ const typeBadgeVariant: Record<string, 'info' | 'accent' | 'neutral'> = {
 }
 
 export function NotificationsPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
-  const notifications = useQuery(
+  const { clerkOrgId } = useTenant()
+    const notifications = useQuery(
     api.notifications.list,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )

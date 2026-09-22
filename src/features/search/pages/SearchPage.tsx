@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { FunctionReturnType } from 'convex/server'
@@ -19,9 +19,8 @@ const MIN_QUERY_LENGTH = 2
 const DEBOUNCE_MS = 300
 
 export function SearchPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
-
+  const { clerkOrgId } = useTenant()
+  
   const search = useAction(api.search.searchCompliance)
   const createDoc = useMutation(api.search.createComplianceDoc)
   const member = useQuery(api.members.me, clerkOrgId ? { clerkOrgId } : 'skip')
