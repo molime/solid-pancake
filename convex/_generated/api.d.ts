@@ -18,6 +18,7 @@ import type * as _utils_stripe from "../_utils/stripe.js";
 import type * as _utils_twilio from "../_utils/twilio.js";
 import type * as adpOutbound from "../adpOutbound.js";
 import type * as adpSync from "../adpSync.js";
+import type * as agencyBilling from "../agencyBilling.js";
 import type * as agencyConfig from "../agencyConfig.js";
 import type * as agencyObligations from "../agencyObligations.js";
 import type * as audit from "../audit.js";
@@ -100,6 +101,7 @@ declare const fullApi: ApiFromModules<{
   "_utils/twilio": typeof _utils_twilio;
   adpOutbound: typeof adpOutbound;
   adpSync: typeof adpSync;
+  agencyBilling: typeof agencyBilling;
   agencyConfig: typeof agencyConfig;
   agencyObligations: typeof agencyObligations;
   audit: typeof audit;
