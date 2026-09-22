@@ -3,6 +3,7 @@ import type { MutationCtx, QueryCtx } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
 import type { Id } from './_generated/dataModel'
 import type { UserIdentity } from 'convex/server'
+import { internal } from './_generated/api'
 import { requireIdentity, requireTenantRole } from './authHelpers'
 
 const ticketCategory = v.union(
@@ -40,6 +41,50 @@ const ALLOWED_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
 const SUBJECT_MAX = 200
 const DESCRIPTION_MAX = 5000
 const NOTE_MAX = 2000
+
+// Atria inboxes alerted on every new support ticket so none is missed. The
+// Resend sendEmail action gates on EMAIL_ENABLED, so this is a no-op in
+// environments without email configured.
+export const SUPPORT_ALERT_RECIPIENTS = [
+  'development@atriaxsolutions.com',
+  'hello@atriaxsolutions.com',
+] as const
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/** Subject + HTML body for the ticket-opened alert sent to the Atria inboxes. */
+export function buildTicketCreatedEmail(args: {
+  subject: string
+  description: string
+  category: string
+  priority: string
+  createdByName: string
+  tenantName: string
+  ticketId: string
+}): { subject: string; html: string } {
+  const subject = `[ATRIA-X Support] New ${args.priority} ticket from ${args.tenantName}: ${args.subject}`
+  const html = [
+    `<p>A new support ticket was opened on ATRIA-X.</p>`,
+    `<ul>`,
+    `<li><strong>Agency:</strong> ${escapeHtml(args.tenantName)}</li>`,
+    `<li><strong>Opened by:</strong> ${escapeHtml(args.createdByName)}</li>`,
+    `<li><strong>Category:</strong> ${escapeHtml(args.category)}</li>`,
+    `<li><strong>Priority:</strong> ${escapeHtml(args.priority)}</li>`,
+    `<li><strong>Subject:</strong> ${escapeHtml(args.subject)}</li>`,
+    `<li><strong>Ticket ID:</strong> ${escapeHtml(args.ticketId)}</li>`,
+    `</ul>`,
+    `<p><strong>Description:</strong></p>`,
+    `<p>${escapeHtml(args.description).replace(/\n/g, '<br>')}</p>`,
+  ].join('')
+  return { subject, html }
+}
 
 // Platform-side guard + audit helpers mirror the (unexported) pattern in
 // platform.ts — kept local to avoid a circular import.
@@ -127,6 +172,25 @@ export const create = mutation({
       metadata: { ticketId: ticketId as string },
       createdAt: now,
     })
+    // Fire-and-forget after commit: alert the Atria inboxes. A failed send
+    // never blocks ticket creation.
+    const tenant = await ctx.db.get(tenantId)
+    const email = buildTicketCreatedEmail({
+      subject,
+      description,
+      category: args.category,
+      priority: args.priority,
+      createdByName: member.displayName,
+      tenantName: tenant?.name ?? 'Unknown agency',
+      ticketId: ticketId as string,
+    })
+    for (const to of SUPPORT_ALERT_RECIPIENTS) {
+      await ctx.scheduler.runAfter(0, internal._utils.resend.sendEmail, {
+        to,
+        subject: email.subject,
+        html: email.html,
+      })
+    }
     return ticketId
   },
 })
