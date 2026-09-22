@@ -762,6 +762,20 @@ export default defineSchema({
     .index('by_tenant_candidate', ['tenantId', 'candidateId'])
     .index('by_tenant_candidate_type', ['tenantId', 'candidateId', 'documentType']),
 
+  // Version history for onboarding documents — every upload (candidate or
+  // HR/admin) of the same document type appends a row, so documents can be
+  // downloaded and re-uploaded as many times as needed with full history.
+  prefilledDocumentVersions: defineTable({
+    tenantId: v.id('tenants'),
+    candidateId: v.id('candidates'),
+    documentType: v.string(),
+    storageId: v.string(), // Convex file storage id of this version
+    fileName: v.string(),
+    uploadedBy: v.string(), // 'candidate' | 'hr'
+    createdAt: v.string(),
+  })
+    .index('by_tenant_candidate_type', ['tenantId', 'candidateId', 'documentType']),
+
   // Training configurations — configurable per agency
   trainingConfigs: defineTable({
     tenantId: v.id('tenants'),

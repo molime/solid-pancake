@@ -1012,6 +1012,7 @@ async function seedE2ECandidateFixtures(
     'background_check',
     'soc_341a',
     'personnel_record',
+    'i9_form',
     'employment_agreement',
     'additional_certifications',
     'car_insurance',

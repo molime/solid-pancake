@@ -443,6 +443,7 @@ test.describe('onboarding application and document upload', { tag: '@auth' }, ()
     await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'background_check', 'Upload stamped Live Scan receipt')
     await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'soc_341a', 'SOC 341A — Abuse Reporting Statement')
     await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'personnel_record', 'LIC 501 — Personnel Record')
+    await attachCandidateDocumentForE2E(candidateToken, E2E_ORG_ID, 'i9_form', 'Employment Eligibility Verification (I-9)')
     // Signing the acknowledgment completes the background check and the
     // employment agreement steps.
     await callConvexMutation(candidateToken, 'candidates:acknowledgeBackgroundCheck', {

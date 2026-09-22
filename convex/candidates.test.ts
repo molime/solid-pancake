@@ -292,7 +292,7 @@ beforeEach(() => {
 })
 
 describe('inviteCandidate', () => {
-  it('seeds 11 tasks in order', async () => {
+  it('seeds 12 tasks in order', async () => {
     stubClerkInvitation()
     const t = createTestConvex()
     const clerkOrgId = 'org_invite_candidate'
@@ -327,7 +327,7 @@ describe('inviteCandidate', () => {
         .collect()
     })
 
-    expect(tasks).toHaveLength(11)
+    expect(tasks).toHaveLength(12)
     expect(tasks.map((t) => t.type)).toEqual([
       'form_submission',
       'photo_id',
@@ -337,11 +337,12 @@ describe('inviteCandidate', () => {
       'background_check',
       'soc_341a',
       'personnel_record',
+      'i9_form',
       'employment_agreement',
       'additional_certifications',
       'car_insurance',
     ])
-    expect(tasks.map((t) => t.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    expect(tasks.map((t) => t.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
     // car_insurance starts skipped until the applicant answers Yes to the transport question
     expect(
       tasks.filter((t) => t.type !== 'car_insurance').every((t) => t.status === 'pending'),

@@ -15,7 +15,7 @@ import { formatDocumentCategoryLabel, formatDateUS } from '@/shared/format'
 import { uploadFileToConvex } from '@/shared/lib/upload'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { generatePrefilledPdf, saveAndUpload } from '@/features/onboarding/pdf/generatePrefilledPdf'
-import { getMapping, normalizeW4PdfData } from '@/features/onboarding/pdf/mappings'
+import { getMapping, normalizeI9PdfData, normalizeW4PdfData } from '@/features/onboarding/pdf/mappings'
 import { isNonEmptyString } from '@/features/onboarding/components/application/types'
 import { DynamicFormReview } from '@/features/forms/components/DynamicFormReview'
 import { ArrowLeft, CheckCircle2, Download, RotateCcw, XCircle } from 'lucide-react'
@@ -364,6 +364,7 @@ export function ApplicationReviewPage() {
   const sendOffer = useMutation(api.candidates.sendOffer)
   const saveW4EmployerSection = useMutation(api.candidates.saveW4EmployerSection)
   const saveI9Section2 = useMutation(api.candidates.saveI9Section2ForHR)
+  const uploadDocumentVersion = useMutation(api.candidates.uploadDocumentVersion)
   const uploadBackgroundCheckResult = useMutation(api.backgroundChecks.uploadBackgroundCheckResult)
   const generateUploadUrl = useMutation(api.files.generateUploadUrl)
   const savePrefilledDocument = useMutation(api.candidates.savePrefilledDocument)
@@ -768,12 +769,54 @@ export function ApplicationReviewPage() {
         section2: i9Section2,
       })
       setI9Dirty(false)
-      show('success', 'I-9 Section 2 saved')
     } catch (err) {
       show(
         'danger',
         'Could not save I-9 Section 2',
         err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
+      )
+      return
+    }
+
+    // Regenerate the final I-9 PDF with the employer section and store it as
+    // a document version (mirrors the W-4 employer-section pattern). A PDF
+    // failure never masks the successful data save.
+    try {
+      const mapping = getMapping('i9')
+      if (!mapping) throw new Error('I-9 template mapping not found.')
+      const candidateI9 = (fields.i9 ?? {}) as Record<string, unknown>
+      const pdfData = normalizeI9PdfData({
+        ...candidateI9,
+        dateOfBirth: candidateI9.dateOfBirth ? formatDateUS(String(candidateI9.dateOfBirth)) : '',
+        documentTitle: i9Section2.documentTitle,
+        documentNumber: i9Section2.documentNumber,
+        expirationDate: i9Section2.expirationDate,
+        firstDateOfEmployment,
+        employerRepName: i9Section2.employerSignature,
+        employerSignature: i9Section2.employerSignature,
+        employerDate: i9Section2.date,
+        employerName,
+        employerAddress: w4ForHR?.agencyAddress ?? '',
+      })
+      const bytes = await generatePrefilledPdf(mapping, pdfData)
+      const storageId = await uploadFileToConvex({
+        generateUploadUrl,
+        clerkOrgId,
+        file: new File([bytes], 'i9_final.pdf', { type: 'application/pdf' }),
+      })
+      await uploadDocumentVersion({
+        clerkOrgId,
+        candidateId: candidateId as Id<'candidates'>,
+        documentType: 'i9_form',
+        storageId,
+        fileName: 'i9_final.pdf',
+      })
+      show('success', 'I-9 Section 2 saved', 'The final I-9 PDF has been regenerated.')
+    } catch (err) {
+      show(
+        'warning',
+        'I-9 Section 2 saved',
+        `The data was saved, but the PDF could not be regenerated: ${err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.'}`,
       )
     }
   }
@@ -1177,6 +1220,13 @@ export function ApplicationReviewPage() {
                   )
                 })}
               </div>
+            </SectionBlock>
+
+            <SectionBlock title="Document versions (history)">
+              <DocumentVersionsPanel
+                clerkOrgId={clerkOrgId!}
+                candidateId={candidateId as Id<'candidates'>}
+              />
             </SectionBlock>
 
             <SectionBlock title="Documents submitted">
@@ -1616,5 +1666,169 @@ export function ApplicationReviewPage() {
       />
       <HrToast toast={toast} onClose={hide} />
     </div>
+  )
+}
+
+
+const DOCUMENT_TYPE_LABELS_VERSIONS: Record<string, string> = {
+  health_screen: 'Health Screen (LIC 503)',
+  live_scan: 'Live Scan (LIC 9163)',
+  criminal_record: 'Criminal Record (LIC 508)',
+  w4: 'W-4 Tax Withholding',
+  i9: 'I-9 Employment Eligibility',
+  i9_form: 'I-9 Employment Eligibility',
+  de_34: 'DE 34 — Report of New Employee(s)',
+  bcia_8016: 'BCIA 8016 — Live Scan Request',
+  lic_501: 'LIC 501 — Personnel Record',
+  soc_341a: 'SOC 341A — Abuse Reporting Statement',
+  hcs_501: 'HCS 501 — Personnel Record',
+}
+
+function DocumentVersionsPanel({
+  clerkOrgId,
+  candidateId,
+}: {
+  clerkOrgId: string
+  candidateId: Id<'candidates'>
+}) {
+  const versions = useQuery(api.candidates.listDocumentVersions, {
+    clerkOrgId,
+    candidateId,
+  })
+  const generateUploadUrl = useMutation(api.files.generateUploadUrl)
+  const uploadDocumentVersion = useMutation(api.candidates.uploadDocumentVersion)
+  const [uploadType, setUploadType] = useState('soc_341a')
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [error, setError] = useState('')
+
+  if (versions === undefined) {
+    return <p className="text-sm text-atria-text-secondary">Loading versions…</p>
+  }
+
+  const byType = new Map<string, typeof versions>()
+  for (const version of versions) {
+    const list = byType.get(version.documentType) ?? []
+    list.push(version)
+    byType.set(version.documentType, list)
+  }
+
+  const handleUpload = async () => {
+    if (!uploadFile) return
+    setIsUploading(true)
+    setError('')
+    try {
+      const storageId = await uploadFileToConvex({
+        generateUploadUrl,
+        clerkOrgId,
+        file: uploadFile,
+      })
+      await uploadDocumentVersion({
+        clerkOrgId,
+        candidateId,
+        documentType: uploadType,
+        storageId,
+        fileName: uploadFile.name,
+      })
+      setUploadFile(null)
+    } catch (err) {
+      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Upload failed.')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {byType.size === 0 && (
+        <p className="text-sm text-atria-text-secondary">
+          No uploaded versions yet. Uploads from the candidate and from HR appear here.
+        </p>
+      )}
+      {[...byType.entries()].map(([type, typeVersions]) => (
+        <div key={type}>
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-atria-text-muted">
+            {DOCUMENT_TYPE_LABELS_VERSIONS[type] ?? type}
+          </p>
+          <div className="space-y-1.5">
+            {typeVersions.map((version, index) => (
+              <div
+                key={version._id}
+                className="flex items-center justify-between gap-3 rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg px-3 py-2"
+              >
+                <span className="text-xs text-atria-text-secondary">
+                  Version {typeVersions.length - index} ·{' '}
+                  {version.uploadedBy === 'hr' ? 'HR' : 'Candidate'} ·{' '}
+                  {formatDateUS(version.createdAt)} · {version.fileName}
+                </span>
+                <DocumentVersionDownloadLink
+                  clerkOrgId={clerkOrgId}
+                  versionId={version._id}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <div className="rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface-2 p-3">
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-atria-text-muted">
+          Upload a new version (HR)
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            aria-label="Document type"
+            value={uploadType}
+            onChange={(e) => setUploadType(e.target.value)}
+            className="w-64"
+          >
+            {Object.entries(DOCUMENT_TYPE_LABELS_VERSIONS).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </Select>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+            className="text-xs text-atria-text-secondary"
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!uploadFile || isUploading}
+            onClick={handleUpload}
+          >
+            {isUploading ? 'Uploading…' : 'Upload version'}
+          </Button>
+        </div>
+        {error && <p className="mt-2 text-xs text-atria-danger">{error}</p>}
+      </div>
+    </div>
+  )
+}
+
+function DocumentVersionDownloadLink({
+  clerkOrgId,
+  versionId,
+}: {
+  clerkOrgId: string
+  versionId: Id<'prefilledDocumentVersions'>
+}) {
+  const result = useQuery(api.candidates.getDocumentVersionDownloadUrl, {
+    clerkOrgId,
+    versionId,
+  })
+  if (!result?.url) return null
+  return (
+    <a
+      href={result.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="shrink-0 text-xs font-medium text-atria-accent hover:underline"
+    >
+      Download
+    </a>
   )
 }
