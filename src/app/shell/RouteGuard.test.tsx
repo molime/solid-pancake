@@ -219,16 +219,18 @@ describe('TenantRouteGuard', () => {
       orgLoaded: true,
       organization: { id: 'org_123', name: 'Test Agency' },
     })
-    vi.mocked(useLocation).mockReturnValue({
+    // mockImplementation (not mockReturnValue) so the restore below wins.
+    vi.mocked(useLocation).mockImplementation(() => ({
       pathname: '/billing',
       search: '',
       hash: '',
       state: null,
       key: 'default',
-    } as ReturnType<typeof useLocation>)
+    }))
     mockQueries({
       'members:checkMembership': true,
       'agencyConfig:getDisabledSections': ['billing'],
+      'members:me': { role: 'org:admin' },
     })
 
     render(
@@ -241,6 +243,44 @@ describe('TenantRouteGuard', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/hr')
 
     // Restore the default location for the following tests.
+    vi.mocked(useLocation).mockImplementation(() => ({
+      pathname: '/',
+      search: '',
+      hash: '',
+      state: null,
+      key: 'default',
+    }))
+  })
+
+  it('sends a coordinator to /compliance when dashboard is disabled (no redirect loop)', () => {
+    mockClerkState({
+      authLoaded: true,
+      isSignedIn: true,
+      orgLoaded: true,
+      organization: { id: 'org_123', name: 'Test Agency' },
+    })
+    vi.mocked(useLocation).mockImplementation(() => ({
+      pathname: '/',
+      search: '',
+      hash: '',
+      state: null,
+      key: 'default',
+    }))
+    mockQueries({
+      'members:checkMembership': true,
+      'agencyConfig:getDisabledSections': ['dashboard'],
+      'members:me': { role: 'org:coordinator' },
+    })
+
+    render(
+      <TenantRouteGuard>
+        <div data-testid="protected">Protected</div>
+      </TenantRouteGuard>,
+    )
+
+    // /hr is admin/hr-only, so the coordinator must land on /compliance.
+    expect(mockNavigate).toHaveBeenCalledWith('/compliance')
+
     vi.mocked(useLocation).mockImplementation(() => ({
       pathname: '/',
       search: '',

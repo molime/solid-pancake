@@ -31,9 +31,24 @@ function pathMatches(sectionPaths: readonly string[], pathname: string): boolean
   })
 }
 
-// Where to send a user who lands on a disabled section. '/hr' is never
-// gateable, so it is always a safe fallback for agency staff.
-export const SECTION_FALLBACK_PATH = '/hr'
+// Where to send a user who lands on a disabled section. The fallback must be
+// reachable by the user's own role AND not itself disabled:
+// - admin/hr land on /hr (never gateable),
+// - caregivers/candidates land on their own portals,
+// - coordinators land on /compliance (allowed for their role; falls back to
+//   /account — never gateable — if compliance is also disabled).
+// Using a single static fallback previously caused a redirect loop for
+// coordinators when Dashboard was disabled (/ -> /hr -> role-guard -> /).
+export function sectionFallbackPath(
+  role: string | undefined,
+  disabledSections: readonly string[] | undefined,
+): string {
+  if (role === 'org:caregiver') return '/caregiver/today'
+  if (role === 'org:candidate') return '/onboarding'
+  if (role === 'org:admin' || role === 'org:hr') return '/hr'
+  if (!disabledSections?.includes('compliance')) return '/compliance'
+  return '/account'
+}
 
 export function isSectionDisabled(
   disabledSections: readonly string[] | undefined,
