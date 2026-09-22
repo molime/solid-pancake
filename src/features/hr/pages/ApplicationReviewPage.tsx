@@ -7,6 +7,7 @@ import { Textarea } from '@/shared/ui/Textarea'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { Input } from '@/shared/ui/Input'
+import { Select } from '@/shared/ui/Select'
 import { HrToast } from '../components/HrToast'
 import { useHrToast } from '../hooks/useHrToast'
 import { candidateStatusPill, candidateStatusAccentClass } from '../lib/candidateStatus'
@@ -802,7 +803,7 @@ export function ApplicationReviewPage() {
       const storageId = await uploadFileToConvex({
         generateUploadUrl,
         clerkOrgId,
-        file: new File([bytes], 'i9_final.pdf', { type: 'application/pdf' }),
+        file: new File([new Blob([bytes as unknown as BlobPart], { type: 'application/pdf' })], 'i9_final.pdf', { type: 'application/pdf' }),
       })
       await uploadDocumentVersion({
         clerkOrgId,
