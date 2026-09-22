@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { convexTest } from 'convex-test'
 import schema from './schema'
 import { api } from './_generated/api'
+import {
+  SUPPORT_ALERT_RECIPIENTS,
+  buildTicketCreatedEmail,
+} from './supportTickets'
 
 const modules = import.meta.glob('./**/*.*s')
 
@@ -107,6 +111,52 @@ describe('supportTickets.create', () => {
           ...createArgs,
         }),
     ).rejects.toThrow(/Forbidden/)
+  })
+})
+
+describe('support ticket email alerts', () => {
+  it('alerts both Atria inboxes', () => {
+    expect([...SUPPORT_ALERT_RECIPIENTS]).toEqual([
+      'development@atriaxsolutions.com',
+      'hello@atriaxsolutions.com',
+    ])
+  })
+
+  it('builds an email with the ticket context and escapes HTML', () => {
+    const { subject, html } = buildTicketCreatedEmail({
+      subject: 'Cannot bill <script>alert(1)</script>',
+      description: 'Line one\nLine "two" & more',
+      category: 'billing',
+      priority: 'high',
+      createdByName: 'Samira <Owner>',
+      tenantName: 'Golden Ages',
+      ticketId: 'ticket_123',
+    })
+    expect(subject).toBe(
+      '[ATRIA-X Support] New high ticket from Golden Ages: Cannot bill <script>alert(1)</script>',
+    )
+    expect(html).toContain('Golden Ages')
+    expect(html).toContain('Samira &lt;Owner&gt;')
+    expect(html).toContain('billing')
+    expect(html).toContain('high')
+    expect(html).toContain('ticket_123')
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;')
+    expect(html).toContain('Line one<br>Line &quot;two&quot; &amp; more')
+    expect(html).not.toContain('<script>')
+  })
+
+  it('creating a ticket schedules the alert sends without failing creation', async () => {
+    const t = createTestConvex()
+    await seedTenantWithMember(t, 'org_a', 'user_admin_a', 'org:admin')
+
+    const ticketId = await t
+      .withIdentity(asOrgUser('user_admin_a', 'org_a', 'org:admin'))
+      .mutation(api.supportTickets.create, { clerkOrgId: 'org_a', ...createArgs })
+    expect(ticketId).toBeTruthy()
+
+    // The scheduled sendEmail actions run and hit the EMAIL_ENABLED gate
+    // (skipped without email config) — they must drain without errors.
+    await t.finishInProgressScheduledFunctions()
   })
 })
 
