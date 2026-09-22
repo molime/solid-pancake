@@ -7,7 +7,7 @@ import type { PropsWithChildren } from 'react'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { getStoredClerkOrgId, useTenant } from '@/app/useTenant'
 import { roleHomePath } from '@/app/roleHomePath'
-import { isSectionDisabled, SECTION_FALLBACK_PATH } from './sections'
+import { isSectionDisabled, sectionFallbackPath } from './sections'
 
 function signInUrlWithRedirect(redirectPath: string): string {
   const search = new URLSearchParams()
@@ -62,6 +62,10 @@ function TenantMembershipGuard({ children }: PropsWithChildren) {
     api.agencyConfig.getDisabledSections,
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
+  const member = useQuery(
+    api.members.me,
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
+  )
 
   if (membership === true && !hasAuthorized) {
     setHasAuthorized(true)
@@ -89,7 +93,14 @@ function TenantMembershipGuard({ children }: PropsWithChildren) {
     disabledSections !== undefined &&
     isSectionDisabled(disabledSections, location.pathname)
   ) {
-    return <Navigate to={SECTION_FALLBACK_PATH} replace />
+    // The fallback must be reachable by the user's own role — a static '/hr'
+    // loops for coordinators when Dashboard is disabled (/ -> /hr -> /).
+    return (
+      <Navigate
+        to={sectionFallbackPath(member?.role, disabledSections)}
+        replace
+      />
+    )
   }
 
   return <>{children}</>
