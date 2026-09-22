@@ -6,6 +6,7 @@ import { clearSessionData } from '@/shared/lib/clearSession'
 import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
+import type { Id } from '../../../../convex/_generated/dataModel'
 import type { Doc } from '../../../../convex/_generated/dataModel'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
@@ -17,7 +18,7 @@ import { cn } from '@/shared/lib/cn'
 import { uploadFileToConvex } from '@/shared/lib/upload'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { generatePrefilledPdf, saveAndDownload, saveAndUpload } from '../pdf/generatePrefilledPdf'
-import { getMapping } from '../pdf/mappings'
+import { getMapping, normalizeI9PdfData } from '../pdf/mappings'
 import { formatDateUS, calculateAge } from '@/shared/format'
 
 const DOCUMENT_LABELS: Record<string, { title: string; hint: string; expiry: boolean }> = {
@@ -59,6 +60,11 @@ const DOCUMENT_LABELS: Record<string, { title: string; hint: string; expiry: boo
   soc_341a: {
     title: 'Upload signed SOC 341A statement',
     hint: 'Download the SOC 341A form, read it carefully, sign and date it, and upload the signed form here. JPG, PNG, or PDF. Max 10MB.',
+    expiry: false,
+  },
+  i9_form: {
+    title: 'Upload signed Form I-9',
+    hint: 'Download the prefilled I-9 below, complete any missing fields, sign and date it, and upload the completed form here. JPG, PNG, or PDF. Max 10MB.',
     expiry: false,
   },
   personnel_record: {
@@ -142,6 +148,7 @@ export function DocumentUploadPage() {
   const isBackgroundCheck = documentType === 'background_check'
   const isPersonnelRecord = documentType === 'personnel_record'
   const isSoc341a = documentType === 'soc_341a'
+  const isI9Form = documentType === 'i9_form'
   const isGoldenAges =
     (tenantName ?? '').toLowerCase().includes('golden') ||
     (employerInfo?.legalName ?? '').toLowerCase().includes('golden')
@@ -151,7 +158,7 @@ export function DocumentUploadPage() {
   // record — block submit until the candidate profile query has loaded so the
   // link is never silently skipped.
   const needsPrefilledLink =
-    isHealthScreen || (isBackgroundCheck && !isGoldenAgesBackgroundCheck) || isPersonnelRecord || isSoc341a
+    isHealthScreen || (isBackgroundCheck && !isGoldenAgesBackgroundCheck) || isPersonnelRecord || isSoc341a || isI9Form
 
   const displayMeta = isGoldenAgesBackgroundCheck
     ? {
@@ -168,6 +175,12 @@ export function DocumentUploadPage() {
 
   const candidateId = applicationData?.candidate?._id
   const fields = (applicationData?.application?.fields ?? {}) as Record<string, unknown>
+  const versions = useQuery(
+    api.candidates.listDocumentVersions,
+    candidateId && effectiveClerkOrgId
+      ? { clerkOrgId: effectiveClerkOrgId, candidateId, documentType }
+      : 'skip',
+  )
   const agencyName = tenantName ?? 'ATRIA-X'
   const todayUs = new Date().toLocaleDateString('en-US')
 
@@ -259,6 +272,17 @@ export function DocumentUploadPage() {
       }
     }
 
+    if (isI9Form) {
+      // Form I-9 Section 1 from the in-app I-9 data. Signature and date stay
+      // blank — the candidate signs the printed form by hand.
+      return normalizeI9PdfData({
+        ...i9,
+        dateOfBirth: formatDateUS(String(i9.dateOfBirth ?? '')),
+        signature: '',
+        date: '',
+      })
+    }
+
     return {}
   }
 
@@ -266,26 +290,30 @@ export function DocumentUploadPage() {
     setIsGenerating(true)
     setError('')
     try {
-      const mappingKey = isPersonnelRecord
-        ? 'lic_501'
-        : isHealthScreen
-          ? isGoldenAgesHealthScreen
-            ? 'golden_ages_health_screen'
-            : 'health_screen'
-          : 'live_scan'
+      const mappingKey = isI9Form
+        ? 'i9'
+        : isPersonnelRecord
+          ? 'lic_501'
+          : isHealthScreen
+            ? isGoldenAgesHealthScreen
+              ? 'golden_ages_health_screen'
+              : 'health_screen'
+            : 'live_scan'
       const mapping = getMapping(mappingKey)
       if (!mapping) {
         throw new Error('PDF template mapping not found.')
       }
       const data = buildPrefilledData()
       const bytes = await generatePrefilledPdf(mapping, data)
-      const filename = isPersonnelRecord
-        ? 'lic_501_personnel_record_prefilled.pdf'
-        : isHealthScreen
-          ? isGoldenAgesHealthScreen
-            ? 'golden_ages_health_screen_prefilled.pdf'
-            : 'lic_503_health_screen_prefilled.pdf'
-          : 'lic_9163_live_scan_prefilled.pdf'
+      const filename = isI9Form
+        ? 'i9_prefilled.pdf'
+        : isPersonnelRecord
+          ? 'lic_501_personnel_record_prefilled.pdf'
+          : isHealthScreen
+            ? isGoldenAgesHealthScreen
+              ? 'golden_ages_health_screen_prefilled.pdf'
+              : 'lic_503_health_screen_prefilled.pdf'
+            : 'lic_9163_live_scan_prefilled.pdf'
       saveAndDownload(bytes, filename)
       const getUploadUrl = async () => {
         const { url } = await generateUploadUrl({ clerkOrgId: orgId })
@@ -294,7 +322,7 @@ export function DocumentUploadPage() {
       await saveAndUpload(
         bytes,
         filename,
-        isPersonnelRecord ? 'lic_501' : isHealthScreen ? 'health_screen' : 'live_scan',
+        isI9Form ? 'i9_form' : isPersonnelRecord ? 'lic_501' : isHealthScreen ? 'health_screen' : 'live_scan',
         orgId,
         getUploadUrl,
         savePrefilledDocument,
@@ -338,16 +366,18 @@ export function DocumentUploadPage() {
         expiresAt: meta.expiry ? expiresAt : undefined,
         photoIdType: isPhotoId ? photoIdType : undefined,
       })
-      if ((isHealthScreen || isBackgroundCheck || isPersonnelRecord || isSoc341a) && candidateId) {
+      if ((isHealthScreen || isBackgroundCheck || isPersonnelRecord || isSoc341a || isI9Form) && candidateId) {
         await saveSignedPrefilledDocument({
           clerkOrgId: orgId,
-          documentType: isHealthScreen
-            ? 'health_screen'
-            : isPersonnelRecord
-              ? 'lic_501'
-              : isSoc341a
-                ? 'soc_341a'
-                : 'live_scan',
+          documentType: isI9Form
+            ? 'i9_form'
+            : isHealthScreen
+              ? 'health_screen'
+              : isPersonnelRecord
+                ? 'lic_501'
+                : isSoc341a
+                  ? 'soc_341a'
+                  : 'live_scan',
           storageId,
         })
       }
@@ -455,6 +485,24 @@ export function DocumentUploadPage() {
               >
                 Download SOC 341A form
               </a>
+            </div>
+          )}
+
+          {isI9Form && (
+            <div className='mb-6 rounded-[var(--radius-atria-md)] border border-atria-info/30 bg-atria-info/10 p-4'>
+              <p className='text-sm font-medium text-atria-info'>Before you upload</p>
+              <p className='mt-1 text-sm text-atria-ink'>
+                Download the I-9 form below — Section 1 is already prefilled with your information. PRINT it, check everything, sign and date it by hand, then come back here and upload the completed form. You can download it again as many times as you need.
+              </p>
+              <Button
+                variant='secondary'
+                size='md'
+                className='mt-3 w-full'
+                disabled={isGenerating}
+                onClick={handleDownloadPrefilled}
+              >
+                {isGenerating ? 'Generating...' : 'Download prefilled I-9 form'}
+              </Button>
             </div>
           )}
 
@@ -647,6 +695,25 @@ export function DocumentUploadPage() {
             <p className='mb-4 text-sm text-atria-danger'>{error}</p>
           )}
 
+          {versions && versions.length > 0 && (
+            <div className='mb-6 rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface-2 p-4'>
+              <p className='mb-2 text-sm font-semibold text-atria-ink'>Uploaded versions</p>
+              <div className='space-y-2'>
+                {versions.map((v, i) => (
+                  <div key={v._id} className='flex items-center justify-between gap-3 text-sm'>
+                    <span className='text-atria-text-secondary'>
+                      Version {versions.length - i} · {v.uploadedBy === 'hr' ? 'Uploaded by HR' : 'Uploaded by you'} · {formatDateUS(v.createdAt)}
+                    </span>
+                    <DocumentVersionDownloadButton clerkOrgId={orgId} versionId={v._id} />
+                  </div>
+                ))}
+              </div>
+              <p className='mt-2 text-xs text-atria-text-muted'>
+                You can upload a new version at any time — older versions stay here for reference.
+              </p>
+            </div>
+          )}
+
           {isGoldenAgesBackgroundCheck && (
             <Button
               variant='primary'
@@ -695,5 +762,30 @@ export function DocumentUploadPage() {
       </Card>
       <SignedInApplyFlowBranding />
     </div>
+  )
+}
+
+
+function DocumentVersionDownloadButton({
+  clerkOrgId,
+  versionId,
+}: {
+  clerkOrgId: string
+  versionId: Id<'prefilledDocumentVersions'>
+}) {
+  const result = useQuery(api.candidates.getDocumentVersionDownloadUrl, {
+    clerkOrgId,
+    versionId,
+  })
+  if (!result?.url) return null
+  return (
+    <a
+      href={result.url}
+      target='_blank'
+      rel='noopener noreferrer'
+      className='shrink-0 text-xs font-medium text-atria-accent hover:underline'
+    >
+      Download
+    </a>
   )
 }

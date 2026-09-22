@@ -104,7 +104,7 @@ const CRIMINAL_RECORD_MAPPING: PdfFieldMapping = {
     { key: 'socialSecurityNumber', x: 40, y: toPdfY(452, 10), fontSize: 10, maxWidth: 203, page: 1 },
     { key: 'driversLicense', x: 254, y: toPdfY(452, 10), fontSize: 10, maxWidth: 203, page: 1 },
     { key: 'dateOfBirth', x: 465, y: toPdfY(452, 10), fontSize: 10, maxWidth: 107, page: 1 },
-    { key: 'signature', x: 40, y: toPdfY(497, 10), fontSize: 10, maxWidth: 420, page: 1 },
+    { key: 'signature', x: 40, y: toPdfY(496, 10), fontSize: 10, maxWidth: 420, page: 1 },
     { key: 'date', x: 480, y: toPdfY(497, 10), fontSize: 10, maxWidth: 92, page: 1 },
   ],
 }
@@ -262,23 +262,42 @@ const W4_MAPPING: PdfFieldMapping = {
 const I9_MAPPING: PdfFieldMapping = {
   page: 0,
   fields: [
-    { key: 'lastName', x: 34, y: toPdfY(112, 10), fontSize: 10, maxWidth: 140 },
-    { key: 'firstName', x: 190, y: toPdfY(112, 10), fontSize: 10, maxWidth: 140 },
-    { key: 'middleInitial', x: 340, y: toPdfY(112, 10), fontSize: 10, maxWidth: 40 },
-    { key: 'otherLastNames', x: 34, y: toPdfY(138, 10), fontSize: 10, maxWidth: 360 },
-    { key: 'address', x: 34, y: toPdfY(164, 10), fontSize: 10, maxWidth: 220 },
-    { key: 'aptNumber', x: 260, y: toPdfY(164, 10), fontSize: 10, maxWidth: 80 },
-    { key: 'city', x: 34, y: toPdfY(190, 10), fontSize: 10, maxWidth: 120 },
-    { key: 'state', x: 160, y: toPdfY(190, 10), fontSize: 10, maxWidth: 40 },
-    { key: 'zip', x: 210, y: toPdfY(190, 10), fontSize: 10, maxWidth: 80 },
-    { key: 'dateOfBirth', x: 300, y: toPdfY(190, 10), fontSize: 10, maxWidth: 100 },
-    { key: 'ssn', x: 34, y: toPdfY(216, 10), fontSize: 10, maxWidth: 120 },
-    { key: 'email', x: 160, y: toPdfY(216, 10), fontSize: 10, maxWidth: 200 },
-    { key: 'phone', x: 370, y: toPdfY(216, 10), fontSize: 10, maxWidth: 120 },
-    { key: 'citizenshipStatus', x: 34, y: toPdfY(242, 10), fontSize: 10, maxWidth: 300 },
-    { key: 'alienNumber', x: 34, y: toPdfY(268, 10), fontSize: 10, maxWidth: 200 },
-    { key: 'signature', x: 34, y: toPdfY(650, 10), fontSize: 10, maxWidth: 260 },
-    { key: 'date', x: 300, y: toPdfY(650, 10), fontSize: 10, maxWidth: 100 },
+    // Section 1 — employee information (coordinates from the agency-annotated
+    // boxes in i9Document.pdf, converted to PyMuPDF top-left origin).
+    { key: 'lastName', x: 46.5, y: toPdfY(172.5, 10), fontSize: 10, maxWidth: 135 },
+    { key: 'firstName', x: 209.25, y: toPdfY(172.5, 10), fontSize: 10, maxWidth: 105 },
+    { key: 'middleInitial', x: 475, y: toPdfY(172.5, 10), fontSize: 10, maxWidth: 30 },
+    { key: 'otherLastNames', x: 565, y: toPdfY(172.5, 10), fontSize: 10, maxWidth: 195 },
+    { key: 'address', x: 45.75, y: toPdfY(198, 10), fontSize: 10, maxWidth: 255 },
+    { key: 'aptNumber', x: 285, y: toPdfY(198, 10), fontSize: 10, maxWidth: 24 },
+    { key: 'city', x: 312, y: toPdfY(198, 10), fontSize: 10, maxWidth: 145 },
+    { key: 'state', x: 464.25, y: toPdfY(197.25, 10), fontSize: 10, maxWidth: 50 },
+    { key: 'zip', x: 520.5, y: toPdfY(197.25, 10), fontSize: 10, maxWidth: 60 },
+    { key: 'dateOfBirth', x: 48.75, y: toPdfY(227.25, 10), fontSize: 10, maxWidth: 100 },
+    { key: 'ssn', x: 156, y: toPdfY(224.25, 10), fontSize: 10, maxWidth: 105 },
+    { key: 'email', x: 267.75, y: toPdfY(223.5, 9), fontSize: 9, maxWidth: 185 },
+    { key: 'phone', x: 461.25, y: toPdfY(224.25, 10), fontSize: 10, maxWidth: 115 },
+    // Citizenship/immigration status checkboxes (X marks), top to bottom:
+    // citizen, noncitizen national, lawful permanent resident, alien authorized.
+    { key: 'citizenYes', x: 183.75, y: toPdfY(257.25, 12), fontSize: 12 },
+    { key: 'noncitizenNationalYes', x: 183.75, y: toPdfY(270.75, 12), fontSize: 12 },
+    { key: 'permanentResidentYes', x: 183.75, y: toPdfY(283.5, 12), fontSize: 12 },
+    { key: 'alienAuthorizedYes', x: 183.75, y: toPdfY(296.25, 12), fontSize: 12 },
+    { key: 'alienNumber', x: 210, y: toPdfY(296.25, 10), fontSize: 10, maxWidth: 200 },
+    { key: 'signature', x: 47.25, y: toPdfY(357.75, 10), fontSize: 10, maxWidth: 300 },
+    { key: 'date', x: 377.25, y: toPdfY(357, 10), fontSize: 10, maxWidth: 90 },
+    // Section 2 — employer verification (first document slot positions measured
+    // from the form's label text; employer block from the annotated boxes).
+    { key: 'documentTitle', x: 38, y: toPdfY(442, 10), fontSize: 10, maxWidth: 325 },
+    { key: 'issuingAuthority', x: 38, y: toPdfY(460, 10), fontSize: 10, maxWidth: 325 },
+    { key: 'documentNumber', x: 38, y: toPdfY(478, 10), fontSize: 10, maxWidth: 325 },
+    { key: 'expirationDate', x: 38, y: toPdfY(497, 10), fontSize: 10, maxWidth: 100 },
+    { key: 'firstDateOfEmployment', x: 469.5, y: toPdfY(666, 10), fontSize: 10, maxWidth: 105 },
+    { key: 'employerRepName', x: 47.25, y: toPdfY(695.25, 10), fontSize: 10, maxWidth: 240 },
+    { key: 'employerSignature', x: 300, y: toPdfY(696.75, 10), fontSize: 10, maxWidth: 185 },
+    { key: 'employerDate', x: 495.75, y: toPdfY(697.5, 10), fontSize: 10, maxWidth: 85 },
+    { key: 'employerName', x: 46.5, y: toPdfY(726, 10), fontSize: 10, maxWidth: 195 },
+    { key: 'employerAddress', x: 249, y: toPdfY(724.5, 9), fontSize: 9, maxWidth: 325 },
   ],
 }
 
@@ -305,6 +324,23 @@ export const MAPPINGS: Record<
   bcia_8016: BCIA_8016_MAPPING,
   hcs_501: HCS_501_MAPPING,
   lic_501: LIC_501_MAPPING,
+}
+
+/**
+ * Normalize I-9 form data into the key shape expected by I9_MAPPING.
+ * citizenshipStatus is expanded into the four checkbox X marks; signature and
+ * date are only drawn when present (the checklist I-9 download leaves them
+ * blank for a handwritten signature).
+ */
+export function normalizeI9PdfData(i9: Record<string, unknown>): Record<string, unknown> {
+  const status = String(i9.citizenshipStatus ?? '')
+  return {
+    ...i9,
+    citizenYes: status === 'citizen' ? 'X' : '',
+    noncitizenNationalYes: status === 'noncitizen_national' ? 'X' : '',
+    permanentResidentYes: status === 'lawful_permanent_resident' ? 'X' : '',
+    alienAuthorizedYes: status === 'alien_authorized' ? 'X' : '',
+  }
 }
 
 export function getMapping(type: string): PdfFieldMapping | undefined {

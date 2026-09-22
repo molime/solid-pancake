@@ -81,9 +81,15 @@ const TASK_META: Record<string, { label: string; shortLabel: string; actionLabel
     actionLabel: 'Upload personnel record',
     due: 'Due in 3 days',
   },
+  i9_form: {
+    label: 'Employment Eligibility Verification (I-9)',
+    shortLabel: 'Form I-9',
+    actionLabel: 'Upload signed I-9',
+    due: 'Due in 3 days',
+  },
 }
 
-const UPLOAD_TYPES = new Set(['photo_id', 'tax_id_ssn', 'cpr_certificate', 'health_screen', 'background_check', 'additional_certifications', 'car_insurance', 'soc_341a', 'personnel_record'])
+const UPLOAD_TYPES = new Set(['photo_id', 'tax_id_ssn', 'cpr_certificate', 'health_screen', 'background_check', 'additional_certifications', 'car_insurance', 'soc_341a', 'personnel_record', 'i9_form'])
 
 function getTaskRoute(task: Doc<'candidateTasks'>, hasTrainingProduct: boolean | undefined) {
   if (task.type === 'form_submission') return '/onboarding/application'

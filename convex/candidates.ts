@@ -55,6 +55,7 @@ const CANDIDATE_TASK_TYPES = [
   'background_check',
   'soc_341a',
   'personnel_record',
+  'i9_form',
   'employment_agreement',
   'additional_certifications',
   'car_insurance',
@@ -2516,6 +2517,19 @@ export const attachCandidateDocument = mutation({
       createdAt: new Date().toISOString(),
     })
 
+    // Record this upload in the document version history — every upload of
+    // the same type appends a version so documents can be re-uploaded as
+    // many times as needed.
+    await ctx.db.insert('prefilledDocumentVersions', {
+      tenantId,
+      candidateId,
+      documentType: args.documentType,
+      storageId: args.storageId,
+      fileName: args.fileName,
+      uploadedBy: 'candidate',
+      createdAt: new Date().toISOString(),
+    })
+
     const existingArchiveItem = await ctx.db
       .query('documentArchiveItems')
       .withIndex('by_tenant_subject', (q) =>
@@ -2735,6 +2749,7 @@ export const createCandidateRecord = internalMutation({
       'background_check',
       'soc_341a',
       'personnel_record',
+      'i9_form',
       'employment_agreement',
       'additional_certifications',
       'car_insurance',
@@ -2923,5 +2938,195 @@ export const updateClerkPassword = action({
     })
 
     return { success: true }
+  },
+})
+
+
+// ═══════════════════════════════════════════════════════════════
+// Document version history
+// ═══════════════════════════════════════════════════════════════
+
+// Upload a new version of a document. Candidates upload their own documents;
+// admin/HR upload on behalf of any candidate in the tenant. The latest upload
+// is also mirrored onto prefilledDocuments.uploadedSignedStorageId so the
+// existing HR document lists keep working.
+export const uploadDocumentVersion = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    candidateId: v.id('candidates'),
+    documentType: v.string(),
+    storageId: v.string(),
+    fileName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await requireIdentity(ctx)
+    const candidate = await ctx.db.get(args.candidateId)
+    if (!candidate) throw new ConvexError('Candidate not found.')
+
+    const isSelf = candidate.clerkUserId === identity.subject
+    let tenantId
+    let uploadedBy: 'candidate' | 'hr'
+    if (isSelf) {
+      ;({ tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+        'org:candidate',
+        'org:caregiver',
+      ]))
+      uploadedBy = 'candidate'
+    } else {
+      ;({ tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+        'org:admin',
+        'org:hr',
+      ]))
+      uploadedBy = 'hr'
+    }
+    assertTenantDoc(candidate, tenantId)
+
+    const versionId = await ctx.db.insert('prefilledDocumentVersions', {
+      tenantId,
+      candidateId: args.candidateId,
+      documentType: args.documentType,
+      storageId: args.storageId,
+      fileName: args.fileName,
+      uploadedBy,
+      createdAt: new Date().toISOString(),
+    })
+
+    const existing = await ctx.db
+      .query('prefilledDocuments')
+      .withIndex('by_tenant_candidate_type', (q) =>
+        q
+          .eq('tenantId', tenantId)
+          .eq('candidateId', args.candidateId)
+          .eq('documentType', args.documentType),
+      )
+      .unique()
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        uploadedSignedStorageId: args.storageId,
+      })
+    } else {
+      await ctx.db.insert('prefilledDocuments', {
+        tenantId,
+        candidateId: args.candidateId,
+        documentType: args.documentType,
+        uploadedSignedStorageId: args.storageId,
+        generatedAt: new Date().toISOString(),
+        generatedBy: 'upload',
+      })
+    }
+
+    return versionId
+  },
+})
+
+// List the version history for a candidate's documents (optionally filtered
+// by type). Candidates read their own; admin/HR/coordinators read any in the
+// tenant (coordinators can view employee profiles).
+export const listDocumentVersions = query({
+  args: {
+    clerkOrgId: v.string(),
+    candidateId: v.id('candidates'),
+    documentType: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await requireIdentity(ctx)
+    const candidate = await ctx.db.get(args.candidateId)
+    if (!candidate) throw new ConvexError('Candidate not found.')
+
+    let tenantId
+    if (candidate.clerkUserId === identity.subject) {
+      ;({ tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+        'org:candidate',
+        'org:caregiver',
+      ]))
+    } else {
+      ;({ tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+        'org:admin',
+        'org:hr',
+        'org:coordinator',
+      ]))
+    }
+    assertTenantDoc(candidate, tenantId)
+
+    const versions = await ctx.db
+      .query('prefilledDocumentVersions')
+      .withIndex('by_tenant_candidate_type', (q) =>
+        q.eq('tenantId', tenantId).eq('candidateId', args.candidateId),
+      )
+      .collect()
+    return versions
+      .filter((v) => !args.documentType || v.documentType === args.documentType)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  },
+})
+
+// Download URL for a single document version, with the same access rules.
+export const getDocumentVersionDownloadUrl = query({
+  args: { clerkOrgId: v.string(), versionId: v.id('prefilledDocumentVersions') },
+  handler: async (ctx, args) => {
+    const identity = await requireIdentity(ctx)
+    const version = await ctx.db.get(args.versionId)
+    if (!version) throw new ConvexError('Document version not found.')
+
+    const candidate = await ctx.db.get(version.candidateId)
+    let tenantId
+    if (candidate?.clerkUserId === identity.subject) {
+      ;({ tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+        'org:candidate',
+        'org:caregiver',
+      ]))
+    } else {
+      ;({ tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+        'org:admin',
+        'org:hr',
+        'org:coordinator',
+      ]))
+    }
+    if (version.tenantId !== tenantId) {
+      throw new ConvexError('Document version not found.')
+    }
+
+    const url = await ctx.storage.getUrl(version.storageId)
+    return {
+      url,
+      fileName: version.fileName,
+      uploadedBy: version.uploadedBy,
+      createdAt: version.createdAt,
+    }
+  },
+})
+
+// One-off retroactivity helper: adds any missing standard checklist tasks to
+// a tenant's existing candidates (idempotent). Used to backfill document
+// tasks introduced after candidates were created (SOC 341A, LIC 501, I-9).
+export const backfillCandidateTasksInternal = internalMutation({
+  args: { tenantId: v.id('tenants') },
+  handler: async (ctx, args) => {
+    const candidates = await ctx.db
+      .query('candidates')
+      .filter((q) => q.eq(q.field('tenantId'), args.tenantId))
+      .collect()
+    let backfilled = 0
+    for (const candidate of candidates) {
+      const existing = await ctx.db
+        .query('candidateTasks')
+        .withIndex('by_tenant_candidate_order', (q) =>
+          q.eq('tenantId', args.tenantId).eq('candidateId', candidate._id),
+        )
+        .collect()
+      const existingTypes = new Set(existing.map((task) => task.type))
+      for (const type of CANDIDATE_TASK_TYPES) {
+        if (existingTypes.has(type)) continue
+        await ctx.db.insert('candidateTasks', {
+          tenantId: args.tenantId,
+          candidateId: candidate._id,
+          type,
+          status: initialTaskStatus(type),
+          order: CANDIDATE_TASK_TYPES.indexOf(type),
+        })
+        backfilled++
+      }
+    }
+    return { candidates: candidates.length, backfilled }
   },
 })

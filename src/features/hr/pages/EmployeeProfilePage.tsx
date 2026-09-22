@@ -84,12 +84,28 @@ function ProfileTab({
   )
 }
 
+const DOCUMENT_VERSION_TYPE_LABELS: Record<string, string> = {
+  health_screen: 'Health Screen (LIC 503)',
+  live_scan: 'Live Scan (LIC 9163)',
+  criminal_record: 'Criminal Record (LIC 508)',
+  w4: 'W-4 Tax Withholding',
+  i9: 'I-9 Employment Eligibility',
+  i9_form: 'I-9 Employment Eligibility',
+  de_34: 'DE 34 — Report of New Employee(s)',
+  bcia_8016: 'BCIA 8016 — Live Scan Request',
+  lic_501: 'LIC 501 — Personnel Record',
+  soc_341a: 'SOC 341A — Abuse Reporting Statement',
+  hcs_501: 'HCS 501 — Personnel Record',
+}
+
 function DocumentsTab({
   employeeProfileId,
   clerkOrgId,
+  clerkUserId,
 }: {
   employeeProfileId: string
   clerkOrgId: string
+  clerkUserId?: string
 }) {
   const documents = useQuery(
     api.documentArchive.listDocumentArchive,
@@ -100,8 +116,21 @@ function DocumentsTab({
         }
       : 'skip',
   )
+  const candidateLink = useQuery(
+    api.candidates.getCandidateByClerkUserId,
+    clerkOrgId && clerkUserId ? { clerkOrgId, clerkUserId } : 'skip',
+  )
+  const versions = useQuery(
+    api.candidates.listDocumentVersions,
+    clerkOrgId && candidateLink?.candidateId
+      ? { clerkOrgId, candidateId: candidateLink.candidateId }
+      : 'skip',
+  )
 
-  if (!documents || documents.length === 0) {
+  const hasDocuments = !!documents && documents.length > 0
+  const hasVersions = !!versions && versions.length > 0
+
+  if (!hasDocuments && !hasVersions) {
     return (
       <EmptyState
         icon={<FileText className="h-6 w-6" />}
@@ -112,6 +141,46 @@ function DocumentsTab({
   }
 
   return (
+    <div className="space-y-6">
+      {hasVersions && (
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-atria-ink">
+            Document versions
+          </h3>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeader>DOCUMENT</TableHeader>
+                <TableHeader>VERSION</TableHeader>
+                <TableHeader>UPLOADED</TableHeader>
+                <TableHeader />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {versions!.map((version, index) => (
+                <TableRow key={version._id}>
+                  <TableCell className="font-medium">
+                    {DOCUMENT_VERSION_TYPE_LABELS[version.documentType] ??
+                      version.documentType}
+                  </TableCell>
+                  <TableCell>
+                    Version {versions!.length - index} ·{' '}
+                    {version.uploadedBy === 'hr' ? 'HR' : 'Candidate'}
+                  </TableCell>
+                  <TableCell>{formatDateUS(version.createdAt)}</TableCell>
+                  <TableCell>
+                    <DocumentVersionDownloadLink
+                      clerkOrgId={clerkOrgId}
+                      versionId={version._id}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+      {hasDocuments && (
     <Table>
       <TableHead>
         <TableRow>
@@ -155,6 +224,32 @@ function DocumentsTab({
         ))}
       </TableBody>
     </Table>
+      )}
+    </div>
+  )
+}
+
+function DocumentVersionDownloadLink({
+  clerkOrgId,
+  versionId,
+}: {
+  clerkOrgId: string
+  versionId: Id<'prefilledDocumentVersions'>
+}) {
+  const result = useQuery(api.candidates.getDocumentVersionDownloadUrl, {
+    clerkOrgId,
+    versionId,
+  })
+  if (!result?.url) return null
+  return (
+    <a
+      href={result.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-xs font-medium text-atria-accent hover:underline"
+    >
+      Download
+    </a>
   )
 }
 
@@ -528,7 +623,7 @@ export function EmployeeProfilePage() {
             <HiringTab clerkOrgId={clerkOrgId} clerkUserId={profile.clerkUserId} />
           )}
           {activeTab === 'documents' && profile && clerkOrgId && (
-            <DocumentsTab employeeProfileId={profile._id} clerkOrgId={clerkOrgId} />
+            <DocumentsTab employeeProfileId={profile._id} clerkOrgId={clerkOrgId} clerkUserId={profile.clerkUserId} />
           )}
           {activeTab === 'cases' && profile?.clerkUserId && clerkOrgId && (
             <CasesTab clerkUserId={profile.clerkUserId} clerkOrgId={clerkOrgId} />

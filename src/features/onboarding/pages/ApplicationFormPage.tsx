@@ -15,7 +15,7 @@ import { AppLoader } from '@/shared/ui/AppLoader'
 import { ProgressSteps } from '@/shared/ui/ProgressSteps'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { generatePrefilledPdf, saveAndDownload, saveAndUpload } from '../pdf/generatePrefilledPdf'
-import { getMapping, normalizeW4PdfData } from '../pdf/mappings'
+import { getMapping, normalizeI9PdfData, normalizeW4PdfData } from '../pdf/mappings'
 import { PersonalInfoSection } from '../components/application/PersonalInfoSection'
 import { SignedInApplyFlowBranding } from '../components/application/ApplyFlowBranding'
 import { EmploymentHistorySection } from '../components/application/EmploymentHistorySection'
@@ -698,11 +698,11 @@ export function ApplicationFormPage() {
     const i9Mapping = getMapping('i9')
     if (i9Mapping) {
       try {
-        const i9PdfData = {
+        const i9PdfData = normalizeI9PdfData({
           ...(data.i9 as unknown as Record<string, unknown>),
           dateOfBirth: formatDateUS(data.i9.dateOfBirth),
           date: formatDateUS(data.i9.date),
-        }
+        })
         const i9Bytes = await generatePrefilledPdf(i9Mapping, i9PdfData)
         await saveAndUpload(
           i9Bytes,
@@ -815,11 +815,11 @@ export function ApplicationFormPage() {
         // I-9 & W-4 step completed - generate I-9, W-4, Health Screen, and Live Scan
         const i9Mapping = getMapping('i9')
         if (i9Mapping) {
-          const i9PdfData = {
+          const i9PdfData = normalizeI9PdfData({
             ...(data.i9 as unknown as Record<string, unknown>),
             dateOfBirth: formatDateUS(data.i9.dateOfBirth),
             date: formatDateUS(data.i9.date),
-          }
+          })
           const bytes = await generatePrefilledPdf(i9Mapping, i9PdfData)
           pdfs.push({ name: 'i9_prefilled.pdf', bytes, description: 'Employment Eligibility Verification (I-9) - Section 1 filled out with your information. Your HR team will complete Section 2.' })
         }
@@ -926,11 +926,11 @@ export function ApplicationFormPage() {
       // I-9
       const i9Mapping = getMapping('i9')
       if (i9Mapping) {
-        const i9PdfData = {
+        const i9PdfData = normalizeI9PdfData({
           ...(data.i9 as unknown as Record<string, unknown>),
           dateOfBirth: formatDateUS(data.i9.dateOfBirth),
           date: formatDateUS(data.i9.date),
-        }
+        })
         const bytes = await generatePrefilledPdf(i9Mapping, i9PdfData)
         pdfs.push({ name: 'i9_prefilled.pdf', bytes, description: 'Employment Eligibility Verification (I-9) - Section 1 filled out with your information. Your HR team will complete Section 2.' })
       }
