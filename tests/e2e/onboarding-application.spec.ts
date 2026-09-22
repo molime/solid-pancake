@@ -293,8 +293,8 @@ test.describe('onboarding application and document upload', { tag: '@auth' }, ()
     await expect(page.getByText('References')).toBeVisible()
 
     // Prefilled documents section shows signed uploads.
-    await expect(page.getByText('Health Screen (LIC 503)')).toBeVisible()
-    await expect(page.getByText('Live Scan (LIC 9163)')).toBeVisible()
+    await expect(page.getByText('Health Screen (LIC 503)').first()).toBeVisible()
+    await expect(page.getByText('Live Scan (LIC 9163)').first()).toBeVisible()
     await expect(page.getByText('Signed/stamped upload:').first()).toBeVisible()
 
     // Upload official background check result.
