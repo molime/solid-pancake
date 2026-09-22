@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -411,9 +411,8 @@ function SupervisionTab({
 
 export function EmployeeProfilePage() {
   const { memberId } = useParams<{ memberId: string }>()
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
-
+  const { clerkOrgId } = useTenant()
+  
   const detail = useQuery(
     api.employeeProfiles.getEmployeeProfileDetail,
     clerkOrgId && memberId

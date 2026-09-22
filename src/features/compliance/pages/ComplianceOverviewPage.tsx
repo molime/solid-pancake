@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { useState } from 'react'
 import { api } from '../../../../convex/_generated/api'
@@ -70,9 +70,8 @@ const obligationStatusLabel: Record<ObligationStatus, string> = {
 }
 
 export function ComplianceOverviewPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
-  const overview = useQuery(
+  const { clerkOrgId } = useTenant()
+    const overview = useQuery(
     api.compliance.getComplianceOverview,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
