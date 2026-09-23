@@ -55,8 +55,8 @@ export const listMyInvoices = query({
 // method. Creates the Stripe customer on first use (mirrors the ensure-
 // customer flow in createAndSendStripeInvoice).
 export const createMyPaymentSetupSession = action({
-  args: { clerkOrgId: v.string() },
-  handler: async (ctx, { clerkOrgId }): Promise<{ url: string }> => {
+  args: { clerkOrgId: v.string(), origin: v.optional(v.string()) },
+  handler: async (ctx, { clerkOrgId, origin }): Promise<{ url: string }> => {
     const { member } = await requireTenantRoleAction(ctx, clerkOrgId, [
       'org:admin',
     ])
@@ -86,7 +86,7 @@ export const createMyPaymentSetupSession = action({
 
     return ctx.runAction(
       internal.platformStripe.createPaymentSetupSessionInternal,
-      { tenantId },
+      { tenantId, returnOrigin: origin },
     )
   },
 })

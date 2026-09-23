@@ -78,13 +78,15 @@ export function TrainingCertificatePage() {
     window.print()
   }
 
+  const agencyName = certificateData.tenantName ?? 'your agency'
+
   const handleDownloadPdf = async () => {
     const bytes = await generateCertificatePdf({
       courseTitle: course.title,
       recipientName: displayName,
       completedAt: formatDateUS(completedAt),
       expiresAt: formatDateUS(expiresAt),
-      agencyName: 'Golden Ages Home Care',
+      agencyName,
     })
     saveAndDownload(bytes, `${course.title} Certificate.pdf`)
   }
@@ -168,7 +170,7 @@ export function TrainingCertificatePage() {
                 ATRIA-X Digital Solutions
               </p>
               <p className="text-xs text-atria-text-muted print:text-atria-ink">
-                on behalf of Golden Ages Home Care
+                on behalf of {agencyName}
               </p>
             </div>
 
@@ -184,19 +186,19 @@ export function TrainingCertificatePage() {
               variant="primary"
               size="lg"
               className="flex-1"
-              onClick={handlePrint}
+              onClick={handleDownloadPdf}
             >
-              <Printer className="h-4 w-4" />
-              Print certificate
+              <Download className="h-4 w-4" />
+              Download certificate (PDF)
             </Button>
             <Button
               variant="secondary"
               size="lg"
               className="flex-1"
-              onClick={handleDownloadPdf}
+              onClick={handlePrint}
             >
-              <Download className="h-4 w-4" />
-              Download PDF
+              <Printer className="h-4 w-4" />
+              Print
             </Button>
           </div>
         </CardContent>

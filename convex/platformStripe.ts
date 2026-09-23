@@ -686,7 +686,7 @@ export const voidStripeInvoiceInternal = internalAction({
  * (e.g. ACH not enabled on the account) propagate to the caller.
  */
 export const createPaymentSetupSessionInternal = internalAction({
-  args: { tenantId: v.id('tenants') },
+  args: { tenantId: v.id('tenants'), returnOrigin: v.optional(v.string()) },
   handler: async (ctx, args): Promise<{ url: string }> => {
     const tenant = await ctx.runQuery(internal.platform.getTenantInternal, {
       tenantId: args.tenantId,
@@ -701,7 +701,9 @@ export const createPaymentSetupSessionInternal = internalAction({
     if (!billing.stripeCustomerId) {
       throw new Error('Tenant has no Stripe customer.')
     }
-    const appUrl = requireEnv('APP_URL')
+    // Prefer the caller's origin so agencies on their own subdomain return to
+    // the right host; APP_URL is the fallback for server-initiated flows.
+    const appUrl = args.returnOrigin ?? requireEnv('APP_URL')
     const session: { url: string } = await ctx.runAction(
       internal._utils.stripe.createCheckoutSession,
       {

@@ -385,11 +385,14 @@ export const getCourseCertificate = query({
       recipientName = profile?.displayName
     }
 
+    const tenant = await ctx.db.get(tenantId)
+
     return {
       course,
       completion,
       file,
       recipientName: recipientName ?? null,
+      tenantName: tenant?.name ?? null,
     }
   },
 })

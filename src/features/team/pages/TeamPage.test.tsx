@@ -91,6 +91,9 @@ function mockTeamState(options: {
       const name = getFunctionName(queryRef as Parameters<typeof getFunctionName>[0])
       if (name === 'members:list') return members
       if (name === 'employeeProfiles:listEmployeeProfiles') return employeeProfiles
+      // ADP section renders only for tenants with a configured connection —
+      // the tests below exercise that section, so report configured.
+      if (name === 'integrations/adp/config:isAdpConfiguredForTenant') return true
       return undefined
     }) as unknown as typeof useQuery,
   )

@@ -1800,6 +1800,9 @@ export const savePrefilledDocument = mutation({
     documentType: v.string(),
     storageId: v.string(),
     applicationId: v.optional(v.id('applications')),
+    // When the saved document is the FINAL form (not a blank/partial prefill
+    // for hand-signing), completing its checklist task is part of the save.
+    markTaskComplete: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const { tenantId, identity, role } = await requireTenantRole(ctx, args.clerkOrgId, [
@@ -1842,6 +1845,7 @@ export const savePrefilledDocument = mutation({
       .first()
 
     const now = new Date().toISOString()
+    let savedId: Id<'prefilledDocuments'>
     if (existing) {
       await ctx.db.patch(existing._id, {
         storageId: args.storageId,
@@ -1849,37 +1853,51 @@ export const savePrefilledDocument = mutation({
         generatedBy: identity.subject,
         applicationId: args.applicationId,
       })
-      return existing._id
+      savedId = existing._id
+    } else {
+      try {
+        savedId = await ctx.db.insert('prefilledDocuments', {
+          tenantId,
+          candidateId,
+          applicationId: args.applicationId,
+          documentType: args.documentType,
+          storageId: args.storageId,
+          generatedAt: now,
+          generatedBy: identity.subject,
+        })
+      } catch (err) {
+        // Unique index violation: another transaction created the row. Patch it.
+        const retry = await ctx.db
+          .query('prefilledDocuments')
+          .withIndex('by_tenant_candidate_type', (q) =>
+            q.eq('tenantId', tenantId).eq('candidateId', candidateId).eq('documentType', args.documentType),
+          )
+          .first()
+        if (!retry) throw err
+        await ctx.db.patch(retry._id, {
+          storageId: args.storageId,
+          generatedAt: now,
+          generatedBy: identity.subject,
+          applicationId: args.applicationId,
+        })
+        savedId = retry._id
+      }
     }
 
-    try {
-      const docId = await ctx.db.insert('prefilledDocuments', {
-        tenantId,
-        candidateId,
-        applicationId: args.applicationId,
-        documentType: args.documentType,
-        storageId: args.storageId,
-        generatedAt: now,
-        generatedBy: identity.subject,
-      })
-      return docId
-    } catch (err) {
-      // Unique index violation: another transaction created the row. Patch it.
-      const retry = await ctx.db
-        .query('prefilledDocuments')
-        .withIndex('by_tenant_candidate_type', (q) =>
-          q.eq('tenantId', tenantId).eq('candidateId', candidateId).eq('documentType', args.documentType),
-        )
-        .first()
-      if (!retry) throw err
-      await ctx.db.patch(retry._id, {
-        storageId: args.storageId,
-        generatedAt: now,
-        generatedBy: identity.subject,
-        applicationId: args.applicationId,
-      })
-      return retry._id
+    // Final-document saves (application submit / HR generator) complete the
+    // matching checklist task so no separate upload step is needed.
+    if (args.markTaskComplete) {
+      const taskType =
+        args.documentType === 'lic_501' || args.documentType === 'hcs_501'
+          ? 'personnel_record'
+          : args.documentType === 'soc_341a'
+            ? 'soc_341a'
+            : undefined
+      if (taskType) {
+        await completeCandidateTask(ctx, tenantId, candidateId, taskType)
+      }
     }
+    return savedId
   },
 })
 

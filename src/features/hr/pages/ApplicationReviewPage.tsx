@@ -17,6 +17,8 @@ import { uploadFileToConvex } from '@/shared/lib/upload'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { generatePrefilledPdf, saveAndDownload, saveAndUpload } from '@/features/onboarding/pdf/generatePrefilledPdf'
 import { getMapping, normalizeI9PdfData, normalizeW4PdfData } from '@/features/onboarding/pdf/mappings'
+import { buildLic501FinalData, buildSoc341aFinalData } from '@/features/onboarding/pdf/finalDocuments'
+import { isGoldenAgesAgency } from '@/features/onboarding/components/application/legalText'
 import { isNonEmptyString } from '@/features/onboarding/components/application/types'
 import { DynamicFormReview } from '@/features/forms/components/DynamicFormReview'
 import { ArrowLeft, CheckCircle2, Download, RotateCcw, XCircle } from 'lucide-react'
@@ -437,6 +439,7 @@ export function ApplicationReviewPage() {
   const [firstDateOfEmployment, setFirstDateOfEmployment] = useState(todayIso)
   const [isGeneratingW4, setIsGeneratingW4] = useState(false)
   const [isGeneratingI9Original, setIsGeneratingI9Original] = useState(false)
+  const [generatingFinalDoc, setGeneratingFinalDoc] = useState<string | null>(null)
 
   const [i9Section2, setI9Section2] = useState({
     documentTitle: '',
@@ -792,6 +795,71 @@ export function ApplicationReviewPage() {
     }
   }
 
+  // Generate a FINAL LIC 501 / SOC 341A from the application data on demand —
+  // the retroactive path for candidates who applied before these documents
+  // were generated at submit. Stored as the prefilled document of record AND
+  // as a document version (so it shows in the employee profile Documents tab);
+  // the matching checklist task completes via markTaskComplete.
+  const handleGenerateFinalDocument = async (type: 'lic_501' | 'soc_341a') => {
+    if (!clerkOrgId || !candidateId) return
+    setGeneratingFinalDoc(type)
+    try {
+      const mapping = getMapping(type)
+      if (!mapping) throw new Error('Template mapping not found.')
+      const sources = {
+        personal: (fields.personal ?? {}) as Record<string, unknown>,
+        i9: (fields.i9 ?? {}) as { ssn?: string },
+        w4: (fields.w4 ?? {}) as { ssn?: string },
+        agencyName: employerName || organization?.name || '',
+        agencyAddress: w4ForHR?.agencyAddress ?? '',
+        todayUs: new Date().toLocaleDateString('en-US'),
+      }
+      const pdfData =
+        type === 'lic_501'
+          ? buildLic501FinalData(sources as never)
+          : buildSoc341aFinalData(sources as never)
+      const fullName = String(pdfData.signature ?? pdfData.employeeName ?? '')
+      if (!fullName.trim()) {
+        throw new Error('The application has no applicant name to fill the document with.')
+      }
+      const bytes = await generatePrefilledPdf(mapping, pdfData)
+      const fileName =
+        type === 'lic_501' ? 'lic_501_personnel_record.pdf' : 'soc_341a_abuse_reporting.pdf'
+      const storageId = await uploadFileToConvex({
+        generateUploadUrl,
+        clerkOrgId,
+        file: new File([new Blob([bytes as unknown as BlobPart], { type: 'application/pdf' })], fileName, { type: 'application/pdf' }),
+      })
+      await savePrefilledDocument({
+        clerkOrgId,
+        candidateId: candidateId as Id<'candidates'>,
+        documentType: type,
+        storageId,
+        markTaskComplete: true,
+      })
+      await uploadDocumentVersion({
+        clerkOrgId,
+        candidateId: candidateId as Id<'candidates'>,
+        documentType: type,
+        storageId,
+        fileName,
+      })
+      show(
+        'success',
+        type === 'lic_501' ? 'LIC 501 generated' : 'SOC 341A generated',
+        'The final document is now downloadable from Prefilled documents and Document versions.',
+      )
+    } catch (err) {
+      show(
+        'danger',
+        'Could not generate document',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
+      )
+    } finally {
+      setGeneratingFinalDoc(null)
+    }
+  }
+
   const handleSaveI9Section2 = async () => {
     if (!clerkOrgId || !candidateId) return
     try {
@@ -1058,6 +1126,17 @@ export function ApplicationReviewPage() {
             </SectionBlock>
 
             <SectionBlock title="I-9 Section 2 verification">
+              <div
+                className={
+                  i9Section2Complete
+                    ? 'mb-4 rounded-[var(--radius-atria-md)] border border-atria-success bg-atria-success/10 p-3 text-sm text-atria-success'
+                    : 'mb-4 rounded-[var(--radius-atria-md)] border border-atria-warning bg-atria-warning/10 p-3 text-sm text-atria-warning'
+                }
+              >
+                {i9Section2Complete
+                  ? `Completed — Section 2 verified${existingI9Section2.i9Section2CompletedAt ? ` on ${formatDateUS(String(existingI9Section2.i9Section2CompletedAt))}` : ''}. The final I-9 PDF was regenerated.`
+                  : 'Pending — employer action required: verify the employee’s documents and complete Section 2 below.'}
+              </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FieldGroup label="DOCUMENT TITLE" htmlFor="i9-doc-title">
                   <Input
@@ -1126,6 +1205,17 @@ export function ApplicationReviewPage() {
             </SectionBlock>
 
             <SectionBlock title="W-4 employer section">
+              <div
+                className={
+                  w4EmployerComplete
+                    ? 'mb-4 rounded-[var(--radius-atria-md)] border border-atria-success bg-atria-success/10 p-3 text-sm text-atria-success'
+                    : 'mb-4 rounded-[var(--radius-atria-md)] border border-atria-warning bg-atria-warning/10 p-3 text-sm text-atria-warning'
+                }
+              >
+                {w4EmployerComplete
+                  ? 'Completed — the employer section is filled and the W-4 PDF was regenerated.'
+                  : 'Pending — employer action required: complete the employer name, EIN and first date of employment below.'}
+              </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <FieldGroup label="EMPLOYER NAME" htmlFor="w4-employer-name">
                   <Input
@@ -1194,7 +1284,13 @@ export function ApplicationReviewPage() {
 
             <SectionBlock title="Prefilled documents">
               <div className="space-y-2">
-                {(['health_screen', 'live_scan', 'criminal_record', 'i9', 'w4', 'de_34', 'bcia_8016', 'lic_501', 'soc_341a', 'hcs_501'] as const).map((type) => {
+                {(isGoldenAgesAgency(organization?.name)
+                  // Golden Ages uses LIC 501 (not HCS 501) and the GA-specific
+                  // DE 34 / BCIA 8016; other agencies use HCS 501 and none of
+                  // the GA-only forms.
+                  ? ['health_screen', 'live_scan', 'criminal_record', 'i9', 'w4', 'de_34', 'bcia_8016', 'lic_501', 'soc_341a'] as const
+                  : ['health_screen', 'live_scan', 'criminal_record', 'i9', 'w4', 'hcs_501', 'soc_341a'] as const
+                ).map((type) => {
                   const doc = prefilledDocByType.get(type)
                   const hasSigned = !!doc?.uploadedSignedStorageId
                   const isOnlineForm = type === 'criminal_record' || type === 'i9' || type === 'w4' || type === 'bcia_8016'
@@ -1267,6 +1363,46 @@ export function ApplicationReviewPage() {
                 })}
               </div>
             </SectionBlock>
+
+            {isGoldenAgesAgency(organization?.name) &&
+              (!prefilledDocByType.get('lic_501') || !prefilledDocByType.get('soc_341a')) && (
+              <SectionBlock title="Generate missing documents">
+                <p className="mb-3 text-sm text-atria-text-secondary">
+                  Generate the final document from the application data — the
+                  applicant&apos;s typed name is the signature, no
+                  download/upload round-trip needed. For candidates who applied
+                  before these documents were generated automatically.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {!prefilledDocByType.get('lic_501') && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={generatingFinalDoc !== null}
+                      onClick={() => handleGenerateFinalDocument('lic_501')}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      {generatingFinalDoc === 'lic_501'
+                        ? 'Generating…'
+                        : 'Generate LIC 501 — Personnel Record'}
+                    </Button>
+                  )}
+                  {!prefilledDocByType.get('soc_341a') && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={generatingFinalDoc !== null}
+                      onClick={() => handleGenerateFinalDocument('soc_341a')}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      {generatingFinalDoc === 'soc_341a'
+                        ? 'Generating…'
+                        : 'Generate SOC 341A — Abuse Reporting Statement'}
+                    </Button>
+                  )}
+                </div>
+              </SectionBlock>
+            )}
 
             <SectionBlock title="Document versions (history)">
               <DocumentVersionsPanel

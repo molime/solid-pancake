@@ -16,6 +16,7 @@ import { ProgressSteps } from '@/shared/ui/ProgressSteps'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { generatePrefilledPdf, saveAndDownload, saveAndUpload } from '../pdf/generatePrefilledPdf'
 import { getMapping, normalizeI9PdfData, normalizeW4PdfData } from '../pdf/mappings'
+import { buildLic501FinalData, buildSoc341aFinalData } from '../pdf/finalDocuments'
 import { PersonalInfoSection } from '../components/application/PersonalInfoSection'
 import { SignedInApplyFlowBranding } from '../components/application/ApplyFlowBranding'
 import { EmploymentHistorySection } from '../components/application/EmploymentHistorySection'
@@ -784,10 +785,39 @@ export function ApplicationFormPage() {
         }
       }
 
-      // HCS 501 (personnel record) is intentionally NOT prefilled here: it is
-      // completed by the employee at the time of hire — hired Golden Ages
-      // caregivers download the blank form, fill it, and upload it back before
-      // accessing the dashboard (see PersonnelRecordPage).
+      // LIC 501 (Personnel Record) and SOC 341A (Abuse Reporting Statement)
+      // are issued as FINAL prefilled documents at submit — every field comes
+      // from the application data, the typed full name is the signature, and
+      // the checklist tasks complete without a download/upload round-trip.
+      const todayUs = new Date().toLocaleDateString('en-US')
+      const finalDocSources = {
+        personal: data.personal,
+        i9: data.i9,
+        w4: data.w4,
+        agencyName: employerInfo?.legalName ?? data.agencyName ?? tenantName ?? '',
+        agencyAddress: employerInfo?.address ?? '',
+        todayUs,
+      }
+
+      const lic501Mapping = getMapping('lic_501')
+      if (lic501Mapping) {
+        try {
+          const bytes = await generatePrefilledPdf(lic501Mapping, buildLic501FinalData(finalDocSources))
+          await saveAndUpload(bytes, 'lic_501_personnel_record.pdf', 'lic_501', orgId, getUploadUrl, savePrefilledDocument, undefined, true)
+        } catch {
+          // Best-effort: do not block submission if PDF generation fails.
+        }
+      }
+
+      const soc341aMapping = getMapping('soc_341a')
+      if (soc341aMapping) {
+        try {
+          const bytes = await generatePrefilledPdf(soc341aMapping, buildSoc341aFinalData(finalDocSources))
+          await saveAndUpload(bytes, 'soc_341a_abuse_reporting.pdf', 'soc_341a', orgId, getUploadUrl, savePrefilledDocument, undefined, true)
+        } catch {
+          // Best-effort: do not block submission if PDF generation fails.
+        }
+      }
     }
   }
 

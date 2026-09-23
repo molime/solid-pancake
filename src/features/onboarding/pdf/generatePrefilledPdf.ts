@@ -9,6 +9,7 @@ export type SavePrefilledDocument = (args: {
   candidateId?: Id<'candidates'>
   documentType: string
   storageId: string
+  markTaskComplete?: boolean
 }) => Promise<unknown>
 
 const TEMPLATE_NAMES: Record<
@@ -25,6 +26,7 @@ const TEMPLATE_NAMES: Record<
   bcia_8016: 'bcia_8016_live_scan',
   hcs_501: 'hcs_501_personnel_record',
   lic_501: 'lic_501_personnel_record',
+  soc_341a: 'soc_341a',
 }
 
 // Whiteout rectangles remove residual agency data from the scanned templates
@@ -75,6 +77,8 @@ const WHITEOUT_AREAS: Record<
   bcia_8016: [],
   hcs_501: [],
   lic_501: [],
+  // SOC 341A is a clean CDSS template — nothing to white out.
+  soc_341a: [],
 }
 
 function applyWhiteout(doc: PDFDocument, mappingKey: keyof typeof MAPPINGS) {
@@ -210,6 +214,7 @@ export async function saveAndUpload(
   generateUploadUrl: GenerateUploadUrl,
   savePrefilledDocument: SavePrefilledDocument,
   candidateId?: Id<'candidates'>,
+  markTaskComplete?: boolean,
 ): Promise<void> {
   const file = new File([toBlob(pdfBytes)], filename, {
     type: 'application/pdf',
@@ -234,5 +239,6 @@ export async function saveAndUpload(
     candidateId,
     documentType,
     storageId,
+    markTaskComplete,
   })
 }

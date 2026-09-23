@@ -148,6 +148,20 @@ export const updateUserDisplayName = internalMutation({
 })
 
 /**
+ * One-off status correction: sets a candidate's status directly. Used
+ * 2026-09-23 to normalize Oge's legacy 'offer_accepted' status to 'hired'
+ * (she already has an employee profile) so she appears under the right
+ * pipeline tabs.
+ */
+export const setCandidateStatusInternal = internalMutation({
+  args: { candidateId: v.id('candidates'), status: v.string() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.candidateId, { status: args.status })
+    return { ok: true }
+  },
+})
+
+/**
  * One-off org cleanup: removes every person (and their data) from a tenant
  * except the explicitly kept accounts. Used 2026-09-23 to clean the Golden
  * Ages org of test accounts, keeping only Samira (admin@) and Oge

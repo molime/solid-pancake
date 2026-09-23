@@ -21,6 +21,7 @@ describe('PDF coordinate mappings', () => {
       'i9',
       'lic_501',
       'live_scan',
+      'soc_341a',
       'w4',
     ])
   })
@@ -34,6 +35,7 @@ describe('PDF coordinate mappings', () => {
     expect(getMapping('de_34')).toBe(MAPPINGS.de_34)
     expect(getMapping('bcia_8016')).toBe(MAPPINGS.bcia_8016)
     expect(getMapping('hcs_501')).toBe(MAPPINGS.hcs_501)
+    expect(getMapping('soc_341a')).toBe(MAPPINGS.soc_341a)
     expect(getMapping('unknown')).toBeUndefined()
   })
 
@@ -247,7 +249,10 @@ describe('PDF coordinate mappings', () => {
         'address',
         'socialSecurityNumber',
         'positionTitle',
+        'signature',
+        'signatureDate',
       ],
+      soc_341a: ['employeeName', 'positionTitle', 'facilityName', 'signature', 'date'],
     }
 
     for (const [type, mapping] of Object.entries(MAPPINGS) as Array<
