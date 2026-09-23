@@ -143,3 +143,115 @@ describe('migrations.migrateUserAccount', () => {
     expect(second.notifications).toBe(0)
   })
 })
+
+describe('migrations.cleanupTenantPeople', () => {
+  it('removes everyone and everything except the kept accounts', async () => {
+    const t = createTestConvex()
+    const { tenantId, candidateId: keptCandidateId } = await seed(t)
+
+    // A second (kept) candidate-less member is already TO_USER from seed;
+    // seed a third, removed member + candidate with cascade rows.
+    const { removedCandidateId, removedMemberId } = await t.run(async (ctx) => {
+      const removedCandidateId = await ctx.db.insert('candidates', {
+        tenantId,
+        clerkUserId: 'user_remove',
+        displayName: 'Test Person',
+        email: 'remove@example.com',
+        status: 'applied',
+        source: 'public_apply',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId: removedCandidateId,
+        type: 'i9_form',
+        status: 'pending',
+        order: 8,
+      })
+      await ctx.db.insert('drafts', {
+        tenantId,
+        candidateId: removedCandidateId,
+        formType: 'application',
+        data: {},
+        updatedAt: new Date().toISOString(),
+      })
+      const removedMemberId = await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: 'user_remove',
+        role: 'org:candidate',
+        displayName: 'Test Person',
+        email: 'remove@example.com',
+      })
+      await ctx.db.insert('notifications', {
+        tenantId,
+        clerkUserId: 'user_remove',
+        type: 'x',
+        message: 'bye',
+        read: false,
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('hrCases', {
+        tenantId,
+        subjectType: 'candidate',
+        subjectId: removedCandidateId,
+        category: 'recruitment',
+        title: 'stale draft',
+        status: 'open',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('hrCases', {
+        tenantId,
+        subjectType: 'candidate',
+        subjectId: keptCandidateId,
+        category: 'recruitment',
+        title: 'keep me',
+        status: 'open',
+        createdAt: new Date().toISOString(),
+      })
+      return { removedCandidateId, removedMemberId }
+    })
+
+    const summary = await t.mutation(internal.migrations.cleanupTenantPeople, {
+      tenantId,
+      keepClerkUserIds: [TO_USER],
+      keepCandidateIds: [keptCandidateId],
+    })
+    expect(summary.candidates).toBe(1) // only the extra candidate; seed()'s is kept
+    expect(summary.tenantMembers).toBe(2) // FROM_USER and user_remove
+
+    const remainingCandidates = await t.run(async (ctx) =>
+      ctx.db.query('candidates').collect(),
+    )
+    expect(remainingCandidates.map((c) => c._id)).toEqual([keptCandidateId])
+
+    const remainingMembers = await t.run(async (ctx) =>
+      ctx.db.query('tenantMembers').collect(),
+    )
+    expect(remainingMembers.map((m) => m.clerkUserId)).toEqual([TO_USER])
+
+    const remainingTasks = await t.run(async (ctx) =>
+      ctx.db.query('candidateTasks').collect(),
+    )
+    expect(remainingTasks.every((task) => task.candidateId === keptCandidateId)).toBe(true)
+
+    const remainingCases = await t.run(async (ctx) =>
+      ctx.db.query('hrCases').collect(),
+    )
+    expect(remainingCases).toHaveLength(1)
+    expect(remainingCases[0].subjectId).toBe(keptCandidateId)
+
+    const remainingNotifications = await t.run(async (ctx) =>
+      ctx.db.query('notifications').collect(),
+    )
+    expect(remainingNotifications.every((n) => n.clerkUserId === TO_USER)).toBe(true)
+
+    // Re-running deletes nothing further.
+    const second = await t.mutation(internal.migrations.cleanupTenantPeople, {
+      tenantId,
+      keepClerkUserIds: [TO_USER],
+      keepCandidateIds: [keptCandidateId],
+    })
+    expect(second.candidates ?? 0).toBe(0)
+    expect(second.tenantMembers ?? 0).toBe(0)
+  })
+})
