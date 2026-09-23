@@ -104,3 +104,45 @@ export const migrateUserAccount = internalMutation({
     return summary
   },
 })
+
+/**
+ * One-off display-name fix: sets a user's display name on their tenant
+ * membership and employee profile. Used 2026-09-23 to give the supervisor
+ * account Oge's full name after the account merge. Idempotent.
+ */
+export const updateUserDisplayName = internalMutation({
+  args: {
+    tenantId: v.id('tenants'),
+    clerkUserId: v.string(),
+    displayName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const summary = { member: false as boolean, employeeProfiles: 0 }
+    const member = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', args.tenantId).eq('clerkUserId', args.clerkUserId),
+      )
+      .unique()
+    if (member && member.displayName !== args.displayName) {
+      await ctx.db.patch(member._id, { displayName: args.displayName })
+      summary.member = true
+    }
+    const profiles = await ctx.db
+      .query('employeeProfiles')
+      .filter((q) =>
+        q.and(
+          q.eq(q.field('tenantId'), args.tenantId),
+          q.eq(q.field('clerkUserId'), args.clerkUserId),
+        ),
+      )
+      .collect()
+    for (const profile of profiles) {
+      if (profile.displayName !== args.displayName) {
+        await ctx.db.patch(profile._id, { displayName: args.displayName })
+        summary.employeeProfiles++
+      }
+    }
+    return summary
+  },
+})
