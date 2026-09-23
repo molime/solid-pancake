@@ -57,6 +57,7 @@ import type * as integrations_adp_mockAdp from "../integrations/adp/mockAdp.js";
 import type * as invitations from "../invitations.js";
 import type * as locationValidation from "../locationValidation.js";
 import type * as members from "../members.js";
+import type * as migrations from "../migrations.js";
 import type * as notifications from "../notifications.js";
 import type * as onboarding from "../onboarding.js";
 import type * as platform from "../platform.js";
@@ -140,6 +141,7 @@ declare const fullApi: ApiFromModules<{
   invitations: typeof invitations;
   locationValidation: typeof locationValidation;
   members: typeof members;
+  migrations: typeof migrations;
   notifications: typeof notifications;
   onboarding: typeof onboarding;
   platform: typeof platform;
