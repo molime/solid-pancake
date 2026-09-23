@@ -15,7 +15,7 @@ import { getCarInsuranceStatus } from '../lib/carInsurance'
 import { formatDocumentCategoryLabel, formatDateUS } from '@/shared/format'
 import { uploadFileToConvex } from '@/shared/lib/upload'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
-import { generatePrefilledPdf, saveAndUpload } from '@/features/onboarding/pdf/generatePrefilledPdf'
+import { generatePrefilledPdf, saveAndDownload, saveAndUpload } from '@/features/onboarding/pdf/generatePrefilledPdf'
 import { getMapping, normalizeI9PdfData, normalizeW4PdfData } from '@/features/onboarding/pdf/mappings'
 import { isNonEmptyString } from '@/features/onboarding/components/application/types'
 import { DynamicFormReview } from '@/features/forms/components/DynamicFormReview'
@@ -436,6 +436,7 @@ export function ApplicationReviewPage() {
   const [ein, setEin] = useState('')
   const [firstDateOfEmployment, setFirstDateOfEmployment] = useState(todayIso)
   const [isGeneratingW4, setIsGeneratingW4] = useState(false)
+  const [isGeneratingI9Original, setIsGeneratingI9Original] = useState(false)
 
   const [i9Section2, setI9Section2] = useState({
     documentTitle: '',
@@ -758,6 +759,36 @@ export function ApplicationReviewPage() {
       )
     } finally {
       setIsGeneratingW4(false)
+    }
+  }
+
+  // Regenerate the Section-1-prefilled I-9 on demand and download it. Needed
+  // for candidates whose application predates the stored i9 prefilled
+  // document (e.g. hired before the I-9 document feature). Signature and date
+  // stay blank — the employee signs the printed form by hand, mirroring the
+  // candidate-side download on the i9_form upload page.
+  const handleDownloadI9Original = async () => {
+    setIsGeneratingI9Original(true)
+    try {
+      const mapping = getMapping('i9')
+      if (!mapping) throw new Error('I-9 template mapping not found.')
+      const candidateI9 = (fields.i9 ?? {}) as Record<string, unknown>
+      const pdfData = normalizeI9PdfData({
+        ...candidateI9,
+        dateOfBirth: candidateI9.dateOfBirth ? formatDateUS(String(candidateI9.dateOfBirth)) : '',
+        signature: '',
+        date: '',
+      })
+      const bytes = await generatePrefilledPdf(mapping, pdfData)
+      saveAndDownload(bytes, 'i9_prefilled.pdf')
+    } catch (err) {
+      show(
+        'danger',
+        'Could not generate I-9',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
+      )
+    } finally {
+      setIsGeneratingI9Original(false)
     }
   }
 
@@ -1185,11 +1216,25 @@ export function ApplicationReviewPage() {
                           {type === 'soc_341a' && 'SOC 341A — Abuse Reporting Statement'}
                           {type === 'hcs_501' && 'HCS 501 — Personnel Record'}
                         </span>
-                        <PrefilledDocumentDownloadButton
-                          clerkOrgId={clerkOrgId!}
-                          documentId={doc?._id}
-                          fileName={`${type}_prefilled.pdf`}
-                        />
+                        {type === 'i9' && !doc ? (
+                          // No stored prefill (application predates the I-9
+                          // document feature) — regenerate it on demand.
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={isGeneratingI9Original}
+                            onClick={handleDownloadI9Original}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            {isGeneratingI9Original ? 'Generating…' : 'Download prefilled'}
+                          </Button>
+                        ) : (
+                          <PrefilledDocumentDownloadButton
+                            clerkOrgId={clerkOrgId!}
+                            documentId={doc?._id}
+                            fileName={`${type}_prefilled.pdf`}
+                          />
+                        )}
                       </div>
                       {!isOnlineForm && (
                         <div className="flex items-center justify-between gap-3">
