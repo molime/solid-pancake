@@ -146,3 +146,144 @@ export const updateUserDisplayName = internalMutation({
     return summary
   },
 })
+
+/**
+ * One-off org cleanup: removes every person (and their data) from a tenant
+ * except the explicitly kept accounts. Used 2026-09-23 to clean the Golden
+ * Ages org of test accounts, keeping only Samira (admin@) and Oge
+ * (supervisor@). Clerk org memberships are removed separately via the Clerk
+ * API — this only touches Convex data. Idempotent: re-running deletes
+ * nothing when the kept set is all that remains.
+ */
+export const cleanupTenantPeople = internalMutation({
+  args: {
+    tenantId: v.id('tenants'),
+    keepClerkUserIds: v.array(v.string()),
+    keepCandidateIds: v.array(v.id('candidates')),
+  },
+  handler: async (ctx, args) => {
+    const keepUsers = new Set(args.keepClerkUserIds)
+    const keepCandidates = new Set<string>(args.keepCandidateIds)
+    const summary: Record<string, number> = {}
+
+    const deleteWhere = async (
+      table:
+        | 'candidateTasks'
+        | 'applications'
+        | 'backgroundChecks'
+        | 'drafts'
+        | 'prefilledDocuments'
+        | 'prefilledDocumentVersions'
+        | 'notifications'
+        | 'platformTrainingCompletions'
+        | 'trainingStepCompletions'
+        | 'hrCases'
+        | 'escalations'
+        | 'documentArchiveItems',
+      matches: (doc: Record<string, unknown>) => boolean,
+    ) => {
+      const rows = await ctx.db
+        .query(table)
+        .filter((q) => q.eq(q.field('tenantId'), args.tenantId))
+        .collect()
+      let count = 0
+      for (const row of rows) {
+        if (matches(row as unknown as Record<string, unknown>)) {
+          await ctx.db.delete(row._id)
+          count++
+        }
+      }
+      summary[table] = (summary[table] ?? 0) + count
+      return count
+    }
+
+    // 1. Candidates not kept + their cascades.
+    const candidates = await ctx.db
+      .query('candidates')
+      .filter((q) => q.eq(q.field('tenantId'), args.tenantId))
+      .collect()
+    const removedCandidateIds = new Set<string>()
+    for (const candidate of candidates) {
+      if (keepCandidates.has(candidate._id)) continue
+      removedCandidateIds.add(candidate._id)
+      await ctx.db.delete(candidate._id)
+    }
+    summary.candidates = removedCandidateIds.size
+    const byRemovedCandidate = (doc: Record<string, unknown>) =>
+      removedCandidateIds.has(String(doc.candidateId))
+    await deleteWhere('candidateTasks', byRemovedCandidate)
+    await deleteWhere('applications', byRemovedCandidate)
+    await deleteWhere('backgroundChecks', byRemovedCandidate)
+    await deleteWhere('drafts', byRemovedCandidate)
+    await deleteWhere('prefilledDocuments', byRemovedCandidate)
+    await deleteWhere('prefilledDocumentVersions', byRemovedCandidate)
+
+    // 2. Memberships not kept.
+    const members = await ctx.db
+      .query('tenantMembers')
+      .filter((q) => q.eq(q.field('tenantId'), args.tenantId))
+      .collect()
+    const keptSubjectIds = new Set<string>([...keepCandidates])
+    let membersRemoved = 0
+    for (const member of members) {
+      if (keepUsers.has(member.clerkUserId)) {
+        keptSubjectIds.add(member._id)
+        continue
+      }
+      await ctx.db.delete(member._id)
+      membersRemoved++
+    }
+    summary.tenantMembers = membersRemoved
+
+    // 3. Employee profiles not kept (kept ones join the kept-subject set for
+    //    document archive filtering).
+    const profiles = await ctx.db
+      .query('employeeProfiles')
+      .filter((q) => q.eq(q.field('tenantId'), args.tenantId))
+      .collect()
+    let profilesRemoved = 0
+    for (const profile of profiles) {
+      if (keepUsers.has(String(profile.clerkUserId))) {
+        keptSubjectIds.add(profile._id)
+        continue
+      }
+      await ctx.db.delete(profile._id)
+      profilesRemoved++
+    }
+    summary.employeeProfiles = profilesRemoved
+
+    // 4. Rows keyed by clerkUserId.
+    const byRemovedUser = (doc: Record<string, unknown>) =>
+      !keepUsers.has(String(doc.clerkUserId))
+    await deleteWhere('notifications', byRemovedUser)
+    await deleteWhere('platformTrainingCompletions', byRemovedUser)
+    await deleteWhere('trainingStepCompletions', byRemovedUser)
+
+    // 5. HR cases about removed subjects, and their escalations.
+    const removedCaseIds = new Set<string>()
+    const cases = await ctx.db
+      .query('hrCases')
+      .filter((q) => q.eq(q.field('tenantId'), args.tenantId))
+      .collect()
+    for (const hrCase of cases) {
+      if (keptSubjectIds.has(hrCase.subjectId)) continue
+      removedCaseIds.add(hrCase._id)
+      await ctx.db.delete(hrCase._id)
+      summary.hrCases = (summary.hrCases ?? 0) + 1
+    }
+    await deleteWhere(
+      'escalations',
+      (doc) =>
+        removedCaseIds.has(String(doc.subjectId)) ||
+        !keptSubjectIds.has(String(doc.subjectId)),
+    )
+
+    // 6. Document archive items belonging to removed subjects.
+    await deleteWhere(
+      'documentArchiveItems',
+      (doc) => !keptSubjectIds.has(String(doc.subjectId)),
+    )
+
+    return summary
+  },
+})
