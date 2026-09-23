@@ -185,7 +185,7 @@ const navItems: NavItem[] = [
     label: 'Candidates',
     path: '/hr/candidates',
     icon: <Users className="h-4 w-4" />,
-    roles: ['org:admin', 'org:hr'],
+    roles: ['org:admin', 'org:hr', 'org:coordinator'],
   },
   {
     label: 'Employees',
