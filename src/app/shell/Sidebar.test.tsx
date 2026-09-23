@@ -142,7 +142,8 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Clients')).not.toBeInTheDocument()
     expect(screen.queryByText('Reporting')).not.toBeInTheDocument()
     expect(screen.queryByText('Availability')).not.toBeInTheDocument()
-    expect(screen.queryByText('Candidates')).not.toBeInTheDocument()
+    // Coordinators have full access to the candidates area (list, review, hire).
+    expect(screen.getByText('Candidates')).toBeInTheDocument()
     expect(screen.queryByText('Cases')).not.toBeInTheDocument()
   })
 

@@ -889,7 +889,7 @@ export function AppRouter() {
         <Route
           path="hr/candidates"
           element={
-            <TenantRoleRouteGuard allowedRoles={['org:admin', 'org:hr']}>
+            <TenantRoleRouteGuard allowedRoles={['org:admin', 'org:hr', 'org:coordinator']}>
               <RouteSuspense>
                 <CandidatePipelinePage />
               </RouteSuspense>
@@ -899,7 +899,7 @@ export function AppRouter() {
         <Route
           path="hr/candidates/:candidateId"
           element={
-            <TenantRoleRouteGuard allowedRoles={['org:admin', 'org:hr']}>
+            <TenantRoleRouteGuard allowedRoles={['org:admin', 'org:hr', 'org:coordinator']}>
               <RouteSuspense>
                 <ApplicationReviewPage />
               </RouteSuspense>
@@ -909,7 +909,7 @@ export function AppRouter() {
         <Route
           path="hr/candidates/:candidateId/hire"
           element={
-            <TenantRoleRouteGuard allowedRoles={['org:admin', 'org:hr']}>
+            <TenantRoleRouteGuard allowedRoles={['org:admin', 'org:hr', 'org:coordinator']}>
               <RouteSuspense>
                 <HireConvertPage />
               </RouteSuspense>
