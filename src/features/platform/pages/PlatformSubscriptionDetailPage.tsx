@@ -118,6 +118,9 @@ function PlatformSubscriptionDetailContent() {
   const deleteUserTrainingProgress = useMutation(
     api.platform.deleteUserTrainingProgress,
   );
+  const backfillCandidateTasks = useMutation(
+    api.candidates.backfillCandidateTasks,
+  );
   const createStripeCustomerForTenant = useAction(
     api.platformStripe.createStripeCustomerForTenant,
   );
@@ -146,6 +149,7 @@ function PlatformSubscriptionDetailContent() {
   const [disableFormsMessage, setDisableFormsMessage] = useState("");
   const [deleteTrainingEmail, setDeleteTrainingEmail] = useState("");
   const [deleteTrainingMessage, setDeleteTrainingMessage] = useState("");
+  const [syncTasksMessage, setSyncTasksMessage] = useState("");
   const [error, setError] = useState("");
 
   const subscription = detail?.subscription ?? null;
@@ -337,6 +341,29 @@ function PlatformSubscriptionDetailContent() {
         err instanceof Error
           ? sanitizeConvexError(err.message)
           : "Failed to seed agency preset.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSyncChecklistTasks = async () => {
+    if (!tenantId) return;
+    setBusy(true);
+    setSyncTasksMessage("");
+    setError("");
+    try {
+      const result = await backfillCandidateTasks({ tenantId });
+      setSyncTasksMessage(
+        result.backfilled === 0
+          ? `Checklist already up to date for all ${result.candidates} candidate(s).`
+          : `Added ${result.backfilled} missing task(s) across ${result.candidates} candidate(s).`,
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : "Failed to sync checklist tasks.",
       );
     } finally {
       setBusy(false);
@@ -598,6 +625,31 @@ function PlatformSubscriptionDetailContent() {
                 </div>
               </div>
             )}
+            <div className="mt-4 border-t border-[#2a3437] pt-4">
+              <p className="text-sm font-medium text-[#f5f7f6]">
+                Onboarding checklist sync
+              </p>
+              <p className="mt-1 text-sm text-[#687173]">
+                Adds any missing standard checklist tasks (e.g. newly required
+                documents) to all existing candidates of this agency, so they
+                can upload them. Run this after a new required document ships.
+                Safe to run repeatedly.
+              </p>
+              <div className="mt-3">
+                <button
+                  onClick={handleSyncChecklistTasks}
+                  disabled={busy || !tenantId}
+                  className={ghostButtonClass}
+                >
+                  {busy ? "Working…" : "Sync checklist tasks"}
+                </button>
+                {syncTasksMessage && (
+                  <p className="mt-2 text-sm text-[#22c55e]">
+                    {syncTasksMessage}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="rounded-2xl border border-[#2a3437] bg-[#151b1d] p-5">

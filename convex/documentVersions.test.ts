@@ -183,3 +183,67 @@ describe('document versions', () => {
     ).rejects.toThrow()
   })
 })
+
+describe('backfillCandidateTasks (platform checklist sync)', () => {
+  const PLATFORM_ADMIN = { subject: 'platform_admin_dv' }
+
+  async function seedPlatformAdmin(t: ReturnType<typeof createTestConvex>) {
+    await t.run(async (ctx) => {
+      await ctx.db.insert('platformAdmins', {
+        clerkUserId: PLATFORM_ADMIN.subject,
+        createdAt: new Date().toISOString(),
+      })
+    })
+  }
+
+  it('platform admin backfills missing tasks; idempotent on second run', async () => {
+    const t = createTestConvex()
+    const { tenantId, candidateId } = await seedTenantWithCandidate(t)
+    await seedPlatformAdmin(t)
+
+    // The seeded candidate has no tasks yet — as if created before the newer
+    // document task types existed.
+    const first = await t
+      .withIdentity(PLATFORM_ADMIN)
+      .mutation(api.candidates.backfillCandidateTasks, { tenantId })
+    expect(first.candidates).toBe(1)
+    expect(first.backfilled).toBe(12)
+
+    const tasks = await t.run(async (ctx) =>
+      ctx.db
+        .query('candidateTasks')
+        .withIndex('by_tenant_candidate_order', (q) =>
+          q.eq('tenantId', tenantId).eq('candidateId', candidateId),
+        )
+        .collect(),
+    )
+    const types = tasks.map((task) => task.type)
+    for (const type of [
+      'form_submission',
+      'soc_341a',
+      'personnel_record',
+      'i9_form',
+      'car_insurance',
+    ]) {
+      expect(types).toContain(type)
+    }
+    // car_insurance starts skipped until the transport answer; everything
+    // else starts pending.
+    expect(tasks.find((task) => task.type === 'car_insurance')?.status).toBe('skipped')
+    expect(tasks.find((task) => task.type === 'i9_form')?.status).toBe('pending')
+
+    const second = await t
+      .withIdentity(PLATFORM_ADMIN)
+      .mutation(api.candidates.backfillCandidateTasks, { tenantId })
+    expect(second.backfilled).toBe(0)
+  })
+
+  it('rejects non-platform admins', async () => {
+    const t = createTestConvex()
+    const { tenantId } = await seedTenantWithCandidate(t)
+
+    await expect(
+      t.withIdentity(ADMIN).mutation(api.candidates.backfillCandidateTasks, { tenantId }),
+    ).rejects.toThrow(/platform admin/)
+  })
+})
