@@ -19,6 +19,7 @@ import { uploadFileToConvex } from '@/shared/lib/upload'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { generatePrefilledPdf, saveAndDownload, saveAndUpload } from '../pdf/generatePrefilledPdf'
 import { getMapping, normalizeI9PdfData } from '../pdf/mappings'
+import { buildSoc341aFinalData } from '../pdf/finalDocuments'
 import { formatDateUS, calculateAge } from '@/shared/format'
 
 const DOCUMENT_LABELS: Record<string, { title: string; hint: string; expiry: boolean }> = {
@@ -283,6 +284,20 @@ export function DocumentUploadPage() {
       })
     }
 
+    if (isSoc341a) {
+      // SOC 341A prefilled from the application data. Signature and date stay
+      // blank — the candidate signs the printed form by hand.
+      return {
+        ...buildSoc341aFinalData({
+          personal: personal as never,
+          agencyName,
+          todayUs: '',
+        }),
+        signature: '',
+        date: '',
+      }
+    }
+
     return {}
   }
 
@@ -294,11 +309,13 @@ export function DocumentUploadPage() {
         ? 'i9'
         : isPersonnelRecord
           ? 'lic_501'
-          : isHealthScreen
-            ? isGoldenAgesHealthScreen
-              ? 'golden_ages_health_screen'
-              : 'health_screen'
-            : 'live_scan'
+          : isSoc341a
+            ? 'soc_341a'
+            : isHealthScreen
+              ? isGoldenAgesHealthScreen
+                ? 'golden_ages_health_screen'
+                : 'health_screen'
+              : 'live_scan'
       const mapping = getMapping(mappingKey)
       if (!mapping) {
         throw new Error('PDF template mapping not found.')
@@ -309,11 +326,13 @@ export function DocumentUploadPage() {
         ? 'i9_prefilled.pdf'
         : isPersonnelRecord
           ? 'lic_501_personnel_record_prefilled.pdf'
-          : isHealthScreen
-            ? isGoldenAgesHealthScreen
-              ? 'golden_ages_health_screen_prefilled.pdf'
-              : 'lic_503_health_screen_prefilled.pdf'
-            : 'lic_9163_live_scan_prefilled.pdf'
+          : isSoc341a
+            ? 'soc_341a_prefilled.pdf'
+            : isHealthScreen
+              ? isGoldenAgesHealthScreen
+                ? 'golden_ages_health_screen_prefilled.pdf'
+                : 'lic_503_health_screen_prefilled.pdf'
+              : 'lic_9163_live_scan_prefilled.pdf'
       saveAndDownload(bytes, filename)
       const getUploadUrl = async () => {
         const { url } = await generateUploadUrl({ clerkOrgId: orgId })
@@ -322,7 +341,7 @@ export function DocumentUploadPage() {
       await saveAndUpload(
         bytes,
         filename,
-        isI9Form ? 'i9_form' : isPersonnelRecord ? 'lic_501' : isHealthScreen ? 'health_screen' : 'live_scan',
+        isI9Form ? 'i9_form' : isPersonnelRecord ? 'lic_501' : isSoc341a ? 'soc_341a' : isHealthScreen ? 'health_screen' : 'live_scan',
         orgId,
         getUploadUrl,
         savePrefilledDocument,
@@ -476,15 +495,17 @@ export function DocumentUploadPage() {
             <div className='mb-6 rounded-[var(--radius-atria-md)] border border-atria-info/30 bg-atria-info/10 p-4'>
               <p className='text-sm font-medium text-atria-info'>Before you upload</p>
               <p className='mt-1 text-sm text-atria-ink'>
-                Download the official SOC 341A form below, read it carefully, sign and date it, then come back here and upload the signed form. California law requires this statement for every employee.
+                Download the SOC 341A form below — we have already filled in everything we know. PRINT it, read it carefully, sign and date it by hand, then come back here and upload the signed form. California law requires this statement for every employee.
               </p>
-              <a
-                href='/templates/soc_341a.pdf'
-                download='soc_341a.pdf'
-                className='mt-3 block w-full rounded-[var(--radius-atria-md)] bg-atria-surface-2 px-4 py-2.5 text-center text-sm font-medium text-atria-accent hover:bg-atria-surface-3 hover:underline'
+              <Button
+                variant='secondary'
+                size='md'
+                className='mt-3 w-full'
+                disabled={isGenerating}
+                onClick={handleDownloadPrefilled}
               >
-                Download SOC 341A form
-              </a>
+                {isGenerating ? 'Generating...' : 'Download prefilled SOC 341A form'}
+              </Button>
             </div>
           )}
 

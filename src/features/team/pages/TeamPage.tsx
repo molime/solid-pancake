@@ -146,6 +146,11 @@ export function TeamPage() {
     api.employeeProfiles.listEmployeeProfiles,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
+  // ADP sync UI only makes sense for agencies with an ADP connection.
+  const adpConfigured = useQuery(
+    api.integrations.adp.config.isAdpConfiguredForTenant,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
   const updateRole = useMutation(api.members.updateRole)
   const createInvitation = useAction(api.invitations.create)
   const createCaregiver = useAction(api.employeeProfiles.createCaregiver)
@@ -625,7 +630,7 @@ export function TeamPage() {
         </Card>
       )}
 
-      {isAdmin && employeeProfiles !== undefined && (
+      {isAdmin && adpConfigured === true && employeeProfiles !== undefined && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">

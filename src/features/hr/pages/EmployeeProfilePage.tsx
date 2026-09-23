@@ -130,18 +130,33 @@ function DocumentsTab({
   const hasDocuments = !!documents && documents.length > 0
   const hasVersions = !!versions && versions.length > 0
 
+  const candidateReviewLink = candidateLink?.candidateId ? (
+    <Link
+      to={`/hr/candidates/${candidateLink.candidateId}`}
+      className="mb-4 flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-accent/30 bg-atria-accent/5 p-3 text-sm font-medium text-atria-accent hover:bg-atria-accent/10"
+    >
+      View application &amp; full document history (download originals, upload
+      new versions)
+      <span aria-hidden>→</span>
+    </Link>
+  ) : null
+
   if (!hasDocuments && !hasVersions) {
     return (
-      <EmptyState
-        icon={<FileText className="h-6 w-6" />}
-        title="No documents"
-        description="No archived documents for this employee yet."
-      />
+      <div>
+        {candidateReviewLink}
+        <EmptyState
+          icon={<FileText className="h-6 w-6" />}
+          title="No documents"
+          description="No archived documents for this employee yet."
+        />
+      </div>
     )
   }
 
   return (
     <div className="space-y-6">
+      {candidateReviewLink}
       {hasVersions && (
         <div>
           <h3 className="mb-2 text-sm font-semibold text-atria-ink">

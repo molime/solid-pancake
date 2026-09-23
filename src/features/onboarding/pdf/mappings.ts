@@ -189,9 +189,10 @@ const BCIA_8016_MAPPING: PdfFieldMapping = {
 // LIC 501 (3/99) — CDSS Personnel Record ("Form to be completed by employee").
 // Coordinates come from the agency-annotated FreeText boxes in
 // personnel-record2.pdf (converted to PyMuPDF top-left origin via toPdfY).
-// Only fields we have data for at application time are prefilled; position
-// details (supervisor/salary/hours/start date), education, and the signature
-// are completed by the employee by hand.
+// All fields we have data for at application time are prefilled, including the
+// typed signature/date (page 2, above the label line at y=726); position
+// details (supervisor/salary/hours/start date) and education stay blank for
+// the employer/employee to complete if needed.
 const LIC_501_MAPPING: PdfFieldMapping = {
   page: 0,
   fields: [
@@ -205,6 +206,22 @@ const LIC_501_MAPPING: PdfFieldMapping = {
     { key: 'address', x: 27.75, y: toPdfY(196.5, 10), fontSize: 10, maxWidth: 400 },
     { key: 'socialSecurityNumber', x: 33, y: toPdfY(230.25, 10), fontSize: 10, maxWidth: 200 },
     { key: 'positionTitle', x: 36.75, y: toPdfY(369, 10), fontSize: 10, maxWidth: 270 },
+    { key: 'signature', x: 28, y: toPdfY(718, 8), fontSize: 8, maxWidth: 390, page: 1 },
+    { key: 'signatureDate', x: 436, y: toPdfY(718, 8), fontSize: 8, maxWidth: 150, page: 1 },
+  ],
+}
+
+// SOC 341A — CDSS "Statement Acknowledging Requirement to Report Suspected
+// Abuse of Dependent Adults and Elders". Header lines (page 0): write-on line
+// with the label underneath it. Signature line on page 3.
+const SOC_341A_MAPPING: PdfFieldMapping = {
+  page: 0,
+  fields: [
+    { key: 'employeeName', x: 340, y: toPdfY(100.5, 9), fontSize: 9, maxWidth: 230 },
+    { key: 'positionTitle', x: 35, y: toPdfY(126, 10), fontSize: 10, maxWidth: 280 },
+    { key: 'facilityName', x: 330, y: toPdfY(126, 10), fontSize: 10, maxWidth: 240 },
+    { key: 'signature', x: 40, y: toPdfY(558, 10), fontSize: 10, maxWidth: 370, page: 3 },
+    { key: 'date', x: 430, y: toPdfY(558, 10), fontSize: 10, maxWidth: 140, page: 3 },
   ],
 }
 
@@ -311,7 +328,8 @@ export const MAPPINGS: Record<
   | 'de_34'
   | 'bcia_8016'
   | 'hcs_501'
-  | 'lic_501',
+  | 'lic_501'
+  | 'soc_341a',
   PdfFieldMapping
 > = {
   health_screen: HEALTH_SCREEN_MAPPING,
@@ -324,6 +342,7 @@ export const MAPPINGS: Record<
   bcia_8016: BCIA_8016_MAPPING,
   hcs_501: HCS_501_MAPPING,
   lic_501: LIC_501_MAPPING,
+  soc_341a: SOC_341A_MAPPING,
 }
 
 /**

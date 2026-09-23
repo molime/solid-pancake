@@ -58,7 +58,10 @@ export function SubscriptionPage() {
     setIsRedirecting(true)
     setError('')
     try {
-      const { url } = await createSetupSession({ clerkOrgId })
+      const { url } = await createSetupSession({
+        clerkOrgId,
+        origin: window.location.origin,
+      })
       window.location.href = url
     } catch (err) {
       setError(
