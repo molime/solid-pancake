@@ -3096,37 +3096,69 @@ export const getDocumentVersionDownloadUrl = query({
   },
 })
 
-// One-off retroactivity helper: adds any missing standard checklist tasks to
-// a tenant's existing candidates (idempotent). Used to backfill document
-// tasks introduced after candidates were created (SOC 341A, LIC 501, I-9).
+// Platform-side guard mirrors the (unexported) pattern in platform.ts and
+// supportTickets.ts — kept local to avoid circular imports.
+async function requirePlatformAdmin(ctx: MutationCtx) {
+  const identity = await requireIdentity(ctx)
+  const existing = await ctx.db
+    .query('platformAdmins')
+    .withIndex('by_clerk_user_id', (q) =>
+      q.eq('clerkUserId', identity.subject),
+    )
+    .unique()
+  if (!existing) {
+    throw new ConvexError('Forbidden: platform admin access required.')
+  }
+  return identity
+}
+
+// Retroactivity helper: adds any missing standard checklist tasks to a
+// tenant's existing candidates (idempotent). Used to backfill document tasks
+// introduced after candidates were created (SOC 341A, LIC 501, I-9).
+async function backfillTasksForTenant(ctx: MutationCtx, tenantId: Id<'tenants'>) {
+  const candidates = await ctx.db
+    .query('candidates')
+    .filter((q) => q.eq(q.field('tenantId'), tenantId))
+    .collect()
+  let backfilled = 0
+  for (const candidate of candidates) {
+    const existing = await ctx.db
+      .query('candidateTasks')
+      .withIndex('by_tenant_candidate_order', (q) =>
+        q.eq('tenantId', tenantId).eq('candidateId', candidate._id),
+      )
+      .collect()
+    const existingTypes = new Set(existing.map((task) => task.type))
+    for (const type of CANDIDATE_TASK_TYPES) {
+      if (existingTypes.has(type)) continue
+      await ctx.db.insert('candidateTasks', {
+        tenantId,
+        candidateId: candidate._id,
+        type,
+        status: initialTaskStatus(type),
+        order: CANDIDATE_TASK_TYPES.indexOf(type),
+      })
+      backfilled++
+    }
+  }
+  return { candidates: candidates.length, backfilled }
+}
+
 export const backfillCandidateTasksInternal = internalMutation({
   args: { tenantId: v.id('tenants') },
+  handler: async (ctx, args) => backfillTasksForTenant(ctx, args.tenantId),
+})
+
+/**
+ * Platform side: sync one agency's checklist tasks — adds any missing
+ * standard tasks to all of its existing candidates. Run this (once per
+ * agency) whenever a new required document/task type ships so existing
+ * candidates and employees can upload it. Idempotent.
+ */
+export const backfillCandidateTasks = mutation({
+  args: { tenantId: v.id('tenants') },
   handler: async (ctx, args) => {
-    const candidates = await ctx.db
-      .query('candidates')
-      .filter((q) => q.eq(q.field('tenantId'), args.tenantId))
-      .collect()
-    let backfilled = 0
-    for (const candidate of candidates) {
-      const existing = await ctx.db
-        .query('candidateTasks')
-        .withIndex('by_tenant_candidate_order', (q) =>
-          q.eq('tenantId', args.tenantId).eq('candidateId', candidate._id),
-        )
-        .collect()
-      const existingTypes = new Set(existing.map((task) => task.type))
-      for (const type of CANDIDATE_TASK_TYPES) {
-        if (existingTypes.has(type)) continue
-        await ctx.db.insert('candidateTasks', {
-          tenantId: args.tenantId,
-          candidateId: candidate._id,
-          type,
-          status: initialTaskStatus(type),
-          order: CANDIDATE_TASK_TYPES.indexOf(type),
-        })
-        backfilled++
-      }
-    }
-    return { candidates: candidates.length, backfilled }
+    await requirePlatformAdmin(ctx)
+    return backfillTasksForTenant(ctx, args.tenantId)
   },
 })
