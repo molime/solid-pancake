@@ -162,6 +162,34 @@ export const setCandidateStatusInternal = internalMutation({
 })
 
 /**
+ * One-off: delete a candidate's prefilled document and its versions for one
+ * document type, so it can be regenerated (e.g. after a mapping correction).
+ * Used 2026-09-23 to regenerate Oge's SOC 341A with corrected coordinates.
+ */
+export const deleteCandidateDocumentByType = internalMutation({
+  args: { candidateId: v.id('candidates'), documentType: v.string() },
+  handler: async (ctx, args) => {
+    let deleted = 0
+    for (const table of ['prefilledDocuments', 'prefilledDocumentVersions'] as const) {
+      const rows = await ctx.db
+        .query(table)
+        .filter((q) =>
+          q.and(
+            q.eq(q.field('candidateId'), args.candidateId),
+            q.eq(q.field('documentType'), args.documentType),
+          ),
+        )
+        .collect()
+      for (const row of rows) {
+        await ctx.db.delete(row._id)
+        deleted++
+      }
+    }
+    return { deleted }
+  },
+})
+
+/**
  * One-off org cleanup: removes every person (and their data) from a tenant
  * except the explicitly kept accounts. Used 2026-09-23 to clean the Golden
  * Ages org of test accounts, keeping only Samira (admin@) and Oge
