@@ -1286,9 +1286,9 @@ export function ApplicationReviewPage() {
               <div className="space-y-2">
                 {(isGoldenAgesAgency(organization?.name)
                   // Golden Ages uses LIC 501 (not HCS 501) and the GA-specific
-                  // DE 34 / BCIA 8016; other agencies use HCS 501 and none of
-                  // the GA-only forms.
-                  ? ['health_screen', 'live_scan', 'criminal_record', 'i9', 'w4', 'de_34', 'bcia_8016', 'lic_501', 'soc_341a'] as const
+                  // DE 34 / BCIA 8016 (not LIC 9163); other agencies use
+                  // HCS 501 and LIC 9163 and none of the GA-only forms.
+                  ? ['health_screen', 'criminal_record', 'i9', 'w4', 'de_34', 'bcia_8016', 'lic_501', 'soc_341a'] as const
                   : ['health_screen', 'live_scan', 'criminal_record', 'i9', 'w4', 'hcs_501', 'soc_341a'] as const
                 ).map((type) => {
                   const doc = prefilledDocByType.get(type)
