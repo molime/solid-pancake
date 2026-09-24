@@ -19,7 +19,10 @@ import { uploadFileToConvex } from '@/shared/lib/upload'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { generatePrefilledPdf, saveAndDownload, saveAndUpload } from '../pdf/generatePrefilledPdf'
 import { getMapping, normalizeI9PdfData } from '../pdf/mappings'
-import { buildSoc341aFinalData } from '../pdf/finalDocuments'
+import {
+  buildGoldenAgesPrefilledData,
+  buildSoc341aFinalData,
+} from '../pdf/finalDocuments'
 import { formatDateUS, calculateAge } from '@/shared/format'
 
 const DOCUMENT_LABELS: Record<string, { title: string; hint: string; expiry: boolean }> = {
@@ -242,6 +245,14 @@ export function DocumentUploadPage() {
     }
 
     if (isBackgroundCheck) {
+      // Golden Ages uses BCIA 8016 (their Live Scan form); other agencies use
+      // LIC 9163.
+      if (isGoldenAges) {
+        return buildGoldenAgesPrefilledData(
+          fields as never,
+          employerInfo ?? undefined,
+        ).bcia8016
+      }
       return {
         lastName: personal.lastName ?? w4.lastName ?? '',
         firstName: personal.firstName ?? w4.firstName ?? '',
@@ -315,7 +326,9 @@ export function DocumentUploadPage() {
               ? isGoldenAgesHealthScreen
                 ? 'golden_ages_health_screen'
                 : 'health_screen'
-              : 'live_scan'
+              : isGoldenAgesBackgroundCheck
+                ? 'bcia_8016'
+                : 'live_scan'
       const mapping = getMapping(mappingKey)
       if (!mapping) {
         throw new Error('PDF template mapping not found.')
@@ -332,7 +345,9 @@ export function DocumentUploadPage() {
               ? isGoldenAgesHealthScreen
                 ? 'golden_ages_health_screen_prefilled.pdf'
                 : 'lic_503_health_screen_prefilled.pdf'
-              : 'lic_9163_live_scan_prefilled.pdf'
+              : isGoldenAgesBackgroundCheck
+                ? 'bcia_8016_live_scan_prefilled.pdf'
+                : 'lic_9163_live_scan_prefilled.pdf'
       saveAndDownload(bytes, filename)
       const getUploadUrl = async () => {
         const { url } = await generateUploadUrl({ clerkOrgId: orgId })
@@ -341,7 +356,7 @@ export function DocumentUploadPage() {
       await saveAndUpload(
         bytes,
         filename,
-        isI9Form ? 'i9_form' : isPersonnelRecord ? 'lic_501' : isSoc341a ? 'soc_341a' : isHealthScreen ? 'health_screen' : 'live_scan',
+        isI9Form ? 'i9_form' : isPersonnelRecord ? 'lic_501' : isSoc341a ? 'soc_341a' : isHealthScreen ? 'health_screen' : isGoldenAgesBackgroundCheck ? 'bcia_8016' : 'live_scan',
         orgId,
         getUploadUrl,
         savePrefilledDocument,
