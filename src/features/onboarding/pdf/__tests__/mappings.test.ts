@@ -252,7 +252,14 @@ describe('PDF coordinate mappings', () => {
         'signature',
         'signatureDate',
       ],
-      soc_341a: ['employeeName', 'positionTitle', 'facilityName', 'signature', 'date'],
+      soc_341a: [
+        'employeeName',
+        'positionTitle',
+        'facilityName',
+        'employeeName',
+        'signature',
+        'date',
+      ],
     }
 
     for (const [type, mapping] of Object.entries(MAPPINGS) as Array<

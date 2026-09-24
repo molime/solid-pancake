@@ -212,16 +212,21 @@ const LIC_501_MAPPING: PdfFieldMapping = {
 }
 
 // SOC 341A — CDSS "Statement Acknowledging Requirement to Report Suspected
-// Abuse of Dependent Adults and Elders". Header lines (page 0): write-on line
-// with the label underneath it. Signature line on page 3.
+// Abuse of Dependent Adults and Elders". Field bands come from the AcroForm
+// fields of the agency-annotated copy ("SOC 341A — Abuse Reporting
+// Statement.pdf"): each label sits ABOVE its write band — name full width
+// below the NAME label (page 0), position/facility below theirs, name again
+// in the "I, ___" acknowledgment blank (page 3), signature/date in the bands
+// below the SIGNATURE/DATE labels (page 3).
 const SOC_341A_MAPPING: PdfFieldMapping = {
   page: 0,
   fields: [
-    { key: 'employeeName', x: 340, y: toPdfY(100.5, 9), fontSize: 9, maxWidth: 230 },
-    { key: 'positionTitle', x: 35, y: toPdfY(126, 10), fontSize: 10, maxWidth: 280 },
-    { key: 'facilityName', x: 330, y: toPdfY(126, 10), fontSize: 10, maxWidth: 240 },
-    { key: 'signature', x: 40, y: toPdfY(558, 10), fontSize: 10, maxWidth: 370, page: 3 },
-    { key: 'date', x: 430, y: toPdfY(558, 10), fontSize: 10, maxWidth: 140, page: 3 },
+    { key: 'employeeName', x: 34, y: toPdfY(122, 10), fontSize: 10, maxWidth: 534 },
+    { key: 'positionTitle', x: 35, y: toPdfY(146, 10), fontSize: 10, maxWidth: 250 },
+    { key: 'facilityName', x: 312, y: toPdfY(146, 10), fontSize: 10, maxWidth: 258 },
+    { key: 'employeeName', x: 40, y: toPdfY(505, 10), fontSize: 10, maxWidth: 178, page: 3 },
+    { key: 'signature', x: 40, y: toPdfY(582, 10), fontSize: 10, maxWidth: 378, page: 3 },
+    { key: 'date', x: 429, y: toPdfY(584, 10), fontSize: 10, maxWidth: 143, page: 3 },
   ],
 }
 
