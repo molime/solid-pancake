@@ -9,9 +9,10 @@ interface SlideDeckProps {
   onAllViewed: () => void
 }
 
-// Narration is temporarily hidden — browser speech synthesis sounds too
-// robotic. Flip to true to re-enable the Listen button.
-const SHOW_NARRATION = false
+// Slide narration via browser speech synthesis. The voice picker prefers
+// natural/neural voices (Microsoft Aria/Jenny, Google US English, Samantha),
+// so on modern browsers it sounds like an instructor rather than a robot.
+const SHOW_NARRATION = true
 
 function useSpeechSynthesis() {
   const synthRef = useRef<SpeechSynthesis | null>(
@@ -184,9 +185,7 @@ export function SlideDeck({ slides, onAllViewed }: SlideDeckProps) {
       <div className="p-4 sm:p-6">
         <div className="mb-4 flex items-start justify-between gap-4">
           <h3 className="text-lg font-bold text-atria-ink sm:text-xl">{slide.title}</h3>
-          {/* Narration hidden for now — browser TTS sounds too robotic.
-              Re-enable by setting SHOW_NARRATION to true once we have a
-              natural-sounding voice solution. */}
+          {/* Slide narration — opt-in per slide via the Listen button. */}
           {SHOW_NARRATION && available && (
             <button
               type="button"

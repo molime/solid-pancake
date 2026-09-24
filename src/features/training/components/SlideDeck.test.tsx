@@ -117,19 +117,18 @@ describe('SlideDeck', () => {
     await waitFor(() => expect(onAllViewed).toHaveBeenCalledTimes(1))
   })
 
-  // Narration is temporarily hidden (SHOW_NARRATION = false) because browser
-  // TTS sounds too robotic. These tests assert the hidden state; restore the
-  // original narration tests when the feature is re-enabled.
-  it('hides the Listen button while narration is disabled', () => {
+  // Narration is enabled (SHOW_NARRATION = true): the Listen button reads the
+  // slide aloud with the best available natural voice.
+  it('shows the Listen button and narrates the slide on click', async () => {
+    const user = userEvent.setup()
     render(<SlideDeck slides={slides} onAllViewed={vi.fn()} />)
 
-    expect(
-      screen.queryByRole('button', { name: /Read slide aloud/i }),
-    ).not.toBeInTheDocument()
-    expect(mockSynth.speak).not.toHaveBeenCalled()
+    const listen = await screen.findByRole('button', { name: /Read slide aloud/i })
+    await user.click(listen)
+    expect(mockSynth.speak).toHaveBeenCalled()
   })
 
-  it('does not show an unavailable audio state while narration is disabled', () => {
+  it('shows an unavailable audio state when speech synthesis is missing', () => {
     Object.defineProperty(window, 'speechSynthesis', {
       value: null,
       writable: true,
@@ -137,6 +136,6 @@ describe('SlideDeck', () => {
     })
 
     render(<SlideDeck slides={slides} onAllViewed={vi.fn()} />)
-    expect(screen.queryByText('Audio unavailable')).not.toBeInTheDocument()
+    expect(screen.getByText('Audio unavailable')).toBeInTheDocument()
   })
 })
