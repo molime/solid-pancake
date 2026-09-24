@@ -162,6 +162,27 @@ export const setCandidateStatusInternal = internalMutation({
 })
 
 /**
+ * One-off: set a tenant's allowed payment method. Used 2026-09-24 for Golden
+ * Ages — the field was never set, so the Stripe setup page defaulted to card
+ * while Maria wants ACH-only for them.
+ */
+export const setTenantPaymentMethodAllowed = internalMutation({
+  args: {
+    tenantId: v.id('tenants'),
+    paymentMethodAllowed: v.union(
+      v.literal('card'),
+      v.literal('us_bank_account'),
+    ),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.tenantId, {
+      paymentMethodAllowed: args.paymentMethodAllowed,
+    })
+    return { ok: true }
+  },
+})
+
+/**
  * One-off: delete a candidate's prefilled document and its versions for one
  * document type, so it can be regenerated (e.g. after a mapping correction).
  * Used 2026-09-23 to regenerate Oge's SOC 341A with corrected coordinates.
