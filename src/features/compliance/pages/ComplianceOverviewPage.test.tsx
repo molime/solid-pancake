@@ -51,6 +51,7 @@ function mockState(state: QueryState, mutations: Record<string, unknown> = {}) {
     }
     if (name === 'compliance:listComplianceItems') return []
     if (name === 'compliance:complianceGaps') return []
+    if (name === 'training:getTrainingCompliance') return []
     if (name === 'members:me') {
       return { role: state.memberRole ?? 'org:admin' }
     }

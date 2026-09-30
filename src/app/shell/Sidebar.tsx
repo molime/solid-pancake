@@ -11,7 +11,6 @@ import {
   X,
   Globe,
   MapPin,
-  Mail,
   Clock,
   Home,
   ShieldCheck,
@@ -121,7 +120,7 @@ const navItems: NavItem[] = [
     label: 'Schedule',
     path: '/scheduling',
     icon: <CalendarDays className="h-4 w-4" />,
-    roles: ['org:admin', 'org:coordinator'],
+    roles: ['org:admin', 'org:coordinator', 'org:hr'],
   },
   {
     label: 'Schedule',
@@ -146,7 +145,7 @@ const navItems: NavItem[] = [
     label: 'Knowledge',
     path: '/search',
     icon: <Search className="h-4 w-4" />,
-    roles: ['org:admin', 'org:coordinator', 'org:caregiver'],
+    roles: ['org:admin', 'org:coordinator', 'org:hr', 'org:caregiver'],
   },
   {
     label: 'Billing',
@@ -204,13 +203,6 @@ const navItems: NavItem[] = [
     section: 'settings',
     path: '/settings/geofence',
     icon: <MapPin className="h-4 w-4" />,
-    roles: ['org:admin'],
-  },
-  {
-    label: 'Email Domains',
-    section: 'email-domains',
-    path: '/settings/allowed-domains',
-    icon: <Mail className="h-4 w-4" />,
     roles: ['org:admin'],
   },
   {

@@ -312,6 +312,96 @@ export const drainAdpPendingRows = mutation({
   },
 })
 
+/** Free-form notes on an employee profile (admin/HR/coordinator). */
+export const listEmployeeNotes = query({
+  args: { clerkOrgId: v.string(), employeeProfileId: v.id('employeeProfiles') },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+    const notes = await ctx.db
+      .query('employeeNotes')
+      .withIndex('by_tenant_profile', (q) =>
+        q.eq('tenantId', tenantId).eq('employeeProfileId', args.employeeProfileId),
+      )
+      .collect()
+    return notes.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  },
+})
+
+const NOTE_MAX = 2000
+
+export const addEmployeeNote = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    employeeProfileId: v.id('employeeProfiles'),
+    text: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, member } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+    const text = args.text.trim()
+    if (!text || text.length > NOTE_MAX) {
+      throw new ConvexError(
+        `Note text is required and must be at most ${NOTE_MAX} characters.`,
+      )
+    }
+    const profile = await ctx.db.get(args.employeeProfileId)
+    if (!profile) throw new ConvexError('Employee profile not found.')
+    assertTenantDoc(profile, tenantId)
+    return await ctx.db.insert('employeeNotes', {
+      tenantId,
+      employeeProfileId: args.employeeProfileId,
+      authorClerkUserId: member.clerkUserId,
+      authorName: member.displayName,
+      text,
+      createdAt: new Date().toISOString(),
+    })
+  },
+})
+
+/**
+ * Correct an employee's display email after hiring (e.g. they registered with
+ * a personal address). Informational only — login is Clerk's, untouched.
+ * Patches both the membership and the employee profile.
+ */
+export const updateMemberDisplayEmail = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    memberId: v.id('tenantMembers'),
+    email: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+    ])
+    const email = args.email.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new ConvexError('Enter a valid email address.')
+    }
+    const member = await ctx.db.get(args.memberId)
+    if (!member) throw new ConvexError('Member not found.')
+    assertTenantDoc(member, tenantId)
+    await ctx.db.patch(member._id, { email })
+    const profile = await ctx.db
+      .query('employeeProfiles')
+      .withIndex('by_tenant_member', (q) =>
+        q.eq('tenantId', tenantId).eq('tenantMemberId', args.memberId),
+      )
+      .unique()
+    if (profile) {
+      await ctx.db.patch(profile._id, { email })
+    }
+    return { ok: true }
+  },
+})
+
 export const runAdpInitialWorkerLoad = action({
   args: { clerkOrgId: v.string() },
   handler: async (

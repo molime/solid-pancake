@@ -292,6 +292,94 @@ export const listAllCourses = query({
   },
 })
 
+const TRAINING_EXPIRING_SOON_MS = 30 * 24 * 60 * 60 * 1000
+
+/**
+ * Per-employee training currency for the compliance page's "Training
+ * compliance" card: which employees are missing required courses, and whose
+ * completions expired or expire within 30 days. Only employees with issues
+ * are returned.
+ */
+export const getTrainingCompliance = query({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, { clerkOrgId }) => {
+    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+
+    const [courses, profiles, members] = await Promise.all([
+      ctx.db
+        .query('trainingCourses')
+        .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+        .collect(),
+      ctx.db
+        .query('employeeProfiles')
+        .filter((q) => q.eq(q.field('tenantId'), tenantId))
+        .collect(),
+      ctx.db
+        .query('tenantMembers')
+        .filter((q) => q.eq(q.field('tenantId'), tenantId))
+        .collect(),
+    ])
+    const activeCourses = courses.filter((course) => course.active)
+    const completions = await ctx.db
+      .query('platformTrainingCompletions')
+      .filter((q) => q.eq(q.field('tenantId'), tenantId))
+      .collect()
+
+    const roleByUser = new Map(members.map((m) => [m.clerkUserId, m.role]))
+    const now = Date.now()
+    const soon = now + TRAINING_EXPIRING_SOON_MS
+
+    const rows = []
+    for (const profile of profiles) {
+      if (!profile.clerkUserId) continue
+      const role = roleByUser.get(profile.clerkUserId)
+      const required = activeCourses.filter(
+        (course) =>
+          !course.requiredRoles ||
+          course.requiredRoles.length === 0 ||
+          (role !== undefined && course.requiredRoles.includes(role)),
+      )
+      const completedByCourseKey = new Map(
+        completions
+          .filter((c) => c.clerkUserId === profile.clerkUserId)
+          .map((c) => [c.trainingId, c]),
+      )
+      const missing: string[] = []
+      const expired: string[] = []
+      const expiringSoon: string[] = []
+      for (const course of required) {
+        const completion = completedByCourseKey.get(course.courseKey)
+        if (!completion) {
+          missing.push(course.title)
+          continue
+        }
+        const expiresAt = completion.expiresAt
+          ? Date.parse(completion.expiresAt)
+          : undefined
+        if (expiresAt !== undefined && expiresAt < now) {
+          expired.push(course.title)
+        } else if (expiresAt !== undefined && expiresAt <= soon) {
+          expiringSoon.push(course.title)
+        }
+      }
+      if (missing.length > 0 || expired.length > 0 || expiringSoon.length > 0) {
+        rows.push({
+          clerkUserId: profile.clerkUserId,
+          displayName: profile.displayName,
+          missing,
+          expired,
+          expiringSoon,
+        })
+      }
+    }
+    return rows
+  },
+})
+
 export const getCourse = query({
   args: { clerkOrgId: v.string(), courseId: v.id('trainingCourses') },
   handler: async (ctx, { clerkOrgId, courseId }) => {

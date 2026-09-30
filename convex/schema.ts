@@ -524,6 +524,16 @@ export default defineSchema({
     .index('by_tenant_candidate_status', ['tenantId', 'candidateId', 'status'])
     .index('by_tenant_candidate_order', ['tenantId', 'candidateId', 'order']),
 
+  // Free-form staff notes on an employee's profile — uncategorized by design.
+  employeeNotes: defineTable({
+    tenantId: v.id('tenants'),
+    employeeProfileId: v.id('employeeProfiles'),
+    authorClerkUserId: v.string(),
+    authorName: v.string(),
+    text: v.string(),
+    createdAt: v.string(),
+  }).index('by_tenant_profile', ['tenantId', 'employeeProfileId']),
+
   hrCases: defineTable({
     tenantId: v.id('tenants'),
     caseNumber: v.optional(v.string()),

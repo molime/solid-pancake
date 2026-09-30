@@ -631,3 +631,93 @@ describe('tenantSettings.updateShiftGeofence role guards', () => {
     ).rejects.toThrow()
   })
 })
+
+describe('employee notes + display email', () => {
+  async function seedEmployee(t: ReturnType<typeof createTestConvex>) {
+    const clerkOrgId = 'org_notes'
+    const adminId = 'user_admin_notes'
+    return t.run(async (ctx) => {
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId,
+        name: 'Notes Agency',
+        slug: 'notes-agency',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: adminId,
+        role: 'org:admin',
+        displayName: 'Admin',
+        email: 'admin@example.com',
+      })
+      const memberId = await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: 'user_emp_notes',
+        role: 'org:caregiver',
+        displayName: 'Employee',
+        email: 'old@example.com',
+      })
+      const employeeProfileId = await ctx.db.insert('employeeProfiles', {
+        tenantId,
+        tenantMemberId: memberId,
+        clerkUserId: 'user_emp_notes',
+        displayName: 'Employee',
+        email: 'old@example.com',
+        adpSyncStatus: 'pending_credentials',
+        createdAt: new Date().toISOString(),
+      })
+      return { clerkOrgId, adminId, memberId, employeeProfileId }
+    })
+  }
+
+  it('admin adds notes and lists them newest first; caregivers cannot', async () => {
+    const t = createTestConvex()
+    const { clerkOrgId, adminId, employeeProfileId } = await seedEmployee(t)
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.employeeProfiles.addEmployeeNote,
+      { clerkOrgId, employeeProfileId, text: 'First note' },
+    )
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.employeeProfiles.addEmployeeNote,
+      { clerkOrgId, employeeProfileId, text: 'Second note' },
+    )
+
+    const notes = await asAdmin(t, adminId, clerkOrgId).query(
+      api.employeeProfiles.listEmployeeNotes,
+      { clerkOrgId, employeeProfileId },
+    )
+    expect(notes).toHaveLength(2)
+    expect(notes[0].authorName).toBe('Admin')
+
+    await expect(
+      asCaregiver(t, 'user_emp_notes', clerkOrgId).mutation(
+        api.employeeProfiles.addEmployeeNote,
+        { clerkOrgId, employeeProfileId, text: 'nope' },
+      ),
+    ).rejects.toThrow(/Forbidden/)
+  })
+
+  it('updates the display email on member and profile; rejects bad emails', async () => {
+    const t = createTestConvex()
+    const { clerkOrgId, adminId, memberId, employeeProfileId } = await seedEmployee(t)
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.employeeProfiles.updateMemberDisplayEmail,
+      { clerkOrgId, memberId, email: 'New@Example.com' },
+    )
+    const rows = await t.run(async (ctx) => ({
+      member: await ctx.db.get(memberId),
+      profile: await ctx.db.get(employeeProfileId),
+    }))
+    expect(rows.member?.email).toBe('new@example.com')
+    expect(rows.profile?.email).toBe('new@example.com')
+
+    await expect(
+      asAdmin(t, adminId, clerkOrgId).mutation(
+        api.employeeProfiles.updateMemberDisplayEmail,
+        { clerkOrgId, memberId, email: 'not-an-email' },
+      ),
+    ).rejects.toThrow(/valid email/)
+  })
+})

@@ -18,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/ui/Table'
-import { ArrowLeft, User, FileText, ClipboardCheck, ClipboardList, UserCheck, Download } from 'lucide-react'
+import { ArrowLeft, User, FileText, ClipboardCheck, ClipboardList, UserCheck, Download, NotebookPen, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import type { Id } from '../../../../convex/_generated/dataModel'
@@ -36,6 +36,7 @@ const TABS = [
   { value: 'profile', label: 'Profile', icon: User },
   { value: 'hiring', label: 'Hiring', icon: UserCheck },
   { value: 'documents', label: 'Documents', icon: FileText },
+  { value: 'notes', label: 'Notes', icon: NotebookPen },
   { value: 'cases', label: 'Cases', icon: ClipboardCheck, hrOnly: true },
   { value: 'supervision', label: 'Supervision', icon: ClipboardList, hrOnly: true },
 ] as const
@@ -65,13 +66,92 @@ function ApplicationField({ label, value }: { label: string; value: string }) {
 function ProfileTab({
   member,
   profile,
+  memberId,
+  clerkOrgId,
+  canEditEmail,
 }: {
   member: { displayName: string; email: string; role: string; createdAt?: string }
   profile: { phone?: string | null; adpSyncStatus: string } | null
+  memberId: Id<'tenantMembers'>
+  clerkOrgId?: string
+  canEditEmail: boolean
 }) {
+  const updateEmail = useMutation(api.employeeProfiles.updateMemberDisplayEmail)
+  const [editingEmail, setEditingEmail] = useState(false)
+  const [emailInput, setEmailInput] = useState(member.email)
+  const [savingEmail, setSavingEmail] = useState(false)
+  const [emailError, setEmailError] = useState('')
+
+  const handleSaveEmail = async () => {
+    if (!clerkOrgId || !emailInput.trim()) return
+    setSavingEmail(true)
+    setEmailError('')
+    try {
+      await updateEmail({ clerkOrgId, memberId, email: emailInput })
+      setEditingEmail(false)
+    } catch (err) {
+      setEmailError(
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Could not save email.',
+      )
+    } finally {
+      setSavingEmail(false)
+    }
+  }
+
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <ApplicationField label="EMAIL" value={member.email} />
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wider text-atria-text-muted">
+          EMAIL
+        </p>
+        {editingEmail ? (
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              type="email"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              className="h-9 w-full rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface px-3 text-sm text-atria-ink focus:border-atria-accent focus:outline-none"
+            />
+            <Button size="sm" onClick={handleSaveEmail} disabled={savingEmail}>
+              {savingEmail ? 'Saving…' : 'Save'}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setEditingEmail(false)
+                setEmailInput(member.email)
+                setEmailError('')
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <p className="mt-1 flex items-center gap-2 text-base text-atria-ink">
+            {member.email || '—'}
+            {canEditEmail && (
+              <button
+                type="button"
+                aria-label="Edit display email"
+                title="Correct the displayed email (does not change their login)"
+                onClick={() => setEditingEmail(true)}
+                className="text-atria-text-muted hover:text-atria-ink"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </p>
+        )}
+        {emailError && (
+          <p className="mt-1 text-xs text-atria-danger">{emailError}</p>
+        )}
+        {canEditEmail && !editingEmail && (
+          <p className="mt-0.5 text-xs text-atria-text-muted">
+            Display only — their login stays the same.
+          </p>
+        )}
+      </div>
       <ApplicationField label="PHONE" value={profile?.phone || ''} />
       <ApplicationField label="ROLE" value={member.role.replace('org:', '')} />
       <ApplicationField
@@ -80,6 +160,83 @@ function ProfileTab({
       />
       <ApplicationField label="EMPLOYMENT TYPE" value="Caregiver" />
       <ApplicationField label="PAY RATE" value="—" />
+    </div>
+  )
+}
+
+function NotesTab({
+  employeeProfileId,
+  clerkOrgId,
+}: {
+  employeeProfileId: Id<'employeeProfiles'>
+  clerkOrgId: string
+}) {
+  const notes = useQuery(
+    api.employeeProfiles.listEmployeeNotes,
+    clerkOrgId ? { clerkOrgId, employeeProfileId } : 'skip',
+  )
+  const addNote = useMutation(api.employeeProfiles.addEmployeeNote)
+  const [text, setText] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleAdd = async () => {
+    if (!text.trim()) return
+    setSaving(true)
+    setError('')
+    try {
+      await addNote({ clerkOrgId, employeeProfileId, text })
+      setText('')
+    } catch (err) {
+      setError(
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Could not save the note.',
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <Textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Write a note about this employee…"
+          rows={3}
+        />
+        <div className="mt-2 flex items-center gap-3">
+          <Button size="sm" onClick={handleAdd} disabled={saving || !text.trim()}>
+            {saving ? 'Saving…' : 'Add note'}
+          </Button>
+          {error && <p className="text-xs text-atria-danger">{error}</p>}
+        </div>
+      </div>
+      {notes === undefined ? (
+        <p className="text-sm text-atria-text-secondary">Loading notes…</p>
+      ) : notes.length === 0 ? (
+        <EmptyState
+          icon={<NotebookPen className="h-6 w-6" />}
+          title="No notes yet"
+          description="Notes about this employee appear here."
+        />
+      ) : (
+        <div className="space-y-3">
+          {notes.map((note) => (
+            <div
+              key={note._id}
+              className="rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3"
+            >
+              <p className="whitespace-pre-wrap text-sm text-atria-ink">
+                {note.text}
+              </p>
+              <p className="mt-2 text-xs text-atria-text-muted">
+                {note.authorName} · {formatDateUS(note.createdAt)}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -154,13 +311,70 @@ function DocumentsTab({
     )
   }
 
+  // Documents split by currency: expired (or rejected) items drop to the
+  // archived section — hiring uploads live in their own section above.
+  const now = Date.now()
+  const isArchivedDoc = (doc: { status: string; expiresAt?: string | null }) =>
+    doc.status === 'rejected' ||
+    (doc.expiresAt !== undefined &&
+      doc.expiresAt !== null &&
+      Date.parse(doc.expiresAt) < now)
+  const currentDocuments = (documents ?? []).filter((doc) => !isArchivedDoc(doc))
+  const archivedDocuments = (documents ?? []).filter(isArchivedDoc)
+
+  const renderDocTable = (docs: typeof documents) => (
+    <Table>
+      <TableHead>
+        <TableRow>
+          <TableHeader>CATEGORY</TableHeader>
+          <TableHeader>STATUS</TableHeader>
+          <TableHeader>EXPIRES</TableHeader>
+          <TableHeader />
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {(docs ?? []).map((doc) => (
+          <TableRow key={doc._id}>
+            <TableCell className="font-medium">
+              {doc.category === 'training_certificate'
+                ? 'Training Certificate'
+                : formatDocumentCategoryLabel(doc.category)}
+            </TableCell>
+            <TableCell>
+              <StatusBadge
+                variant={
+                  doc.status === 'active' || doc.status === 'verified'
+                    ? 'success'
+                    : doc.status === 'rejected'
+                      ? 'danger'
+                      : 'warning'
+                }
+              >
+                {doc.status}
+              </StatusBadge>
+            </TableCell>
+            <TableCell>{doc.expiresAt ? formatDateUS(doc.expiresAt) : '—'}</TableCell>
+            <TableCell>
+              {doc.category === 'training_certificate' && (
+                <CertificateDownloadButton
+                  clerkOrgId={clerkOrgId}
+                  archiveItemId={doc._id}
+                />
+              )}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+
   return (
     <div className="space-y-6">
       {candidateReviewLink}
       {hasVersions && (
         <div>
           <h3 className="mb-2 text-sm font-semibold text-atria-ink">
-            Document versions
+            Hiring documents
           </h3>
           <Table>
             <TableHead>
@@ -195,50 +409,21 @@ function DocumentsTab({
           </Table>
         </div>
       )}
-      {hasDocuments && (
-    <Table>
-      <TableHead>
-        <TableRow>
-          <TableHeader>CATEGORY</TableHeader>
-          <TableHeader>STATUS</TableHeader>
-          <TableHeader>EXPIRES</TableHeader>
-          <TableHeader />
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {documents.map((doc) => (
-          <TableRow key={doc._id}>
-            <TableCell className="font-medium">
-              {doc.category === 'training_certificate'
-                ? 'Training Certificate'
-                : formatDocumentCategoryLabel(doc.category)}
-            </TableCell>
-            <TableCell>
-              <StatusBadge
-                variant={
-                  doc.status === 'active' || doc.status === 'verified'
-                    ? 'success'
-                    : doc.status === 'rejected'
-                      ? 'danger'
-                      : 'warning'
-                }
-              >
-                {doc.status}
-              </StatusBadge>
-            </TableCell>
-            <TableCell>{doc.expiresAt ? formatDateUS(doc.expiresAt) : '—'}</TableCell>
-            <TableCell>
-              {doc.category === 'training_certificate' && (
-                <CertificateDownloadButton
-                  clerkOrgId={clerkOrgId}
-                  archiveItemId={doc._id}
-                />
-              )}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+      {currentDocuments.length > 0 && (
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-atria-ink">
+            Current documents
+          </h3>
+          {renderDocTable(currentDocuments)}
+        </div>
+      )}
+      {archivedDocuments.length > 0 && (
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-atria-ink">
+            Archived / expired documents
+          </h3>
+          {renderDocTable(archivedDocuments)}
+        </div>
       )}
     </div>
   )
@@ -632,6 +817,9 @@ export function EmployeeProfilePage() {
                 createdAt: profile?.createdAt,
               }}
               profile={profile}
+              memberId={memberId as Id<'tenantMembers'>}
+              clerkOrgId={clerkOrgId}
+              canEditEmail={isHrViewer}
             />
           )}
           {activeTab === 'hiring' && profile?.clerkUserId && clerkOrgId && (
@@ -639,6 +827,9 @@ export function EmployeeProfilePage() {
           )}
           {activeTab === 'documents' && profile && clerkOrgId && (
             <DocumentsTab employeeProfileId={profile._id} clerkOrgId={clerkOrgId} clerkUserId={profile.clerkUserId} />
+          )}
+          {activeTab === 'notes' && profile && clerkOrgId && (
+            <NotesTab employeeProfileId={profile._id} clerkOrgId={clerkOrgId} />
           )}
           {activeTab === 'cases' && profile?.clerkUserId && clerkOrgId && (
             <CasesTab clerkUserId={profile.clerkUserId} clerkOrgId={clerkOrgId} />

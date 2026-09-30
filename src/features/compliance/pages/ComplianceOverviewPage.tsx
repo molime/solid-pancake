@@ -27,7 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/ui/Table'
-import { ShieldCheck, Clock, XCircle, Ban, Download } from 'lucide-react'
+import { ShieldCheck, Clock, XCircle, Ban, Download, ChevronDown, ChevronRight } from 'lucide-react'
 import { formatDateUS, formatDocumentCategoryLabel } from '@/shared/format'
 import { downloadCsv } from '@/shared/lib/downloadCsv'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
@@ -79,7 +79,13 @@ export function ComplianceOverviewPage() {
     api.compliance.listComplianceItems,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
-  const gaps = useQuery(
+  const trainingGaps = useQuery(
+    api.training.getTrainingCompliance,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
+  // Still used to mark overridden rows in the compliance items table
+  // (listComplianceItems does not return overrideStatus per item).
+  const credentialGaps = useQuery(
     api.compliance.complianceGaps,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
@@ -151,7 +157,7 @@ export function ComplianceOverviewPage() {
   // credential category — labels are requirement-defined and cannot be
   // reconstructed here).
   const overriddenKeys = new Set(
-    (gaps ?? []).flatMap((gap) =>
+    (credentialGaps ?? []).flatMap((gap) =>
       (gap.overriddenCategories ?? []).map(
         (category) => `${gap.displayName}::${category}`,
       ),
@@ -160,12 +166,25 @@ export function ComplianceOverviewPage() {
   const isOverridden = (item: { subjectName: string; category: string }) =>
     overriddenKeys.has(`${item.subjectName}::${item.category}`)
 
-  const gapsWithIssues = (gaps ?? []).filter(
-    (gap) =>
-      gap.missing.length > 0 ||
-      gap.expired.length > 0 ||
-      gap.overridden.length > 0,
-  )
+  // getTrainingCompliance only returns employees with issues.
+  const gapsWithIssues = trainingGaps ?? []
+
+  // Compliance items grouped per employee for the expandable view.
+  const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set())
+  const toggleEmployeeExpanded = (name: string) => {
+    setExpandedEmployees((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+  const itemsByEmployee = new Map<string, NonNullable<typeof items>>()
+  for (const item of items ?? []) {
+    const list = itemsByEmployee.get(item.subjectName) ?? []
+    list.push(item)
+    itemsByEmployee.set(item.subjectName, list)
+  }
 
   const openOverride = (item: {
     itemId: Id<'documentArchiveItems'>
@@ -348,6 +367,11 @@ export function ComplianceOverviewPage() {
         </div>
       )}
 
+      <p className="text-xs text-atria-text-muted">
+        Counts below are per document item (credential, certificate, form),
+        across all employees.
+      </p>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Compliant"
@@ -397,7 +421,7 @@ export function ComplianceOverviewPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Compliance items</CardTitle>
+          <CardTitle>Compliance by employee</CardTitle>
         </CardHeader>
         <CardContent>
           {items === undefined ? (
@@ -410,90 +434,124 @@ export function ComplianceOverviewPage() {
               description="Credentials and documents will appear here once they are uploaded."
             />
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableHeader>Employee</TableHeader>
-                  <TableHeader>Credential type</TableHeader>
-                  <TableHeader>Status</TableHeader>
-                  <TableHeader>Expiration</TableHeader>
-                  <TableHeader>Actions</TableHeader>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {items.map((item) => (
-                  <TableRow key={item.itemId}>
-                    <TableCell className="font-medium">
-                      {item.subjectName}
-                    </TableCell>
-                    <TableCell>
-                      {formatDocumentCategoryLabel(item.category)}
-                    </TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-2">
-                        <StatusBadge
-                          variant={
-                            computedStatusVariant[item.computedStatus] ??
-                            'neutral'
-                          }
-                        >
-                          {computedStatusLabel[item.computedStatus] ??
-                            item.computedStatus}
-                        </StatusBadge>
-                        {isOverridden(item) && (
-                          <Badge variant="info">Overridden</Badge>
+            // Per employee, expandable: summary line shows how many of their
+            // documents are current; expanding lists each item.
+            <div className="space-y-3">
+              {[...itemsByEmployee.entries()].map(([employeeName, employeeItems]) => {
+                const currentCount = employeeItems.filter(
+                  (item) => item.computedStatus === 'compliant',
+                ).length
+                const expanded = expandedEmployees.has(employeeName)
+                return (
+                  <div
+                    key={employeeName}
+                    className="rounded-[var(--radius-atria-md)] border border-atria-border"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleEmployeeExpanded(employeeName)}
+                      className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-atria-surface-2"
+                    >
+                      <span className="flex items-center gap-2 text-sm font-medium text-atria-ink">
+                        {expanded ? (
+                          <ChevronDown className="h-4 w-4 shrink-0" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 shrink-0" />
                         )}
+                        {employeeName}
                       </span>
-                    </TableCell>
-                    <TableCell>
-                      {item.expiresAt ? formatDateUS(item.expiresAt) : '—'}
-                    </TableCell>
-                    <TableCell>
-                      {canOverride &&
-                      !isOverridden(item) &&
-                      (item.computedStatus === 'expired' ||
-                        item.status === 'rejected') ? (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => openOverride(item)}
-                        >
-                          Override
-                        </Button>
-                      ) : (
-                        '—'
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      <span className="text-sm text-atria-text-secondary">
+                        {currentCount} of {employeeItems.length} current
+                      </span>
+                    </button>
+                    {expanded && (
+                      <div className="border-t border-atria-border p-3">
+                        <Table>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>Credential type</TableHeader>
+                              <TableHeader>Status</TableHeader>
+                              <TableHeader>Expiration</TableHeader>
+                              <TableHeader>Actions</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {employeeItems.map((item) => (
+                              <TableRow key={item.itemId}>
+                                <TableCell>
+                                  {formatDocumentCategoryLabel(item.category)}
+                                </TableCell>
+                                <TableCell>
+                                  <span className="inline-flex items-center gap-2">
+                                    <StatusBadge
+                                      variant={
+                                        computedStatusVariant[item.computedStatus] ??
+                                        'neutral'
+                                      }
+                                    >
+                                      {computedStatusLabel[item.computedStatus] ??
+                                        item.computedStatus}
+                                    </StatusBadge>
+                                    {isOverridden(item) && (
+                                      <Badge variant="info">Overridden</Badge>
+                                    )}
+                                  </span>
+                                </TableCell>
+                                <TableCell>
+                                  {item.expiresAt ? formatDateUS(item.expiresAt) : '—'}
+                                </TableCell>
+                                <TableCell>
+                                  {canOverride &&
+                                  !isOverridden(item) &&
+                                  (item.computedStatus === 'expired' ||
+                                    item.status === 'rejected') ? (
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      onClick={() => openOverride(item)}
+                                    >
+                                      Override
+                                    </Button>
+                                  ) : (
+                                    '—'
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Gaps</CardTitle>
+          <CardTitle>Training compliance</CardTitle>
         </CardHeader>
         <CardContent>
-          {gaps === undefined ? (
+          {trainingGaps === undefined ? (
             <p className="py-8 text-center text-sm text-atria-text-secondary">
-              Loading credential gaps…
+              Loading training compliance…
             </p>
           ) : gapsWithIssues.length === 0 ? (
             <EmptyState
-              title="No credential gaps"
-              description="All caregivers have their required credentials on file."
+              title="Everyone's training is current"
+              description="All employees have completed their required trainings and none are expiring soon."
             />
           ) : (
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableHeader>Caregiver</TableHeader>
-                  <TableHeader>Missing</TableHeader>
+                  <TableHeader>Employee</TableHeader>
+                  <TableHeader>Missing trainings</TableHeader>
                   <TableHeader>Expired</TableHeader>
-                  <TableHeader>Overridden</TableHeader>
+                  <TableHeader>Expiring soon</TableHeader>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -509,8 +567,8 @@ export function ComplianceOverviewPage() {
                       {gap.expired.length > 0 ? gap.expired.join(', ') : '—'}
                     </TableCell>
                     <TableCell>
-                      {gap.overridden.length > 0
-                        ? gap.overridden.join(', ')
+                      {gap.expiringSoon.length > 0
+                        ? gap.expiringSoon.join(', ')
                         : '—'}
                     </TableCell>
                   </TableRow>

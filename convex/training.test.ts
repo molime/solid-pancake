@@ -351,3 +351,73 @@ describe('seedGoldenAgesTraining', () => {
     }
   })
 })
+
+describe('training.getTrainingCompliance', () => {
+  async function seedEmployeeWithCourse(t: ReturnType<typeof createTestConvex>) {
+    const clerkOrgId = 'org_training_compliance'
+    const tenantId = await seedTenant(t, clerkOrgId)
+    await t.run(async (ctx) => {
+      await ctx.db.insert('employeeProfiles', {
+        tenantId,
+        clerkUserId: 'user_cg',
+        displayName: 'Caregiver',
+        email: 'cg@example.com',
+        adpSyncStatus: 'pending_credentials',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('trainingCourses', {
+        ...SAMPLE_COURSE,
+        tenantId,
+        active: true,
+        isDefault: false,
+        createdAt: new Date().toISOString(),
+      })
+    })
+    return { clerkOrgId, tenantId }
+  }
+
+  it('flags employees missing required courses', async () => {
+    const t = createTestConvex()
+    const { clerkOrgId } = await seedEmployeeWithCourse(t)
+
+    const rows = await t
+      .withIdentity({ subject: 'user_admin', org_id: clerkOrgId, org_role: 'org:admin' })
+      .query(api.training.getTrainingCompliance, { clerkOrgId })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].missing).toEqual(['Test Course'])
+    expect(rows[0].expired).toEqual([])
+  })
+
+  it('flags expired completions and clears once current', async () => {
+    const t = createTestConvex()
+    const { clerkOrgId, tenantId } = await seedEmployeeWithCourse(t)
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    await t.run(async (ctx) => {
+      await ctx.db.insert('platformTrainingCompletions', {
+        tenantId,
+        clerkUserId: 'user_cg',
+        trainingId: 'test_course',
+        completedAt: new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString(),
+        status: 'completed',
+        expiresAt: past,
+      })
+    })
+
+    const rows = await t
+      .withIdentity({ subject: 'user_admin', org_id: clerkOrgId, org_role: 'org:admin' })
+      .query(api.training.getTrainingCompliance, { clerkOrgId })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].expired).toEqual(['Test Course'])
+
+    await t.run(async (ctx) => {
+      const existing = await ctx.db.query('platformTrainingCompletions').collect()
+      await ctx.db.patch(existing[0]._id, {
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      })
+    })
+    const cleared = await t
+      .withIdentity({ subject: 'user_admin', org_id: clerkOrgId, org_role: 'org:admin' })
+      .query(api.training.getTrainingCompliance, { clerkOrgId })
+    expect(cleared).toHaveLength(0)
+  })
+})

@@ -220,14 +220,14 @@ export const checkEscalations = internalMutation({
           createdAt,
         })
 
-        // Notify a concrete member holding the target role when one resolves;
-        // otherwise the escalation row + audit event above are the record.
+        // Notify the agency admin regardless of escalation level — Maria's
+        // call: supervisor alerts should only appear to the admin. The
+        // escalation levels above still drive severity in the UI. When no
+        // admin resolves, the escalation row + audit event are the record.
         const target = await ctx.db
           .query('tenantMembers')
           .withIndex('by_tenant_role', (q) =>
-            q
-              .eq('tenantId', tenant._id)
-              .eq('role', escalatedTo as 'org:coordinator' | 'org:admin' | 'org:hr'),
+            q.eq('tenantId', tenant._id).eq('role', 'org:admin'),
           )
           .first()
         if (target) {

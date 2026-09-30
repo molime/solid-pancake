@@ -1,5 +1,5 @@
 import { useOrganization } from '@clerk/react'
-import { useConvex, useQuery } from 'convex/react'
+import { useConvex, useMutation, useQuery } from 'convex/react'
 import type { FunctionReturnType } from 'convex/server'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -21,8 +21,8 @@ import { CorrectiveActionsCard } from '@/features/reporting/components/Correctiv
 import { AuditSimpleView } from '@/features/reporting/components/AuditSimpleView'
 import { Select } from '@/shared/ui/Select'
 import { USDateInput } from '@/shared/ui/USDateInput'
-import { formatHours, formatStatusLabel } from '@/shared/format'
-import { ChevronLeft, Download, ScrollText } from 'lucide-react'
+import { formatHours, formatStatusLabel, formatDateUS } from '@/shared/format'
+import { ChevronDown, ChevronLeft, ChevronRight, Download, ScrollText } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
@@ -221,6 +221,33 @@ function AuditFullView() {
     () => new Date().toISOString().slice(0, 10),
   )
   const [downloadingPacket, setDownloadingPacket] = useState(false)
+  // Inline checklist expansion + reminder actions (no redirects).
+  const [expandedChecklistItem, setExpandedChecklistItem] = useState<string | null>(null)
+  const [remindingFor, setRemindingFor] = useState<string | null>(null)
+  const [reminderSentFor, setReminderSentFor] = useState<string | null>(null)
+  const sendReminder = useMutation(api.notifications.sendReminderToMember)
+
+  const handleSendReminder = async (
+    itemLabel: string,
+    clerkUserId: string,
+    issue: string,
+  ) => {
+    if (!clerkOrgId) return
+    const key = `${itemLabel}-${clerkUserId}`
+    setRemindingFor(key)
+    try {
+      await sendReminder({
+        clerkOrgId,
+        clerkUserId,
+        message: `Reminder from your agency: ${issue}`,
+      })
+      setReminderSentFor(key)
+    } catch {
+      // The button re-enables so the admin can retry.
+    } finally {
+      setRemindingFor(null)
+    }
+  }
 
   const report = useQuery(
     api.auditReadiness.getReport,
@@ -325,59 +352,119 @@ function AuditFullView() {
     report.documentation.total === 0
       ? 1
       : report.documentation.withNotes / report.documentation.total
-  const checklistItems: { label: string; met: boolean; linkTo?: string }[] = [
+  // Each issue expands in place with the specific offenders and a contextual
+  // action — no more redirecting away and losing the trail.
+  type ChecklistPerson = { clerkUserId: string; displayName: string; issue: string }
+  type ChecklistItem = {
+    label: string
+    met: boolean
+    category: 'Documentation' | 'Incidents' | 'Agency obligations' | 'Operations'
+    detail?: string
+    people?: ChecklistPerson[]
+  }
+  const credentialPeople = (
+    kind: 'missing' | 'expired',
+  ): ChecklistPerson[] =>
+    report.gaps
+      .filter((gap) => gap[kind].length > 0)
+      .map((gap) => ({
+        clerkUserId: gap.clerkUserId ?? gap.displayName,
+        displayName: gap.displayName,
+        issue: `${kind === 'missing' ? 'Missing' : 'Expired'}: ${gap[kind].join(', ')}`,
+      }))
+  const obligationDetail = (key: string) => {
+    const obligation = obligations?.find((o) => o.key === key)
+    return obligation
+      ? `Current filing covers through ${formatDateUS(obligation.dueAt)}.`
+      : 'No filing on record for this obligation.'
+  }
+  const checklistItems: ChecklistItem[] = [
     {
       label: 'No expired caregiver credentials',
       met:
         report.personnel.expired === 0 &&
         report.gaps.every((gap) => gap.expired.length === 0),
-      linkTo: '/compliance',
+      category: 'Documentation',
+      detail:
+        report.personnel.expired > 0
+          ? `${report.personnel.expired} expired credential document(s) on file.`
+          : undefined,
+      people: credentialPeople('expired'),
     },
     {
       label: 'No missing required credentials',
       met: report.gaps.every((gap) => gap.missing.length === 0),
-      linkTo: '/compliance',
+      category: 'Documentation',
+      people: credentialPeople('missing'),
     },
     {
       label: 'All SIRs verbally reported within 24 hours (last 90 days)',
       met: (incidentTimeliness?.verbalBreached ?? 0) === 0,
-      linkTo: '/incidents',
+      category: 'Incidents',
+      detail:
+        (incidentTimeliness?.verbalBreached ?? 0) > 0
+          ? `${incidentTimeliness!.verbalBreached} incident(s) breached the 24-hour verbal report window.`
+          : undefined,
     },
     {
       label: 'All SIR written reports submitted within 48 hours (last 90 days)',
       met: (incidentTimeliness?.writtenBreached ?? 0) === 0,
-      linkTo: '/incidents',
+      category: 'Incidents',
+      detail:
+        (incidentTimeliness?.writtenBreached ?? 0) > 0
+          ? `${incidentTimeliness!.writtenBreached} incident(s) breached the 48-hour written report window.`
+          : undefined,
     },
     {
       label: 'General liability insurance COI current',
       met: obligationCurrent('insurance_general_liability'),
-      linkTo: '/compliance',
+      category: 'Agency obligations',
+      detail: obligationDetail('insurance_general_liability'),
     },
     {
       label: "Workers' compensation insurance COI current",
       met: obligationCurrent('insurance_workers_comp'),
-      linkTo: '/compliance',
+      category: 'Agency obligations',
+      detail: obligationDetail('insurance_workers_comp'),
     },
     {
       label: 'DS 1891 disclosure current (2-year cycle)',
       met: obligationCurrent('ds1891_disclosure'),
-      linkTo: '/compliance',
+      category: 'Agency obligations',
+      detail: obligationDetail('ds1891_disclosure'),
     },
     {
       label: 'No overdue progress reports',
       met: (progressSummary?.overdue ?? 0) === 0,
-      linkTo: '/clients',
+      category: 'Operations',
+      detail:
+        (progressSummary?.overdue ?? 0) > 0
+          ? `${progressSummary!.overdue} progress report(s) overdue.`
+          : undefined,
     },
     {
       label: 'Documentation completeness at least 95%',
       met: documentationRate >= DOCUMENTATION_READY_THRESHOLD,
+      category: 'Documentation',
+      detail: `${report.documentation.withNotes} of ${report.documentation.total} visits have notes.`,
     },
     {
       label: 'No blocked billing lines',
       met: report.blockedBillingLines === 0,
+      category: 'Operations',
+      detail:
+        report.blockedBillingLines > 0
+          ? `${report.blockedBillingLines} billing line(s) blocked by compliance.`
+          : undefined,
     },
   ]
   const checklistMet = checklistItems.filter((item) => item.met).length
+  const CHECKLIST_CATEGORIES: ChecklistItem['category'][] = [
+    'Documentation',
+    'Incidents',
+    'Agency obligations',
+    'Operations',
+  ]
 
   return (
     <div className="space-y-8">
@@ -562,34 +649,96 @@ function AuditFullView() {
           </Badge>
         </CardHeader>
         <CardContent>
-          <ul className="space-y-2">
-            {checklistItems.map((item) => (
-              <li
-                key={item.label}
-                className="flex items-center justify-between gap-2"
-              >
-                <span className="text-sm text-atria-text-secondary">
-                  {item.label}
-                </span>
-                <span className="flex items-center gap-2">
-                  {item.linkTo && !item.met && (
-                    <Link
-                      to={item.linkTo}
-                      className="text-sm font-medium text-atria-accent hover:underline"
-                    >
-                      Fix →
-                    </Link>
-                  )}
-                  <StatusBadge variant={item.met ? 'success' : 'danger'}>
-                    {item.met ? 'Met' : 'Review'}
-                  </StatusBadge>
-                </span>
-              </li>
-            ))}
-          </ul>
+          <div className="space-y-5">
+            {CHECKLIST_CATEGORIES.map((category) => {
+              const items = checklistItems.filter((i) => i.category === category)
+              if (items.length === 0) return null
+              return (
+                <div key={category}>
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wider text-atria-text-muted">
+                    {category}
+                  </p>
+                  <ul className="space-y-2">
+                    {items.map((item) => {
+                      const expandable = !item.met && (!!item.detail || (item.people?.length ?? 0) > 0)
+                      const expanded = expandedChecklistItem === item.label
+                      return (
+                        <li key={item.label}>
+                          <div className="flex items-center justify-between gap-2">
+                            {expandable ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedChecklistItem(expanded ? null : item.label)
+                                }
+                                className="flex items-center gap-1.5 text-left text-sm font-medium text-atria-ink hover:text-atria-accent"
+                              >
+                                {expanded ? (
+                                  <ChevronDown className="h-4 w-4 shrink-0" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 shrink-0" />
+                                )}
+                                {item.label}
+                              </button>
+                            ) : (
+                              <span className="text-sm text-atria-text-secondary">
+                                {item.label}
+                              </span>
+                            )}
+                            <StatusBadge variant={item.met ? 'success' : 'danger'}>
+                              {item.met ? 'Met' : 'Review'}
+                            </StatusBadge>
+                          </div>
+                          {expanded && (
+                            <div className="mt-2 space-y-2 rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3">
+                              {item.detail && (
+                                <p className="text-sm text-atria-text-secondary">
+                                  {item.detail}
+                                </p>
+                              )}
+                              {item.people?.map((person) => (
+                                <div
+                                  key={`${item.label}-${person.clerkUserId}`}
+                                  className="flex items-center justify-between gap-2"
+                                >
+                                  <p className="text-sm text-atria-ink">
+                                    <span className="font-medium">{person.displayName}</span>
+                                    <span className="text-atria-text-secondary"> — {person.issue}</span>
+                                  </p>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    disabled={remindingFor === `${item.label}-${person.clerkUserId}`}
+                                    onClick={() =>
+                                      handleSendReminder(
+                                        item.label,
+                                        person.clerkUserId,
+                                        `${item.label}: ${person.issue}`,
+                                      )
+                                    }
+                                  >
+                                    {reminderSentFor === `${item.label}-${person.clerkUserId}`
+                                      ? 'Reminder sent ✓'
+                                      : remindingFor === `${item.label}-${person.clerkUserId}`
+                                        ? 'Sending…'
+                                        : 'Send reminder'}
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              )
+            })}
+          </div>
           <p className="mt-3 text-xs text-atria-muted">
             Self-inspection mirroring the biennial vendor-file review (17 CCR
-            §54332(b)). Computed live — nothing is stored.
+            §54332(b)). Computed live — nothing is stored. Unmet items expand
+            in place with the details and the action to take.
           </p>
         </CardContent>
       </Card>

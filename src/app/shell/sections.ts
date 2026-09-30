@@ -14,11 +14,6 @@ export const GATEABLE_SECTIONS = [
   { key: 'payroll', label: 'Payroll', paths: ['/billing/payroll'] },
   { key: 'clients', label: 'Clients', paths: ['/clients'] },
   { key: 'settings', label: 'Settings', paths: ['/settings/geofence'] },
-  {
-    key: 'email-domains',
-    label: 'Email Domains',
-    paths: ['/settings/allowed-domains'],
-  },
 ] as const
 
 export type SectionKey = (typeof GATEABLE_SECTIONS)[number]['key']
