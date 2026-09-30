@@ -586,3 +586,79 @@ describe('pay periods and exportPayroll', () => {
     expect(csv).toContain(`${caregiverId},Caregiver Two,4.00`)
   })
 })
+
+describe('paymentCalendarData', () => {
+  it('returns worked days with hours for a client-caregiver pair in a month', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_payment_calendar'
+    const adminId = 'user_admin_cal'
+    const { tenantId } = await seedTenant(t, { clerkOrgId, adminId })
+    await t.run(async (ctx) => {
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: 'user_cg_cal',
+        role: 'org:caregiver',
+        displayName: 'Erick Santiago',
+        email: 'erick@example.com',
+      })
+    })
+    const { clientId } = await seedClientWithLine(t, {
+      tenantId,
+      caregiverId: 'user_cg_cal',
+      clientName: 'Juanito Gonzalez',
+      createdAt: '2026-07-10T18:00:00.000Z',
+    })
+
+    const data = await asAdmin(t, adminId, clerkOrgId).query(
+      api.billing.paymentCalendarData,
+      {
+        clerkOrgId,
+        clientId,
+        caregiverId: 'user_cg_cal',
+        month: '2026-07',
+      },
+    )
+    expect(data.clientName).toBe('Juanito Gonzalez')
+    expect(data.caregiverName).toBe('Erick Santiago')
+    expect(data.days).toHaveLength(1)
+    expect(data.days[0].hours).toBe(8)
+    expect(data.days[0].date).toBe('2026-07-10')
+  })
+})
+
+describe('updateInvoicePeriod', () => {
+  it('edits draft invoice dates, rejects paid invoices and bad ranges', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_invoice_dates'
+    const adminId = 'user_admin_inv'
+    const { tenantId } = await seedTenant(t, { clerkOrgId, adminId })
+    const { lineId } = await seedClientWithLine(t, {
+      tenantId,
+      caregiverId: 'user_cg_inv',
+      clientName: 'Client',
+      createdAt: '2026-07-10T18:00:00.000Z',
+    })
+
+    const invoiceId = await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.billing.createInvoice,
+      { clerkOrgId, name: 'July', lineIds: [lineId] },
+    )
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.billing.updateInvoicePeriod,
+      { clerkOrgId, invoiceId, periodStart: '2026-07-01', periodEnd: '2026-07-31' },
+    )
+    const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId))
+    expect(invoice?.periodStart).toBe('2026-07-01')
+    expect(invoice?.periodEnd).toBe('2026-07-31')
+
+    await expect(
+      asAdmin(t, adminId, clerkOrgId).mutation(api.billing.updateInvoicePeriod, {
+        clerkOrgId,
+        invoiceId,
+        periodStart: '2026-07-31',
+        periodEnd: '2026-07-01',
+      }),
+    ).rejects.toThrow(/valid period/)
+  })
+})

@@ -2,7 +2,9 @@ import { v } from 'convex/values'
 import { mutation, query, internalMutation } from './_generated/server'
 import { ConvexError } from 'convex/values'
 import { requireTenantRole, assertTenantDoc } from './authHelpers'
+import { internal } from './_generated/api'
 import { ensureCaregiverEmployeeProfile } from './employeeProfiles'
+import { computeRetentionUntil } from './documentArchive'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
 
@@ -1101,5 +1103,236 @@ export const resetUserCourseProgressInternal = internalMutation({
       courseCompletionsDeleted: courseCompletions.length,
       certificateFilesDeleted: certificateFiles.length,
     }
+  },
+})
+
+// ============ Training management: assignments, expiry alerts, external uploads ============
+
+/** Admin/HR: assign a course to a member (shows in their hub + notifies them). */
+export const assignTraining = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    courseId: v.id('trainingCourses'),
+    clerkUserId: v.string(),
+    dueAt: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, ADMIN_ROLES)
+    const course = await ctx.db.get(args.courseId)
+    if (!course) throw new ConvexError('Course not found.')
+    assertTenantDoc(course, tenantId)
+    const target = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', tenantId).eq('clerkUserId', args.clerkUserId),
+      )
+      .unique()
+    if (!target) throw new ConvexError('Member not found in this agency.')
+
+    const existing = await ctx.db
+      .query('trainingAssignments')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', tenantId).eq('clerkUserId', args.clerkUserId),
+      )
+      .filter((q) => q.eq(q.field('courseId'), args.courseId))
+      .first()
+    if (existing) return existing._id
+
+    const id = await ctx.db.insert('trainingAssignments', {
+      tenantId,
+      courseId: args.courseId,
+      clerkUserId: args.clerkUserId,
+      assignedBy: identity.subject,
+      dueAt: args.dueAt,
+      createdAt: new Date().toISOString(),
+    })
+    await ctx.db.insert('notifications', {
+      tenantId,
+      clerkUserId: args.clerkUserId,
+      type: 'training_assigned',
+      message: `You were assigned a new training: ${course.title}${args.dueAt ? ` (due ${args.dueAt})` : ''}.`,
+      read: false,
+      createdAt: new Date().toISOString(),
+    })
+    return id
+  },
+})
+
+export const unassignTraining = mutation({
+  args: { clerkOrgId: v.string(), assignmentId: v.id('trainingAssignments') },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, ADMIN_ROLES)
+    const assignment = await ctx.db.get(args.assignmentId)
+    if (!assignment) throw new ConvexError('Assignment not found.')
+    assertTenantDoc(assignment, tenantId)
+    await ctx.db.delete(args.assignmentId)
+    return { ok: true }
+  },
+})
+
+/** Admin/HR: assignments for one course (with member names for display). */
+export const listCourseAssignments = query({
+  args: { clerkOrgId: v.string(), courseId: v.id('trainingCourses') },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, ADMIN_ROLES)
+    const assignments = await ctx.db
+      .query('trainingAssignments')
+      .withIndex('by_tenant_course', (q) =>
+        q.eq('tenantId', tenantId).eq('courseId', args.courseId),
+      )
+      .collect()
+    const rows = []
+    for (const assignment of assignments) {
+      const member = await ctx.db
+        .query('tenantMembers')
+        .withIndex('by_tenant_user', (q) =>
+          q.eq('tenantId', tenantId).eq('clerkUserId', assignment.clerkUserId),
+        )
+        .unique()
+      rows.push({ ...assignment, memberName: member?.displayName ?? 'Unknown' })
+    }
+    return rows
+  },
+})
+
+/** Member: course ids assigned to the caller (drives the hub's Assigned badge). */
+export const listMyTrainingAssignments = query({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, args) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+      'org:caregiver',
+      'org:candidate',
+    ])
+    return await ctx.db
+      .query('trainingAssignments')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', tenantId).eq('clerkUserId', identity.subject),
+      )
+      .collect()
+  },
+})
+
+/**
+ * Member: upload a certificate/proof for an external (non-Atria) training.
+ * Lands in the document archive as pending for admin/HR to verify in
+ * Compliance, and admin/HR are notified.
+ */
+export const uploadExternalTraining = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    title: v.string(),
+    storageId: v.string(),
+    fileName: v.string(),
+    contentType: v.string(),
+    size: v.number(),
+    expiresAt: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+      'org:caregiver',
+    ])
+    const title = args.title.trim()
+    if (!title) throw new ConvexError('Training title is required.')
+    const profile = await ctx.db
+      .query('employeeProfiles')
+      .withIndex('by_tenant_clerk_user', (q) =>
+        q.eq('tenantId', tenantId).eq('clerkUserId', identity.subject),
+      )
+      .first()
+    if (!profile) {
+      throw new ConvexError(
+        'No employee profile found for your account — ask your admin to set you up first.',
+      )
+    }
+
+    const now = new Date().toISOString()
+    const fileId = await ctx.db.insert('files', {
+      tenantId,
+      storageId: args.storageId,
+      uploadedBy: identity.subject,
+      fileName: `${title} — ${args.fileName}`,
+      contentType: args.contentType,
+      size: args.size,
+      linkedType: 'complianceDoc',
+      linkedId: profile._id as string,
+      visibility: 'admins_coordinators',
+      createdAt: now,
+    })
+    const itemId = await ctx.db.insert('documentArchiveItems', {
+      tenantId,
+      fileId,
+      subjectType: 'employee',
+      subjectId: profile._id as string,
+      category: 'external_training',
+      status: 'pending',
+      expiresAt: args.expiresAt,
+      retentionUntil: computeRetentionUntil(now),
+      createdAt: now,
+    })
+    // Notify admin/HR directly (in-app row now, email scheduled) so the
+    // verification request is recorded even if the email send fails.
+    const staffRoles = ['org:admin', 'org:hr'] as const
+    const notified = new Set<string>()
+    for (const role of staffRoles) {
+      const staff = await ctx.db
+        .query('tenantMembers')
+        .withIndex('by_tenant_role', (q) => q.eq('tenantId', tenantId).eq('role', role))
+        .collect()
+      for (const member of staff) {
+        if (notified.has(member.clerkUserId)) continue
+        notified.add(member.clerkUserId)
+        await ctx.db.insert('notifications', {
+          tenantId,
+          clerkUserId: member.clerkUserId,
+          type: 'external_training_uploaded',
+          message: `${profile.displayName} uploaded an external training certificate ("${title}") for verification.`,
+          read: false,
+          createdAt: now,
+        })
+        await ctx.scheduler.runAfter(0, internal._utils.resend.sendEmail, {
+          to: member.email,
+          subject: 'External training certificate to verify',
+          html: `<p>${profile.displayName} uploaded an external training certificate (&quot;${title}&quot;) for verification.</p>`,
+        })
+      }
+    }
+    return itemId
+  },
+})
+
+const TRAINING_EXPIRY_ALERT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
+
+/**
+ * Daily cron: alert employees whose training completions expire within 30
+ * days (once per completion — expiryAlertedAt is the dedup marker).
+ */
+export const checkTrainingExpirations = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now()
+    const soon = new Date(now + TRAINING_EXPIRY_ALERT_WINDOW_MS).toISOString()
+    const completions = await ctx.db.query('platformTrainingCompletions').collect()
+    let alerted = 0
+    for (const completion of completions) {
+      if (!completion.expiresAt || completion.expiryAlertedAt) continue
+      if (completion.expiresAt > soon || completion.expiresAt < new Date(now).toISOString()) continue
+      await ctx.db.insert('notifications', {
+        tenantId: completion.tenantId,
+        clerkUserId: completion.clerkUserId,
+        type: 'training_expiring',
+        message: `A training you completed expires soon (${completion.expiresAt.slice(0, 10)}). Please retake it before it expires.`,
+        read: false,
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.patch(completion._id, { expiryAlertedAt: new Date().toISOString() })
+      alerted++
+    }
+    return { alerted }
   },
 })

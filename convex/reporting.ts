@@ -412,3 +412,114 @@ export const exportReport = mutation({
     )
   },
 })
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+const WORKED_SHIFT_STATUSES = new Set(['submitted', 'approved', 'billing_ready'])
+
+/**
+ * Employee Performance page: per-coordinator/supervisor stats — weekly visit
+ * counts (last 4 weeks) and month total from worked shifts, supervision
+ * rounds logged this month, and the document-compliance rate of the employees
+ * they supervise (their caseload).
+ */
+export const getEmployeePerformance = query({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:coordinator',
+    ])
+
+    const [coordinators, shifts, supervision, profiles, docItems] =
+      await Promise.all([
+        ctx.db
+          .query('tenantMembers')
+          .withIndex('by_tenant_role', (q) =>
+            q.eq('tenantId', tenantId).eq('role', 'org:coordinator'),
+          )
+          .collect(),
+        ctx.db
+          .query('shifts')
+          .filter((q) => q.eq(q.field('tenantId'), tenantId))
+          .collect(),
+        ctx.db
+          .query('supervisionRecords')
+          .filter((q) => q.eq(q.field('tenantId'), tenantId))
+          .collect(),
+        ctx.db
+          .query('employeeProfiles')
+          .filter((q) => q.eq(q.field('tenantId'), tenantId))
+          .collect(),
+        ctx.db
+          .query('documentArchiveItems')
+          .filter((q) => q.eq(q.field('tenantId'), tenantId))
+          .collect(),
+      ])
+
+    const profileNameById = new Map(profiles.map((p) => [p._id as string, p]))
+    const now = Date.now()
+    const monthStart = new Date()
+    monthStart.setUTCDate(1)
+    monthStart.setUTCHours(0, 0, 0, 0)
+    const monthStartMs = monthStart.getTime()
+    const weekStart = now - 3 * WEEK_MS // last 4 calendar buckets ending now
+
+    return coordinators.map((coordinator) => {
+      const theirs = shifts.filter(
+        (s) =>
+          s.coordinatorId === coordinator.clerkUserId &&
+          WORKED_SHIFT_STATUSES.has(s.status),
+      )
+      const weeklyVisits = [3, 2, 1, 0].map((weeksAgo) => {
+        const start = weekStart + (3 - weeksAgo) * WEEK_MS
+        const end = start + WEEK_MS
+        return {
+          label: weeksAgo === 0 ? 'This week' : `${weeksAgo}w ago`,
+          count: theirs.filter((s) => {
+            const t = Date.parse(s.scheduledStart)
+            return t >= start && t < end
+          }).length,
+        }
+      })
+      const monthVisits = theirs.filter(
+        (s) => Date.parse(s.scheduledStart) >= monthStartMs,
+      ).length
+
+      const myRounds = supervision.filter(
+        (r) =>
+          r.recordedBy === coordinator.clerkUserId &&
+          r.kind === 'supervision' &&
+          Date.parse(r.occurredAt) >= monthStartMs,
+      )
+      // Caseload: employees this coordinator has logged supervision for.
+      const caseloadIds = new Set(
+        supervision
+          .filter((r) => r.recordedBy === coordinator.clerkUserId)
+          .map((r) => r.employeeProfileId as string),
+      )
+      const caseloadDocs = docItems.filter(
+        (item) =>
+          item.subjectType === 'employee' && caseloadIds.has(item.subjectId),
+      )
+      const caseload = computeComplianceCounts(caseloadDocs)
+
+      return {
+        clerkUserId: coordinator.clerkUserId,
+        name: coordinator.displayName,
+        weeklyVisits,
+        monthVisits,
+        roundsThisMonth: myRounds.length,
+        roundsClients: new Set(
+          myRounds.map(
+            (r) =>
+              profileNameById.get(r.employeeProfileId as string)?.displayName ??
+              'Unknown',
+          ),
+        ).size,
+        caseloadSize: caseloadIds.size,
+        caseloadCompliance:
+          caseload.total === 0 ? null : Math.round((caseload.compliant / caseload.total) * 100),
+      }
+    })
+  },
+})

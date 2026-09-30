@@ -34,6 +34,7 @@ function mockSidebarState(options: {
   isPlatformAdmin?: boolean
   hasTrainingProduct?: boolean
   disabledSections?: string[]
+  branches?: Array<{ branchType: string; active: boolean }>
 }) {
   vi.mocked(useOrganization).mockReturnValue({
     organization: options.orgId ? { id: options.orgId } : null,
@@ -47,6 +48,9 @@ function mockSidebarState(options: {
     if (args === 'skip') return null
     if (getFunctionName(_api as Parameters<typeof getFunctionName>[0]) === 'agencyConfig:getDisabledSections') {
       return options.disabledSections ?? []
+    }
+    if (getFunctionName(_api as Parameters<typeof getFunctionName>[0]) === 'agencyConfig:listAllAgencyBranches') {
+      return options.branches ?? []
     }
     if (args && typeof args === 'object' && 'clerkOrgId' in args) {
       if ('productKey' in args) {
@@ -104,7 +108,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('Team')).toBeInTheDocument()
     expect(screen.getByText('Admin')).toBeInTheDocument()
     expect(screen.getByText('Compliance')).toBeInTheDocument()
-    expect(screen.getByText('Reporting')).toBeInTheDocument()
+    expect(screen.getByText('Employee Performance')).toBeInTheDocument()
     expect(screen.getByText('Notifications')).toBeInTheDocument()
 
     // Today, Availability are caregiver-only

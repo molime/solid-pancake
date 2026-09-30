@@ -421,3 +421,124 @@ describe('training.getTrainingCompliance', () => {
     expect(cleared).toHaveLength(0)
   })
 })
+
+describe('training management (assignments, external uploads, expiry alerts)', () => {
+  async function seed(t: ReturnType<typeof createTestConvex>) {
+    const clerkOrgId = 'org_training_mgmt'
+    const tenantId = await seedTenant(t, clerkOrgId)
+    await t.run(async (ctx) => {
+      await ctx.db.insert('employeeProfiles', {
+        tenantId,
+        clerkUserId: 'user_cg',
+        displayName: 'Caregiver',
+        email: 'cg@example.com',
+        adpSyncStatus: 'pending_credentials',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('trainingCourses', {
+        ...SAMPLE_COURSE,
+        tenantId,
+        active: true,
+        isDefault: false,
+        createdAt: new Date().toISOString(),
+      })
+    })
+    const courseId = await t.run(async (ctx) => {
+      const course = await ctx.db
+        .query('trainingCourses')
+        .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+        .first()
+      return course!._id
+    })
+    return { clerkOrgId, tenantId, courseId }
+  }
+
+  it('assigns a course, lists it for the member, and unassigns', async () => {
+    const t = createTestConvex()
+    const { clerkOrgId, courseId } = await seed(t)
+
+    const assignmentId = await t.withIdentity({ subject: 'user_admin', org_id: clerkOrgId, org_role: 'org:admin' }).mutation(
+      api.training.assignTraining,
+      { clerkOrgId, courseId, clerkUserId: 'user_cg', dueAt: '2026-10-15' },
+    )
+    expect(assignmentId).toBeDefined()
+
+    const mine = await t
+      .withIdentity({ subject: 'user_cg', org_id: clerkOrgId, org_role: 'org:caregiver' })
+      .query(api.training.listMyTrainingAssignments, { clerkOrgId })
+    expect(mine).toHaveLength(1)
+    expect(mine[0].dueAt).toBe('2026-10-15')
+
+    const assignees = await t.withIdentity({ subject: 'user_admin', org_id: clerkOrgId, org_role: 'org:admin' }).query(
+      api.training.listCourseAssignments,
+      { clerkOrgId, courseId },
+    )
+    expect(assignees).toHaveLength(1)
+    expect(assignees[0].memberName).toBe('Caregiver')
+
+    await t.withIdentity({ subject: 'user_admin', org_id: clerkOrgId, org_role: 'org:admin' }).mutation(
+      api.training.unassignTraining,
+      { clerkOrgId, assignmentId },
+    )
+    const after = await t.withIdentity({ subject: 'user_admin', org_id: clerkOrgId, org_role: 'org:admin' }).query(
+      api.training.listCourseAssignments,
+      { clerkOrgId, courseId },
+    )
+    expect(after).toHaveLength(0)
+  })
+
+  it('external upload creates a pending archive item and notifies staff', async () => {
+    const t = createTestConvex()
+    const { clerkOrgId } = await seed(t)
+
+    await t
+      .withIdentity({ subject: 'user_cg', org_id: clerkOrgId, org_role: 'org:caregiver' })
+      .mutation(api.training.uploadExternalTraining, {
+        clerkOrgId,
+        title: 'CPR Renewal — Red Cross',
+        storageId: 'storage_ext_1',
+        fileName: 'cpr.pdf',
+        contentType: 'application/pdf',
+        size: 1234,
+      })
+
+    const rows = await t.run(async (ctx) => ({
+      items: await ctx.db.query('documentArchiveItems').collect(),
+      notes: await ctx.db.query('notifications').collect(),
+    }))
+    expect(rows.items).toHaveLength(1)
+    expect(rows.items[0].category).toBe('external_training')
+    expect(rows.items[0].status).toBe('pending')
+    expect(rows.notes.length).toBeGreaterThan(0)
+    expect(rows.notes[0].type).toBe('external_training_uploaded')
+  })
+
+  it('expiry cron alerts once for soon-expiring completions', async () => {
+    const t = createTestConvex()
+    const { clerkOrgId, tenantId } = await seed(t)
+    const soon = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString()
+    await t.run(async (ctx) => {
+      await ctx.db.insert('platformTrainingCompletions', {
+        tenantId,
+        clerkUserId: 'user_cg',
+        trainingId: 'test_course',
+        completedAt: new Date().toISOString(),
+        status: 'completed',
+        expiresAt: soon,
+      })
+    })
+
+    const { internal } = await import('./_generated/api')
+    const first = await t.mutation(internal.training.checkTrainingExpirations, {})
+    expect(first.alerted).toBe(1)
+    const second = await t.mutation(internal.training.checkTrainingExpirations, {})
+    expect(second.alerted).toBe(0)
+
+    const notes = await t.run(async (ctx) =>
+      ctx.db.query('notifications').collect(),
+    )
+    expect(notes.filter((n) => n.type === 'training_expiring')).toHaveLength(1)
+    expect(notes[0].clerkUserId).toBe('user_cg')
+    expect(clerkOrgId).toBeTruthy()
+  })
+})

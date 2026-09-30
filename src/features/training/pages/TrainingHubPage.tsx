@@ -7,6 +7,7 @@ import { GraduationCap } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { CourseWithProgress } from '../model/courseTypes'
 import { CourseCard } from '../components/CourseCard'
+import { ExternalTrainingUploadCard } from '../components/ExternalTrainingUploadCard'
 
 export function TrainingHubPage() {
   const navigate = useNavigate()
@@ -15,12 +16,22 @@ export function TrainingHubPage() {
     api.training.listCourses,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
+  const myAssignments = useQuery(
+    api.training.listMyTrainingAssignments,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
+  const assignedCourseIds = new Set(
+    (myAssignments ?? []).map((a) => a.courseId as string),
+  )
 
   if (!clerkOrgId || courses === undefined) {
     return <AppLoader fullScreen label="Loading training..." />
   }
 
-  const assignable = (courses ?? []).filter((c) => c.isAssignable)
+  // Role-assignable courses plus anything manually assigned to this user.
+  const assignable = (courses ?? []).filter(
+    (c) => c.isAssignable || assignedCourseIds.has(c._id as string),
+  )
   const completedCount = assignable.filter((c) => c.isCompleted).length
   const totalRequired = Math.max(assignable.length, 1)
   const overallProgress = Math.round((completedCount / totalRequired) * 100)
@@ -73,14 +84,22 @@ export function TrainingHubPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {assignable.map((course) => (
-            <CourseCard
-              key={course._id}
-              course={course as CourseWithProgress}
-              onStart={() => navigate(`/training/${course._id}`)}
-            />
+            <div key={course._id} className="relative">
+              {assignedCourseIds.has(course._id as string) && (
+                <span className="absolute -top-2 right-3 z-10 rounded-full bg-atria-accent px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-atria-on-accent">
+                  Assigned
+                </span>
+              )}
+              <CourseCard
+                course={course as CourseWithProgress}
+                onStart={() => navigate(`/training/${course._id}`)}
+              />
+            </div>
           ))}
         </div>
       )}
+
+      {clerkOrgId && <ExternalTrainingUploadCard clerkOrgId={clerkOrgId} />}
     </div>
   )
 }
