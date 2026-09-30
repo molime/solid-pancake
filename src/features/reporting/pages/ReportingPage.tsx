@@ -4,6 +4,15 @@ import { api } from '../../../../convex/_generated/api'
 import { useState } from 'react'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
+import { EmptyState } from '@/shared/ui/EmptyState'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/shared/ui/Table'
 import { KpiCard } from '@/shared/ui/KpiCard'
 import { CalendarCheck, Banknote, Download, ShieldCheck, Users } from 'lucide-react'
 import { formatCurrency } from '@/shared/format'
@@ -15,6 +24,10 @@ export function ReportingPage() {
   const clerkOrgId = organization?.id
   const report = useQuery(
     api.reporting.getAgencyReport,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
+  const performance = useQuery(
+    api.reporting.getEmployeePerformance,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
   const exportReport = useMutation(api.reporting.exportReport)
@@ -63,9 +76,10 @@ export function ReportingPage() {
     <div className="space-y-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-atria-ink">Reporting</h1>
+          <h1 className="text-2xl font-bold text-atria-ink">Employee Performance</h1>
           <p className="text-base text-atria-text-secondary">
-            Agency activity and revenue for the current month.
+            Agency activity, coordinator performance, and revenue for the
+            current month.
           </p>
         </div>
         <Button
@@ -170,6 +184,64 @@ export function ReportingPage() {
                 </div>
               ))}
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Coordinator performance</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {performance === undefined ? (
+            <p className="py-8 text-center text-sm text-atria-text-secondary">
+              Loading coordinator performance…
+            </p>
+          ) : performance.length === 0 ? (
+            <EmptyState
+              icon={<Users className="h-6 w-6" />}
+              title="No coordinators"
+              description="Coordinator performance appears here once you have coordinators with supervised employees or visits."
+            />
+          ) : (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableHeader>Coordinator</TableHeader>
+                  {performance[0]?.weeklyVisits.map((week) => (
+                    <TableHeader key={week.label}>{week.label}</TableHeader>
+                  ))}
+                  <TableHeader>This month</TableHeader>
+                  <TableHeader>Supervision rounds</TableHeader>
+                  <TableHeader>Caseload compliance</TableHeader>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {performance.map((row) => (
+                  <TableRow key={row.clerkUserId}>
+                    <TableCell className="font-medium">{row.name}</TableCell>
+                    {row.weeklyVisits.map((week) => (
+                      <TableCell key={week.label}>{week.count}</TableCell>
+                    ))}
+                    <TableCell>{row.monthVisits}</TableCell>
+                    <TableCell>
+                      {row.roundsThisMonth}
+                      {row.roundsClients > 0 && (
+                        <span className="text-xs text-atria-text-muted">
+                          {' '}
+                          ({row.roundsClients} clients)
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {row.caseloadCompliance === null
+                        ? '—'
+                        : `${row.caseloadCompliance}% (${row.caseloadSize} employees)`}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>

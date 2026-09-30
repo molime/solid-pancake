@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/ui/Table'
-import { Download } from 'lucide-react'
+import { Download, Pencil } from 'lucide-react'
 import { formatDateUS, formatStatusLabel } from '@/shared/format'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import type { Id } from '../../../../convex/_generated/dataModel'
@@ -57,6 +57,34 @@ export function InvoicesTable({
 
   const [pendingId, setPendingId] = useState<Id<'exportBatches'> | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const updateInvoicePeriod = useMutation(api.billing.updateInvoicePeriod)
+  const [editingPeriodId, setEditingPeriodId] =
+    useState<Id<'exportBatches'> | null>(null)
+  const [periodStartInput, setPeriodStartInput] = useState('')
+  const [periodEndInput, setPeriodEndInput] = useState('')
+
+  const handleSavePeriod = async (invoiceId: Id<'exportBatches'>) => {
+    if (!clerkOrgId || !periodStartInput || !periodEndInput) return
+    setPendingId(invoiceId)
+    setActionError(null)
+    try {
+      await updateInvoicePeriod({
+        clerkOrgId,
+        invoiceId,
+        periodStart: periodStartInput,
+        periodEnd: periodEndInput,
+      })
+      setEditingPeriodId(null)
+    } catch (err) {
+      setActionError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Invoice update failed.',
+      )
+    } finally {
+      setPendingId(null)
+    }
+  }
 
   const runTransition = async (
     invoiceId: Id<'exportBatches'>,
@@ -125,11 +153,62 @@ export function InvoicesTable({
                       'Multiple caregivers'}
                   </TableCell>
                   <TableCell>
-                    {invoice.periodStart || invoice.periodEnd
-                      ? `${invoice.periodStart || 'Start'} - ${
-                          invoice.periodEnd || 'Today'
-                        }`
-                      : 'Selected shifts'}
+                    {editingPeriodId === invoice._id ? (
+                      <span className="flex items-center gap-1">
+                        <input
+                          type="date"
+                          aria-label="Period start"
+                          value={periodStartInput}
+                          onChange={(e) => setPeriodStartInput(e.target.value)}
+                          className="h-8 rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface px-2 text-xs text-atria-ink"
+                        />
+                        <input
+                          type="date"
+                          aria-label="Period end"
+                          value={periodEndInput}
+                          onChange={(e) => setPeriodEndInput(e.target.value)}
+                          className="h-8 rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface px-2 text-xs text-atria-ink"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={isPending || !periodStartInput || !periodEndInput}
+                          onClick={() => handleSavePeriod(invoice._id)}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingPeriodId(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1">
+                        {invoice.periodStart || invoice.periodEnd
+                          ? `${invoice.periodStart || 'Start'} - ${
+                              invoice.periodEnd || 'Today'
+                            }`
+                          : 'Selected shifts'}
+                        {canManage && (status === 'draft' || status === 'sent') && (
+                          <button
+                            type="button"
+                            aria-label="Edit invoice period"
+                            title="Edit invoice period"
+                            className="text-atria-muted hover:text-atria-ink"
+                            onClick={() => {
+                              setEditingPeriodId(invoice._id)
+                              setPeriodStartInput(invoice.periodStart ?? '')
+                              setPeriodEndInput(invoice.periodEnd ?? '')
+                            }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>{invoice.lineCount}</TableCell>
                   <TableCell className="text-right font-medium">

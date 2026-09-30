@@ -36,6 +36,7 @@ export function TrainingAdminPage() {
   const toggleCourse = useMutation(api.training.toggleCourse)
   const deleteCourse = useMutation(api.training.deleteCourse)
   const seedDefaults = useMutation(api.training.seedDefaultCourses)
+  const [assigningFor, setAssigningFor] = useState<string | null>(null)
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -316,6 +317,15 @@ export function TrainingAdminPage() {
                   Preview
                 </Button>
                 <Button
+                  variant={assigningFor === course._id ? 'primary' : 'secondary'}
+                  size="sm"
+                  onClick={() =>
+                    setAssigningFor(assigningFor === course._id ? null : course._id)
+                  }
+                >
+                  Assign
+                </Button>
+                <Button
                   variant={course.active ? 'ghost' : 'primary'}
                   size="sm"
                   onClick={() => handleToggle(course._id, !course.active)}
@@ -331,9 +341,128 @@ export function TrainingAdminPage() {
                 </Button>
               </div>
             </CardContent>
+            {assigningFor === course._id && clerkOrgId && (
+              <AssignPanel clerkOrgId={clerkOrgId} courseId={course._id} />
+            )}
           </Card>
         ))}
       </div>
+    </div>
+  )
+}
+
+/** Assign a course to a member (with optional due date) + current assignees. */
+function AssignPanel({
+  clerkOrgId,
+  courseId,
+}: {
+  clerkOrgId: string
+  courseId: Id<'trainingCourses'>
+}) {
+  const members = useQuery(api.members.list, { clerkOrgId })
+  const assignments = useQuery(api.training.listCourseAssignments, {
+    clerkOrgId,
+    courseId,
+  })
+  const assignTraining = useMutation(api.training.assignTraining)
+  const unassignTraining = useMutation(api.training.unassignTraining)
+  const [memberId, setMemberId] = useState('')
+  const [dueAt, setDueAt] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleAssign = async () => {
+    if (!memberId) return
+    setBusy(true)
+    setError('')
+    try {
+      await assignTraining({
+        clerkOrgId,
+        courseId,
+        clerkUserId: memberId,
+        dueAt: dueAt || undefined,
+      })
+      setMemberId('')
+      setDueAt('')
+    } catch (err) {
+      setError(
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Assign failed.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3 border-t border-atria-border px-4 py-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium uppercase tracking-wider text-atria-text-muted">
+            Member
+          </label>
+          <Select
+            aria-label="Member"
+            value={memberId}
+            onChange={(e) => setMemberId(e.target.value)}
+            className="w-56"
+          >
+            <option value="">Select a member…</option>
+            {(members ?? []).map((m: { clerkUserId: string; displayName: string }) => (
+              <option key={m.clerkUserId} value={m.clerkUserId}>
+                {m.displayName}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium uppercase tracking-wider text-atria-text-muted">
+            Due date (optional)
+          </label>
+          <Input
+            type="date"
+            value={dueAt}
+            onChange={(e) => setDueAt(e.target.value)}
+            className="w-40"
+          />
+        </div>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={handleAssign}
+          disabled={busy || !memberId}
+        >
+          {busy ? 'Assigning…' : 'Assign training'}
+        </Button>
+        {error && <p className="text-xs text-atria-danger">{error}</p>}
+      </div>
+      {assignments && assignments.length > 0 && (
+        <ul className="space-y-1">
+          {assignments.map((a) => (
+            <li
+              key={a._id}
+              className="flex items-center justify-between gap-2 text-sm text-atria-text-secondary"
+            >
+              <span>
+                {a.memberName}
+                {a.dueAt ? ` · due ${a.dueAt}` : ''}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  unassignTraining({ clerkOrgId, assignmentId: a._id })
+                }
+              >
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-xs text-atria-text-muted">
+        Assigned members get a notification and see the course in their hub even
+        if their role doesn&apos;t include it.
+      </p>
     </div>
   )
 }

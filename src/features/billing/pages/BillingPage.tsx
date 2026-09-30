@@ -14,8 +14,12 @@ import {
 } from '@/shared/ui/Dialog'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { USDateInput } from '@/shared/ui/USDateInput'
+import { Input } from '@/shared/ui/Input'
+import { Select } from '@/shared/ui/Select'
 import { Separator } from '@/shared/ui/Separator'
 import { AppLoader } from '@/shared/ui/AppLoader'
+import { generatePaymentCalendarPdf } from '../pdf/paymentCalendarPdf'
+import { saveAndDownload } from '@/features/onboarding/pdf/generatePrefilledPdf'
 import { downloadCsv } from '@/shared/lib/downloadCsv'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { BillingInvoicePanel } from '../components/BillingInvoicePanel'
@@ -77,6 +81,17 @@ export function BillingPage() {
   const [perPatientError, setPerPatientError] = useState<string | null>(null)
   const [evidenceLineId, setEvidenceLineId] = useState<Id<'billingLines'> | null>(
     null,
+  )
+  const [ledgerMonth, setLedgerMonth] = useState('')
+  // Billing archive filter: view the ledger by year-month (scheduled date).
+  const visibleLedgerLines = useMemo(
+    () =>
+      ledgerMonth
+        ? (ledger ?? []).filter(
+            (line) => line.scheduledStart.slice(0, 7) === ledgerMonth,
+          )
+        : (ledger ?? []),
+    [ledger, ledgerMonth],
   )
   const [evidenceStart, setEvidenceStart] = useState('')
   const [evidenceEnd, setEvidenceEnd] = useState('')
@@ -338,12 +353,27 @@ export function BillingPage() {
 
       <Separator />
 
+      <PaymentCalendarCard clerkOrgId={clerkOrgId} />
+
       <Card>
         <CardHeader>
           <CardTitle>Billing Line Ledger</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-2">
+            <FieldGroup label="Archive month" htmlFor="ledgerMonth">
+              <Input
+                id="ledgerMonth"
+                type="month"
+                value={ledgerMonth}
+                onChange={(e) => setLedgerMonth(e.target.value)}
+              />
+            </FieldGroup>
+            {ledgerMonth && (
+              <Button variant="ghost" size="sm" onClick={() => setLedgerMonth('')}>
+                Clear
+              </Button>
+            )}
             <FieldGroup label="Evidence from" htmlFor="evidenceStart">
               <USDateInput
                 id="evidenceStart"
@@ -373,11 +403,32 @@ export function BillingPage() {
               detail="Approved shifts and created invoices will appear here."
             />
           ) : (
-            <BillingLinesTable
-              lines={ledger}
-              showStatus
-              onViewEvidence={(line) => setEvidenceLineId(line._id)}
-            />
+            <>
+              <div className="flex flex-wrap gap-2 text-xs text-atria-text-secondary">
+                {(['SLS', 'ILS'] as const).map((type) => {
+                  const typeLines = visibleLedgerLines.filter(
+                    (line) => line.serviceType === type,
+                  )
+                  if (typeLines.length === 0) return null
+                  const hours = typeLines.reduce((sum, line) => sum + line.hours, 0)
+                  const amount = typeLines.reduce((sum, line) => sum + line.amount, 0)
+                  return (
+                    <span
+                      key={type}
+                      className="rounded-full border border-atria-border bg-atria-surface px-2.5 py-1"
+                    >
+                      {type}: {hours}h · ${amount.toFixed(2)} ({typeLines.length}{' '}
+                      lines)
+                    </span>
+                  )
+                })}
+              </div>
+              <BillingLinesTable
+                lines={visibleLedgerLines}
+                showStatus
+                onViewEvidence={(line) => setEvidenceLineId(line._id)}
+              />
+            </>
           )}
         </CardContent>
       </Card>
@@ -441,5 +492,117 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
       <div className="text-xs text-atria-muted">{label}</div>
       <div className="text-base font-semibold text-atria-ink">{value}</div>
     </div>
+  )
+}
+
+/** Per client-caregiver-month printable payment calendar (billing support doc). */
+function PaymentCalendarCard({ clerkOrgId }: { clerkOrgId?: string }) {
+  const convex = useConvex()
+  const clients = useQuery(
+    api.clients.list,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
+  const caregivers = useQuery(
+    api.members.listCaregivers,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
+  const [clientId, setClientId] = useState('')
+  const [caregiverId, setCaregiverId] = useState('')
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleDownload = async () => {
+    if (!clerkOrgId || !clientId || !caregiverId || !month) return
+    setBusy(true)
+    setError('')
+    try {
+      const data = await convex.query(api.billing.paymentCalendarData, {
+        clerkOrgId,
+        clientId: clientId as Id<'clients'>,
+        caregiverId,
+        month,
+      })
+      const bytes = await generatePaymentCalendarPdf({
+        clientName: data.clientName,
+        caregiverName: data.caregiverName,
+        month,
+        days: data.days,
+      })
+      saveAndDownload(bytes, `payment-calendar-${data.clientName}-${month}.pdf`)
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Could not generate the calendar.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Payment calendars</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-atria-text-secondary">
+          Printable month calendar per client-caregiver pair with the worked
+          days, hours and total — ready to attach to billing.
+        </p>
+        <div className="flex flex-wrap items-end gap-2">
+          <FieldGroup label="Client" htmlFor="calClient">
+            <Select
+              id="calClient"
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              className="w-52"
+            >
+              <option value="">Select client…</option>
+              {(clients ?? []).map((client: { _id: string; displayName: string }) => (
+                <option key={client._id} value={client._id}>
+                  {client.displayName}
+                </option>
+              ))}
+            </Select>
+          </FieldGroup>
+          <FieldGroup label="Caregiver" htmlFor="calCaregiver">
+            <Select
+              id="calCaregiver"
+              value={caregiverId}
+              onChange={(e) => setCaregiverId(e.target.value)}
+              className="w-52"
+            >
+              <option value="">Select caregiver…</option>
+              {(caregivers ?? []).map(
+                (caregiver: { clerkUserId: string; displayName: string }) => (
+                  <option key={caregiver.clerkUserId} value={caregiver.clerkUserId}>
+                    {caregiver.displayName}
+                  </option>
+                ),
+              )}
+            </Select>
+          </FieldGroup>
+          <FieldGroup label="Month" htmlFor="calMonth">
+            <Input
+              id="calMonth"
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+            />
+          </FieldGroup>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleDownload}
+            disabled={busy || !clientId || !caregiverId || !month}
+          >
+            {busy ? 'Generating…' : 'Download calendar PDF'}
+          </Button>
+          {error && <p className="text-sm text-atria-danger">{error}</p>}
+        </div>
+      </CardContent>
+    </Card>
   )
 }

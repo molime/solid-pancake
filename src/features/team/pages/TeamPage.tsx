@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Input } from '@/shared/ui/Input'
+import { Textarea } from '@/shared/ui/Textarea'
 import { Select } from '@/shared/ui/Select'
 import { isValidEmail } from '@/shared/validation'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
@@ -152,6 +153,38 @@ export function TeamPage() {
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
   const updateRole = useMutation(api.members.updateRole)
+  const sendMemberMessage = useMutation(api.notifications.sendReminderToMember)
+  const [messageFor, setMessageFor] = useState<{
+    clerkUserId: string
+    name: string
+  } | null>(null)
+  const [messageText, setMessageText] = useState('')
+  const [sendingMessage, setSendingMessage] = useState(false)
+  const [messageError, setMessageError] = useState('')
+
+  // Admin-created alert/message to a member (in-app notification + email).
+  const handleSendMessage = async () => {
+    if (!clerkOrgId || !messageFor || !messageText.trim()) return
+    setSendingMessage(true)
+    setMessageError('')
+    try {
+      await sendMemberMessage({
+        clerkOrgId,
+        clerkUserId: messageFor.clerkUserId,
+        message: messageText,
+      })
+      setMessageFor(null)
+      setMessageText('')
+    } catch (err) {
+      setMessageError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Could not send the message.',
+      )
+    } finally {
+      setSendingMessage(false)
+    }
+  }
   const createInvitation = useAction(api.invitations.create)
   const createCaregiver = useAction(api.employeeProfiles.createCaregiver)
   const runAdpInitialWorkerLoad = useAction(
@@ -795,6 +828,7 @@ export function TeamPage() {
                   <TableHeader>Name</TableHeader>
                   <TableHeader>Email</TableHeader>
                   <TableHeader>Role</TableHeader>
+                  {isAdmin && <TableHeader className="w-28">Actions</TableHeader>}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -854,11 +888,70 @@ export function TeamPage() {
                           </Badge>
                         )}
                       </TableCell>
+                      {isAdmin && (
+                        <TableCell>
+                          {!isSelf && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setMessageFor({
+                                  clerkUserId: member.clerkUserId,
+                                  name: member.displayName,
+                                })
+                                setMessageText('')
+                                setMessageError('')
+                              }}
+                            >
+                              Message
+                            </Button>
+                          )}
+                        </TableCell>
+                      )}
                     </TableRow>
                   )
                 })}
               </TableBody>
             </Table>
+          )}
+          {isAdmin && messageFor && (
+            <div className="space-y-2 border-t border-atria-border p-4">
+              <p className="text-sm font-medium text-atria-ink">
+                Message to {messageFor.name}
+              </p>
+              <Textarea
+                value={messageText}
+                onChange={(e) => setMessageText(e.target.value)}
+                placeholder="e.g. Please upload your renewed CPR certificate this week."
+                rows={3}
+              />
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={handleSendMessage}
+                  disabled={sendingMessage || !messageText.trim()}
+                >
+                  {sendingMessage ? 'Sending…' : 'Send'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setMessageFor(null)
+                    setMessageText('')
+                    setMessageError('')
+                  }}
+                >
+                  Cancel
+                </Button>
+                {messageError && (
+                  <p className="text-xs text-atria-danger">{messageError}</p>
+                )}
+              </div>
+              <p className="text-xs text-atria-muted">
+                They get an in-app notification and an email.
+              </p>
+            </div>
           )}
         </CardContent>
       </Card>

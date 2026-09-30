@@ -8,6 +8,7 @@ import {
   type MutationCtx,
 } from './_generated/server'
 import { internal } from './_generated/api'
+import { notifyTenantStaff } from './_utils/notifications'
 import type { Doc, Id } from './_generated/dataModel'
 import {
   assertTenantDoc,
@@ -696,5 +697,150 @@ export const exportPayroll = action({
       caregiverCount: data.entries.length,
       csv,
     }
+  },
+})
+
+/**
+ * Payment calendar data: worked days for one client-caregiver pair in one
+ * month (from submitted/approved/billing_ready shifts). Powers the printable
+ * per-pair payment calendar PDF.
+ */
+export const paymentCalendarData = query({
+  args: {
+    clerkOrgId: v.string(),
+    clientId: v.id('clients'),
+    caregiverId: v.string(),
+    month: v.string(), // yyyy-mm
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+    if (!/^\d{4}-\d{2}$/.test(args.month)) {
+      throw new ConvexError('Month must be yyyy-mm.')
+    }
+    const [year, month] = args.month.split('-').map(Number)
+    const startBound = `${args.month}-01T00:00:00.000Z`
+    const endBound = new Date(Date.UTC(year, month, 1)).toISOString()
+
+    const client = await ctx.db.get(args.clientId)
+    if (!client) throw new ConvexError('Client not found.')
+    assertTenantDoc(client, tenantId)
+
+    const shifts = await ctx.db
+      .query('shifts')
+      .withIndex('by_tenant_caregiver_status', (q) =>
+        q.eq('tenantId', tenantId).eq('caregiverId', args.caregiverId),
+      )
+      .filter((q) =>
+        q.and(
+          q.eq(q.field('clientId'), args.clientId),
+          q.gte(q.field('scheduledStart'), startBound),
+          q.lt(q.field('scheduledStart'), endBound),
+        ),
+      )
+      .collect()
+
+    const worked = shifts.filter((s) =>
+      ['submitted', 'approved', 'billing_ready'].includes(s.status),
+    )
+    const caregiver = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', tenantId).eq('clerkUserId', args.caregiverId),
+      )
+      .unique()
+
+    const days = worked.map((shift) => {
+      const beginAt = shift.clockInAt ?? shift.scheduledStart
+      const endAt = shift.clockOutAt ?? shift.scheduledEnd
+      const hours = Math.max(
+        0,
+        (Date.parse(endAt) - Date.parse(beginAt)) / (1000 * 60 * 60),
+      )
+      return {
+        date: beginAt.slice(0, 10),
+        beginAt,
+        endAt,
+        hours: Math.round(hours * 2) / 2,
+      }
+    })
+    return {
+      clientName: client.displayName,
+      caregiverName: caregiver?.displayName ?? 'Caregiver',
+      days,
+    }
+  },
+})
+
+/**
+ * Monthly cron (2nd of the month): remind coordinators and admins that the
+ * billing period closed and invoices are due to be reviewed/created.
+ */
+export const notifyBillingDueInternal = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const tenants = await ctx.db.query('tenants').collect()
+    let notifiedTenants = 0
+    for (const tenant of tenants) {
+      await notifyTenantStaff(ctx, tenant._id, ['org:admin', 'org:coordinator'], {
+        type: 'billing_due',
+        message:
+          'The billing period has closed — review the billing ledger and create this month\'s invoices.',
+        subject: 'Billing period closed',
+      })
+      notifiedTenants++
+    }
+    return { notifiedTenants }
+  },
+})
+
+/**
+ * Edit an invoice's period dates after creation (Maria's "cómo se cambia la
+ * fecha"). Allowed while the invoice is draft or sent — paid/void invoices
+ * are locked.
+ */
+export const updateInvoicePeriod = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    invoiceId: v.id('exportBatches'),
+    periodStart: v.string(),
+    periodEnd: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:coordinator',
+    ])
+    const invoice = await ctx.db.get(args.invoiceId)
+    if (!invoice) throw new ConvexError('Invoice not found.')
+    assertTenantDoc(invoice, tenantId)
+    const status = invoice.status ?? 'draft'
+    if (status === 'paid' || status === 'void') {
+      throw new ConvexError('Paid or void invoices cannot be edited.')
+    }
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(args.periodStart) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(args.periodEnd) ||
+      args.periodEnd < args.periodStart
+    ) {
+      throw new ConvexError('Enter a valid period (start on or before end).')
+    }
+    await ctx.db.patch(args.invoiceId, {
+      periodStart: args.periodStart,
+      periodEnd: args.periodEnd,
+    })
+    await ctx.runMutation(internal.audit.record, {
+      clerkOrgId: args.clerkOrgId,
+      action: 'invoice.period_updated',
+      metadata: {
+        invoiceId: args.invoiceId as string,
+        periodStart: args.periodStart,
+        periodEnd: args.periodEnd,
+      },
+    })
+    return { ok: true }
   },
 })

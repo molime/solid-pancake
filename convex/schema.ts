@@ -710,6 +710,8 @@ export default defineSchema({
     completedAt: v.string(),
     status: v.string(),
     expiresAt: v.optional(v.string()),
+    // Set when the 30-day expiry alert was sent (daily cron, send once).
+    expiryAlertedAt: v.optional(v.string()),
   }).index('by_tenant_user', ['tenantId', 'clerkUserId']),
 
   // Agency branches — each agency configures which branches they have
@@ -1141,6 +1143,19 @@ export default defineSchema({
   })
     .index('by_tenant', ['tenantId'])
     .index('by_tenant_key', ['tenantId', 'courseKey']),
+
+  // Manual per-user training assignments (training management) — a course
+  // assigned to a member shows in their hub regardless of requiredRoles.
+  trainingAssignments: defineTable({
+    tenantId: v.id('tenants'),
+    courseId: v.id('trainingCourses'),
+    clerkUserId: v.string(),
+    assignedBy: v.string(),
+    dueAt: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index('by_tenant_user', ['tenantId', 'clerkUserId'])
+    .index('by_tenant_course', ['tenantId', 'courseId']),
 
   // Per-step completion tracking for training courses.
   trainingStepCompletions: defineTable({

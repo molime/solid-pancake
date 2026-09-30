@@ -93,6 +93,21 @@ export function ComplianceOverviewPage() {
   const overrideComplianceBlock = useMutation(
     api.compliance.overrideComplianceBlock,
   )
+  const updateArchiveItem = useMutation(
+    api.documentArchive.updateDocumentArchiveItem,
+  )
+  // Verify a pending external training certificate into the record.
+  const handleVerify = async (itemId: Id<'documentArchiveItems'>) => {
+    if (!clerkOrgId) return
+    try {
+      await updateArchiveItem({ clerkOrgId, itemId, status: 'verified' })
+      setMessage('Document verified.')
+    } catch (err) {
+      setError(
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Verify failed.',
+      )
+    }
+  }
   const exportReport = useMutation(api.reporting.exportReport)
 
   const canOverride = member?.role === 'org:admin' || member?.role === 'org:hr'
@@ -511,6 +526,14 @@ export function ComplianceOverviewPage() {
                                       onClick={() => openOverride(item)}
                                     >
                                       Override
+                                    </Button>
+                                  ) : canOverride && item.status === 'pending' ? (
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      onClick={() => handleVerify(item.itemId)}
+                                    >
+                                      Verify
                                     </Button>
                                   ) : (
                                     '—'

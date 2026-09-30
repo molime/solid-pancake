@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
 import {
   AlertTriangle,
+  Banknote,
   Bell,
   XCircle,
 } from 'lucide-react'
@@ -30,6 +31,11 @@ export function DashboardPage() {
     api.compliance.getComplianceOverview,
     clerkOrgId && canViewDashboard ? { clerkOrgId } : 'skip',
   )
+  const readyLines = useQuery(
+    api.billing.unexported,
+    clerkOrgId && canViewDashboard ? { clerkOrgId } : 'skip',
+  )
+  const readyToInvoice = readyLines?.length ?? 0
 
   if (member?.role === 'org:caregiver') {
     return <Navigate to="/caregiver/today" replace />
@@ -151,7 +157,8 @@ export function DashboardPage() {
           <CardContent>
             {complianceOverview.expiring === 0 &&
             complianceOverview.expired === 0 &&
-            pendingDocuments === 0 ? (
+            pendingDocuments === 0 &&
+            readyToInvoice === 0 ? (
               <div className="rounded-[var(--radius-atria-md)] border border-dashed border-atria-border p-6 text-center">
                 <p className="text-sm text-atria-muted">
                   Nothing needs attention right now.
@@ -160,7 +167,10 @@ export function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {pendingDocuments > 0 && (
-                  <div className="flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3">
+                  <Link
+                    to="/coordinator/review"
+                    className="flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3 transition-colors hover:border-atria-accent/40"
+                  >
                     <div className="flex items-center gap-3">
                       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-atria-info-bg text-atria-info">
                         <Bell className="h-4 w-4" />
@@ -172,10 +182,31 @@ export function DashboardPage() {
                     <span className="text-lg font-semibold text-atria-ink">
                       {pendingDocuments}
                     </span>
-                  </div>
+                  </Link>
+                )}
+                {readyToInvoice > 0 && (
+                  <Link
+                    to="/billing"
+                    className="flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3 transition-colors hover:border-atria-accent/40"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-atria-success-bg text-atria-success">
+                        <Banknote className="h-4 w-4" />
+                      </span>
+                      <p className="text-sm font-medium text-atria-ink">
+                        Billing lines ready to invoice
+                      </p>
+                    </div>
+                    <span className="text-lg font-semibold text-atria-ink">
+                      {readyToInvoice}
+                    </span>
+                  </Link>
                 )}
                 {complianceOverview.expiring > 0 && (
-                  <div className="flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3">
+                  <Link
+                    to="/compliance"
+                    className="flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3 transition-colors hover:border-atria-accent/40"
+                  >
                     <div className="flex items-center gap-3">
                       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-atria-warning-bg text-atria-warning">
                         <AlertTriangle className="h-4 w-4" />
@@ -187,22 +218,25 @@ export function DashboardPage() {
                     <span className="text-lg font-semibold text-atria-ink">
                       {complianceOverview.expiring}
                     </span>
-                  </div>
+                  </Link>
                 )}
                 {complianceOverview.expired > 0 && (
-                  <div className="flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3">
+                  <Link
+                    to="/compliance"
+                    className="flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3 transition-colors hover:border-atria-accent/40"
+                  >
                     <div className="flex items-center gap-3">
                       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-atria-danger-bg text-atria-danger">
                         <XCircle className="h-4 w-4" />
                       </span>
-                      <p className="text-sm font-medium text-atria-ink">
+                      <p className="text-sm text-atria-ink">
                         Expired credentials
                       </p>
                     </div>
                     <span className="text-lg font-semibold text-atria-ink">
                       {complianceOverview.expired}
                     </span>
-                  </div>
+                  </Link>
                 )}
               </div>
             )}

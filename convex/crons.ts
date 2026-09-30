@@ -69,4 +69,18 @@ crons.daily(
   internal.platform.checkLimitAlerts,
 )
 
+// Daily 30-day training expiry alerts (per completion, sent once).
+crons.daily(
+  'checkTrainingExpirations',
+  { hourUTC: 6, minuteUTC: 45 },
+  internal.training.checkTrainingExpirations,
+)
+
+// Monthly billing-due reminder (2nd, after the recurring billing run on the 1st).
+crons.monthly(
+  'notifyBillingDue',
+  { day: 2, hourUTC: 14, minuteUTC: 0 },
+  internal.billing.notifyBillingDueInternal,
+)
+
 export default crons

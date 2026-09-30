@@ -43,6 +43,44 @@ interface NavItem {
   section?: SectionKey
 }
 
+// Sidebar grouping (label → group). Sectioned menu per agency feedback; an
+// unmapped label falls under General.
+const NAV_GROUPS: Array<{ key: string; label: string }> = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'work', label: 'Work' },
+  { key: 'people', label: 'People' },
+  { key: 'learning', label: 'Learning' },
+  { key: 'management', label: 'Management' },
+  { key: 'general', label: 'General' },
+]
+const GROUP_BY_LABEL: Record<string, string> = {
+  'HR Home': 'overview',
+  Dashboard: 'overview',
+  Today: 'work',
+  Schedule: 'work',
+  Availability: 'work',
+  Review: 'work',
+  Compliance: 'work',
+  Incidents: 'work',
+  'EVV Export': 'work',
+  Candidates: 'people',
+  Employees: 'people',
+  Team: 'people',
+  Clients: 'people',
+  Cases: 'people',
+  Knowledge: 'learning',
+  Onboarding: 'learning',
+  Training: 'learning',
+  'Training Hub': 'learning',
+  Admin: 'management',
+  'Employee Performance': 'management',
+  'Audit Ready Center': 'management',
+  Billing: 'management',
+  Payroll: 'management',
+  Subscription: 'management',
+  Settings: 'management',
+}
+
 const navItems: NavItem[] = [
   {
     label: 'HR Home',
@@ -85,7 +123,7 @@ const navItems: NavItem[] = [
     roles: ['org:admin', 'org:coordinator', 'org:hr'],
   },
   {
-    label: 'Reporting',
+    label: 'Employee Performance',
     section: 'reporting',
     path: '/reports',
     icon: <BarChart3 className="h-4 w-4" />,
@@ -270,8 +308,21 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
     api.agencyConfig.getDisabledSections,
     effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
+  const branches = useQuery(
+    api.agencyConfig.listAllAgencyBranches,
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
+  )
 
   const role = member?.role ?? 'org:caregiver'
+
+  // Coordinator access differs for ILS-only agencies: no shift scheduling or
+  // shift review there. SLS/branched/unbranched agencies are unaffected.
+  const branchTypes = new Set(
+    (branches ?? [])
+      .filter((branch) => branch.active)
+      .map((branch) => branch.branchType.toUpperCase()),
+  )
+  const isIlsOnlyAgency = branchTypes.has('ILS') && !branchTypes.has('SLS')
 
   const visibleItems = navItems.filter((item) => {
     if (!item.roles.includes(role)) return false
@@ -280,6 +331,13 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       return false
     }
     if (item.hiddenWhenProduct === 'training' && hasTrainingProduct === true) {
+      return false
+    }
+    if (
+      role === 'org:coordinator' &&
+      isIlsOnlyAgency &&
+      (item.path === '/scheduling' || item.path === '/coordinator/review')
+    ) {
       return false
     }
     return true
@@ -348,27 +406,42 @@ function SidebarContent({
         <AtriaLogo className="h-20 px-1" />
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {visibleItems.map((item) => {
-          const isActive = item.exact
-            ? locationPath === item.path
-            : locationPath === item.path ||
-              (item.path !== '/' && locationPath.startsWith(`${item.path}/`))
+      <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
+        {NAV_GROUPS.map((group) => {
+          const groupItems = visibleItems.filter(
+            (item) => (GROUP_BY_LABEL[item.label] ?? 'general') === group.key,
+          )
+          if (groupItems.length === 0) return null
           return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              onClick={onNavigate}
-              className={cn(
-                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-white/10 text-white'
-                  : 'hover:bg-white/5 hover:text-white',
-              )}
-            >
-              {item.icon}
-              {item.label}
-            </NavLink>
+            <div key={group.key}>
+              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-atria-sidebar-text/50">
+                {group.label}
+              </p>
+              <div className="space-y-1">
+                {groupItems.map((item) => {
+                  const isActive = item.exact
+                    ? locationPath === item.path
+                    : locationPath === item.path ||
+                      (item.path !== '/' && locationPath.startsWith(`${item.path}/`))
+                  return (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      onClick={onNavigate}
+                      className={cn(
+                        'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-white/10 text-white'
+                          : 'hover:bg-white/5 hover:text-white',
+                      )}
+                    >
+                      {item.icon}
+                      {item.label}
+                    </NavLink>
+                  )
+                })}
+              </div>
+            </div>
           )
         })}
       </nav>
