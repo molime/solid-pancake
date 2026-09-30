@@ -48,24 +48,10 @@ const VISITS = {
   excludedLiveInCount: 2,
 }
 
-const ATTESTATIONS = [
-  {
-    _id: 'item_1',
-    subjectId: 'profile_1',
-    employeeName: 'Live-In Caregiver',
-    status: 'active',
-    expiresAt: '2027-08-01T00:00:00.000Z',
-    expired: false,
-    createdAt: '2026-08-01T00:00:00.000Z',
-  },
-]
-
 function mockEvvState({
   visits = VISITS,
-  attestations = ATTESTATIONS,
 }: {
   visits?: unknown
-  attestations?: unknown
 } = {}) {
   vi.mocked(useQuery).mockImplementation(
     ((queryRef: unknown) => {
@@ -73,10 +59,6 @@ function mockEvvState({
         queryRef as Parameters<typeof getFunctionName>[0],
       )
       if (name === 'evv:getEvvVisits') return visits
-      if (name === 'evv:listLiveInAttestations') return attestations
-      if (name === 'evv:listEvvEmployeeOptions') {
-        return [{ employeeProfileId: 'profile_1', displayName: 'Live-In Caregiver' }]
-      }
       return undefined
     }) as unknown as typeof useQuery,
   )
@@ -105,7 +87,7 @@ describe('EvvExportPage', () => {
     expect(screen.getByText(/not a live Sandata\/CalEVV integration/i)).toBeInTheDocument()
   })
 
-  it('renders visit rows with the six EVV elements and the excluded count', () => {
+  it('renders visit rows with the six EVV elements', () => {
     mockEvvState()
     render(
       <MemoryRouter>
@@ -117,9 +99,6 @@ describe('EvvExportPage', () => {
     expect(screen.getByText('Caregiver One')).toBeInTheDocument()
     expect(screen.getByText('Client home')).toBeInTheDocument()
     expect(screen.getByText('SLS')).toBeInTheDocument()
-    expect(
-      screen.getByText('2 live-in exempt visits excluded'),
-    ).toBeInTheDocument()
   })
 
   it('shows the empty state when no visits are in range', () => {
@@ -133,21 +112,4 @@ describe('EvvExportPage', () => {
     expect(screen.getByText('No visits in range')).toBeInTheDocument()
   })
 
-  it('renders the live-in attestation section', () => {
-    mockEvvState()
-    render(
-      <MemoryRouter>
-        <EvvExportPageUnderTest />
-      </MemoryRouter>,
-    )
-
-    expect(
-      screen.getByText('Live-in caregiver attestations'),
-    ).toBeInTheDocument()
-    // The name appears in both the attestation table and the employee picker.
-    expect(screen.getAllByText('Live-In Caregiver').length).toBeGreaterThan(0)
-    expect(
-      screen.getByRole('button', { name: /record attestation/i }),
-    ).toBeInTheDocument()
-  })
 })

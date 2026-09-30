@@ -1,5 +1,5 @@
 import { useOrganization } from '@clerk/react'
-import { useMutation, useQuery } from 'convex/react'
+import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
@@ -13,7 +13,7 @@ import {
 } from '@/shared/ui/Table'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { EmptyState } from '@/shared/ui/EmptyState'
-import { ClipboardCheck, Plus, RefreshCw } from 'lucide-react'
+import { ClipboardCheck, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { NewCaseModal } from '../components/NewCaseModal'
@@ -38,30 +38,10 @@ export function HRCasesPage() {
   )
 
   const [modalOpen, setModalOpen] = useState(false)
-  const [checking, setChecking] = useState(false)
   const [selectedCaseId, setSelectedCaseId] = useState<Id<'hrCases'> | null>(
     null,
   )
   const { toast, show, hide } = useHrToast()
-  const triggerFlagCheck = useMutation(api.hrCases.triggerFlagCheck)
-
-  const handleCheckForIssues = async () => {
-    if (!clerkOrgId || checking) return
-    setChecking(true)
-    try {
-      const result = await triggerFlagCheck({ clerkOrgId })
-      show(
-        'success',
-        result.created === 0
-          ? 'No new issues found'
-          : `Flagged ${result.created} new ${result.created === 1 ? 'issue' : 'issues'}`,
-      )
-    } catch {
-      show('danger', 'Could not check for issues')
-    } finally {
-      setChecking(false)
-    }
-  }
 
   const memberIdByClerkUserId = new Map(
     (employees ?? [])
@@ -79,14 +59,6 @@ export function HRCasesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            onClick={handleCheckForIssues}
-            disabled={!clerkOrgId || checking}
-          >
-            <RefreshCw className="h-4 w-4" />
-            {checking ? 'Checking…' : 'Check for issues'}
-          </Button>
           <Button variant="primary" onClick={() => setModalOpen(true)}>
             <Plus className="h-4 w-4" />
             New case

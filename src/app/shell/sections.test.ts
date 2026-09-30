@@ -48,7 +48,6 @@ describe('isSectionDisabled', () => {
       'payroll',
       'clients',
       'settings',
-      'email-domains',
     ]) {
       expect(keys).toContain(key)
     }

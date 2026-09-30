@@ -990,7 +990,7 @@ export function AppRouter() {
           path="scheduling"
           element={
             <TenantRoleRouteGuard
-              allowedRoles={['org:admin', 'org:coordinator']}
+              allowedRoles={['org:admin', 'org:coordinator', 'org:hr']}
             >
               <RouteSuspense>
                 <SchedulingPage />

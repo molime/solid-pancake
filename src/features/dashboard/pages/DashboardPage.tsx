@@ -6,10 +6,9 @@ import { Badge } from '@/shared/ui/Badge'
 import {
   AlertTriangle,
   Bell,
-  Search,
   XCircle,
 } from 'lucide-react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 
 export function DashboardPage() {
   const { organization } = useOrganization()
@@ -50,20 +49,13 @@ export function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="relative hidden sm:block">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-atria-muted" />
-            <input
-              className="h-10 w-64 rounded-full border border-atria-border bg-atria-surface pl-9 pr-4 text-sm text-atria-ink placeholder:text-atria-muted focus:border-atria-accent focus:outline-none focus:ring-1 focus:ring-atria-accent"
-              placeholder="Search caregivers, clients…"
-              type="text"
-            />
-          </div>
-          <button
+          <Link
+            to="/notifications"
+            aria-label="Open notifications"
             className="flex h-10 w-10 items-center justify-center rounded-full border border-atria-border bg-atria-surface text-atria-muted transition-colors hover:text-atria-ink"
-            type="button"
           >
             <Bell className="h-4 w-4" />
-          </button>
+          </Link>
         </div>
       </div>
 

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { formatCurrency, formatDateUS } from '@/shared/format'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
+import { Link } from 'react-router-dom'
 
 export function AgencyAdminDashboardPage() {
   const { organization } = useOrganization()
@@ -54,6 +55,7 @@ export function AgencyAdminDashboardPage() {
           count: summary.exceptions.billingBlocked,
           icon: <XCircle className="h-4 w-4" />,
           tone: 'danger' as const,
+          to: '/coordinator/review',
         },
         {
           key: 'compliance',
@@ -61,6 +63,7 @@ export function AgencyAdminDashboardPage() {
           count: summary.exceptions.complianceExpired,
           icon: <AlertTriangle className="h-4 w-4" />,
           tone: 'warning' as const,
+          to: '/compliance',
         },
         {
           key: 'onboarding',
@@ -68,6 +71,7 @@ export function AgencyAdminDashboardPage() {
           count: summary.exceptions.onboardingWaiting,
           icon: <Hourglass className="h-4 w-4" />,
           tone: 'info' as const,
+          to: '/hr/candidates',
         },
       ]
     : []
@@ -91,73 +95,82 @@ export function AgencyAdminDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard
-          label="Ready to bill"
-          value={formatCurrency(summary?.readyToBillAmount ?? 0)}
-          icon={<Banknote className="h-5 w-5" />}
-          valueClassName="text-atria-success"
-          trend={
-            <span className="text-sm text-atria-text-secondary">
-              {summary?.readyToBill ?? 0} unbilled lines
-            </span>
-          }
-        />
-        <KpiCard
-          label="Docs awaiting review"
-          value={String(summary?.docsAwaitingReview ?? 0)}
-          icon={<FileClock className="h-5 w-5" />}
-          valueClassName="text-atria-warning"
-          trend={
-            <span className="text-sm text-atria-text-secondary">
-              Uploaded documents pending HR review
-            </span>
-          }
-        />
-        <KpiCard
-          label="Compliance rate"
-          value={`${summary?.complianceRate ?? 0}%`}
-          icon={<ShieldCheck className="h-5 w-5" />}
-          valueClassName="text-atria-info"
-          trend={
-            <span className="text-sm text-atria-text-secondary">
-              Verified credentials
-            </span>
-          }
-        />
-        <KpiCard
-          label="Active caregivers"
-          value={String(summary?.activeCaregivers ?? 0)}
-          icon={<Users className="h-5 w-5" />}
-          trend={
-            <span className="text-sm text-atria-text-secondary">
-              Caregivers on roster
-            </span>
-          }
-        />
+        <Link to="/billing" className="block transition-opacity hover:opacity-80">
+          <KpiCard
+            label="Ready to bill"
+            value={formatCurrency(summary?.readyToBillAmount ?? 0)}
+            icon={<Banknote className="h-5 w-5" />}
+            valueClassName="text-atria-success"
+            trend={
+              <span className="text-sm text-atria-text-secondary">
+                {summary?.readyToBill ?? 0} unbilled lines
+              </span>
+            }
+          />
+        </Link>
+        <Link to="/compliance" className="block transition-opacity hover:opacity-80">
+          <KpiCard
+            label="Docs awaiting review"
+            value={String(summary?.docsAwaitingReview ?? 0)}
+            icon={<FileClock className="h-5 w-5" />}
+            valueClassName="text-atria-warning"
+            trend={
+              <span className="text-sm text-atria-text-secondary">
+                Uploaded documents pending HR review
+              </span>
+            }
+          />
+        </Link>
+        <Link to="/compliance" className="block transition-opacity hover:opacity-80">
+          <KpiCard
+            label="Compliance rate"
+            value={`${summary?.complianceRate ?? 0}%`}
+            icon={<ShieldCheck className="h-5 w-5" />}
+            valueClassName="text-atria-info"
+            trend={
+              <span className="text-sm text-atria-text-secondary">
+                Verified credentials
+              </span>
+            }
+          />
+        </Link>
+        <Link to="/hr/employees" className="block transition-opacity hover:opacity-80">
+          <KpiCard
+            label="Active caregivers"
+            value={String(summary?.activeCaregivers ?? 0)}
+            icon={<Users className="h-5 w-5" />}
+            trend={
+              <span className="text-sm text-atria-text-secondary">
+                Caregivers on roster
+              </span>
+            }
+          />
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>Exceptions</CardTitle>
+            <CardTitle>Needs attention</CardTitle>
           </CardHeader>
           <CardContent>
             {summary === undefined ? (
               <p className="py-8 text-center text-sm text-atria-text-secondary">
-                Loading exceptions…
+                Loading…
               </p>
             ) : exceptionTotal === 0 ? (
               <div className="rounded-[var(--radius-atria-md)] border border-dashed border-atria-border p-6 text-center">
                 <p className="text-sm text-atria-text-secondary">
-                  No exceptions
+                  Nothing needs attention
                 </p>
               </div>
             ) : (
               <div className="space-y-3">
                 {exceptionRows.map((row) => (
-                  <div
+                  <Link
                     key={row.key}
-                    className="flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3"
+                    to={row.to}
+                    className="flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3 transition-colors hover:border-atria-accent/40"
                   >
                     <div className="flex items-center gap-3">
                       <span
@@ -172,38 +185,40 @@ export function AgencyAdminDashboardPage() {
                     <span className="text-lg font-semibold text-atria-ink">
                       {row.count}
                     </span>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Monthly summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm text-atria-text-secondary">
-                  Revenue billed
-                </p>
-                <p className="mt-1 text-2xl font-bold text-atria-ink">
-                  {formatCurrency(summary?.monthly.revenueBilled ?? 0)}
-                </p>
+        <Link to="/billing" className="block transition-opacity hover:opacity-80">
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle>Monthly summary</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-atria-text-secondary">
+                    Revenue billed
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-atria-ink">
+                    {formatCurrency(summary?.monthly.revenueBilled ?? 0)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-atria-text-secondary">
+                    Visits completed
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-atria-ink">
+                    {summary?.monthly.visitsCompleted ?? 0}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-atria-text-secondary">
-                  Visits completed
-                </p>
-                <p className="mt-1 text-2xl font-bold text-atria-ink">
-                  {summary?.monthly.visitsCompleted ?? 0}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       <Card>

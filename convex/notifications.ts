@@ -5,6 +5,7 @@ import {
   mutation,
   query,
 } from './_generated/server'
+import { internal } from './_generated/api'
 import { requireTenantRole } from './authHelpers'
 
 const MEMBER_ROLES: Array<
@@ -167,5 +168,59 @@ export const markAllRead = mutation({
     }
 
     return { marked: unread.length }
+  },
+})
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+/**
+ * Staff-side reminder: lets admin/HR/coordinators nudge a member of their
+ * agency (e.g. from the audit center's inline issue detail). Writes an in-app
+ * notification and best-effort emails the member.
+ */
+export const sendReminderToMember = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    clerkUserId: v.string(),
+    message: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+    const message = args.message.trim()
+    if (!message || message.length > 500) {
+      throw new ConvexError('Reminder message is required (max 500 characters).')
+    }
+    const target = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', tenantId).eq('clerkUserId', args.clerkUserId),
+      )
+      .unique()
+    if (!target) {
+      throw new ConvexError('Member not found in this agency.')
+    }
+    await ctx.db.insert('notifications', {
+      tenantId,
+      clerkUserId: args.clerkUserId,
+      type: 'reminder',
+      message,
+      read: false,
+      createdAt: new Date().toISOString(),
+    })
+    await ctx.scheduler.runAfter(0, internal._utils.resend.sendEmail, {
+      to: target.email,
+      subject: 'Reminder from your agency',
+      html: `<p>${escapeHtml(message)}</p>`,
+    })
+    return { ok: true }
   },
 })
