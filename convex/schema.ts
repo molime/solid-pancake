@@ -1157,6 +1157,27 @@ export default defineSchema({
     .index('by_tenant_user', ['tenantId', 'clerkUserId'])
     .index('by_tenant_course', ['tenantId', 'courseId']),
 
+  // External (non-Atria) training assignments: admin creates and assigns one
+  // per member with instructions; the member uploads their certificate and
+  // admin verifies it. The verified upload also lands in the document archive.
+  externalTrainingAssignments: defineTable({
+    tenantId: v.id('tenants'),
+    title: v.string(),
+    instructions: v.optional(v.string()),
+    clerkUserId: v.string(),
+    assignedBy: v.string(),
+    dueAt: v.optional(v.string()),
+    status: v.string(), // 'pending' | 'submitted' | 'verified' | 'rejected'
+    storageId: v.optional(v.string()),
+    fileName: v.optional(v.string()),
+    submittedAt: v.optional(v.string()),
+    archiveItemId: v.optional(v.id('documentArchiveItems')),
+    rejectionReason: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_user', ['tenantId', 'clerkUserId']),
+
   // Per-step completion tracking for training courses.
   trainingStepCompletions: defineTable({
     tenantId: v.id('tenants'),

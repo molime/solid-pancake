@@ -7,6 +7,7 @@ import { GraduationCap } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { CourseWithProgress } from '../model/courseTypes'
 import { CourseCard } from '../components/CourseCard'
+import { ExternalTrainingTasks } from '../components/ExternalTrainingTasks'
 import { ExternalTrainingUploadCard } from '../components/ExternalTrainingUploadCard'
 
 export function TrainingHubPage() {
@@ -110,6 +111,8 @@ export function TrainingHubPage() {
           ))}
         </div>
       )}
+
+      {clerkOrgId && <ExternalTrainingTasks clerkOrgId={clerkOrgId} />}
 
       {clerkOrgId && <ExternalTrainingUploadCard clerkOrgId={clerkOrgId} />}
     </div>

@@ -1336,3 +1336,233 @@ export const checkTrainingExpirations = internalMutation({
     return { alerted }
   },
 })
+
+// ============ External training assignments (admin creates/assigns, member uploads, admin verifies) ============
+
+/** Admin/HR: create an external training and assign it to members. */
+export const createExternalTrainingAssignment = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    title: v.string(),
+    instructions: v.optional(v.string()),
+    clerkUserIds: v.array(v.string()),
+    dueAt: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, ADMIN_ROLES)
+    const title = args.title.trim()
+    if (!title) throw new ConvexError('Training title is required.')
+    if (args.clerkUserIds.length === 0) {
+      throw new ConvexError('Select at least one member to assign.')
+    }
+    const now = new Date().toISOString()
+    const created: string[] = []
+    for (const clerkUserId of args.clerkUserIds) {
+      const member = await ctx.db
+        .query('tenantMembers')
+        .withIndex('by_tenant_user', (q) =>
+          q.eq('tenantId', tenantId).eq('clerkUserId', clerkUserId),
+        )
+        .unique()
+      if (!member) continue
+      const id = await ctx.db.insert('externalTrainingAssignments', {
+        tenantId,
+        title,
+        instructions: args.instructions,
+        clerkUserId,
+        assignedBy: identity.subject,
+        dueAt: args.dueAt,
+        status: 'pending',
+        createdAt: now,
+      })
+      created.push(id as string)
+      await ctx.db.insert('notifications', {
+        tenantId,
+        clerkUserId,
+        type: 'external_training_assigned',
+        message: `You were assigned an external training: ${title}${args.dueAt ? ` (due ${args.dueAt})` : ''}. Upload your certificate in the Training Hub when done.`,
+        read: false,
+        createdAt: now,
+      })
+    }
+    return { created: created.length }
+  },
+})
+
+/** Admin/HR: all external assignments for the tenant (with member names). */
+export const listExternalTrainingAssignments = query({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, ADMIN_ROLES)
+    const assignments = await ctx.db
+      .query('externalTrainingAssignments')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    const rows = []
+    for (const assignment of assignments) {
+      const member = await ctx.db
+        .query('tenantMembers')
+        .withIndex('by_tenant_user', (q) =>
+          q.eq('tenantId', tenantId).eq('clerkUserId', assignment.clerkUserId),
+        )
+        .unique()
+      rows.push({ ...assignment, memberName: member?.displayName ?? 'Unknown' })
+    }
+    return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  },
+})
+
+/** Member: my external training assignments (task list in the hub). */
+export const listMyExternalTrainingAssignments = query({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, args) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+      'org:caregiver',
+    ])
+    const assignments = await ctx.db
+      .query('externalTrainingAssignments')
+      .withIndex('by_tenant_user', (q) =>
+        q.eq('tenantId', tenantId).eq('clerkUserId', identity.subject),
+      )
+      .collect()
+    return assignments.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  },
+})
+
+/** Member: submit a certificate for my assignment (upload then check off). */
+export const submitExternalTraining = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    assignmentId: v.id('externalTrainingAssignments'),
+    storageId: v.string(),
+    fileName: v.string(),
+    contentType: v.string(),
+    size: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+      'org:caregiver',
+    ])
+    const assignment = await ctx.db.get(args.assignmentId)
+    if (!assignment) throw new ConvexError('Assignment not found.')
+    assertTenantDoc(assignment, tenantId)
+    if (assignment.clerkUserId !== identity.subject) {
+      throw new ConvexError('You can only submit your own assignments.')
+    }
+    if (assignment.status === 'verified') {
+      throw new ConvexError('This assignment is already verified.')
+    }
+
+    const profile = await ctx.db
+      .query('employeeProfiles')
+      .withIndex('by_tenant_clerk_user', (q) =>
+        q.eq('tenantId', tenantId).eq('clerkUserId', identity.subject),
+      )
+      .first()
+    if (!profile) {
+      throw new ConvexError('No employee profile found for your account.')
+    }
+
+    const now = new Date().toISOString()
+    const fileId = await ctx.db.insert('files', {
+      tenantId,
+      storageId: args.storageId,
+      uploadedBy: identity.subject,
+      fileName: `${assignment.title} — ${args.fileName}`,
+      contentType: args.contentType,
+      size: args.size,
+      linkedType: 'complianceDoc',
+      linkedId: profile._id as string,
+      visibility: 'admins_coordinators',
+      createdAt: now,
+    })
+    const archiveItemId = await ctx.db.insert('documentArchiveItems', {
+      tenantId,
+      fileId,
+      subjectType: 'employee',
+      subjectId: profile._id as string,
+      category: 'external_training',
+      status: 'pending',
+      retentionUntil: computeRetentionUntil(now),
+      createdAt: now,
+    })
+    await ctx.db.patch(args.assignmentId, {
+      status: 'submitted',
+      storageId: args.storageId,
+      fileName: args.fileName,
+      submittedAt: now,
+      archiveItemId,
+      rejectionReason: undefined,
+    })
+
+    // Notify admin/HR that a certificate is ready to verify.
+    const staffRoles = ['org:admin', 'org:hr'] as const
+    for (const role of staffRoles) {
+      const staff = await ctx.db
+        .query('tenantMembers')
+        .withIndex('by_tenant_role', (q) => q.eq('tenantId', tenantId).eq('role', role))
+        .collect()
+      for (const member of staff) {
+        await ctx.db.insert('notifications', {
+          tenantId,
+          clerkUserId: member.clerkUserId,
+          type: 'external_training_submitted',
+          message: `${profile.displayName} uploaded their certificate for "${assignment.title}" — review and verify it.`,
+          read: false,
+          createdAt: now,
+        })
+      }
+    }
+    return { ok: true }
+  },
+})
+
+/** Admin/HR: verify or reject a submitted external training. */
+export const reviewExternalTraining = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    assignmentId: v.id('externalTrainingAssignments'),
+    approve: v.boolean(),
+    rejectionReason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, ADMIN_ROLES)
+    const assignment = await ctx.db.get(args.assignmentId)
+    if (!assignment) throw new ConvexError('Assignment not found.')
+    assertTenantDoc(assignment, tenantId)
+    if (assignment.status !== 'submitted') {
+      throw new ConvexError('Only submitted certificates can be reviewed.')
+    }
+    if (!args.approve && !args.rejectionReason?.trim()) {
+      throw new ConvexError('Rejection reason is required when rejecting.')
+    }
+
+    const now = new Date().toISOString()
+    await ctx.db.patch(args.assignmentId, {
+      status: args.approve ? 'verified' : 'rejected',
+      rejectionReason: args.approve ? undefined : args.rejectionReason,
+    })
+    if (assignment.archiveItemId) {
+      await ctx.db.patch(assignment.archiveItemId, args.approve
+        ? { status: 'verified', verifiedBy: identity.subject, verifiedAt: now, rejectionReason: undefined }
+        : { status: 'rejected', rejectionReason: args.rejectionReason, verifiedBy: undefined, verifiedAt: undefined })
+    }
+    await ctx.db.insert('notifications', {
+      tenantId,
+      clerkUserId: assignment.clerkUserId,
+      type: 'external_training_reviewed',
+      message: args.approve
+        ? `Your certificate for "${assignment.title}" was verified.`
+        : `Your certificate for "${assignment.title}" was rejected: ${args.rejectionReason}. You can upload a new one.`,
+      read: false,
+      createdAt: now,
+    })
+    return { ok: true }
+  },
+})

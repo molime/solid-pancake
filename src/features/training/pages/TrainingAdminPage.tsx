@@ -11,6 +11,7 @@ import { Input } from '@/shared/ui/Input'
 import { Select } from '@/shared/ui/Select'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { cn } from '@/shared/lib/cn'
+import { ExternalTrainingAdminCard } from '../components/ExternalTrainingAdminCard'
 import type { TrainingStep } from '../model/courseTypes'
 import {
   CATEGORY_LABELS,
@@ -276,6 +277,8 @@ export function TrainingAdminPage() {
           </CardContent>
         </Card>
       )}
+
+      {clerkOrgId && <ExternalTrainingAdminCard clerkOrgId={clerkOrgId} />}
 
       <div className="space-y-3">
         {(courses ?? []).map((course) => (
