@@ -109,7 +109,22 @@ export function InvoicesTable({
     }
   }
 
-  if (invoices.length === 0) return null
+  if (invoices.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Invoices</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="py-6 text-center text-sm text-atria-text-secondary">
+            No invoices yet — select billing lines above and create one. Once
+            created, invoice period dates are editable here while the invoice
+            is draft or sent.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card>
