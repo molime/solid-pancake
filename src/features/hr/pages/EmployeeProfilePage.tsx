@@ -411,14 +411,14 @@ function DocumentsTab({
                   </TableCell>
                 </TableRow>
               ))}
-              {versions!.map((version, index) => (
+              {(versions ?? []).map((version, index) => (
                 <TableRow key={version._id}>
                   <TableCell className="font-medium">
                     {DOCUMENT_VERSION_TYPE_LABELS[version.documentType] ??
                       version.documentType}
                   </TableCell>
                   <TableCell>
-                    Version {versions!.length - index} ·{' '}
+                    Version {(versions ?? []).length - index} ·{' '}
                     {version.uploadedBy === 'hr' ? 'HR' : 'Candidate'}
                   </TableCell>
                   <TableCell>{formatDateUS(version.createdAt)}</TableCell>

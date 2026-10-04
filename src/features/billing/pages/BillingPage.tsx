@@ -16,13 +16,13 @@ import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { USDateInput } from '@/shared/ui/USDateInput'
 import { Input } from '@/shared/ui/Input'
 import { Select } from '@/shared/ui/Select'
-import { Separator } from '@/shared/ui/Separator'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { generatePaymentCalendarPdf } from '../pdf/paymentCalendarPdf'
 import { saveAndDownload } from '@/features/onboarding/pdf/generatePrefilledPdf'
 import { downloadCsv } from '@/shared/lib/downloadCsv'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { BillingInvoicePanel } from '../components/BillingInvoicePanel'
+import { CollapsibleCard } from '../components/CollapsibleCard'
 import { BillingLinesTable } from '../components/BillingLinesTable'
 import { EmptyBillingState } from '../components/EmptyBillingState'
 import { EvidenceLineageDialog } from '../components/EvidenceLineageDialog'
@@ -351,17 +351,31 @@ export function BillingPage() {
         onCreateInvoice={handleCreateInvoice}
       />
 
-      <InvoicesTable invoices={invoices} onDownload={requestInvoiceDownload} onDownloadPdf={requestInvoicePdfDownload} />
+      <CollapsibleCard
+        title="Invoices"
+        defaultOpen
+        badge={
+          <span className="text-xs text-atria-muted">
+            {(invoices ?? []).length} invoice(s)
+          </span>
+        }
+      >
+        <InvoicesTable invoices={invoices} onDownload={requestInvoiceDownload} onDownloadPdf={requestInvoicePdfDownload} />
+      </CollapsibleCard>
 
-      <Separator />
+      <CollapsibleCard title="Payment calendars">
+        <PaymentCalendarCard clerkOrgId={clerkOrgId} bare />
+      </CollapsibleCard>
 
-      <PaymentCalendarCard clerkOrgId={clerkOrgId} />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Billing Line Ledger</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CollapsibleCard
+        title="Billing Line Ledger"
+        badge={
+          <span className="text-xs text-atria-muted">
+            {visibleLedgerLines.length} of {(ledger ?? []).length} lines
+          </span>
+        }
+      >
+        <div className="space-y-4">
           <div className="flex flex-wrap items-end gap-2">
             <FieldGroup label="Archive from" htmlFor="ledgerFrom">
               <USDateInput
@@ -445,8 +459,8 @@ export function BillingPage() {
               />
             </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </CollapsibleCard>
 
       <EvidenceLineageDialog
         billingLineId={evidenceLineId}
@@ -511,7 +525,7 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
 }
 
 /** Per client-caregiver-month printable payment calendar (billing support doc). */
-function PaymentCalendarCard({ clerkOrgId }: { clerkOrgId?: string }) {
+function PaymentCalendarCard({ clerkOrgId, bare }: { clerkOrgId?: string; bare?: boolean }) {
   const convex = useConvex()
   const clients = useQuery(
     api.clients.list,
@@ -556,11 +570,14 @@ function PaymentCalendarCard({ clerkOrgId }: { clerkOrgId?: string }) {
     }
   }
 
+  const Wrapper = bare ? 'div' : Card
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Payment calendars</CardTitle>
-      </CardHeader>
+    <Wrapper>
+      {!bare && (
+        <CardHeader>
+          <CardTitle>Payment calendars</CardTitle>
+        </CardHeader>
+      )}
       <CardContent className="space-y-3">
         <p className="text-sm text-atria-text-secondary">
           Printable month calendar per client-caregiver pair with the worked
@@ -618,6 +635,6 @@ function PaymentCalendarCard({ clerkOrgId }: { clerkOrgId?: string }) {
           {error && <p className="text-sm text-atria-danger">{error}</p>}
         </div>
       </CardContent>
-    </Card>
+    </Wrapper>
   )
 }
