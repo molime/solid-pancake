@@ -82,16 +82,18 @@ export function BillingPage() {
   const [evidenceLineId, setEvidenceLineId] = useState<Id<'billingLines'> | null>(
     null,
   )
-  const [ledgerMonth, setLedgerMonth] = useState('')
-  // Billing archive filter: view the ledger by year-month (scheduled date).
+  const [ledgerFrom, setLedgerFrom] = useState('')
+  const [ledgerTo, setLedgerTo] = useState('')
+  // Billing archive filter: view the ledger by scheduled-date range.
   const visibleLedgerLines = useMemo(
     () =>
-      ledgerMonth
-        ? (ledger ?? []).filter(
-            (line) => line.scheduledStart.slice(0, 7) === ledgerMonth,
-          )
-        : (ledger ?? []),
-    [ledger, ledgerMonth],
+      (ledger ?? []).filter((line) => {
+        const date = line.scheduledStart.slice(0, 10)
+        if (ledgerFrom && date < ledgerFrom) return false
+        if (ledgerTo && date > ledgerTo) return false
+        return true
+      }),
+    [ledger, ledgerFrom, ledgerTo],
   )
   const [evidenceStart, setEvidenceStart] = useState('')
   const [evidenceEnd, setEvidenceEnd] = useState('')
@@ -361,16 +363,29 @@ export function BillingPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-2">
-            <FieldGroup label="Archive month" htmlFor="ledgerMonth">
-              <Input
-                id="ledgerMonth"
-                type="month"
-                value={ledgerMonth}
-                onChange={(e) => setLedgerMonth(e.target.value)}
+            <FieldGroup label="Archive from" htmlFor="ledgerFrom">
+              <USDateInput
+                id="ledgerFrom"
+                value={ledgerFrom}
+                onChange={setLedgerFrom}
               />
             </FieldGroup>
-            {ledgerMonth && (
-              <Button variant="ghost" size="sm" onClick={() => setLedgerMonth('')}>
+            <FieldGroup label="Archive to" htmlFor="ledgerTo">
+              <USDateInput
+                id="ledgerTo"
+                value={ledgerTo}
+                onChange={setLedgerTo}
+              />
+            </FieldGroup>
+            {(ledgerFrom || ledgerTo) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setLedgerFrom('')
+                  setLedgerTo('')
+                }}
+              >
                 Clear
               </Button>
             )}

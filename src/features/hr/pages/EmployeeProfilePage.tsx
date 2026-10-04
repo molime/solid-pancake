@@ -283,9 +283,16 @@ function DocumentsTab({
       ? { clerkOrgId, candidateId: candidateLink.candidateId }
       : 'skip',
   )
+  const prefilledDocs = useQuery(
+    api.candidates.getPrefilledDocuments,
+    clerkOrgId && candidateLink?.candidateId
+      ? { clerkOrgId, candidateId: candidateLink.candidateId }
+      : 'skip',
+  )
 
   const hasDocuments = !!documents && documents.length > 0
   const hasVersions = !!versions && versions.length > 0
+  const hasPrefilled = !!prefilledDocs && prefilledDocs.length > 0
 
   const candidateReviewLink = candidateLink?.candidateId ? (
     <Link
@@ -298,14 +305,14 @@ function DocumentsTab({
     </Link>
   ) : null
 
-  if (!hasDocuments && !hasVersions) {
+  if (!hasDocuments && !hasVersions && !hasPrefilled) {
     return (
       <div>
         {candidateReviewLink}
         <EmptyState
           icon={<FileText className="h-6 w-6" />}
           title="No documents"
-          description="No archived documents for this employee yet."
+          description="No documents for this employee yet."
         />
       </div>
     )
@@ -371,7 +378,7 @@ function DocumentsTab({
   return (
     <div className="space-y-6">
       {candidateReviewLink}
-      {hasVersions && (
+      {(hasPrefilled || hasVersions) && (
         <div>
           <h3 className="mb-2 text-sm font-semibold text-atria-ink">
             Hiring documents
@@ -386,6 +393,24 @@ function DocumentsTab({
               </TableRow>
             </TableHead>
             <TableBody>
+              {(prefilledDocs ?? []).map((doc) => (
+                <TableRow key={doc._id}>
+                  <TableCell className="font-medium">
+                    {DOCUMENT_VERSION_TYPE_LABELS[doc.documentType] ??
+                      doc.documentType}
+                  </TableCell>
+                  <TableCell>Prefilled from application</TableCell>
+                  <TableCell>
+                    {doc.generatedAt ? formatDateUS(doc.generatedAt) : '—'}
+                  </TableCell>
+                  <TableCell>
+                    <PrefilledDocDownloadLink
+                      clerkOrgId={clerkOrgId}
+                      documentId={doc._id}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
               {versions!.map((version, index) => (
                 <TableRow key={version._id}>
                   <TableCell className="font-medium">
@@ -426,6 +451,31 @@ function DocumentsTab({
         </div>
       )}
     </div>
+  )
+}
+
+function PrefilledDocDownloadLink({
+  clerkOrgId,
+  documentId,
+}: {
+  clerkOrgId: string
+  documentId: Id<'prefilledDocuments'>
+}) {
+  const url = useQuery(api.candidates.getPrefilledDocumentDownloadUrl, {
+    clerkOrgId,
+    documentId,
+    variant: 'prefilled',
+  })
+  if (!url) return null
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-xs font-medium text-atria-accent hover:underline"
+    >
+      Download
+    </a>
   )
 }
 

@@ -14,6 +14,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Input } from '@/shared/ui/Input'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/ui/Dialog'
 import { Textarea } from '@/shared/ui/Textarea'
 import { Select } from '@/shared/ui/Select'
 import { isValidEmail } from '@/shared/validation'
@@ -915,26 +922,26 @@ export function TeamPage() {
             </Table>
           )}
           {isAdmin && messageFor && (
-            <div className="space-y-2 border-t border-atria-border p-4">
-              <p className="text-sm font-medium text-atria-ink">
-                Message to {messageFor.name}
-              </p>
-              <Textarea
-                value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
-                placeholder="e.g. Please upload your renewed CPR certificate this week."
-                rows={3}
-              />
-              <div className="flex items-center gap-2">
+            <Dialog open onClose={() => setMessageFor(null)}>
+              <DialogHeader>
+                <DialogTitle>Message to {messageFor.name}</DialogTitle>
+              </DialogHeader>
+              <DialogContent className="space-y-3">
+                <Textarea
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  placeholder="e.g. Please upload your renewed CPR certificate this week."
+                  rows={4}
+                />
+                <p className="text-xs text-atria-muted">
+                  They get an in-app notification and an email.
+                </p>
+                {messageError && (
+                  <p className="text-sm text-atria-danger">{messageError}</p>
+                )}
+              </DialogContent>
+              <DialogFooter>
                 <Button
-                  size="sm"
-                  onClick={handleSendMessage}
-                  disabled={sendingMessage || !messageText.trim()}
-                >
-                  {sendingMessage ? 'Sending…' : 'Send'}
-                </Button>
-                <Button
-                  size="sm"
                   variant="ghost"
                   onClick={() => {
                     setMessageFor(null)
@@ -944,14 +951,15 @@ export function TeamPage() {
                 >
                   Cancel
                 </Button>
-                {messageError && (
-                  <p className="text-xs text-atria-danger">{messageError}</p>
-                )}
-              </div>
-              <p className="text-xs text-atria-muted">
-                They get an in-app notification and an email.
-              </p>
-            </div>
+                <Button
+                  variant="primary"
+                  onClick={handleSendMessage}
+                  disabled={sendingMessage || !messageText.trim()}
+                >
+                  {sendingMessage ? 'Sending…' : 'Send message'}
+                </Button>
+              </DialogFooter>
+            </Dialog>
           )}
         </CardContent>
       </Card>
