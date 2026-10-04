@@ -350,3 +350,80 @@ export const cleanupTenantPeople = internalMutation({
     return summary
   },
 })
+
+/**
+ * One-off demo data for billing QA (Test Agency): a client, four
+ * billing-ready Wednesday shifts in September 2026 with billing lines, and a
+ * draft invoice covering the first two — so Ready to bill, Invoices (with
+ * the period pencil), the ledger, and the payment calendar all have content.
+ * Idempotent: skips when the demo client already exists.
+ */
+export const seedBillingDemo = internalMutation({
+  args: { tenantId: v.id('tenants'), caregiverClerkUserId: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query('clients')
+      .filter((q) =>
+        q.and(
+          q.eq(q.field('tenantId'), args.tenantId),
+          q.eq(q.field('displayName'), 'Juanito Gonzalez'),
+        ),
+      )
+      .first()
+    if (existing) return { skipped: true, reason: 'Demo client already exists.' }
+
+    const clientId = await ctx.db.insert('clients', {
+      tenantId: args.tenantId,
+      displayName: 'Juanito Gonzalez',
+      serviceType: 'SLS',
+      authorizationHours: 40,
+      riskFlags: [],
+    })
+
+    const dates = ['2026-09-09', '2026-09-16', '2026-09-23', '2026-09-30']
+    const lineIds = []
+    for (const date of dates) {
+      const shiftId = await ctx.db.insert('shifts', {
+        tenantId: args.tenantId,
+        clientId,
+        caregiverId: args.caregiverClerkUserId,
+        scheduledStart: `${date}T09:00:00.000Z`,
+        scheduledEnd: `${date}T12:00:00.000Z`,
+        clockInAt: `${date}T09:02:00.000Z`,
+        clockOutAt: `${date}T11:58:00.000Z`,
+        status: 'billing_ready',
+        serviceType: 'SLS',
+        rate: 33,
+      })
+      const lineId = await ctx.db.insert('billingLines', {
+        tenantId: args.tenantId,
+        shiftId,
+        hours: 3,
+        rate: 33,
+        amount: 99,
+        createdAt: `${date}T13:00:00.000Z`,
+      })
+      lineIds.push(lineId)
+    }
+
+    const invoiceId = await ctx.db.insert('exportBatches', {
+      tenantId: args.tenantId,
+      name: 'September 2026 (demo)',
+      exportedAt: '2026-10-01T12:00:00.000Z',
+      exportedBy: 'demo',
+      invoiceNumber: 'INV-2026-0901',
+      periodStart: '2026-09-01',
+      periodEnd: '2026-09-30',
+      lineCount: 2,
+      totalAmount: 198,
+      clientId,
+      status: 'draft',
+    })
+    // Link the first two lines to the demo invoice.
+    for (const lineId of lineIds.slice(0, 2)) {
+      await ctx.db.patch(lineId, { exportBatchId: invoiceId })
+    }
+
+    return { clientId, lines: lineIds.length, invoiceId }
+  },
+})

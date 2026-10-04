@@ -20,6 +20,9 @@ export function TrainingHubPage() {
     api.training.listMyTrainingAssignments,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
+  const member = useQuery(api.members.me, clerkOrgId ? { clerkOrgId } : 'skip')
+  const canManageTraining =
+    member?.role === 'org:admin' || member?.role === 'org:hr'
   const assignedCourseIds = new Set(
     (myAssignments ?? []).map((a) => a.courseId as string),
   )
@@ -54,6 +57,15 @@ export function TrainingHubPage() {
             </p>
           </div>
           <div className="rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface/80 p-4 backdrop-blur lg:min-w-[220px]">
+            {canManageTraining && (
+              <button
+                type="button"
+                onClick={() => navigate('/training/admin')}
+                className="mb-3 inline-flex items-center gap-1.5 rounded-[var(--radius-atria-md)] border border-atria-accent/40 bg-atria-accent/10 px-3 py-1.5 text-xs font-semibold text-atria-accent hover:bg-atria-accent/20"
+              >
+                Manage courses (assign, create, activate)
+              </button>
+            )}
             <p className="text-xs font-medium uppercase tracking-wide text-atria-text-muted">
               Overall progress
             </p>
