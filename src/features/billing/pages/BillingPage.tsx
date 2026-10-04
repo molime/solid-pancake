@@ -331,6 +331,15 @@ export function BillingPage() {
         </div>
       </div>
 
+      <CollapsibleCard
+        title="Ready to bill"
+        defaultOpen
+        badge={
+          <span className="text-xs text-atria-muted">
+            {filteredLines.length} unbilled line(s)
+          </span>
+        }
+      >
       <BillingInvoicePanel
         caregivers={caregivers}
         filters={filters}
@@ -350,6 +359,7 @@ export function BillingPage() {
         }
         onCreateInvoice={handleCreateInvoice}
       />
+      </CollapsibleCard>
 
       <CollapsibleCard
         title="Invoices"

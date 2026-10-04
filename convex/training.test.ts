@@ -542,3 +542,126 @@ describe('training management (assignments, external uploads, expiry alerts)', (
     expect(clerkOrgId).toBeTruthy()
   })
 })
+
+describe('external training assignments', () => {
+  it('full flow: assign → task visible → submit → verify', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_ext_assign'
+    const tenantId = await seedTenant(t, clerkOrgId)
+    await t.run(async (ctx) => {
+      await ctx.db.insert('employeeProfiles', {
+        tenantId,
+        clerkUserId: 'user_cg',
+        displayName: 'Caregiver',
+        email: 'cg@example.com',
+        adpSyncStatus: 'pending_credentials',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    await t
+      .withIdentity({ subject: 'user_admin', org_id: clerkOrgId, org_role: 'org:admin' })
+      .mutation(api.training.createExternalTrainingAssignment, {
+        clerkOrgId,
+        title: 'CPR Renewal — Red Cross',
+        instructions: 'Book at redcross.org and upload the card.',
+        clerkUserIds: ['user_cg'],
+        dueAt: '2026-10-31',
+      })
+
+    const mine = await t
+      .withIdentity({ subject: 'user_cg', org_id: clerkOrgId, org_role: 'org:caregiver' })
+      .query(api.training.listMyExternalTrainingAssignments, { clerkOrgId })
+    expect(mine).toHaveLength(1)
+    expect(mine[0].status).toBe('pending')
+    expect(mine[0].title).toBe('CPR Renewal — Red Cross')
+
+    await t
+      .withIdentity({ subject: 'user_cg', org_id: clerkOrgId, org_role: 'org:caregiver' })
+      .mutation(api.training.submitExternalTraining, {
+        clerkOrgId,
+        assignmentId: mine[0]._id,
+        storageId: 'st_ext_1',
+        fileName: 'cpr.pdf',
+        contentType: 'application/pdf',
+        size: 999,
+      })
+
+    const afterSubmit = await t
+      .withIdentity({ subject: 'user_admin', org_id: clerkOrgId, org_role: 'org:admin' })
+      .query(api.training.listExternalTrainingAssignments, { clerkOrgId })
+    expect(afterSubmit[0].status).toBe('submitted')
+    expect(afterSubmit[0].memberName).toBe('Caregiver')
+
+    await t
+      .withIdentity({ subject: 'user_admin', org_id: clerkOrgId, org_role: 'org:admin' })
+      .mutation(api.training.reviewExternalTraining, {
+        clerkOrgId,
+        assignmentId: mine[0]._id,
+        approve: true,
+      })
+
+    const rows = await t.run(async (ctx) => ({
+      assignment: await ctx.db.get(mine[0]._id),
+      items: await ctx.db.query('documentArchiveItems').collect(),
+    }))
+    expect(rows.assignment?.status).toBe('verified')
+    expect(rows.items[0].status).toBe('verified')
+  })
+
+  it('rejecting sends the reason and lets the member resubmit', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_ext_reject'
+    const tenantId = await seedTenant(t, clerkOrgId)
+    await t.run(async (ctx) => {
+      await ctx.db.insert('employeeProfiles', {
+        tenantId,
+        clerkUserId: 'user_cg',
+        displayName: 'Caregiver',
+        email: 'cg@example.com',
+        adpSyncStatus: 'pending_credentials',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('externalTrainingAssignments', {
+        tenantId,
+        title: 'CPR Renewal',
+        clerkUserId: 'user_cg',
+        assignedBy: 'user_admin',
+        status: 'submitted',
+        storageId: 'st_old',
+        fileName: 'old.pdf',
+        createdAt: new Date().toISOString(),
+      })
+    })
+    const assignmentId = await t.run(async (ctx) =>
+      (await ctx.db.query('externalTrainingAssignments').first())!._id,
+    )
+
+    await t
+      .withIdentity({ subject: 'user_admin', org_id: clerkOrgId, org_role: 'org:admin' })
+      .mutation(api.training.reviewExternalTraining, {
+        clerkOrgId,
+        assignmentId,
+        approve: false,
+        rejectionReason: 'Card is expired',
+      })
+
+    const rejected = await t.run(async (ctx) => ctx.db.get(assignmentId))
+    expect(rejected?.status).toBe('rejected')
+    expect(rejected?.rejectionReason).toBe('Card is expired')
+
+    // Member can resubmit after a rejection.
+    await t
+      .withIdentity({ subject: 'user_cg', org_id: clerkOrgId, org_role: 'org:caregiver' })
+      .mutation(api.training.submitExternalTraining, {
+        clerkOrgId,
+        assignmentId,
+        storageId: 'st_new',
+        fileName: 'new.pdf',
+        contentType: 'application/pdf',
+        size: 500,
+      })
+    const resubmitted = await t.run(async (ctx) => ctx.db.get(assignmentId))
+    expect(resubmitted?.status).toBe('submitted')
+  })
+})
