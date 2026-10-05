@@ -96,16 +96,26 @@ export const createStripeInvoice = internalAction({
       v.union(v.literal('send_invoice'), v.literal('charge_automatically')),
     ),
     defaultPaymentMethod: v.optional(v.string()),
+    // Restricts the payment methods offered on the hosted invoice page
+    // (e.g. ACH-only agencies). Absent = Stripe account defaults.
+    paymentMethodAllowed: v.optional(
+      v.union(v.literal('card'), v.literal('us_bank_account')),
+    ),
   },
   handler: async (_ctx, args) => {
     const collectionMethod = args.collectionMethod ?? 'send_invoice'
-    const dueDateSeconds = Math.floor(new Date(args.dueDate).getTime() / 1000)
+    // Stripe rejects a due_date in the past (400) — past-due invoices mirror
+    // as "due now" (one hour ahead) instead of failing to mirror at all.
+    const requestedSeconds = Math.floor(new Date(args.dueDate).getTime() / 1000)
+    const nowSeconds = Math.floor(Date.now() / 1000)
+    const dueDateSeconds = Math.max(requestedSeconds, nowSeconds + 3600)
     const invoice = await stripeRequest('/invoices', 'POST', {
       customer: args.customerId,
       collection_method: collectionMethod,
       due_date:
         collectionMethod === 'send_invoice' ? dueDateSeconds : undefined,
       default_payment_method: args.defaultPaymentMethod,
+      'payment_settings[payment_method_types][0]': args.paymentMethodAllowed,
     })
     const invoiceId = invoice.id as string
 

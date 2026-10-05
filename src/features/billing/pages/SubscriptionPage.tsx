@@ -76,6 +76,23 @@ export function SubscriptionPage() {
   const subscription = data?.subscription ?? null
   const plan = data?.plan ?? null
 
+  // The unpaid invoice covering the current billing period, if any — its
+  // total is the actual charge for this month (e.g. a manual discount), so
+  // the plan card shows it instead of the plan's list price.
+  const currentPeriodStart = subscription?.currentPeriodStart.slice(0, 10)
+  const currentPeriodEnd = subscription?.currentPeriodEnd.slice(0, 10)
+  const currentInvoice =
+    subscription &&
+    currentPeriodStart &&
+    currentPeriodEnd
+      ? (invoices.find(
+          (invoice) =>
+            (invoice.status === 'sent' || invoice.status === 'overdue') &&
+            invoice.periodStart >= currentPeriodStart &&
+            invoice.periodStart <= currentPeriodEnd,
+        ) ?? null)
+      : null
+
   return (
     <div className="space-y-6 p-4 lg:p-6">
       <div>
@@ -109,16 +126,32 @@ export function SubscriptionPage() {
                   <p className="text-xl font-bold text-atria-ink">
                     {plan?.label ?? subscription.planKey}
                   </p>
-                  {plan && (
-                    <p className="text-sm text-atria-text-secondary">
-                      {formatMoney(plan.basePrice)} / month
-                      {plan.includedSeats
-                        ? ` · includes ${plan.includedSeats} seats`
-                        : ''}
-                      {plan.perSeatPrice
-                        ? ` · then ${formatMoney(plan.perSeatPrice)} / seat`
-                        : ''}
-                    </p>
+                  {currentInvoice ? (
+                    <>
+                      <p className="text-sm text-atria-text-secondary">
+                        {formatMoney(currentInvoice.total)} / month
+                        {plan?.includedSeats
+                          ? ` · includes ${plan.includedSeats} seats`
+                          : ''}
+                      </p>
+                      {currentInvoice.description && (
+                        <p className="text-xs text-atria-text-muted">
+                          {currentInvoice.description}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    plan && (
+                      <p className="text-sm text-atria-text-secondary">
+                        {formatMoney(plan.basePrice)} / month
+                        {plan.includedSeats
+                          ? ` · includes ${plan.includedSeats} seats`
+                          : ''}
+                        {plan.perSeatPrice
+                          ? ` · then ${formatMoney(plan.perSeatPrice)} / seat`
+                          : ''}
+                      </p>
+                    )
                   )}
                 </div>
                 <Badge variant={STATUS_VARIANT[subscription.status] ?? 'neutral'}>
@@ -152,7 +185,17 @@ export function SubscriptionPage() {
                   </p>
                 </div>
               </div>
-              <div className="border-t border-atria-border pt-4">
+              <div className="flex flex-wrap items-center gap-3 border-t border-atria-border pt-4">
+                {currentInvoice?.stripeHostedInvoiceUrl && (
+                  <a
+                    href={currentInvoice.stripeHostedInvoiceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-atria-accent px-4 text-sm font-medium text-atria-on-accent transition-colors hover:bg-atria-accent-hover focus:outline-none focus:ring-2 focus:ring-atria-accent/60 focus:ring-offset-2 focus:ring-offset-atria-bg"
+                  >
+                    Pay {formatMoney(currentInvoice.total)} now
+                  </a>
+                )}
                 <Button
                   variant="secondary"
                   size="md"

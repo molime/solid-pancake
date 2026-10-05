@@ -83,4 +83,20 @@ crons.monthly(
   internal.billing.notifyBillingDueInternal,
 )
 
+// Daily dunning: sent invoices past their due date go 'overdue' and the
+// tenant enters past_due with a 5-day grace window (anchored to due date).
+crons.daily(
+  'checkOverdueSubscriptionInvoices',
+  { hourUTC: 6, minuteUTC: 15 },
+  internal.platformStripe.checkOverdueSubscriptionInvoices,
+)
+
+// Daily suspension: past_due tenants whose grace window expired lose access
+// until the balance is paid (auto-reactivated on invoice.paid).
+crons.daily(
+  'suspendPastDueTenants',
+  { hourUTC: 6, minuteUTC: 20 },
+  internal.platformStripe.suspendPastDueTenants,
+)
+
 export default crons

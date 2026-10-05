@@ -1,4 +1,4 @@
-import { v } from 'convex/values'
+import { v, ConvexError } from 'convex/values'
 import { internalMutation } from './_generated/server'
 import type { Id } from './_generated/dataModel'
 
@@ -425,5 +425,20 @@ export const seedBillingDemo = internalMutation({
     }
 
     return { clientId, lines: lineIds.length, invoiceId }
+  },
+})
+
+/** One-off: mark a platform invoice void (repair for the Stripe sync bug). */
+export const voidPlatformInvoiceById = internalMutation({
+  args: { invoiceId: v.id('platformInvoices') },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.invoiceId)
+    if (!invoice) throw new ConvexError('Invoice not found.')
+    if (invoice.status === 'void') return { skipped: true }
+    await ctx.db.patch(args.invoiceId, {
+      status: 'void',
+      updatedAt: new Date().toISOString(),
+    })
+    return { ok: true }
   },
 })
