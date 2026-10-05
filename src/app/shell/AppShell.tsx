@@ -1,6 +1,7 @@
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
+import { BillingNoticeBanner } from './BillingNoticeBanner'
 import { TenantRouteGuard } from './RouteGuard'
 import { useState } from 'react'
 import { cn } from '@/shared/lib/cn'
@@ -30,6 +31,7 @@ export function AppShell() {
           {!hideChrome && (
             <Topbar onMenuClick={() => setMobileNavOpen(true)} />
           )}
+          {!hideChrome && <BillingNoticeBanner />}
           <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6">
             <Outlet />
           </main>

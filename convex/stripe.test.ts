@@ -499,7 +499,7 @@ describe('applyStripeInvoicePaid', () => {
 })
 
 describe('applyStripeInvoiceFailed (dunning)', () => {
-  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+  const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000
 
   async function seedPastDuable(t: ReturnType<typeof createTestConvex>) {
     return await t.run(async (ctx) => {
@@ -562,9 +562,9 @@ describe('applyStripeInvoiceFailed (dunning)', () => {
     expect(subscription?.status).toBe('past_due')
     expect(subscription?.pastDueSince).toBeTypeOf('number')
     expect(subscription?.graceUntil).toBeTypeOf('number')
-    // Grace window is exactly 7 days from the failure.
+    // Grace window is exactly 5 days from the failure.
     expect(subscription!.graceUntil! - subscription!.pastDueSince!).toBe(
-      SEVEN_DAYS_MS,
+      FIVE_DAYS_MS,
     )
 
     const audits = await t.run(async (ctx) =>
@@ -591,8 +591,8 @@ describe('applyStripeInvoiceFailed (dunning)', () => {
     const second = await t.run(async (ctx) => ctx.db.get(subscriptionId))
 
     expect(second?.status).toBe('past_due')
-    // Recomputed, never stacked: still exactly one 7-day window wide.
-    expect(second!.graceUntil! - second!.pastDueSince!).toBe(SEVEN_DAYS_MS)
+    // Recomputed, never stacked: still exactly one 5-day window wide.
+    expect(second!.graceUntil! - second!.pastDueSince!).toBe(FIVE_DAYS_MS)
     expect(second!.graceUntil!).toBeGreaterThanOrEqual(first!.graceUntil!)
   })
 
@@ -653,6 +653,239 @@ describe('applyStripeInvoiceFailed (dunning)', () => {
     expect(
       audits.some((event) => event.action === 'invoice_payment_failed'),
     ).toBe(false)
+  })
+})
+
+describe('checkOverdueSubscriptionInvoices (daily cron)', () => {
+  const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000
+
+  async function seedSentInvoice(
+    t: ReturnType<typeof createTestConvex>,
+    dueDate: string,
+    status: 'sent' | 'paid' | 'void' = 'sent',
+  ) {
+    return await t.run(async (ctx) => {
+      const now = new Date().toISOString()
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId: 'org_overdue',
+        name: 'Overdue Care',
+        slug: 'overdue-care',
+        createdAt: now,
+      })
+      const subscriptionId = await ctx.db.insert('tenantSubscriptions', {
+        tenantId,
+        planKey: 'starter',
+        status: 'active',
+        billingEmails: ['billing@overdue.test'],
+        currentPeriodStart: '2026-10-01',
+        currentPeriodEnd: '2026-11-01',
+        createdAt: now,
+        updatedAt: now,
+      })
+      const invoiceId = await ctx.db.insert('platformInvoices', {
+        tenantId,
+        invoiceNumber: 'PLAT-2026-0099',
+        periodStart: '2026-10-01',
+        periodEnd: '2026-10-31',
+        dueDate,
+        lineItems: [
+          {
+            description: 'Base price',
+            quantity: 1,
+            unitPrice: 199,
+            amount: 199,
+            source: 'manual',
+          },
+        ],
+        subtotal: 199,
+        total: 199,
+        status,
+        createdBy: 'admin_1',
+        createdAt: now,
+        updatedAt: now,
+      })
+      return { tenantId, subscriptionId, invoiceId }
+    })
+  }
+
+  it('flips past-due sent invoices to overdue and duns the subscription', async () => {
+    const t = createTestConvex()
+    const { subscriptionId, invoiceId } = await seedSentInvoice(
+      t,
+      '2020-01-01',
+    )
+
+    await t.mutation(internal.platformStripe.checkOverdueSubscriptionInvoices, {})
+
+    const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId))
+    expect(invoice?.status).toBe('overdue')
+
+    const subscription = await t.run(async (ctx) => ctx.db.get(subscriptionId))
+    expect(subscription?.status).toBe('past_due')
+    // Grace is anchored to the due date: due end-of-day + 5 days.
+    expect(subscription?.pastDueSince).toBe(
+      new Date('2020-01-01T00:00:00Z').getTime(),
+    )
+    expect(subscription?.graceUntil).toBe(
+      new Date('2020-01-01T23:59:59Z').getTime() + FIVE_DAYS_MS,
+    )
+
+    const audits = await t.run(async (ctx) =>
+      ctx.db.query('auditEvents').collect(),
+    )
+    expect(audits.some((event) => event.action === 'invoice_overdue')).toBe(
+      true,
+    )
+  })
+
+  it('leaves future-due and non-sent invoices untouched', async () => {
+    const t = createTestConvex()
+    const { subscriptionId, invoiceId } = await seedSentInvoice(
+      t,
+      '2999-01-01',
+    )
+
+    const result = await t.mutation(
+      internal.platformStripe.checkOverdueSubscriptionInvoices,
+      {},
+    )
+    expect(result.processed).toBe(0)
+
+    const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId))
+    expect(invoice?.status).toBe('sent')
+    const subscription = await t.run(async (ctx) => ctx.db.get(subscriptionId))
+    expect(subscription?.status).toBe('active')
+  })
+})
+
+describe('suspendPastDueTenants (daily cron)', () => {
+  async function seedPastDueSubscription(
+    t: ReturnType<typeof createTestConvex>,
+    graceUntil: number,
+  ) {
+    return await t.run(async (ctx) => {
+      const now = new Date().toISOString()
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId: 'org_suspend',
+        name: 'Suspend Care',
+        slug: 'suspend-care',
+        createdAt: now,
+      })
+      const subscriptionId = await ctx.db.insert('tenantSubscriptions', {
+        tenantId,
+        planKey: 'starter',
+        status: 'past_due',
+        billingEmails: ['billing@suspend.test'],
+        currentPeriodStart: '2026-10-01',
+        currentPeriodEnd: '2026-11-01',
+        pastDueSince: Date.now() - 10 * 24 * 60 * 60 * 1000,
+        graceUntil,
+        createdAt: now,
+        updatedAt: now,
+      })
+      return { tenantId, subscriptionId }
+    })
+  }
+
+  it('suspends past_due tenants whose grace window expired', async () => {
+    const t = createTestConvex()
+    const { subscriptionId } = await seedPastDueSubscription(t, Date.now() - 1)
+
+    const result = await t.mutation(
+      internal.platformStripe.suspendPastDueTenants,
+      {},
+    )
+    expect(result.suspended).toBe(1)
+
+    const subscription = await t.run(async (ctx) => ctx.db.get(subscriptionId))
+    expect(subscription?.status).toBe('suspended')
+
+    const audits = await t.run(async (ctx) =>
+      ctx.db.query('auditEvents').collect(),
+    )
+    expect(audits.some((event) => event.action === 'tenant_suspended')).toBe(
+      true,
+    )
+  })
+
+  it('leaves tenants inside the grace window alone', async () => {
+    const t = createTestConvex()
+    const { subscriptionId } = await seedPastDueSubscription(
+      t,
+      Date.now() + 24 * 60 * 60 * 1000,
+    )
+
+    const result = await t.mutation(
+      internal.platformStripe.suspendPastDueTenants,
+      {},
+    )
+    expect(result.suspended).toBe(0)
+
+    const subscription = await t.run(async (ctx) => ctx.db.get(subscriptionId))
+    expect(subscription?.status).toBe('past_due')
+  })
+})
+
+describe('suspension recovery on payment', () => {
+  it('applyStripeInvoicePaid lifts a suspension and clears dunning dates', async () => {
+    const t = createTestConvex()
+    const { subscriptionId, invoiceId } = await t.run(async (ctx) => {
+      const now = new Date().toISOString()
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId: 'org_recovery',
+        name: 'Recovery Care',
+        slug: 'recovery-care',
+        createdAt: now,
+      })
+      const subscriptionId = await ctx.db.insert('tenantSubscriptions', {
+        tenantId,
+        planKey: 'starter',
+        status: 'suspended',
+        billingEmails: ['billing@recovery.test'],
+        currentPeriodStart: '2026-10-01',
+        currentPeriodEnd: '2026-11-01',
+        pastDueSince: Date.now() - 10 * 24 * 60 * 60 * 1000,
+        graceUntil: Date.now() - 1000,
+        createdAt: now,
+        updatedAt: now,
+      })
+      const invoiceId = await ctx.db.insert('platformInvoices', {
+        tenantId,
+        invoiceNumber: 'PLAT-2026-0100',
+        periodStart: '2026-10-01',
+        periodEnd: '2026-10-31',
+        dueDate: '2026-10-01',
+        lineItems: [
+          {
+            description: 'Base price',
+            quantity: 1,
+            unitPrice: 199,
+            amount: 199,
+            source: 'manual',
+          },
+        ],
+        subtotal: 199,
+        total: 199,
+        status: 'overdue',
+        stripeInvoiceId: 'in_recovery',
+        createdBy: 'admin_1',
+        createdAt: now,
+        updatedAt: now,
+      })
+      return { subscriptionId, invoiceId }
+    })
+
+    await t.mutation(internal.platformStripe.applyStripeInvoicePaid, {
+      stripeInvoiceId: 'in_recovery',
+    })
+
+    const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId))
+    expect(invoice?.status).toBe('paid')
+
+    const subscription = await t.run(async (ctx) => ctx.db.get(subscriptionId))
+    expect(subscription?.status).toBe('active')
+    expect(subscription?.pastDueSince).toBeUndefined()
+    expect(subscription?.graceUntil).toBeUndefined()
   })
 })
 

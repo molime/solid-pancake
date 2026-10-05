@@ -301,8 +301,9 @@ endstream`,
   }
   pdfStr += `trailer\n<< /Size ${pdf.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`
 
-  // Convert to base64
-  return Buffer.from(pdfStr, 'latin1').toString('base64')
+  // Convert to base64 (btoa is the Convex-runtime-safe equivalent of
+  // Buffer.from(...).toString('base64') — the PDF content is ASCII).
+  return btoa(pdfStr)
 }
 
 export function buildInvoiceEmailHtml(

@@ -13,6 +13,10 @@ import { toStripeInvoiceItems } from './platformBilling'
 import { buildInvoiceEmailHtml, buildInvoicePdf } from './platform'
 import { requireEnv } from './_utils/env'
 
+// Grace window between a missed subscription payment and service suspension
+// (Maria, 2026-10-04 review: 5 days, default for every agency).
+export const GRACE_PERIOD_MS = 5 * 24 * 60 * 60 * 1000
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -77,6 +81,7 @@ export const getTenantBillingInternal = internalQuery({
       stripeCustomerId: subscription?.stripeCustomerId ?? null,
       stripeDefaultPaymentMethod:
         subscription?.stripeDefaultPaymentMethod ?? null,
+      paymentMethodAllowed: tenant?.paymentMethodAllowed ?? null,
     }
   },
 })
@@ -223,12 +228,16 @@ export const applyStripeInvoicePaid = internalMutation({
       updatedAt: now,
     })
     // Recovery: a paid invoice exits the dunning state — restore the
-    // subscription to active and clear the grace-period dates.
+    // subscription to active and clear the grace-period dates. This also
+    // lifts a suspension (services resume as soon as the balance is paid).
     const subscription = await ctx.db
       .query('tenantSubscriptions')
       .withIndex('by_tenant', (q) => q.eq('tenantId', invoice.tenantId))
       .unique()
-    if (subscription?.status === 'past_due') {
+    if (
+      subscription?.status === 'past_due' ||
+      subscription?.status === 'suspended'
+    ) {
       await ctx.db.patch(subscription._id, {
         status: 'active',
         pastDueSince: undefined,
@@ -255,7 +264,7 @@ export const applyStripeInvoicePaid = internalMutation({
 
 /**
  * Webhook: invoice.payment_failed — enter the dunning state. The platform
- * invoice goes 'overdue'; the subscription goes 'past_due' with a 7-day
+ * invoice goes 'overdue'; the subscription goes 'past_due' with a 5-day
  * grace window. Repeated failures recompute the dates (never stack). A
  * failure notice email is scheduled for the tenant's billing contacts.
  */
@@ -301,7 +310,7 @@ export const applyStripeInvoiceFailed = internalMutation({
       await ctx.db.patch(subscription._id, {
         status: 'past_due',
         pastDueSince: now,
-        graceUntil: now + 7 * 24 * 60 * 60 * 1000,
+        graceUntil: now + GRACE_PERIOD_MS,
         updatedAt: nowIso,
       })
     }
@@ -376,6 +385,232 @@ export const sendPaymentFailedEmail = internalAction({
         })
       } catch (err) {
         console.warn(`Failed to send payment-failed email to ${to}:`, err)
+      }
+    }
+    return { skipped: false }
+  },
+})
+
+/**
+ * Daily cron: flip sent invoices whose dueDate has passed to 'overdue' and
+ * move the tenant's subscription into 'past_due'. The grace window is
+ * anchored to the invoice due date (dueDate end-of-day + 5 days), not to the
+ * cron run time, so "pay by the 5th" means the same thing no matter when the
+ * cron fires. The overdue notice email goes out once per past_due entry —
+ * repeat runs while already past_due only recompute the dates.
+ */
+export const checkOverdueSubscriptionInvoices = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const today = new Date().toISOString().slice(0, 10)
+    const overdueInvoices = await ctx.db
+      .query('platformInvoices')
+      .withIndex('by_status', (q) => q.eq('status', 'sent'))
+      .filter((q) => q.lt(q.field('dueDate'), today))
+      .collect()
+    const now = Date.now()
+    const nowIso = new Date(now).toISOString()
+    let processed = 0
+    for (const invoice of overdueInvoices) {
+      await ctx.db.patch(invoice._id, {
+        status: 'overdue',
+        updatedAt: nowIso,
+      })
+      const subscription = await ctx.db
+        .query('tenantSubscriptions')
+        .withIndex('by_tenant', (q) => q.eq('tenantId', invoice.tenantId))
+        .unique()
+      const alreadyPastDue = subscription?.status === 'past_due'
+      // Grace ends 5 days after the due date (end of day, UTC).
+      const graceUntil =
+        new Date(`${invoice.dueDate}T23:59:59Z`).getTime() + GRACE_PERIOD_MS
+      if (
+        subscription &&
+        (subscription.status === 'active' ||
+          subscription.status === 'trialing' ||
+          subscription.status === 'past_due')
+      ) {
+        await ctx.db.patch(subscription._id, {
+          status: 'past_due',
+          pastDueSince: new Date(`${invoice.dueDate}T00:00:00Z`).getTime(),
+          graceUntil,
+          updatedAt: nowIso,
+        })
+      }
+      await ctx.db.insert('auditEvents', {
+        tenantId: invoice.tenantId,
+        actorId: 'cron',
+        actorRole: 'platform_admin',
+        action: 'invoice_overdue',
+        kind: 'platform',
+        metadata: {
+          invoiceId: invoice._id as string,
+          invoiceNumber: invoice.invoiceNumber,
+          source: 'checkOverdueSubscriptionInvoices',
+        },
+        createdAt: nowIso,
+      })
+      if (subscription && !alreadyPastDue) {
+        try {
+          await ctx.scheduler.runAfter(
+            0,
+            internal.platformStripe.sendOverdueNoticeEmail,
+            {
+              tenantId: invoice.tenantId,
+              invoiceNumber: invoice.invoiceNumber,
+              graceUntil,
+              hostedInvoiceUrl: invoice.stripeHostedInvoiceUrl ?? null,
+            },
+          )
+        } catch (err) {
+          console.warn('Failed to schedule overdue-notice email:', err)
+        }
+      }
+      processed += 1
+    }
+    return { processed }
+  },
+})
+
+/**
+ * Daily cron: suspend tenants whose past_due grace window has expired.
+ * Reactivation is automatic — applyStripeInvoicePaid lifts the suspension
+ * as soon as the balance is paid.
+ */
+export const suspendPastDueTenants = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now()
+    const nowIso = new Date(now).toISOString()
+    const pastDue = await ctx.db
+      .query('tenantSubscriptions')
+      .withIndex('by_status', (q) => q.eq('status', 'past_due'))
+      .collect()
+    let suspended = 0
+    for (const subscription of pastDue) {
+      if (!subscription.graceUntil || subscription.graceUntil >= now) {
+        continue
+      }
+      await ctx.db.patch(subscription._id, {
+        status: 'suspended',
+        updatedAt: nowIso,
+      })
+      await ctx.db.insert('auditEvents', {
+        tenantId: subscription.tenantId,
+        actorId: 'cron',
+        actorRole: 'platform_admin',
+        action: 'tenant_suspended',
+        kind: 'platform',
+        metadata: {
+          subscriptionId: subscription._id as string,
+          graceUntil: subscription.graceUntil,
+          source: 'suspendPastDueTenants',
+        },
+        createdAt: nowIso,
+      })
+      try {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.platformStripe.sendSuspensionEmail,
+          { tenantId: subscription.tenantId },
+        )
+      } catch (err) {
+        console.warn('Failed to schedule suspension email:', err)
+      }
+      suspended += 1
+    }
+    return { suspended }
+  },
+})
+
+/**
+ * Overdue notice: tells the billing contacts an invoice is past due and
+ * services will be suspended at the end of the grace window. Carries the
+ * hosted Stripe payment link when one exists. No PHI.
+ */
+export const sendOverdueNoticeEmail = internalAction({
+  args: {
+    tenantId: v.id('tenants'),
+    invoiceNumber: v.string(),
+    graceUntil: v.number(),
+    hostedInvoiceUrl: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const billing = await ctx.runQuery(
+      internal.platformStripe.getTenantBillingInternal,
+      { tenantId: args.tenantId },
+    )
+    if (billing.billingEmails.length === 0) {
+      console.warn(
+        `No billing emails for tenant ${args.tenantId}; skipping overdue-notice email.`,
+      )
+      return { skipped: true }
+    }
+    const graceDate = new Date(args.graceUntil).toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    })
+    const subject = `Payment required — invoice ${args.invoiceNumber} is past due`
+    const html =
+      `<p>Hi ${escapeHtml(billing.tenantName)},</p>` +
+      `<p>Invoice <strong>${escapeHtml(args.invoiceNumber)}</strong> is past due. ` +
+      `To avoid service interruption, please pay by <strong>${escapeHtml(graceDate)}</strong>. ` +
+      `After that date your agency's access to Atria will be suspended until the balance is paid.</p>` +
+      (args.hostedInvoiceUrl
+        ? `<p><a href="${escapeHtml(args.hostedInvoiceUrl)}">Pay this invoice now</a></p>`
+        : '') +
+      `<p>— ATRIA-X Platform Billing</p>`
+    for (const to of billing.billingEmails) {
+      try {
+        await ctx.runAction(internal._utils.resend.sendEmail, {
+          to,
+          subject,
+          html,
+        })
+      } catch (err) {
+        console.warn(`Failed to send overdue-notice email to ${to}:`, err)
+      }
+    }
+    return { skipped: false }
+  },
+})
+
+/**
+ * Suspension notice: the grace window expired and the tenant is now
+ * suspended. Access is restored automatically once the balance is paid.
+ */
+export const sendSuspensionEmail = internalAction({
+  args: { tenantId: v.id('tenants') },
+  handler: async (ctx, args) => {
+    const billing = await ctx.runQuery(
+      internal.platformStripe.getTenantBillingInternal,
+      { tenantId: args.tenantId },
+    )
+    if (billing.billingEmails.length === 0) {
+      console.warn(
+        `No billing emails for tenant ${args.tenantId}; skipping suspension email.`,
+      )
+      return { skipped: true }
+    }
+    const subject = 'Your Atria access has been suspended'
+    const html =
+      `<p>Hi ${escapeHtml(billing.tenantName)},</p>` +
+      `<p>Your agency's access to Atria has been suspended because a past-due ` +
+      `invoice was not paid within the 5-day grace period. Access is restored ` +
+      `automatically as soon as the outstanding balance is paid. You can pay ` +
+      `from the Subscription page in your dashboard.</p>` +
+      `<p>— ATRIA-X Platform Billing</p>`
+    for (const to of billing.billingEmails) {
+      try {
+        await ctx.runAction(internal._utils.resend.sendEmail, {
+          to,
+          subject,
+          html,
+        })
+      } catch (err) {
+        console.warn(`Failed to send suspension email to ${to}:`, err)
       }
     }
     return { skipped: false }
@@ -512,6 +747,7 @@ export const createAndSendStripeInvoice = internalAction({
           customerId: stripeCustomerId,
           dueDate: invoice.dueDate,
           lineItems: toStripeInvoiceItems(invoice.lineItems),
+          paymentMethodAllowed: billing.paymentMethodAllowed ?? undefined,
           ...(autoCharge
             ? {
                 collectionMethod: 'charge_automatically' as const,
