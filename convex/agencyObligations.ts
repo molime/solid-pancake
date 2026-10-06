@@ -16,6 +16,7 @@ const OBLIGATION_MANAGE_ROLES: ('org:admin' | 'org:hr')[] = [
   'org:hr',
 ]
 
+// Seeded CA obligation keys (custom obligations use free-form slugs instead).
 const obligationKeyValidator = v.union(
   v.literal('ds1891_disclosure'),
   v.literal('hcbs_agreement_ds1896'),
@@ -267,6 +268,127 @@ export const updateDueDate = mutation({
         key: obligation.key,
         previousDueAt: obligation.dueAt,
         nextDueAt: args.dueAt,
+      },
+    })
+
+    return args.obligationId
+  },
+})
+
+/** URL-safe slug derived from a custom obligation's label. */
+function slugifyObligationLabel(label: string): string {
+  const slug = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 48)
+  return slug || 'task'
+}
+
+/**
+ * Adds a custom agency obligation (each agency tracks its own recurring
+ * tasks beyond the seeded CA set). The key is auto-derived from the label
+ * with a numeric suffix when it collides; custom obligations are the only
+ * ones deleteObligation will remove.
+ */
+export const addObligation = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    label: v.string(),
+    dueAt: v.optional(v.string()),
+    cadenceMonths: v.optional(v.number()),
+    guidelineUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(
+      ctx,
+      args.clerkOrgId,
+      OBLIGATION_MANAGE_ROLES,
+    )
+
+    const label = args.label.trim()
+    if (!label) throw new ConvexError('A title is required.')
+    if (args.dueAt && Number.isNaN(new Date(args.dueAt).getTime())) {
+      throw new ConvexError('Due date must be a valid date.')
+    }
+    const cadenceMonths = args.cadenceMonths ?? 12
+    if (!Number.isInteger(cadenceMonths) || cadenceMonths < 1) {
+      throw new ConvexError('Cadence must be a positive whole number of months.')
+    }
+    const guidelineUrl = args.guidelineUrl?.trim() || undefined
+
+    const existing = await ctx.db
+      .query('agencyObligations')
+      .withIndex('by_tenant_due', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    const existingKeys = new Set(existing.map((o) => o.key))
+    const baseKey = `custom_${slugifyObligationLabel(label)}`
+    let key = baseKey
+    let suffix = 2
+    while (existingKeys.has(key)) {
+      key = `${baseKey}_${suffix}`
+      suffix += 1
+    }
+
+    const now = new Date().toISOString()
+    const obligationId = await ctx.db.insert('agencyObligations', {
+      tenantId,
+      key,
+      label,
+      cadenceMonths,
+      dueAt: args.dueAt ?? addMonths(now, cadenceMonths),
+      guidelineUrl,
+      custom: true,
+      createdAt: now,
+    })
+
+    await ctx.runMutation(internal.audit.record, {
+      clerkOrgId: args.clerkOrgId,
+      action: 'agency_obligation_added',
+      metadata: {
+        obligationId: obligationId as string,
+        key,
+        label,
+        guidelineUrl,
+      },
+    })
+
+    return obligationId
+  },
+})
+
+/**
+ * Deletes a custom obligation. Seeded standard CA obligations (custom !==
+ * true) are kept for every agency and cannot be removed.
+ */
+export const deleteObligation = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    obligationId: v.id('agencyObligations'),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(
+      ctx,
+      args.clerkOrgId,
+      OBLIGATION_MANAGE_ROLES,
+    )
+    const obligation = await loadObligation(ctx, args.obligationId, tenantId)
+
+    if (obligation.custom !== true) {
+      throw new ConvexError(
+        'Only custom obligations can be deleted — standard CA obligations apply to every agency.',
+      )
+    }
+
+    await ctx.db.delete(args.obligationId)
+
+    await ctx.runMutation(internal.audit.record, {
+      clerkOrgId: args.clerkOrgId,
+      action: 'agency_obligation_deleted',
+      metadata: {
+        obligationId: args.obligationId as string,
+        key: obligation.key,
+        label: obligation.label,
       },
     })
 

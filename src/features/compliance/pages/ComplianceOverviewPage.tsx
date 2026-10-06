@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from '@/shared/ui/Dialog'
 import { Textarea } from '@/shared/ui/Textarea'
+import { Input } from '@/shared/ui/Input'
 import { Select } from '@/shared/ui/Select'
 import { USDateInput } from '@/shared/ui/USDateInput'
 import {
@@ -67,6 +68,49 @@ const obligationStatusLabel: Record<ObligationStatus, string> = {
   ok: 'On track',
   due_soon: 'Due soon',
   overdue: 'Overdue',
+}
+
+// Collapsed per-employee summary dot: red wins over amber, amber over green.
+// listComplianceItems computedStatus is 'compliant' | 'expiring' | 'expired';
+// the raw status adds 'rejected' (there is no per-item 'missing' state).
+type EmployeeDotStatus = 'attention' | 'expiring' | 'compliant'
+
+const employeeDotClass: Record<EmployeeDotStatus, string> = {
+  attention: 'bg-atria-danger',
+  expiring: 'bg-atria-warning',
+  compliant: 'bg-atria-success',
+}
+
+const employeeDotLabel: Record<EmployeeDotStatus, string> = {
+  attention: 'Has expired or rejected items',
+  expiring: 'Has items expiring soon',
+  compliant: 'All items current',
+}
+
+/** Opens/downloads the file backing a compliance item (CPR certificate, …). */
+function ViewDocumentLink({
+  clerkOrgId,
+  storageId,
+}: {
+  clerkOrgId: string
+  storageId: string
+}) {
+  const url = useQuery(api.files.getDownloadUrl, { clerkOrgId, storageId })
+
+  return (
+    <a
+      href={url ?? '#'}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-disabled={!url}
+      onClick={(event) => {
+        if (!url) event.preventDefault()
+      }}
+      className="inline-flex h-8 items-center gap-1 rounded-md border border-atria-border bg-atria-surface px-2.5 text-xs font-medium text-atria-ink hover:bg-atria-surface-2"
+    >
+      View
+    </a>
+  )
 }
 
 export function ComplianceOverviewPage() {
@@ -128,6 +172,8 @@ export function ComplianceOverviewPage() {
   const completeObligation = useMutation(
     api.agencyObligations.completeObligation,
   )
+  const addObligation = useMutation(api.agencyObligations.addObligation)
+  const deleteObligation = useMutation(api.agencyObligations.deleteObligation)
 
   const isAdmin = member?.role === 'org:admin'
   const canManageObligations = isAdmin || member?.role === 'org:hr'
@@ -146,6 +192,10 @@ export function ComplianceOverviewPage() {
   const [evidenceItemId, setEvidenceItemId] = useState('')
   const [obligationNotes, setObligationNotes] = useState('')
   const [isCompleting, setIsCompleting] = useState(false)
+  const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [newTaskDueDate, setNewTaskDueDate] = useState('')
+  const [newTaskGuidelineUrl, setNewTaskGuidelineUrl] = useState('')
+  const [isAddingTask, setIsAddingTask] = useState(false)
 
   // listDocumentArchive is admin/hr-only; only fetch it while the Complete
   // dialog is open so coordinators viewing the page never trigger it.
@@ -321,6 +371,52 @@ export function ComplianceOverviewPage() {
     setMessage(null)
   }
 
+  const handleAddTask = async () => {
+    if (!clerkOrgId || !newTaskTitle.trim()) return
+    setError(null)
+    setMessage(null)
+    setIsAddingTask(true)
+    try {
+      await addObligation({
+        clerkOrgId,
+        label: newTaskTitle.trim(),
+        ...(newTaskDueDate ? { dueAt: newTaskDueDate } : {}),
+        ...(newTaskGuidelineUrl.trim()
+          ? { guidelineUrl: newTaskGuidelineUrl.trim() }
+          : {}),
+      })
+      setMessage(`Task added: ${newTaskTitle.trim()}.`)
+      setNewTaskTitle('')
+      setNewTaskDueDate('')
+      setNewTaskGuidelineUrl('')
+    } catch (err) {
+      setError(
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Could not add the task.',
+      )
+    } finally {
+      setIsAddingTask(false)
+    }
+  }
+
+  const handleDeleteObligation = async (obligation: {
+    _id: Id<'agencyObligations'>
+    label: string
+  }) => {
+    if (!clerkOrgId) return
+    setError(null)
+    setMessage(null)
+    try {
+      await deleteObligation({ clerkOrgId, obligationId: obligation._id })
+      setMessage(`Task deleted: ${obligation.label}.`)
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Could not delete the task.',
+      )
+    }
+  }
+
   const handleCompleteSubmit = async () => {
     if (!completeTarget || !clerkOrgId) return
     setError(null)
@@ -456,6 +552,17 @@ export function ComplianceOverviewPage() {
                 const currentCount = employeeItems.filter(
                   (item) => item.computedStatus === 'compliant',
                 ).length
+                const dotStatus: EmployeeDotStatus = employeeItems.some(
+                  (item) =>
+                    item.computedStatus === 'expired' ||
+                    item.status === 'rejected',
+                )
+                  ? 'attention'
+                  : employeeItems.some(
+                        (item) => item.computedStatus === 'expiring',
+                      )
+                    ? 'expiring'
+                    : 'compliant'
                 const expanded = expandedEmployees.has(employeeName)
                 return (
                   <div
@@ -473,6 +580,12 @@ export function ComplianceOverviewPage() {
                         ) : (
                           <ChevronRight className="h-4 w-4 shrink-0" />
                         )}
+                        <span
+                          role="img"
+                          aria-label={employeeDotLabel[dotStatus]}
+                          title={employeeDotLabel[dotStatus]}
+                          className={`h-2.5 w-2.5 shrink-0 rounded-full ${employeeDotClass[dotStatus]}`}
+                        />
                         {employeeName}
                       </span>
                       <span className="text-sm text-atria-text-secondary">
@@ -516,28 +629,36 @@ export function ComplianceOverviewPage() {
                                   {item.expiresAt ? formatDateUS(item.expiresAt) : '—'}
                                 </TableCell>
                                 <TableCell>
-                                  {canOverride &&
-                                  !isOverridden(item) &&
-                                  (item.computedStatus === 'expired' ||
-                                    item.status === 'rejected') ? (
-                                    <Button
-                                      size="sm"
-                                      variant="secondary"
-                                      onClick={() => openOverride(item)}
-                                    >
-                                      Override
-                                    </Button>
-                                  ) : canOverride && item.status === 'pending' ? (
-                                    <Button
-                                      size="sm"
-                                      variant="secondary"
-                                      onClick={() => handleVerify(item.itemId)}
-                                    >
-                                      Verify
-                                    </Button>
-                                  ) : (
-                                    '—'
-                                  )}
+                                  <span className="inline-flex items-center gap-2">
+                                    {item.fileStorageId && clerkOrgId && (
+                                      <ViewDocumentLink
+                                        clerkOrgId={clerkOrgId}
+                                        storageId={item.fileStorageId}
+                                      />
+                                    )}
+                                    {canOverride &&
+                                    !isOverridden(item) &&
+                                    (item.computedStatus === 'expired' ||
+                                      item.status === 'rejected') ? (
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() => openOverride(item)}
+                                      >
+                                        Override
+                                      </Button>
+                                    ) : canOverride && item.status === 'pending' ? (
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() => handleVerify(item.itemId)}
+                                      >
+                                        Verify
+                                      </Button>
+                                    ) : item.fileStorageId ? null : (
+                                      '—'
+                                    )}
+                                  </span>
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -636,77 +757,160 @@ export function ComplianceOverviewPage() {
           <CardTitle>Agency obligations</CardTitle>
         </CardHeader>
         <CardContent>
-          {obligations === undefined ? (
-            <p className="py-8 text-center text-sm text-atria-text-secondary">
-              Loading agency obligations…
-            </p>
-          ) : obligations.length === 0 ? (
-            <div className="space-y-4">
-              <EmptyState
-                title="No agency obligations"
-                description="Recurring agency-level items (DS 1891 disclosure, insurance certificates, CPA audit/review, and more) will appear here once seeded."
-              />
-              {isAdmin && (
-                <div className="flex justify-center">
+          <div className="space-y-4">
+            {obligations === undefined ? (
+              <p className="py-8 text-center text-sm text-atria-text-secondary">
+                Loading agency obligations…
+              </p>
+            ) : obligations.length === 0 ? (
+              <div className="space-y-4">
+                <EmptyState
+                  title="No agency obligations"
+                  description="Recurring agency-level items (DS 1891 disclosure, insurance certificates, CPA audit/review, and more) will appear here once seeded."
+                />
+                {isAdmin && (
+                  <div className="flex justify-center">
+                    <Button
+                      variant="secondary"
+                      disabled={!clerkOrgId || isSeedingObligations}
+                      onClick={handleSeedObligations}
+                    >
+                      {isSeedingObligations
+                        ? 'Seeding…'
+                        : 'Seed standard CA obligations'}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Obligation</TableHeader>
+                    <TableHeader>Due date</TableHeader>
+                    <TableHeader>Cadence</TableHeader>
+                    <TableHeader>Status</TableHeader>
+                    <TableHeader>Actions</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {obligations.map((obligation) => {
+                    const status = computeObligationStatus(obligation.dueAt)
+                    return (
+                      <TableRow key={obligation._id}>
+                        <TableCell className="font-medium">
+                          <span className="inline-flex items-center gap-2">
+                            {obligation.label}
+                            {obligation.guidelineUrl && (
+                              <a
+                                href={obligation.guidelineUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-normal text-atria-accent hover:underline"
+                              >
+                                Guideline
+                              </a>
+                            )}
+                          </span>
+                        </TableCell>
+                        <TableCell>{formatDateUS(obligation.dueAt)}</TableCell>
+                        <TableCell>
+                          Every {obligation.cadenceMonths} months
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge variant={obligationStatusVariant[status]}>
+                            {obligationStatusLabel[status]}
+                          </StatusBadge>
+                        </TableCell>
+                        <TableCell>
+                          {canManageObligations ? (
+                            <span className="inline-flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => openComplete(obligation)}
+                              >
+                                Complete
+                              </Button>
+                              {obligation.custom === true && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() =>
+                                    void handleDeleteObligation(obligation)
+                                  }
+                                >
+                                  Delete
+                                </Button>
+                              )}
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            )}
+            {canManageObligations && obligations !== undefined && (
+              <form
+                className="rounded-[var(--radius-atria-md)] border border-atria-border p-3"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void handleAddTask()
+                }}
+              >
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[2fr_1fr_2fr_auto] sm:items-end">
+                  <div>
+                    <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                      Task title
+                    </label>
+                    <Input
+                      className="mt-1.5"
+                      onChange={(event) => setNewTaskTitle(event.target.value)}
+                      placeholder="e.g. Renew facility license"
+                      value={newTaskTitle}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                      Due date (optional)
+                    </label>
+                    <USDateInput
+                      className="mt-1.5"
+                      onChange={setNewTaskDueDate}
+                      value={newTaskDueDate}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                      Guideline link (optional)
+                    </label>
+                    <Input
+                      className="mt-1.5"
+                      onChange={(event) =>
+                        setNewTaskGuidelineUrl(event.target.value)
+                      }
+                      placeholder="https://…"
+                      type="url"
+                      value={newTaskGuidelineUrl}
+                    />
+                  </div>
                   <Button
+                    type="submit"
                     variant="secondary"
-                    disabled={!clerkOrgId || isSeedingObligations}
-                    onClick={handleSeedObligations}
+                    disabled={
+                      !clerkOrgId || !newTaskTitle.trim() || isAddingTask
+                    }
                   >
-                    {isSeedingObligations
-                      ? 'Seeding…'
-                      : 'Seed standard CA obligations'}
+                    {isAddingTask ? 'Adding…' : 'Add task'}
                   </Button>
                 </div>
-              )}
-            </div>
-          ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableHeader>Obligation</TableHeader>
-                  <TableHeader>Due date</TableHeader>
-                  <TableHeader>Cadence</TableHeader>
-                  <TableHeader>Status</TableHeader>
-                  <TableHeader>Actions</TableHeader>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {obligations.map((obligation) => {
-                  const status = computeObligationStatus(obligation.dueAt)
-                  return (
-                    <TableRow key={obligation._id}>
-                      <TableCell className="font-medium">
-                        {obligation.label}
-                      </TableCell>
-                      <TableCell>{formatDateUS(obligation.dueAt)}</TableCell>
-                      <TableCell>
-                        Every {obligation.cadenceMonths} months
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge variant={obligationStatusVariant[status]}>
-                          {obligationStatusLabel[status]}
-                        </StatusBadge>
-                      </TableCell>
-                      <TableCell>
-                        {canManageObligations ? (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => openComplete(obligation)}
-                          >
-                            Complete
-                          </Button>
-                        ) : (
-                          '—'
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          )}
+              </form>
+            )}
+          </div>
         </CardContent>
       </Card>
 

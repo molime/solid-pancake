@@ -115,23 +115,30 @@ export const listComplianceItems = query({
       now.getTime() + EXPIRING_SOON_DAYS * 24 * 60 * 60 * 1000,
     ).toISOString()
 
-    return items.map((item) => {
-      let computedStatus: 'compliant' | 'expiring' | 'expired' = 'compliant'
-      if (item.expiresAt && item.expiresAt < nowIso) {
-        computedStatus = 'expired'
-      } else if (item.expiresAt && item.expiresAt <= expiringCutoff) {
-        computedStatus = 'expiring'
-      }
+    return Promise.all(
+      items.map(async (item) => {
+        let computedStatus: 'compliant' | 'expiring' | 'expired' = 'compliant'
+        if (item.expiresAt && item.expiresAt < nowIso) {
+          computedStatus = 'expired'
+        } else if (item.expiresAt && item.expiresAt <= expiringCutoff) {
+          computedStatus = 'expiring'
+        }
 
-      return {
-        itemId: item._id,
-        subjectName: names.get(item.subjectId) ?? item.subjectId,
-        category: item.category,
-        status: item.status,
-        expiresAt: item.expiresAt,
-        computedStatus,
-      }
-    })
+        // Backing file storageId so the UI can offer a View/download action
+        // (same resolution as documentArchive.listDocumentArchive).
+        const file = await ctx.db.get(item.fileId)
+
+        return {
+          itemId: item._id,
+          subjectName: names.get(item.subjectId) ?? item.subjectId,
+          category: item.category,
+          status: item.status,
+          expiresAt: item.expiresAt,
+          computedStatus,
+          fileStorageId: file?.storageId ?? null,
+        }
+      }),
+    )
   },
 })
 

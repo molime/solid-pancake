@@ -387,6 +387,154 @@ describe('agencyObligations.updateDueDate', () => {
   })
 })
 
+describe('agencyObligations.addObligation', () => {
+  it('creates a custom obligation with a derived key, guideline link, and audit', async () => {
+    const t = createTestConvex()
+    const { tenantId } = await seedTenant(t)
+
+    const obligationId = await asAdmin(t).mutation(
+      api.agencyObligations.addObligation,
+      {
+        clerkOrgId: CLERK_ORG_ID,
+        label: 'Renew facility license',
+        dueAt: '2027-01-15',
+        guidelineUrl: 'https://example.com/guide',
+      },
+    )
+
+    const doc = await t.run(async (ctx) => ctx.db.get(obligationId))
+    expect(doc?.tenantId).toBe(tenantId)
+    expect(doc?.custom).toBe(true)
+    expect(doc?.key).toBe('custom_renew_facility_license')
+    expect(doc?.label).toBe('Renew facility license')
+    expect(doc?.dueAt).toBe('2027-01-15')
+    expect(doc?.guidelineUrl).toBe('https://example.com/guide')
+    expect(doc?.cadenceMonths).toBe(12)
+
+    const audits = await t.run(async (ctx) =>
+      ctx.db
+        .query('auditEvents')
+        .withIndex('by_tenant_created_at', (q) => q.eq('tenantId', tenantId))
+        .collect(),
+    )
+    expect(audits.some((a) => a.action === 'agency_obligation_added')).toBe(
+      true,
+    )
+  })
+
+  it('suffixes colliding keys and defaults the due date one cadence out', async () => {
+    const t = createTestConvex()
+    await seedTenant(t)
+
+    const first = await asHr(t).mutation(api.agencyObligations.addObligation, {
+      clerkOrgId: CLERK_ORG_ID,
+      label: 'Pest control',
+    })
+    const second = await asHr(t).mutation(api.agencyObligations.addObligation, {
+      clerkOrgId: CLERK_ORG_ID,
+      label: 'Pest control',
+    })
+
+    const firstDoc = await t.run(async (ctx) => ctx.db.get(first))
+    const secondDoc = await t.run(async (ctx) => ctx.db.get(second))
+    expect(firstDoc?.key).toBe('custom_pest_control')
+    expect(secondDoc?.key).toBe('custom_pest_control_2')
+    // No due date given → roughly now + 12 months.
+    expect(new Date(firstDoc!.dueAt).getTime()).toBeGreaterThan(Date.now())
+  })
+
+  it('rejects an empty title and invalid due dates', async () => {
+    const t = createTestConvex()
+    await seedTenant(t)
+
+    await expect(
+      asAdmin(t).mutation(api.agencyObligations.addObligation, {
+        clerkOrgId: CLERK_ORG_ID,
+        label: '   ',
+      }),
+    ).rejects.toThrow('title')
+    await expect(
+      asAdmin(t).mutation(api.agencyObligations.addObligation, {
+        clerkOrgId: CLERK_ORG_ID,
+        label: 'Valid title',
+        dueAt: 'not-a-date',
+      }),
+    ).rejects.toThrow('valid date')
+  })
+
+  it('rejects coordinators', async () => {
+    const t = createTestConvex()
+    await seedTenant(t)
+
+    await expect(
+      asCoordinator(t).mutation(api.agencyObligations.addObligation, {
+        clerkOrgId: CLERK_ORG_ID,
+        label: 'Nope',
+      }),
+    ).rejects.toThrow('org:admin')
+  })
+})
+
+describe('agencyObligations.deleteObligation', () => {
+  it('deletes a custom obligation and audits', async () => {
+    const t = createTestConvex()
+    const { tenantId } = await seedTenant(t)
+    const obligationId = await asAdmin(t).mutation(
+      api.agencyObligations.addObligation,
+      { clerkOrgId: CLERK_ORG_ID, label: 'Pest control' },
+    )
+
+    await asHr(t).mutation(api.agencyObligations.deleteObligation, {
+      clerkOrgId: CLERK_ORG_ID,
+      obligationId,
+    })
+
+    expect(await t.run(async (ctx) => ctx.db.get(obligationId))).toBeNull()
+    const audits = await t.run(async (ctx) =>
+      ctx.db
+        .query('auditEvents')
+        .withIndex('by_tenant_created_at', (q) => q.eq('tenantId', tenantId))
+        .collect(),
+    )
+    expect(audits.some((a) => a.action === 'agency_obligation_deleted')).toBe(
+      true,
+    )
+  })
+
+  it('refuses to delete a seeded CA obligation', async () => {
+    const t = createTestConvex()
+    const { tenantId } = await seedTenant(t)
+    await asAdmin(t).mutation(api.agencyObligations.seedObligations, {
+      clerkOrgId: CLERK_ORG_ID,
+    })
+    const seeded = (await listObligationDocs(t, tenantId))[0]!
+
+    await expect(
+      asAdmin(t).mutation(api.agencyObligations.deleteObligation, {
+        clerkOrgId: CLERK_ORG_ID,
+        obligationId: seeded._id,
+      }),
+    ).rejects.toThrow('Only custom obligations')
+    expect(await t.run(async (ctx) => ctx.db.get(seeded._id))).not.toBeNull()
+  })
+
+  it('rejects coordinators', async () => {
+    const t = createTestConvex()
+    await seedTenant(t)
+    const obligationId = await asAdmin(t).mutation(
+      api.agencyObligations.addObligation,
+      { clerkOrgId: CLERK_ORG_ID, label: 'Pest control' },
+    )
+
+    await expect(
+      asCoordinator(t).mutation(api.agencyObligations.deleteObligation, {
+        clerkOrgId: CLERK_ORG_ID,
+        obligationId,
+      }),
+    ).rejects.toThrow('org:admin')
+  })
+})
+
 describe('obligation_due auto-flagging (hrCases.checkAndFlagIssues)', () => {
   const DAY_MS = 24 * 60 * 60 * 1000
 

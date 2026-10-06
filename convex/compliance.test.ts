@@ -250,6 +250,23 @@ describe('checkComplianceBlocked', () => {
   })
 })
 
+describe('listComplianceItems', () => {
+  it('returns the backing file storageId and resolved subject name per item', async () => {
+    const t = createTestConvex()
+    const seed = await seedTenant(t)
+    await seedArchiveItem(t, seed, {})
+
+    const items = await asAdmin(t).query(api.compliance.listComplianceItems, {
+      clerkOrgId: CLERK_ORG_ID,
+    })
+
+    expect(items).toHaveLength(1)
+    expect(items[0]!.fileStorageId).toBe('storage_1')
+    expect(items[0]!.subjectName).toBe('Caregiver One')
+    expect(items[0]!.computedStatus).toBe('compliant')
+  })
+})
+
 describe('reviews.approve credential decoupling', () => {
   it('missing required credentials still flag compliance but no longer block billing lines', async () => {
     const t = createTestConvex()
