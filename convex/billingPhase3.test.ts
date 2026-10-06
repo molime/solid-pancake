@@ -3,6 +3,7 @@ import { convexTest } from 'convex-test'
 import schema from './schema'
 import { api } from './_generated/api'
 import type { Id } from './_generated/dataModel'
+import { checkBillingBlocked } from './billingHelpers'
 
 const modules = import.meta.glob('./**/*.*s')
 
@@ -128,6 +129,18 @@ describe('createPerPatientInvoices', () => {
       },
     )
     expect(result.count).toBe(2)
+    expect(result.invoices).toHaveLength(2)
+    for (const created of result.invoices) {
+      expect(created.invoiceId).toBeDefined()
+      expect(created.clientId).toBeDefined()
+      expect(created.clientName).toBeTruthy()
+      expect(created.periodStart).toBe('2026-07-01T00:00:00.000Z')
+      expect(created.periodEnd).toBe('2026-07-31T23:59:59.999Z')
+    }
+    expect(result.invoices.map((i) => i.clientName).sort()).toEqual([
+      'Bob Smith',
+      'Jane Doe',
+    ])
 
     const invoices = await t.run(async (ctx) =>
       ctx.db
@@ -588,7 +601,7 @@ describe('pay periods and exportPayroll', () => {
 })
 
 describe('paymentCalendarData', () => {
-  it('returns worked days with hours for a client-caregiver pair in a month', async () => {
+  it('returns one consolidated calendar per client with all caregivers', async () => {
     const t = createTestConvex()
     const clerkOrgId = 'org_payment_calendar'
     const adminId = 'user_admin_cal'
@@ -601,6 +614,13 @@ describe('paymentCalendarData', () => {
         displayName: 'Erick Santiago',
         email: 'erick@example.com',
       })
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: 'user_cg_cal_2',
+        role: 'org:caregiver',
+        displayName: 'Maria Lopez',
+        email: 'maria@example.com',
+      })
     })
     const { clientId } = await seedClientWithLine(t, {
       tenantId,
@@ -608,21 +628,38 @@ describe('paymentCalendarData', () => {
       clientName: 'Juanito Gonzalez',
       createdAt: '2026-07-10T18:00:00.000Z',
     })
+    // Second caregiver, same client, same day — consolidated into one calendar.
+    await t.run(async (ctx) => {
+      await ctx.db.insert('shifts', {
+        tenantId,
+        clientId,
+        caregiverId: 'user_cg_cal_2',
+        scheduledStart: '2026-07-10T16:00:00.000Z',
+        scheduledEnd: '2026-07-10T20:00:00.000Z',
+        status: 'billing_ready',
+        serviceType: 'SLS',
+        rate: 25,
+      })
+    })
 
     const data = await asAdmin(t, adminId, clerkOrgId).query(
       api.billing.paymentCalendarData,
       {
         clerkOrgId,
         clientId,
-        caregiverId: 'user_cg_cal',
         month: '2026-07',
       },
     )
     expect(data.clientName).toBe('Juanito Gonzalez')
-    expect(data.caregiverName).toBe('Erick Santiago')
-    expect(data.days).toHaveLength(1)
-    expect(data.days[0].hours).toBe(8)
+    expect(data.caregiverNames).toEqual(['Erick Santiago', 'Maria Lopez'])
+    expect(data.days).toHaveLength(2)
     expect(data.days[0].date).toBe('2026-07-10')
+    expect(data.days[0].hours).toBe(8)
+    expect(data.days[0].caregiverName).toBe('Erick Santiago')
+    expect(data.days[0].caregiverInitials).toBe('ES')
+    expect(data.days[1].hours).toBe(4)
+    expect(data.days[1].caregiverName).toBe('Maria Lopez')
+    expect(data.days[1].caregiverInitials).toBe('ML')
   })
 })
 
@@ -660,5 +697,201 @@ describe('updateInvoicePeriod', () => {
         periodEnd: '2026-07-01',
       }),
     ).rejects.toThrow(/valid period/)
+  })
+})
+
+describe('createInvoice per-client guard', () => {
+  it('rejects mixing lines from different clients into one invoice', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_invoice_guard'
+    const adminId = 'user_admin_guard'
+    const { tenantId } = await seedTenant(t, { clerkOrgId, adminId })
+
+    const doe = await seedClientWithLine(t, {
+      tenantId,
+      caregiverId: 'user_cg_guard_1',
+      clientName: 'Jane Doe',
+      createdAt: '2026-07-10T12:00:00.000Z',
+    })
+    const smith = await seedClientWithLine(t, {
+      tenantId,
+      caregiverId: 'user_cg_guard_2',
+      clientName: 'Bob Smith',
+      createdAt: '2026-07-11T12:00:00.000Z',
+    })
+
+    const admin = asAdmin(t, adminId, clerkOrgId)
+    await expect(
+      admin.mutation(api.billing.createInvoice, {
+        clerkOrgId,
+        name: 'Mixed clients',
+        lineIds: [doe.lineId, smith.lineId],
+      }),
+    ).rejects.toThrow(/one invoice per client/i)
+
+    // Lines remain uninvoiced after the rejected attempt.
+    const doeLine = await t.run(async (ctx) => ctx.db.get(doe.lineId))
+    expect(doeLine?.exportBatchId).toBeUndefined()
+
+    // Single-client invoicing still works and stamps the invoice clientId.
+    const invoiceId = await admin.mutation(api.billing.createInvoice, {
+      clerkOrgId,
+      name: 'Doe only',
+      lineIds: [doe.lineId],
+    })
+    const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId))
+    expect(invoice?.clientId).toBe(doe.clientId)
+  })
+})
+
+describe('checkBillingBlocked', () => {
+  async function seedShiftForBlockCheck(
+    t: ReturnType<typeof createTestConvex>,
+    options: {
+      tenantId: Id<'tenants'>
+      authorizationHours: number
+      withNote: boolean
+      noteEndTime?: string
+    },
+  ) {
+    return t.run(async (ctx) => {
+      const clientId = await ctx.db.insert('clients', {
+        tenantId: options.tenantId,
+        displayName: 'Block Client',
+        serviceType: 'SLS',
+        authorizationHours: options.authorizationHours,
+        riskFlags: [],
+      })
+      const shiftId = await ctx.db.insert('shifts', {
+        tenantId: options.tenantId,
+        clientId,
+        caregiverId: 'user_cg_block',
+        scheduledStart: '2026-07-10T08:00:00.000Z',
+        scheduledEnd: '2026-07-10T12:00:00.000Z',
+        status: 'submitted',
+        serviceType: 'SLS',
+        rate: 25,
+      })
+      if (options.withNote) {
+        await ctx.db.insert('progressNotes', {
+          tenantId: options.tenantId,
+          shiftId,
+          startTime: '08:00',
+          endTime: options.noteEndTime ?? '12:00',
+          servicesProvided: 'ADL support',
+          clientResponse: 'Cooperative',
+          narrative: 'Shift completed as planned.',
+        })
+      }
+      return { clientId, shiftId }
+    })
+  }
+
+  it('blocks when the progress note is missing', async () => {
+    const t = createTestConvex()
+    const { tenantId } = await seedTenant(t, {
+      clerkOrgId: 'org_block_note',
+      adminId: 'user_admin_block_note',
+    })
+    const { shiftId } = await seedShiftForBlockCheck(t, {
+      tenantId,
+      authorizationHours: 100,
+      withNote: false,
+    })
+
+    const result = await t.run(async (ctx) => {
+      const shift = (await ctx.db.get(shiftId))!
+      return checkBillingBlocked(ctx, tenantId, shift, 4)
+    })
+    expect(result.blocked).toBe(true)
+    expect(result.reason).toBe('Missing progress note.')
+  })
+
+  it('blocks when the progress note is incomplete', async () => {
+    const t = createTestConvex()
+    const { tenantId } = await seedTenant(t, {
+      clerkOrgId: 'org_block_incomplete',
+      adminId: 'user_admin_block_incomplete',
+    })
+    const { shiftId } = await seedShiftForBlockCheck(t, {
+      tenantId,
+      authorizationHours: 100,
+      withNote: true,
+      noteEndTime: '07:00', // end before start -> invalid documentation
+    })
+
+    const result = await t.run(async (ctx) => {
+      const shift = (await ctx.db.get(shiftId))!
+      return checkBillingBlocked(ctx, tenantId, shift, 4)
+    })
+    expect(result.blocked).toBe(true)
+    expect(result.reason).toBe('Progress note is incomplete.')
+  })
+
+  it('blocks when worked hours exceed the client approved hours', async () => {
+    const t = createTestConvex()
+    const { tenantId } = await seedTenant(t, {
+      clerkOrgId: 'org_block_hours',
+      adminId: 'user_admin_block_hours',
+    })
+    // Sark approved 24h; 20h already delivered this month + 8h new = 28h.
+    const { shiftId, clientId } = await seedShiftForBlockCheck(t, {
+      tenantId,
+      authorizationHours: 24,
+      withNote: true,
+    })
+    await t.run(async (ctx) => {
+      await ctx.db.insert('shifts', {
+        tenantId,
+        clientId,
+        caregiverId: 'user_cg_block',
+        scheduledStart: '2026-07-03T08:00:00.000Z',
+        scheduledEnd: '2026-07-03T16:00:00.000Z',
+        clockInAt: '2026-07-03T08:00:00.000Z',
+        clockOutAt: '2026-07-03T18:00:00.000Z',
+        status: 'billing_ready',
+        serviceType: 'SLS',
+        rate: 25,
+      })
+      await ctx.db.insert('shifts', {
+        tenantId,
+        clientId,
+        caregiverId: 'user_cg_block',
+        scheduledStart: '2026-07-04T08:00:00.000Z',
+        scheduledEnd: '2026-07-04T18:00:00.000Z',
+        status: 'approved',
+        serviceType: 'SLS',
+        rate: 25,
+      })
+    })
+
+    const result = await t.run(async (ctx) => {
+      const shift = (await ctx.db.get(shiftId))!
+      return checkBillingBlocked(ctx, tenantId, shift, 8)
+    })
+    expect(result.blocked).toBe(true)
+    expect(result.reason).toContain('approved hours')
+    expect(result.reason).toContain('28h')
+    expect(result.reason).toContain('24h')
+  })
+
+  it('does not block when hours fit the authorization and the note is complete', async () => {
+    const t = createTestConvex()
+    const { tenantId } = await seedTenant(t, {
+      clerkOrgId: 'org_block_clean',
+      adminId: 'user_admin_block_clean',
+    })
+    const { shiftId } = await seedShiftForBlockCheck(t, {
+      tenantId,
+      authorizationHours: 100,
+      withNote: true,
+    })
+
+    const result = await t.run(async (ctx) => {
+      const shift = (await ctx.db.get(shiftId))!
+      return checkBillingBlocked(ctx, tenantId, shift, 8)
+    })
+    expect(result.blocked).toBe(false)
+    expect(result.reason).toBeUndefined()
   })
 })

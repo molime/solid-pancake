@@ -28,6 +28,7 @@ export interface InvoiceRow {
   status?: string
   periodStart?: string
   periodEnd?: string
+  clientId?: Id<'clients'>
   caregiverName?: string
   caregiverEmail?: string
   lineCount: number
@@ -38,6 +39,31 @@ export interface BillingFilters {
   caregiverId: string
   periodStart: string
   periodEnd: string
+}
+
+/** Current month as 'yyyy-mm' (UTC), the default invoice period. */
+export function currentMonth(): string {
+  return new Date().toISOString().slice(0, 7)
+}
+
+/**
+ * Full calendar-month date range for 'yyyy-mm' as inclusive date-only bounds
+ * (yyyy-mm-dd). Monthly is the default invoice period; custom ranges remain
+ * available when needed.
+ */
+export function monthRange(month: string): {
+  startDate: string
+  endDate: string
+} {
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    throw new Error('Month must be yyyy-mm.')
+  }
+  const [year, monthIndex] = month.split('-').map(Number)
+  const lastDay = new Date(Date.UTC(year, monthIndex, 0)).getUTCDate()
+  return {
+    startDate: `${month}-01`,
+    endDate: `${month}-${String(lastDay).padStart(2, '0')}`,
+  }
 }
 
 export interface InvoiceDetails {

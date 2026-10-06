@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import {
   buildInvoiceCsv,
+  currentMonth,
   defaultInvoiceName,
   filterBillingLines,
+  monthRange,
   summarizeLines,
   type BillingLineRow,
 } from './invoiceUtils'
@@ -84,5 +86,32 @@ describe('invoice utilities', () => {
     expect(csv).toContain('ATRIA-20260520-ABC123')
     expect(csv).toContain('"Lopez, Maria"')
     expect(csv).toContain('juan@example.com')
+  })
+})
+
+describe('monthRange (monthly default invoice period)', () => {
+  it('computes inclusive date-only bounds for a month', () => {
+    expect(monthRange('2026-07')).toEqual({
+      startDate: '2026-07-01',
+      endDate: '2026-07-31',
+    })
+    expect(monthRange('2026-04')).toEqual({
+      startDate: '2026-04-01',
+      endDate: '2026-04-30',
+    })
+  })
+
+  it('handles February on leap and non-leap years', () => {
+    expect(monthRange('2026-02').endDate).toBe('2026-02-28')
+    expect(monthRange('2028-02').endDate).toBe('2028-02-29')
+  })
+
+  it('rejects malformed months', () => {
+    expect(() => monthRange('2026-7')).toThrow()
+    expect(() => monthRange('July')).toThrow()
+  })
+
+  it('currentMonth returns a yyyy-mm string', () => {
+    expect(currentMonth()).toMatch(/^\d{4}-\d{2}$/)
   })
 })

@@ -250,8 +250,8 @@ describe('checkComplianceBlocked', () => {
   })
 })
 
-describe('reviews.approve compliance gating', () => {
-  it('blocked without override creates a blocked billing line, keeps billing_ready, audits, and does not throw', async () => {
+describe('reviews.approve credential decoupling', () => {
+  it('missing required credentials still flag compliance but no longer block billing lines', async () => {
     const t = createTestConvex()
     const seed = await seedTenant(t)
     await seedRequirement(t, seed.tenantId, {
@@ -261,14 +261,22 @@ describe('reviews.approve compliance gating', () => {
     })
     const { shiftId } = await seedSubmittedShift(t, seed.tenantId)
 
+    // The credential check itself is unchanged — the caregiver is still
+    // flagged for the compliance views.
+    const compliance = await t.run(async (ctx) =>
+      checkComplianceBlocked(ctx, seed.tenantId, CAREGIVER_ID),
+    )
+    expect(compliance.blocked).toBe(true)
+
+    // ...but professional documentation must not block billing (client
+    // request): approval produces a clean, billable line.
     const result = await asAdmin(t).mutation(api.reviews.approve, {
       clerkOrgId: CLERK_ORG_ID,
       shiftId,
       comment: 'Looks good',
     })
 
-    expect(typeof result).toBe('string')
-    expect(result as string).toContain('Billing blocked')
+    expect(result).toBe(shiftId)
 
     const state = await t.run(async (ctx) => {
       const shift = await ctx.db.get(shiftId)
@@ -289,86 +297,9 @@ describe('reviews.approve compliance gating', () => {
 
     expect(state.shift?.status).toBe('billing_ready')
     expect(state.lines).toHaveLength(1)
-    expect(state.lines[0]?.blockedReason).toContain('Driver License')
-    expect(state.lines[0]?.blockedAt).toBeTruthy()
-    expect(
-      state.audits.some((a) => a.action === 'billing_blocked_compliance'),
-    ).toBe(true)
-  })
-
-  it('blocked with override by a coordinator throws', async () => {
-    const t = createTestConvex()
-    const seed = await seedTenant(t)
-    await seedRequirement(t, seed.tenantId, {
-      category: 'license',
-      label: 'Driver License',
-      isRequired: true,
-    })
-    const { shiftId } = await seedSubmittedShift(t, seed.tenantId)
-
-    await expect(
-      asCoordinator(t).mutation(api.reviews.approve, {
-        clerkOrgId: CLERK_ORG_ID,
-        shiftId,
-        comment: 'Looks good',
-        complianceOverride: true,
-        complianceOverrideReason: 'Verified in person',
-      }),
-    ).rejects.toThrow('only org:admin')
-  })
-
-  it('blocked with override by an admin creates a clean line and records override fields', async () => {
-    const t = createTestConvex()
-    const seed = await seedTenant(t)
-    await seedRequirement(t, seed.tenantId, {
-      category: 'license',
-      label: 'Driver License',
-      isRequired: true,
-    })
-    const { shiftId } = await seedSubmittedShift(t, seed.tenantId)
-
-    const result = await asAdmin(t).mutation(api.reviews.approve, {
-      clerkOrgId: CLERK_ORG_ID,
-      shiftId,
-      comment: 'Looks good',
-      complianceOverride: true,
-      complianceOverrideReason: 'Verified in person',
-    })
-
-    expect(result).toBe(shiftId)
-
-    const state = await t.run(async (ctx) => {
-      const lines = await ctx.db
-        .query('billingLines')
-        .withIndex('by_tenant_shift', (q) =>
-          q.eq('tenantId', seed.tenantId).eq('shiftId', shiftId),
-        )
-        .collect()
-      const events = await ctx.db
-        .query('reviewEvents')
-        .withIndex('by_tenant_shift', (q) =>
-          q.eq('tenantId', seed.tenantId).eq('shiftId', shiftId),
-        )
-        .collect()
-      const audits = await ctx.db
-        .query('auditEvents')
-        .withIndex('by_tenant_created_at', (q) =>
-          q.eq('tenantId', seed.tenantId),
-        )
-        .collect()
-      return { lines, events, audits }
-    })
-
-    expect(state.lines).toHaveLength(1)
     expect(state.lines[0]?.blockedReason).toBeUndefined()
-    expect(state.events).toHaveLength(1)
-    expect(state.events[0]?.complianceOverride).toBe(true)
-    expect(state.events[0]?.complianceOverrideReason).toBe(
-      'Verified in person',
-    )
-    expect(
-      state.audits.some((a) => a.action === 'compliance_override_applied'),
-    ).toBe(true)
+    expect(state.audits.some((a) => a.action === 'billing_blocked')).toBe(false)
+    expect(state.audits.some((a) => a.action === 'shift_approved')).toBe(true)
   })
 })
 

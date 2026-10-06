@@ -30,8 +30,10 @@ import { InvoicesTable } from '../components/InvoicesTable'
 import {
   buildInvoiceCsv,
   buildInvoicePdf,
+  currentMonth,
   defaultInvoiceName,
   filterBillingLines,
+  monthRange,
   summarizeLines,
   type BillingFilters,
   type BillingLineRow,
@@ -75,6 +77,13 @@ export function BillingPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [perPatientOpen, setPerPatientOpen] = useState(false)
+  // Monthly is the default invoice period; a custom range is available when
+  // needed (client request: "default que sea mensual... si se requiere, la
+  // opción custom").
+  const [perPatientMode, setPerPatientMode] = useState<'monthly' | 'custom'>(
+    'monthly',
+  )
+  const [perPatientMonth, setPerPatientMonth] = useState(currentMonth)
   const [perPatientStart, setPerPatientStart] = useState('')
   const [perPatientEnd, setPerPatientEnd] = useState('')
   const [isCreatingPerPatient, setIsCreatingPerPatient] = useState(false)
@@ -221,22 +230,82 @@ export function BillingPage() {
     }
   }
 
+  /** Downloads the consolidated per-client payment calendar PDF for a month. */
+  const downloadClientCalendar = async (
+    clientId: Id<'clients'>,
+    month: string,
+  ) => {
+    if (!clerkOrgId) return
+    const data = await convex.query(api.billing.paymentCalendarData, {
+      clerkOrgId,
+      clientId,
+      month,
+    })
+    const bytes = await generatePaymentCalendarPdf({
+      clientName: data.clientName,
+      caregiverNames: data.caregiverNames,
+      month,
+      days: data.days,
+    })
+    saveAndDownload(bytes, `payment-calendar-${data.clientName}-${month}.pdf`)
+  }
+
+  const handleInvoiceCalendarDownload = async (invoice: InvoiceRow) => {
+    if (!invoice.clientId || !invoice.periodStart) return
+    setError(null)
+    try {
+      await downloadClientCalendar(
+        invoice.clientId,
+        invoice.periodStart.slice(0, 7),
+      )
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Could not generate the calendar.',
+      )
+    }
+  }
+
   const handleCreatePerPatientInvoices = async () => {
-    if (!clerkOrgId || !perPatientStart || !perPatientEnd) return
+    if (!clerkOrgId) return
+    const range =
+      perPatientMode === 'monthly'
+        ? monthRange(perPatientMonth)
+        : { startDate: perPatientStart, endDate: perPatientEnd }
+    if (!range.startDate || !range.endDate) return
     setIsCreatingPerPatient(true)
     setPerPatientError(null)
     try {
       const result = await createPerPatientInvoices({
         clerkOrgId,
-        startDate: perPatientStart,
-        endDate: perPatientEnd,
+        startDate: range.startDate,
+        endDate: range.endDate,
       })
       setPerPatientOpen(false)
       setPerPatientStart('')
       setPerPatientEnd('')
       setError(null)
+      // Companion document: generate each client's payment calendar at the
+      // same time as their invoice (one consolidated calendar per client).
+      let calendars = 0
+      for (const created of result.invoices ?? []) {
+        try {
+          await downloadClientCalendar(
+            created.clientId,
+            created.periodStart.slice(0, 7),
+          )
+          calendars++
+        } catch {
+          // Calendar generation is best-effort; the invoice already exists
+          // and the calendar stays downloadable from the invoice history.
+        }
+      }
       setMessage(
-        `Created ${result.count} per-patient invoice(s) for ${perPatientStart} - ${perPatientEnd}.`,
+        `Created ${result.count} per-patient invoice(s) for ${range.startDate} - ${range.endDate}.` +
+          (calendars > 0
+            ? ` Downloaded ${calendars} payment calendar(s).`
+            : ''),
       )
     } catch (err) {
       setPerPatientError(
@@ -370,7 +439,7 @@ export function BillingPage() {
           </span>
         }
       >
-        <InvoicesTable invoices={invoices} onDownload={requestInvoiceDownload} onDownloadPdf={requestInvoicePdfDownload} />
+        <InvoicesTable invoices={invoices} onDownload={requestInvoiceDownload} onDownloadPdf={requestInvoicePdfDownload} onDownloadCalendar={handleInvoiceCalendarDownload} />
       </CollapsibleCard>
 
       <CollapsibleCard title="Payment calendars">
@@ -483,25 +552,50 @@ export function BillingPage() {
         </DialogHeader>
         <DialogContent className="space-y-4">
           <p className="text-sm text-atria-muted">
-            Groups every unbilled, unblocked billing line in the date range into
-            one draft invoice per client.
+            Groups every unbilled, unblocked billing line in the period into
+            one draft invoice per client, and downloads each client's payment
+            calendar for the same period.
           </p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FieldGroup label="Start date" htmlFor="perPatientStart" required>
-              <USDateInput
-                id="perPatientStart"
-                value={perPatientStart}
-                onChange={setPerPatientStart}
+          <FieldGroup label="Period type" htmlFor="perPatientMode">
+            <Select
+              id="perPatientMode"
+              value={perPatientMode}
+              onChange={(e) =>
+                setPerPatientMode(e.target.value as 'monthly' | 'custom')
+              }
+              className="w-52"
+            >
+              <option value="monthly">Monthly (default)</option>
+              <option value="custom">Custom date range</option>
+            </Select>
+          </FieldGroup>
+          {perPatientMode === 'monthly' ? (
+            <FieldGroup label="Month" htmlFor="perPatientMonth" required>
+              <Input
+                id="perPatientMonth"
+                type="month"
+                value={perPatientMonth}
+                onChange={(e) => setPerPatientMonth(e.target.value)}
               />
             </FieldGroup>
-            <FieldGroup label="End date" htmlFor="perPatientEnd" required>
-              <USDateInput
-                id="perPatientEnd"
-                value={perPatientEnd}
-                onChange={setPerPatientEnd}
-              />
-            </FieldGroup>
-          </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FieldGroup label="Start date" htmlFor="perPatientStart" required>
+                <USDateInput
+                  id="perPatientStart"
+                  value={perPatientStart}
+                  onChange={setPerPatientStart}
+                />
+              </FieldGroup>
+              <FieldGroup label="End date" htmlFor="perPatientEnd" required>
+                <USDateInput
+                  id="perPatientEnd"
+                  value={perPatientEnd}
+                  onChange={setPerPatientEnd}
+                />
+              </FieldGroup>
+            </div>
+          )}
           {perPatientError && (
             <p className="text-sm text-atria-danger">{perPatientError}</p>
           )}
@@ -514,7 +608,10 @@ export function BillingPage() {
             variant="primary"
             onClick={handleCreatePerPatientInvoices}
             disabled={
-              isCreatingPerPatient || !perPatientStart || !perPatientEnd
+              isCreatingPerPatient ||
+              (perPatientMode === 'monthly'
+                ? !perPatientMonth
+                : !perPatientStart || !perPatientEnd)
             }
           >
             {isCreatingPerPatient ? 'Creating…' : 'Create invoices'}
@@ -534,37 +631,31 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
   )
 }
 
-/** Per client-caregiver-month printable payment calendar (billing support doc). */
+/** Per client-month printable payment calendar with ALL caregivers (billing support doc). */
 function PaymentCalendarCard({ clerkOrgId, bare }: { clerkOrgId?: string; bare?: boolean }) {
   const convex = useConvex()
   const clients = useQuery(
     api.clients.list,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
-  const caregivers = useQuery(
-    api.members.listCaregivers,
-    clerkOrgId ? { clerkOrgId } : 'skip',
-  )
   const [clientId, setClientId] = useState('')
-  const [caregiverId, setCaregiverId] = useState('')
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   const handleDownload = async () => {
-    if (!clerkOrgId || !clientId || !caregiverId || !month) return
+    if (!clerkOrgId || !clientId || !month) return
     setBusy(true)
     setError('')
     try {
       const data = await convex.query(api.billing.paymentCalendarData, {
         clerkOrgId,
         clientId: clientId as Id<'clients'>,
-        caregiverId,
         month,
       })
       const bytes = await generatePaymentCalendarPdf({
         clientName: data.clientName,
-        caregiverName: data.caregiverName,
+        caregiverNames: data.caregiverNames,
         month,
         days: data.days,
       })
@@ -590,8 +681,9 @@ function PaymentCalendarCard({ clerkOrgId, bare }: { clerkOrgId?: string; bare?:
       )}
       <CardContent className="space-y-3">
         <p className="text-sm text-atria-text-secondary">
-          Printable month calendar per client-caregiver pair with the worked
-          days, hours and total — ready to attach to billing.
+          One printable month calendar per client with every caregiver's worked
+          days (initials per day cell), hours and total — ready to attach to
+          billing.
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <FieldGroup label="Client" htmlFor="calClient">
@@ -609,23 +701,6 @@ function PaymentCalendarCard({ clerkOrgId, bare }: { clerkOrgId?: string; bare?:
               ))}
             </Select>
           </FieldGroup>
-          <FieldGroup label="Caregiver" htmlFor="calCaregiver">
-            <Select
-              id="calCaregiver"
-              value={caregiverId}
-              onChange={(e) => setCaregiverId(e.target.value)}
-              className="w-52"
-            >
-              <option value="">Select caregiver…</option>
-              {(caregivers ?? []).map(
-                (caregiver: { clerkUserId: string; displayName: string }) => (
-                  <option key={caregiver.clerkUserId} value={caregiver.clerkUserId}>
-                    {caregiver.displayName}
-                  </option>
-                ),
-              )}
-            </Select>
-          </FieldGroup>
           <FieldGroup label="Month" htmlFor="calMonth">
             <Input
               id="calMonth"
@@ -638,7 +713,7 @@ function PaymentCalendarCard({ clerkOrgId, bare }: { clerkOrgId?: string; bare?:
             variant="secondary"
             size="sm"
             onClick={handleDownload}
-            disabled={busy || !clientId || !caregiverId || !month}
+            disabled={busy || !clientId || !month}
           >
             {busy ? 'Generating…' : 'Download calendar PDF'}
           </Button>

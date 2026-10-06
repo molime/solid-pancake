@@ -208,6 +208,13 @@ export const createPerPatientInvoices = mutation({
     const now = new Date().toISOString()
     const yyyymm = startDate.slice(0, 7).replace('-', '')
     let count = 0
+    const createdInvoices: {
+      invoiceId: Id<'exportBatches'>
+      clientId: Id<'clients'>
+      clientName: string
+      periodStart: string
+      periodEnd: string
+    }[] = []
 
     // Invoice numbers already issued for this tenant, so a repeat run in the
     // same month cannot reuse a number for the same client.
@@ -298,15 +305,23 @@ export const createPerPatientInvoices = mutation({
       }
 
       count++
+      createdInvoices.push({
+        invoiceId,
+        clientId: group.clientId,
+        clientName: client.displayName,
+        periodStart: startDate,
+        periodEnd: endDate,
+      })
     }
 
-    return { count }
+    return { count, invoices: createdInvoices }
   },
 })
 
-// Returns the compliance-blocked billing line for a shift, if any. Used by
+// Returns the blocked billing line for a shift, if any. Used by
 // the review detail's "Approve with compliance override" flow to release the
-// block created by a plain approval of a compliance-blocked caregiver.
+// block created by a plain approval of a shift with a billing block (missing
+// progress note or hours over the client's approved hours).
 export const getBlockedLineForShift = query({
   args: { clerkOrgId: v.string(), shiftId: v.id('shifts') },
   handler: async (ctx, { clerkOrgId, shiftId }) => {
@@ -701,15 +716,16 @@ export const exportPayroll = action({
 })
 
 /**
- * Payment calendar data: worked days for one client-caregiver pair in one
- * month (from submitted/approved/billing_ready shifts). Powers the printable
- * per-pair payment calendar PDF.
+ * Payment calendar data: one consolidated calendar per client per month with
+ * ALL caregivers' worked days (from submitted/approved/billing_ready shifts).
+ * The agency submits a single calendar per client to the payer, so caregivers
+ * are distinguished inside each day cell by their initials. Powers the
+ * printable payment calendar PDF.
  */
 export const paymentCalendarData = query({
   args: {
     clerkOrgId: v.string(),
     clientId: v.id('clients'),
-    caregiverId: v.string(),
     month: v.string(), // yyyy-mm
   },
   handler: async (ctx, args) => {
@@ -729,51 +745,84 @@ export const paymentCalendarData = query({
     if (!client) throw new ConvexError('Client not found.')
     assertTenantDoc(client, tenantId)
 
-    const shifts = await ctx.db
-      .query('shifts')
-      .withIndex('by_tenant_caregiver_status', (q) =>
-        q.eq('tenantId', tenantId).eq('caregiverId', args.caregiverId),
-      )
-      .filter((q) =>
-        q.and(
-          q.eq(q.field('clientId'), args.clientId),
-          q.gte(q.field('scheduledStart'), startBound),
-          q.lt(q.field('scheduledStart'), endBound),
-        ),
-      )
-      .collect()
+    const shifts: Doc<'shifts'>[] = []
+    for (const status of ['submitted', 'approved', 'billing_ready'] as const) {
+      const monthShifts = await ctx.db
+        .query('shifts')
+        .withIndex('by_tenant_status_start', (q) =>
+          q
+            .eq('tenantId', tenantId)
+            .eq('status', status)
+            .gte('scheduledStart', startBound)
+            .lt('scheduledStart', endBound),
+        )
+        .collect()
+      shifts.push(...monthShifts)
+    }
+    const worked = shifts.filter((s) => s.clientId === args.clientId)
 
-    const worked = shifts.filter((s) =>
-      ['submitted', 'approved', 'billing_ready'].includes(s.status),
-    )
-    const caregiver = await ctx.db
-      .query('tenantMembers')
-      .withIndex('by_tenant_user', (q) =>
-        q.eq('tenantId', tenantId).eq('clerkUserId', args.caregiverId),
+    // Resolve caregiver display names (one lookup per distinct caregiver).
+    const namesByCaregiver = new Map<string, string>()
+    for (const shift of worked) {
+      if (namesByCaregiver.has(shift.caregiverId)) continue
+      const member = await ctx.db
+        .query('tenantMembers')
+        .withIndex('by_tenant_user', (q) =>
+          q.eq('tenantId', tenantId).eq('clerkUserId', shift.caregiverId),
+        )
+        .unique()
+      namesByCaregiver.set(
+        shift.caregiverId,
+        member?.displayName ?? member?.email ?? 'Caregiver',
       )
-      .unique()
+    }
 
-    const days = worked.map((shift) => {
-      const beginAt = shift.clockInAt ?? shift.scheduledStart
-      const endAt = shift.clockOutAt ?? shift.scheduledEnd
-      const hours = Math.max(
-        0,
-        (Date.parse(endAt) - Date.parse(beginAt)) / (1000 * 60 * 60),
+    const days = worked
+      .map((shift) => {
+        const beginAt = shift.clockInAt ?? shift.scheduledStart
+        const endAt = shift.clockOutAt ?? shift.scheduledEnd
+        const hours = Math.max(
+          0,
+          (Date.parse(endAt) - Date.parse(beginAt)) / (1000 * 60 * 60),
+        )
+        const caregiverName =
+          namesByCaregiver.get(shift.caregiverId) ?? 'Caregiver'
+        return {
+          date: beginAt.slice(0, 10),
+          beginAt,
+          endAt,
+          hours: Math.round(hours * 2) / 2,
+          caregiverName,
+          caregiverInitials: caregiverInitials(caregiverName),
+        }
+      })
+      .sort((a, b) =>
+        a.date === b.date
+          ? a.beginAt < b.beginAt
+            ? -1
+            : 1
+          : a.date < b.date
+            ? -1
+            : 1,
       )
-      return {
-        date: beginAt.slice(0, 10),
-        beginAt,
-        endAt,
-        hours: Math.round(hours * 2) / 2,
-      }
-    })
+
     return {
       clientName: client.displayName,
-      caregiverName: caregiver?.displayName ?? 'Caregiver',
+      caregiverNames: Array.from(new Set(namesByCaregiver.values())).sort(),
       days,
     }
   },
 })
+
+/** Two-letter initials for compact per-day caregiver labels ("Erick Santiago" -> "ES"). */
+function caregiverInitials(displayName: string): string {
+  const parts = displayName.trim().split(/\s+/).filter(Boolean)
+  const initials = parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+  return initials || 'CG'
+}
 
 /**
  * Monthly cron (2nd of the month): remind coordinators and admins that the

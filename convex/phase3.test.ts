@@ -300,8 +300,8 @@ describe('checkComplianceBlocked', () => {
   })
 })
 
-describe('reviews.approve compliance gate', () => {
-  it('creates a blocked billing line without throwing when compliance-blocked', async () => {
+describe('reviews.approve billing block gate', () => {
+  it('no longer blocks billing lines for rejected professional credentials', async () => {
     const t = createTestConvex()
     const clerkOrgId = 'org_approve_blocked'
     const coordinatorId = 'user_coord_blocked'
@@ -317,6 +317,51 @@ describe('reviews.approve compliance gate', () => {
       status: 'rejected',
     })
     const { shiftId } = await seedDocumentedShift(t, { tenantId, caregiverId })
+
+    // Professional documentation must not block billing (client request), so
+    // approval produces a clean, billable line even with a rejected credential.
+    const result = await asUser(t, coordinatorId, clerkOrgId, 'org:coordinator').mutation(
+      api.reviews.approve,
+      { clerkOrgId, shiftId, comment: 'Looks good' },
+    )
+
+    expect(result).toBe(shiftId)
+
+    const state = await t.run(async (ctx) => {
+      const shift = await ctx.db.get(shiftId)
+      const lines = await ctx.db
+        .query('billingLines')
+        .withIndex('by_tenant_shift', (q) =>
+          q.eq('tenantId', tenantId).eq('shiftId', shiftId),
+        )
+        .collect()
+      const audits = await ctx.db
+        .query('auditEvents')
+        .withIndex('by_tenant_created_at', (q) => q.eq('tenantId', tenantId))
+        .collect()
+      return { shift, lines, audits }
+    })
+
+    expect(state.shift?.status).toBe('billing_ready')
+    expect(state.lines).toHaveLength(1)
+    expect(state.lines[0]?.blockedReason).toBeUndefined()
+    expect(state.audits.some((a) => a.action === 'billing_blocked')).toBe(false)
+    expect(state.audits.some((a) => a.action === 'shift_approved')).toBe(true)
+  })
+
+  it('creates a blocked billing line when worked hours exceed the approved hours', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_approve_hours'
+    const coordinatorId = 'user_coord_hours'
+    const caregiverId = 'user_cg_hours'
+    const tenantId = await seedTenant(t, clerkOrgId)
+    await addMember(t, tenantId, coordinatorId, 'org:coordinator')
+    await addMember(t, tenantId, caregiverId, 'org:caregiver')
+    const { shiftId, clientId } = await seedDocumentedShift(t, { tenantId, caregiverId })
+    // Sark approved only 2h for the month; the documented shift works 4h.
+    await t.run(async (ctx) => {
+      await ctx.db.patch(clientId, { authorizationHours: 2 })
+    })
 
     const result = await asUser(t, coordinatorId, clerkOrgId, 'org:coordinator').mutation(
       api.reviews.approve,
@@ -343,14 +388,14 @@ describe('reviews.approve compliance gate', () => {
 
     expect(state.shift?.status).toBe('billing_ready')
     expect(state.lines).toHaveLength(1)
-    expect(state.lines[0]?.blockedReason).toBeDefined()
+    expect(state.lines[0]?.blockedReason).toContain('approved hours')
     expect(state.lines[0]?.blockedAt).toBeDefined()
     expect(
-      state.audits.some((a) => a.action === 'billing_blocked_compliance'),
+      state.audits.some((a) => a.action === 'billing_blocked'),
     ).toBe(true)
   })
 
-  it('rejects a compliance override attempted by a non-admin', async () => {
+  it('rejects a billing-block override attempted by a non-admin', async () => {
     const t = createTestConvex()
     const clerkOrgId = 'org_approve_coord_override'
     const coordinatorId = 'user_coord_override'
@@ -358,14 +403,10 @@ describe('reviews.approve compliance gate', () => {
     const tenantId = await seedTenant(t, clerkOrgId)
     await addMember(t, tenantId, coordinatorId, 'org:coordinator')
     await addMember(t, tenantId, caregiverId, 'org:caregiver')
-    const profileId = await seedCaregiverProfile(t, tenantId, caregiverId)
-    await seedArchiveItem(t, {
-      tenantId,
-      subjectId: profileId as string,
-      category: 'cpr',
-      status: 'rejected',
+    const { shiftId, clientId } = await seedDocumentedShift(t, { tenantId, caregiverId })
+    await t.run(async (ctx) => {
+      await ctx.db.patch(clientId, { authorizationHours: 2 })
     })
-    const { shiftId } = await seedDocumentedShift(t, { tenantId, caregiverId })
 
     await expect(
       asUser(t, coordinatorId, clerkOrgId, 'org:coordinator').mutation(
@@ -381,7 +422,7 @@ describe('reviews.approve compliance gate', () => {
     ).rejects.toThrow(/only org:admin/)
   })
 
-  it('creates a clean billing line when an admin applies a compliance override', async () => {
+  it('creates a clean billing line when an admin overrides an hours-mismatch block', async () => {
     const t = createTestConvex()
     const clerkOrgId = 'org_approve_admin_override'
     const adminId = 'user_admin_override'
@@ -389,14 +430,10 @@ describe('reviews.approve compliance gate', () => {
     const tenantId = await seedTenant(t, clerkOrgId)
     await addMember(t, tenantId, adminId, 'org:admin')
     await addMember(t, tenantId, caregiverId, 'org:caregiver')
-    const profileId = await seedCaregiverProfile(t, tenantId, caregiverId)
-    await seedArchiveItem(t, {
-      tenantId,
-      subjectId: profileId as string,
-      category: 'cpr',
-      status: 'rejected',
+    const { shiftId, clientId } = await seedDocumentedShift(t, { tenantId, caregiverId })
+    await t.run(async (ctx) => {
+      await ctx.db.patch(clientId, { authorizationHours: 2 })
     })
-    const { shiftId } = await seedDocumentedShift(t, { tenantId, caregiverId })
 
     const result = await asUser(t, adminId, clerkOrgId, 'org:admin').mutation(
       api.reviews.approve,
@@ -405,7 +442,7 @@ describe('reviews.approve compliance gate', () => {
         shiftId,
         comment: 'Approved with override',
         complianceOverride: true,
-        complianceOverrideReason: 'Credential re-verified by phone',
+        complianceOverrideReason: 'Extra hours authorized by Sark',
       },
     )
     expect(result).toBe(shiftId)
@@ -434,10 +471,10 @@ describe('reviews.approve compliance gate', () => {
     expect(state.lines[0]?.blockedReason).toBeUndefined()
     expect(state.reviewEvents[0]?.complianceOverride).toBe(true)
     expect(state.reviewEvents[0]?.complianceOverrideReason).toBe(
-      'Credential re-verified by phone',
+      'Extra hours authorized by Sark',
     )
     expect(
-      state.audits.some((a) => a.action === 'compliance_override_applied'),
+      state.audits.some((a) => a.action === 'billing_block_override_applied'),
     ).toBe(true)
   })
 
