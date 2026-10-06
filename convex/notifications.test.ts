@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, afterEach, vi } from 'vitest'
 import { convexTest } from 'convex-test'
 import schema from './schema'
 import { api, internal } from './_generated/api'
@@ -241,6 +241,95 @@ describe('notifications', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]?.read).toBe(false)
     expect(rows[0]?.type).toBe('escalation')
+  })
+})
+
+describe('sendAgencyAlert', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  async function notificationsFor(
+    t: TestConvex,
+    tenantId: Id<'tenants'>,
+    clerkUserId: string,
+  ) {
+    return t.run(async (ctx) =>
+      ctx.db
+        .query('notifications')
+        .withIndex('by_tenant_user', (q) =>
+          q.eq('tenantId', tenantId).eq('clerkUserId', clerkUserId),
+        )
+        .collect(),
+    )
+  }
+
+  it('fans out one agency_alert row per member of the target roles', async () => {
+    const t = createTestConvex()
+    const tenantId = await seedTenant(t, [
+      { clerkUserId: 'user_admin', role: 'org:admin' },
+      { clerkUserId: 'user_hr', role: 'org:hr' },
+      { clerkUserId: 'user_cg1', role: 'org:caregiver' },
+      { clerkUserId: 'user_cg2', role: 'org:caregiver' },
+    ])
+
+    vi.useFakeTimers()
+    const result = await asUser(t, 'user_admin', 'org:admin').mutation(
+      api.notifications.sendAgencyAlert,
+      {
+        clerkOrgId: CLERK_ORG_ID,
+        message: 'Office closed Monday for the holiday.',
+        targetRoles: ['org:hr', 'org:caregiver'],
+      },
+    )
+    expect(result.sent).toBe(3)
+
+    await t.finishAllScheduledFunctions(vi.runAllTimers)
+
+    for (const clerkUserId of ['user_hr', 'user_cg1', 'user_cg2']) {
+      const rows = await notificationsFor(t, tenantId, clerkUserId)
+      expect(rows).toHaveLength(1)
+      expect(rows[0]?.type).toBe('agency_alert')
+      expect(rows[0]?.message).toBe('Office closed Monday for the holiday.')
+      expect(rows[0]?.read).toBe(false)
+    }
+    // The admin role was not targeted.
+    expect(await notificationsFor(t, tenantId, 'user_admin')).toHaveLength(0)
+  })
+
+  it('rejects non-admin callers', async () => {
+    const t = createTestConvex()
+    await seedTenant(t, [
+      { clerkUserId: 'user_admin', role: 'org:admin' },
+      { clerkUserId: 'user_hr', role: 'org:hr' },
+    ])
+
+    await expect(
+      asUser(t, 'user_hr', 'org:hr').mutation(api.notifications.sendAgencyAlert, {
+        clerkOrgId: CLERK_ORG_ID,
+        message: 'Hello staff',
+        targetRoles: ['org:caregiver'],
+      }),
+    ).rejects.toThrow('required one of')
+  })
+
+  it('rejects an empty message or empty target list', async () => {
+    const t = createTestConvex()
+    await seedTenant(t, [{ clerkUserId: 'user_admin', role: 'org:admin' }])
+
+    await expect(
+      asUser(t, 'user_admin', 'org:admin').mutation(
+        api.notifications.sendAgencyAlert,
+        { clerkOrgId: CLERK_ORG_ID, message: '   ', targetRoles: ['org:hr'] },
+      ),
+    ).rejects.toThrow('Alert message is required')
+
+    await expect(
+      asUser(t, 'user_admin', 'org:admin').mutation(
+        api.notifications.sendAgencyAlert,
+        { clerkOrgId: CLERK_ORG_ID, message: 'Hello', targetRoles: [] },
+      ),
+    ).rejects.toThrow('Select at least one target role')
   })
 })
 

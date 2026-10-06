@@ -20,6 +20,7 @@ const STAFF_SUBJECTS: Record<string, string> = {
   billing_ready: 'Shift ready to bill',
   invoice_created: 'Invoice created',
   billing_blocked: 'Billing blocked (hours or progress note)',
+  agency_alert: 'Alert from your agency',
   escalation: 'Escalation notice',
 }
 

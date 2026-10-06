@@ -14,10 +14,12 @@ import {
   AlertTriangle,
   XCircle,
   Hourglass,
+  ChevronDown,
 } from 'lucide-react'
 import { formatCurrency, formatDateUS } from '@/shared/format'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { Link } from 'react-router-dom'
+import { CaseDetailModal } from '@/features/hr/components/CaseDetailModal'
 
 export function AgencyAdminDashboardPage() {
   const { organization } = useOrganization()
@@ -32,6 +34,9 @@ export function AgencyAdminDashboardPage() {
   )
   const resolveEscalation = useMutation(api.escalations.resolveEscalation)
   const [escalationError, setEscalationError] = useState<string | null>(null)
+  const [expandedEscalationId, setExpandedEscalationId] =
+    useState<Id<'escalations'> | null>(null)
+  const [openCaseId, setOpenCaseId] = useState<Id<'hrCases'> | null>(null)
 
   const handleResolve = async (escalationId: Id<'escalations'>) => {
     if (!clerkOrgId) return
@@ -67,7 +72,7 @@ export function AgencyAdminDashboardPage() {
         },
         {
           key: 'onboarding',
-          label: 'Onboarding waiting',
+          label: 'Onboarding awaiting',
           count: summary.exceptions.onboardingWaiting,
           icon: <Hourglass className="h-4 w-4" />,
           tone: 'info' as const,
@@ -244,39 +249,110 @@ export function AgencyAdminDashboardPage() {
               {escalationError && (
                 <p className="text-sm text-atria-danger">{escalationError}</p>
               )}
-              {escalations.map((escalation) => (
-                <div
-                  key={escalation._id}
-                  className="flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-atria-warning-bg text-atria-warning">
-                      <AlertTriangle className="h-4 w-4" />
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium text-atria-ink">
-                        {escalation.reason}
-                      </p>
-                      <p className="text-xs text-atria-text-secondary">
-                        Level {escalation.escalationLevel} ·{' '}
-                        {escalation.subjectType} ·{' '}
-                        {formatDateUS(escalation.createdAt)}
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => handleResolve(escalation._id)}
+              {escalations.map((escalation) => {
+                const isExpanded = expandedEscalationId === escalation._id
+                return (
+                  <div
+                    key={escalation._id}
+                    className="rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg"
                   >
-                    Resolve
-                  </Button>
-                </div>
-              ))}
+                    <div
+                      onClick={() =>
+                        setExpandedEscalationId(isExpanded ? null : escalation._id)
+                      }
+                      className="flex cursor-pointer items-center justify-between p-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-atria-warning-bg text-atria-warning">
+                          <AlertTriangle className="h-4 w-4" />
+                        </span>
+                        <div>
+                          <p className="text-sm font-medium text-atria-ink">
+                            {escalation.reason}
+                          </p>
+                          <p className="text-xs text-atria-text-secondary">
+                            Level {escalation.escalationLevel} ·{' '}
+                            {escalation.subjectType} ·{' '}
+                            {formatDateUS(escalation.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleResolve(escalation._id)
+                          }}
+                        >
+                          Resolve
+                        </Button>
+                        <ChevronDown
+                          className={`h-4 w-4 text-atria-text-muted transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        />
+                      </div>
+                    </div>
+                    {isExpanded && (
+                      <div className="space-y-2 border-t border-atria-border px-3 py-3">
+                        <p className="text-sm text-atria-ink">
+                          {escalation.reason}
+                        </p>
+                        <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                          <div>
+                            <dt className="text-xs font-medium uppercase tracking-wider text-atria-text-muted">
+                              Level
+                            </dt>
+                            <dd className="text-atria-ink">
+                              {escalation.escalationLevel} (escalated to{' '}
+                              {escalation.escalatedTo})
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs font-medium uppercase tracking-wider text-atria-text-muted">
+                              Subject
+                            </dt>
+                            <dd className="text-atria-ink">
+                              {escalation.subjectType} · {escalation.subjectId}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs font-medium uppercase tracking-wider text-atria-text-muted">
+                              Created
+                            </dt>
+                            <dd className="text-atria-ink">
+                              {formatDateUS(escalation.createdAt)}
+                            </dd>
+                          </div>
+                        </dl>
+                        {escalation.subjectType === 'hrCase' && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() =>
+                              setOpenCaseId(
+                                escalation.subjectId as Id<'hrCases'>,
+                              )
+                            }
+                          >
+                            Open case
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </CardContent>
       </Card>
+
+      <CaseDetailModal
+        caseId={openCaseId}
+        clerkOrgId={clerkOrgId}
+        onClose={() => setOpenCaseId(null)}
+      />
     </div>
   )
 }

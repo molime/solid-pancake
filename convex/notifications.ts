@@ -171,6 +171,66 @@ export const markAllRead = mutation({
   },
 })
 
+/**
+ * Agency-wide alert: an admin broadcasts a message to every tenant member
+ * holding one of the target roles. Fan-out writes one notifications-table
+ * row per member (plus a best-effort email) via the shared staff
+ * notification action.
+ */
+export const sendAgencyAlert = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    message: v.string(),
+    targetRoles: v.array(
+      v.union(
+        v.literal('org:admin'),
+        v.literal('org:hr'),
+        v.literal('org:coordinator'),
+        v.literal('org:caregiver'),
+      ),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+    ])
+    const message = args.message.trim()
+    if (!message || message.length > 500) {
+      throw new ConvexError('Alert message is required (max 500 characters).')
+    }
+    if (args.targetRoles.length === 0) {
+      throw new ConvexError('Select at least one target role.')
+    }
+
+    // A member holds a single role, but dedup defensively so nobody gets the
+    // same alert twice.
+    const notified = new Set<string>()
+    for (const role of args.targetRoles) {
+      const members = await ctx.db
+        .query('tenantMembers')
+        .withIndex('by_tenant_role', (q) =>
+          q.eq('tenantId', tenantId).eq('role', role),
+        )
+        .collect()
+      for (const member of members) {
+        if (notified.has(member.clerkUserId)) continue
+        notified.add(member.clerkUserId)
+        await ctx.scheduler.runAfter(
+          0,
+          internal._utils.notifications.sendStaffNotification,
+          {
+            tenantId,
+            clerkUserId: member.clerkUserId,
+            type: 'agency_alert',
+            message,
+          },
+        )
+      }
+    }
+    return { sent: notified.size }
+  },
+})
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
