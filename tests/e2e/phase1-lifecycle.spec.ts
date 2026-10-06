@@ -180,10 +180,12 @@ test.describe('phase1 lifecycle', { tag: '@auth' }, () => {
     await resubmitClockOutButton.click()
     await expect(page.locator('[data-testid="shift-success-screen"]')).toBeVisible({ timeout: 15000 })
 
-    // ---- Admin: blocked approve, then compliance override -> billing ready ----
-    // The fixture caregiver has no issued Live Scan credential, so the first
-    // approval succeeds but creates a compliance-blocked billing line. The
-    // admin-only override then releases that block.
+    // ---- Admin: blocked approve, then billing-block override -> billing ready ----
+    // The fixture client (Sam Lee) is pinned to 2 monthly authorization
+    // hours, below this 4h shift, so the first approval succeeds but creates
+    // an hours-mismatch-blocked billing line (billing blocks now fire on
+    // hours/progress notes, not credentials). The admin-only override then
+    // releases that block.
     await signOut(page)
     await signInWithClerk(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD, E2E_ORG_ID, 'org:admin')
     await page.goto('/coordinator/review')
@@ -203,7 +205,7 @@ test.describe('phase1 lifecycle', { tag: '@auth' }, () => {
     await expect(page.getByText('Billing blocked')).toBeVisible()
     await expect(page.locator('[data-testid="compliance-override-button"]')).toBeVisible()
     await page.locator('[data-testid="compliance-override-button"]').click()
-    await page.locator('[data-testid="compliance-override-reason-input"]').fill('E2E fixture: Live Scan clearance verified outside the system.')
+    await page.locator('[data-testid="compliance-override-reason-input"]').fill('E2E fixture: hours exception approved by the payer.')
     await page.locator('[data-testid="compliance-override-submit-button"]').click()
     // A successful override returns us to the review queue.
     await expect(page.locator('[data-testid="filter-pending"]')).toBeVisible({ timeout: 15000 })

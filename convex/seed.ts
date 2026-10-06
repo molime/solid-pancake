@@ -657,6 +657,12 @@ async function seedE2EFixtures(
   } else {
     lifecycleClientId = lifecycleClient._id
   }
+  // The lifecycle E2E exercises the billing-block + override flow. Billing
+  // blocks now fire on hours exceeding the client's monthly authorization
+  // (not on credentials), so pin Sam Lee below the 4h fixture shift — every
+  // approval deterministically blocks with an hours mismatch. Patched on
+  // every reset so existing dev databases converge.
+  await ctx.db.patch(lifecycleClientId, { authorizationHours: 2 })
 
   let geofenceClientId: Id<'clients'>
   const geofenceClient = await findClient('Maya Torres')
