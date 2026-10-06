@@ -18,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/ui/Table'
-import { ArrowLeft, User, FileText, ClipboardCheck, ClipboardList, UserCheck, Download, NotebookPen, Pencil } from 'lucide-react'
+import { ArrowLeft, User, FileText, ClipboardCheck, ClipboardList, UserCheck, Download, NotebookPen, Pencil, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import type { Id } from '../../../../convex/_generated/dataModel'
@@ -102,7 +102,7 @@ function ProfileTab({
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div>
         <p className="text-xs font-medium uppercase tracking-wider text-atria-text-muted">
-          EMAIL
+          WORK EMAIL
         </p>
         {editingEmail ? (
           <div className="mt-1 flex items-center gap-2">
@@ -167,15 +167,18 @@ function ProfileTab({
 function NotesTab({
   employeeProfileId,
   clerkOrgId,
+  canDelete,
 }: {
   employeeProfileId: Id<'employeeProfiles'>
   clerkOrgId: string
+  canDelete: boolean
 }) {
   const notes = useQuery(
     api.employeeProfiles.listEmployeeNotes,
     clerkOrgId ? { clerkOrgId, employeeProfileId } : 'skip',
   )
   const addNote = useMutation(api.employeeProfiles.addEmployeeNote)
+  const deleteNote = useMutation(api.employeeProfiles.deleteEmployeeNote)
   const [text, setText] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -193,6 +196,18 @@ function NotesTab({
       )
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleDelete = async (noteId: Id<'employeeNotes'>) => {
+    if (!window.confirm('Delete this note? This cannot be undone.')) return
+    setError('')
+    try {
+      await deleteNote({ clerkOrgId, noteId })
+    } catch (err) {
+      setError(
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Could not delete the note.',
+      )
     }
   }
 
@@ -230,9 +245,22 @@ function NotesTab({
               <p className="whitespace-pre-wrap text-sm text-atria-ink">
                 {note.text}
               </p>
-              <p className="mt-2 text-xs text-atria-text-muted">
-                {note.authorName} · {formatDateUS(note.createdAt)}
-              </p>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <p className="text-xs text-atria-text-muted">
+                  {note.authorName} · {formatDateUS(note.createdAt)}
+                </p>
+                {canDelete && (
+                  <button
+                    type="button"
+                    aria-label="Delete note"
+                    title="Delete note"
+                    onClick={() => handleDelete(note._id)}
+                    className="text-atria-text-muted hover:text-atria-danger"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -318,8 +346,9 @@ function DocumentsTab({
     )
   }
 
-  // Documents split by currency: expired (or rejected) items drop to the
-  // archived section — hiring uploads live in their own section above.
+  // Documents split by currency: expired (or rejected) items sort below the
+  // current ones inside the merged table — hiring uploads live in their own
+  // section above. Status badges keep archived entries distinguishable.
   const now = Date.now()
   const isArchivedDoc = (doc: { status: string; expiresAt?: string | null }) =>
     doc.status === 'rejected' ||
@@ -328,6 +357,7 @@ function DocumentsTab({
       Date.parse(doc.expiresAt) < now)
   const currentDocuments = (documents ?? []).filter((doc) => !isArchivedDoc(doc))
   const archivedDocuments = (documents ?? []).filter(isArchivedDoc)
+  const allDocuments = [...currentDocuments, ...archivedDocuments]
 
   const renderDocTable = (docs: typeof documents) => (
     <Table>
@@ -434,20 +464,12 @@ function DocumentsTab({
           </Table>
         </div>
       )}
-      {currentDocuments.length > 0 && (
+      {allDocuments.length > 0 && (
         <div>
           <h3 className="mb-2 text-sm font-semibold text-atria-ink">
-            Current documents
+            Current &amp; Archived Documents
           </h3>
-          {renderDocTable(currentDocuments)}
-        </div>
-      )}
-      {archivedDocuments.length > 0 && (
-        <div>
-          <h3 className="mb-2 text-sm font-semibold text-atria-ink">
-            Archived / expired documents
-          </h3>
-          {renderDocTable(archivedDocuments)}
+          {renderDocTable(allDocuments)}
         </div>
       )}
     </div>
@@ -879,7 +901,7 @@ export function EmployeeProfilePage() {
             <DocumentsTab employeeProfileId={profile._id} clerkOrgId={clerkOrgId} clerkUserId={profile.clerkUserId} />
           )}
           {activeTab === 'notes' && profile && clerkOrgId && (
-            <NotesTab employeeProfileId={profile._id} clerkOrgId={clerkOrgId} />
+            <NotesTab employeeProfileId={profile._id} clerkOrgId={clerkOrgId} canDelete={isHrViewer} />
           )}
           {activeTab === 'cases' && profile?.clerkUserId && clerkOrgId && (
             <CasesTab clerkUserId={profile.clerkUserId} clerkOrgId={clerkOrgId} />

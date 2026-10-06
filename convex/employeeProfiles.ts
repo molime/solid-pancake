@@ -365,6 +365,24 @@ export const addEmployeeNote = mutation({
   },
 })
 
+/** Delete a note (admin/HR only — coordinators can add but not remove). */
+export const deleteEmployeeNote = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    noteId: v.id('employeeNotes'),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+    ])
+    const note = await ctx.db.get(args.noteId)
+    if (!note) throw new ConvexError('Note not found.')
+    assertTenantDoc(note, tenantId)
+    await ctx.db.delete(args.noteId)
+  },
+})
+
 /**
  * Correct an employee's display email after hiring (e.g. they registered with
  * a personal address). Informational only — login is Clerk's, untouched.
