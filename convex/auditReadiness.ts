@@ -658,7 +658,7 @@ export const getFixList = query({
       const caregiverName = shift?.caregiverId
         ? profileBySubject.get(shift.caregiverId)?.displayName
         : undefined
-      const key = `${clientName} ${line.blockedReason}`
+      const key = `${clientName}\0${line.blockedReason}`
       const existing = blockedByClientAndReason.get(key)
       if (existing) {
         existing.count += 1
