@@ -1,5 +1,5 @@
 import { useOrganization } from '@clerk/react'
-import { useConvex, useMutation, useQuery } from 'convex/react'
+import { useConvex, useQuery } from 'convex/react'
 import type { FunctionReturnType } from 'convex/server'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -58,20 +58,6 @@ const statusLabel = {
 function percent(part: number, total: number) {
   if (total === 0) return '—'
   return `${Math.round((part / total) * 100)}%`
-}
-
-// Human wording for the credential nudge email (review-call feedback: the old
-// message read like "Reminder from your agency: No expired credentials:
-// Expired Driver License").
-function credentialReminderText(kind: 'missing' | 'expired', labels: string[]) {
-  if (kind === 'expired') {
-    return labels.length === 1
-      ? `Reminder from your agency: your ${labels[0]} has expired — please upload a renewed one.`
-      : `Reminder from your agency: these credentials have expired: ${labels.join(', ')} — please upload renewed copies.`
-  }
-  return labels.length === 1
-    ? `Reminder from your agency: your ${labels[0]} is missing — please upload it as soon as you can.`
-    : `Reminder from your agency: these credentials are missing: ${labels.join(', ')} — please upload them as soon as you can.`
 }
 
 // The five audit pillars from docs/07 §1, each computed from real queries.
@@ -235,34 +221,10 @@ function AuditFullView() {
     () => new Date().toISOString().slice(0, 10),
   )
   const [downloadingPacket, setDownloadingPacket] = useState(false)
-  // Inline checklist expansion: concise count + link to the owning console;
-  // the reminder action stays for small offender lists (≤3 people).
+  // Inline checklist expansion: concise count + link to the owning console.
+  // Reminders live only in the ARC simple view (/audit) — the full view
+  // routes there instead of duplicating them (review-call decision).
   const [expandedChecklistItem, setExpandedChecklistItem] = useState<string | null>(null)
-  const [remindingFor, setRemindingFor] = useState<string | null>(null)
-  const [reminderSentFor, setReminderSentFor] = useState<string | null>(null)
-  const sendReminder = useMutation(api.notifications.sendReminderToMember)
-
-  const handleSendReminder = async (
-    itemLabel: string,
-    clerkUserId: string,
-    message: string,
-  ) => {
-    if (!clerkOrgId) return
-    const key = `${itemLabel}-${clerkUserId}`
-    setRemindingFor(key)
-    try {
-      await sendReminder({
-        clerkOrgId,
-        clerkUserId,
-        message,
-      })
-      setReminderSentFor(key)
-    } catch {
-      // The button re-enables so the admin can retry.
-    } finally {
-      setRemindingFor(null)
-    }
-  }
 
   const report = useQuery(
     api.auditReadiness.getReport,
@@ -368,12 +330,12 @@ function AuditFullView() {
       ? 1
       : report.documentation.withNotes / report.documentation.total
   // Unmet items expand with a concise count and a link to the owning
-  // console; small offender lists (≤3 people) keep the inline reminder.
+  // console (credential items go to the ARC simple view, where the in-place
+  // fix and reminder actions live).
   type ChecklistPerson = {
     clerkUserId: string
     displayName: string
     issue: string
-    reminder: string
   }
   type ChecklistItem = {
     label: string
@@ -394,7 +356,6 @@ function AuditFullView() {
           clerkUserId: gap.clerkUserId ?? gap.displayName,
           displayName: gap.displayName,
           issue: `${kind === 'missing' ? 'Missing' : 'Expired'}: ${labels.join(', ')}`,
-          reminder: credentialReminderText(kind, labels),
         }
       })
   const obligationDetail = (key: string) => {
@@ -405,7 +366,7 @@ function AuditFullView() {
   }
   const checklistItems: ChecklistItem[] = [
     {
-      label: 'No expired caregiver credentials',
+      label: 'All caregiver credentials current',
       met:
         report.personnel.expired === 0 &&
         report.gaps.every((gap) => gap.expired.length === 0),
@@ -415,14 +376,14 @@ function AuditFullView() {
           ? `${report.personnel.expired} expired credential document(s) on file.`
           : undefined,
       people: credentialPeople('expired'),
-      consoleLink: '/compliance',
+      consoleLink: '/audit',
     },
     {
-      label: 'No missing required credentials',
+      label: 'All required credentials on file',
       met: report.gaps.every((gap) => gap.missing.length === 0),
       category: 'Documentation',
       people: credentialPeople('missing'),
-      consoleLink: '/compliance',
+      consoleLink: '/audit',
     },
     {
       label: 'All SIRs verbally reported within 24 hours (last 90 days)',
@@ -735,51 +696,26 @@ function AuditFullView() {
                                   {item.detail}
                                 </p>
                               )}
-                              {/* Long offender lists live in the owning
-                                  console; short lists stay inline so the
-                                  reminder action is one click away. */}
-                              {(item.people?.length ?? 0) > 3 ? (
+                              {/* Offender lists and reminders live in the
+                                  owning console — the full view only routes. */}
+                              {(item.people?.length ?? 0) > 0 && (
                                 <p className="text-sm text-atria-text-secondary">
-                                  {item.people!.length} people affected — the
-                                  console has the full list.
+                                  {item.people!.length}{' '}
+                                  {item.people!.length === 1 ? 'person' : 'people'}{' '}
+                                  affected
+                                  {item.consoleLink
+                                    ? ' — open the console to see who and take action.'
+                                    : '.'}
                                 </p>
-                              ) : (
-                                item.people?.map((person) => (
-                                  <div
-                                    key={`${item.label}-${person.clerkUserId}`}
-                                    className="flex items-center justify-between gap-2"
-                                  >
-                                    <p className="text-sm text-atria-ink">
-                                      <span className="font-medium">{person.displayName}</span>
-                                      <span className="text-atria-text-secondary"> — {person.issue}</span>
-                                    </p>
-                                    <Button
-                                      variant="secondary"
-                                      size="sm"
-                                      disabled={remindingFor === `${item.label}-${person.clerkUserId}`}
-                                      onClick={() =>
-                                        handleSendReminder(
-                                          item.label,
-                                          person.clerkUserId,
-                                          person.reminder,
-                                        )
-                                      }
-                                    >
-                                      {reminderSentFor === `${item.label}-${person.clerkUserId}`
-                                        ? 'Reminder sent ✓'
-                                        : remindingFor === `${item.label}-${person.clerkUserId}`
-                                          ? 'Sending…'
-                                          : 'Send reminder'}
-                                    </Button>
-                                  </div>
-                                ))
                               )}
                               {item.consoleLink && (
                                 <Link
                                   to={item.consoleLink}
                                   className="inline-block text-sm font-medium text-atria-accent hover:underline"
                                 >
-                                  Open the console to fix these →
+                                  {item.consoleLink === '/audit'
+                                    ? 'Open the Audit Ready Center to fix these →'
+                                    : 'Open the console to fix these →'}
                                 </Link>
                               )}
                             </div>
