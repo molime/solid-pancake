@@ -457,6 +457,38 @@ describe('ComplianceOverviewPage — employee status dots', () => {
     expect(link).toHaveAttribute('href', 'https://files.example/download')
     expect(link).toHaveAttribute('target', '_blank')
   })
+
+  it('offers Upload renewal on expired items with a resolvable employee profile', () => {
+    mockState({
+      items: [
+        makeItem({
+          itemId: 'i1',
+          subjectName: 'Alice',
+          computedStatus: 'expired',
+          employeeProfileId: 'profile_1',
+        }),
+        // No profile resolution (e.g. candidate-backed item) → no button.
+        makeItem({
+          itemId: 'i2',
+          subjectName: 'Bob',
+          computedStatus: 'expired',
+          employeeProfileId: null,
+        }),
+      ],
+    })
+
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: /alice/i }))
+    expect(
+      screen.getByRole('button', { name: 'Upload renewal' }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /bob/i }))
+    expect(
+      screen.queryAllByRole('button', { name: 'Upload renewal' }),
+    ).toHaveLength(1)
+  })
 })
 
 describe('ComplianceOverviewPage — custom obligation tasks', () => {
