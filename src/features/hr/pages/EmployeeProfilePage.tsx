@@ -65,13 +65,13 @@ function ApplicationField({ label, value }: { label: string; value: string }) {
 
 function ProfileTab({
   member,
-  profile,
+  phone,
   memberId,
   clerkOrgId,
   canEditEmail,
 }: {
   member: { displayName: string; email: string; role: string; createdAt?: string }
-  profile: { phone?: string | null; adpSyncStatus: string } | null
+  phone: string | null
   memberId: Id<'tenantMembers'>
   clerkOrgId?: string
   canEditEmail: boolean
@@ -152,7 +152,7 @@ function ProfileTab({
           </p>
         )}
       </div>
-      <ApplicationField label="PHONE" value={profile?.phone || ''} />
+      <ApplicationField label="PHONE" value={phone || ''} />
       <ApplicationField label="ROLE" value={member.role.replace('org:', '')} />
       <ApplicationField
         label="START DATE"
@@ -888,7 +888,7 @@ export function EmployeeProfilePage() {
                 role: member.role,
                 createdAt: profile?.createdAt,
               }}
-              profile={profile}
+              phone={detail.phone}
               memberId={memberId as Id<'tenantMembers'>}
               clerkOrgId={clerkOrgId}
               canEditEmail={isHrViewer}

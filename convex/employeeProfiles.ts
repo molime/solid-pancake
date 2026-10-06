@@ -297,7 +297,21 @@ export const getEmployeeProfileDetail = query({
       )
       .unique()
 
-    return { member, profile }
+    // Phone lives on the candidate (application) record, not on
+    // employeeProfiles — surface it on the profile tab for hired employees.
+    let phone: string | null = null
+    const clerkUserId = profile?.clerkUserId ?? member.clerkUserId
+    if (clerkUserId) {
+      const candidate = await ctx.db
+        .query('candidates')
+        .withIndex('by_tenant_clerk_user', (q) =>
+          q.eq('tenantId', tenantId).eq('clerkUserId', clerkUserId),
+        )
+        .unique()
+      phone = candidate?.phone ?? null
+    }
+
+    return { member, profile, phone }
   },
 })
 
