@@ -153,6 +153,15 @@ type MockState = {
       detail?: string
       linkTo: string | null
       dueAt?: string
+      employeeName?: string
+      clientName?: string
+      credential?: {
+        clerkUserId: string | null
+        employeeProfileId: string
+        category: string
+        label: string
+        state: 'missing' | 'expired' | 'expiring'
+      }
     }[]
   }
   member?: { role: string }
@@ -376,7 +385,7 @@ describe('AuditReadinessPage — simple view (default)', () => {
     expect(screen.queryByText('Personnel')).not.toBeInTheDocument()
   })
 
-  it('shows the yellow state with a fix-it link per item', () => {
+  it('groups fixes per employee and opens the in-place fix popup', () => {
     mockState({
       fixList: {
         status: 'almost',
@@ -386,6 +395,7 @@ describe('AuditReadinessPage — simple view (default)', () => {
             severity: 'soon',
             title: "Maria's CPR card expires in 12 days",
             linkTo: '/compliance',
+            employeeName: 'Maria',
           },
         ],
       },
@@ -394,14 +404,24 @@ describe('AuditReadinessPage — simple view (default)', () => {
     renderPage(['/audit'])
 
     expect(screen.getByText('Almost — fix this 1 thing.')).toBeInTheDocument()
-    const fixLink = screen.getByRole('link', { name: /fix it/i })
-    expect(fixLink).toHaveAttribute('href', '/compliance')
+    // Items group under the employee's collapsible row.
+    expect(
+      screen.getByRole('button', { name: /Maria.*1 fix/ }),
+    ).toBeInTheDocument()
     expect(
       screen.getByText("Maria's CPR card expires in 12 days"),
     ).toBeInTheDocument()
+
+    // Fix it opens the popup instead of redirecting.
+    fireEvent.click(screen.getByRole('button', { name: /fix it/i }))
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.textContent).toContain("Maria's CPR card expires in 12 days")
+    expect(
+      screen.getByRole('link', { name: /open it in the console/i }),
+    ).toHaveAttribute('href', '/compliance')
   })
 
-  it('shows the red state with numbered items and no button when linkTo is null', () => {
+  it('shows a fix-it button per item, even when there is no console link', () => {
     mockState({
       fixList: {
         status: 'not_ready',
@@ -427,10 +447,97 @@ describe('AuditReadinessPage — simple view (default)', () => {
     renderPage(['/audit'])
 
     expect(screen.getByText('Not ready — fix these 2 things.')).toBeInTheDocument()
-    const fixLinks = screen.getAllByRole('link', { name: /fix it/i })
-    expect(fixLinks).toHaveLength(1)
-    expect(fixLinks[0]).toHaveAttribute('href', '/incidents/abc123')
+    const fixButtons = screen.getAllByRole('button', { name: /fix it/i })
+    expect(fixButtons).toHaveLength(2)
     expect(screen.getByText('overdue by 6 hours')).toBeInTheDocument()
+
+    // The item without a console link explains who can resolve it.
+    fireEvent.click(fixButtons[1]!)
+    expect(screen.getByRole('dialog').textContent).toContain(
+      'Only an admin can resolve this',
+    )
+  })
+
+  it('shows upload and reminder actions for credential items', () => {
+    mockState({
+      fixList: {
+        status: 'not_ready',
+        items: [
+          {
+            id: 'credential-missing-1',
+            severity: 'critical',
+            title: 'Diego is missing: Background Check',
+            linkTo: '/compliance',
+            employeeName: 'Diego',
+            credential: {
+              clerkUserId: 'user_diego',
+              employeeProfileId: 'profile_diego',
+              category: 'background_check',
+              label: 'Background Check',
+              state: 'missing',
+            },
+          },
+        ],
+      },
+    })
+
+    renderPage(['/audit'])
+
+    fireEvent.click(screen.getByRole('button', { name: /fix it/i }))
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.textContent).toContain('Diego is missing: Background Check')
+    expect(
+      screen.getByRole('button', { name: /upload background check/i }),
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: /send reminder email/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('filters fixes by search text and by client', () => {
+    mockState({
+      fixList: {
+        status: 'not_ready',
+        items: [
+          {
+            id: 'credential-expired-1',
+            severity: 'critical',
+            title: "Carlos Rivera's Driver License expired",
+            linkTo: '/compliance',
+            employeeName: 'Carlos Rivera',
+          },
+          {
+            id: 'sir-written-1',
+            severity: 'critical',
+            title: "Jane Doe's incident is missing its written report",
+            linkTo: '/incidents/abc123',
+            clientName: 'Jane Doe',
+          },
+        ],
+      },
+    })
+
+    renderPage(['/audit'])
+
+    const carlosTitle = "Carlos Rivera's Driver License expired"
+    const janeTitle = "Jane Doe's incident is missing its written report"
+    expect(screen.getByText(carlosTitle)).toBeInTheDocument()
+    expect(screen.getByText(janeTitle)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Search fixes'), {
+      target: { value: 'carlos' },
+    })
+    expect(screen.getByText(carlosTitle)).toBeInTheDocument()
+    expect(screen.queryByText(janeTitle)).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Search fixes'), {
+      target: { value: '' },
+    })
+    fireEvent.change(screen.getByLabelText('Filter by client'), {
+      target: { value: 'Jane Doe' },
+    })
+    expect(screen.queryByText(carlosTitle)).not.toBeInTheDocument()
+    expect(screen.getByText(janeTitle)).toBeInTheDocument()
   })
 
   it('links to the full audit dashboard from the auditors card', () => {

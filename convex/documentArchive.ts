@@ -1,6 +1,7 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import { ConvexError } from 'convex/values'
+import type { Id } from './_generated/dataModel'
 import { requireTenantRole, assertTenantDoc } from './authHelpers'
 import { internal } from './_generated/api'
 import { getFileMetadata } from './files'
@@ -278,5 +279,127 @@ export const updateDocumentArchiveItem = mutation({
     })
 
     return args.itemId
+  },
+})
+
+const EMPLOYEE_CREDENTIAL_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+]
+const MAX_EMPLOYEE_CREDENTIAL_BYTES = 10 * 1024 * 1024
+
+/**
+ * Staff-side credential upload for an employee (e.g. from the Audit Ready
+ * Center's in-place fix dialog): admin/HR attaches the document straight to
+ * the employee's compliance file. Mirrors the candidate upload in
+ * candidates.saveSignedPrefilledDocument — an existing item of the same
+ * category is replaced in place so an expired credential becomes current.
+ */
+export const addEmployeeCredentialDocument = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    employeeProfileId: v.id('employeeProfiles'),
+    category: v.string(),
+    label: v.string(),
+    storageId: v.string(),
+    fileName: v.string(),
+    contentType: v.optional(v.string()),
+    size: v.optional(v.number()),
+    expiresAt: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+    ])
+
+    const category = args.category.trim()
+    if (!category) throw new ConvexError('Credential category is required.')
+    const profile = await ctx.db.get(args.employeeProfileId)
+    if (!profile) throw new ConvexError('Employee not found.')
+    assertTenantDoc(profile, tenantId)
+
+    if (args.contentType && !EMPLOYEE_CREDENTIAL_TYPES.includes(args.contentType)) {
+      throw new ConvexError(
+        'Invalid file type. Only JPG, PNG, WebP, and PDF are allowed.',
+      )
+    }
+    if (args.size && args.size > MAX_EMPLOYEE_CREDENTIAL_BYTES) {
+      throw new ConvexError('File exceeds 10 MB limit.')
+    }
+
+    const now = new Date().toISOString()
+    const fileId = await ctx.db.insert('files', {
+      tenantId,
+      storageId: args.storageId,
+      uploadedBy: identity.subject,
+      fileName: args.fileName,
+      contentType: args.contentType,
+      size: args.size,
+      linkedType: 'complianceDoc',
+      linkedId: profile._id as string,
+      visibility: 'admins_coordinators',
+      createdAt: now,
+    })
+
+    // Items may reference the employee by profile id or clerk user id — check
+    // both, same as computeComplianceGaps.
+    const subjectIds = [profile._id as string]
+    if (profile.clerkUserId) subjectIds.push(profile.clerkUserId)
+    let existingItemId: Id<'documentArchiveItems'> | null = null
+    for (const subjectId of subjectIds) {
+      const existing = await ctx.db
+        .query('documentArchiveItems')
+        .withIndex('by_tenant_subject', (q) =>
+          q
+            .eq('tenantId', tenantId)
+            .eq('subjectType', 'employee')
+            .eq('subjectId', subjectId),
+        )
+        .filter((q) => q.eq(q.field('category'), category))
+        .first()
+      if (existing) {
+        existingItemId = existing._id
+        break
+      }
+    }
+
+    if (existingItemId) {
+      await ctx.db.patch(existingItemId, {
+        fileId,
+        status: 'active',
+        source: args.label,
+        expiresAt: args.expiresAt,
+        createdAt: now,
+      })
+    } else {
+      await ctx.db.insert('documentArchiveItems', {
+        tenantId,
+        fileId,
+        subjectType: 'employee',
+        subjectId: profile._id as string,
+        category,
+        status: 'active',
+        expiresAt: args.expiresAt,
+        // 17 CCR §54326(a)(3): retain service records at least 5 years.
+        retentionUntil: computeRetentionUntil(now),
+        source: args.label,
+        createdAt: now,
+      })
+    }
+
+    await ctx.runMutation(internal.audit.record, {
+      clerkOrgId: args.clerkOrgId,
+      action: 'document.employee_credential_added',
+      metadata: {
+        employeeProfileId: profile._id as string,
+        category,
+        fileId: fileId as string,
+      },
+    })
+
+    return fileId
   },
 })

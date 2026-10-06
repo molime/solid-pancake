@@ -647,3 +647,150 @@ describe('getRetentionReport', () => {
     ).rejects.toThrow()
   })
 })
+
+describe('addEmployeeCredentialDocument', () => {
+  async function seedEmployeeProfile(
+    t: ReturnType<typeof createTestConvex>,
+    clerkOrgId: string,
+    clerkUserId: string,
+  ) {
+    return t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      return ctx.db.insert('employeeProfiles', {
+        tenantId: tenant._id,
+        clerkUserId,
+        displayName: 'Caregiver One',
+        email: 'caregiver@example.com',
+        adpSyncStatus: 'synced',
+        createdAt: new Date().toISOString(),
+      })
+    })
+  }
+
+  it('creates a file and an active archive item for the employee', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_emp_cred_add'
+    const adminId = 'user_admin_emp_cred_add'
+    await seedTenant(t, clerkOrgId, adminId)
+    const profileId = await seedEmployeeProfile(t, clerkOrgId, 'user_cg_cred_add')
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.documentArchive.addEmployeeCredentialDocument,
+      {
+        clerkOrgId,
+        employeeProfileId: profileId,
+        category: 'license',
+        label: 'Driver License',
+        storageId: 'storage_cred_add',
+        fileName: 'license.pdf',
+        contentType: 'application/pdf',
+        size: 1024,
+        expiresAt: '2027-01-01T00:00:00.000Z',
+      },
+    )
+
+    const items = await asAdmin(t, adminId, clerkOrgId).query(
+      api.documentArchive.listDocumentArchive,
+      {
+        clerkOrgId,
+        linkedTo: { subjectType: 'employee', subjectId: profileId as string },
+      },
+    )
+    expect(items).toHaveLength(1)
+    expect(items[0]?.category).toBe('license')
+    expect(items[0]?.status).toBe('active')
+    expect(items[0]?.expiresAt).toBe('2027-01-01T00:00:00.000Z')
+    expect(items[0]?.file?.fileName).toBe('license.pdf')
+    expect(items[0]?.retentionUntil).toBeDefined()
+  })
+
+  it('replaces an existing item of the same category instead of duplicating it', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_emp_cred_replace'
+    const adminId = 'user_admin_emp_cred_replace'
+    await seedTenant(t, clerkOrgId, adminId)
+    const profileId = await seedEmployeeProfile(
+      t,
+      clerkOrgId,
+      'user_cg_cred_replace',
+    )
+    const { itemId } = await seedArchiveItem(t, clerkOrgId, {
+      subjectType: 'employee',
+      subjectId: profileId as string,
+      category: 'license',
+      status: 'active',
+      expiresAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    })
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.documentArchive.addEmployeeCredentialDocument,
+      {
+        clerkOrgId,
+        employeeProfileId: profileId,
+        category: 'license',
+        label: 'Driver License',
+        storageId: 'storage_cred_replace',
+        fileName: 'license-renewed.pdf',
+        contentType: 'application/pdf',
+        size: 1024,
+        expiresAt: '2027-06-01T00:00:00.000Z',
+      },
+    )
+
+    const items = await asAdmin(t, adminId, clerkOrgId).query(
+      api.documentArchive.listDocumentArchive,
+      {
+        clerkOrgId,
+        linkedTo: { subjectType: 'employee', subjectId: profileId as string },
+      },
+    )
+    expect(items).toHaveLength(1)
+    expect(items[0]?._id).toBe(itemId)
+    expect(items[0]?.expiresAt).toBe('2027-06-01T00:00:00.000Z')
+    expect(items[0]?.file?.fileName).toBe('license-renewed.pdf')
+  })
+
+  it('rejects caregivers and profiles from another tenant', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_emp_cred_guard'
+    const adminId = 'user_admin_emp_cred_guard'
+    const caregiverId = 'user_cg_cred_guard'
+    await seedTenant(t, clerkOrgId, adminId)
+    await seedCaregiver(t, clerkOrgId, caregiverId)
+    const profileId = await seedEmployeeProfile(t, clerkOrgId, caregiverId)
+
+    const args = {
+      clerkOrgId,
+      employeeProfileId: profileId,
+      category: 'license',
+      label: 'Driver License',
+      storageId: 'storage_cred_guard',
+      fileName: 'license.pdf',
+    }
+    await expect(
+      asCaregiver(t, caregiverId, clerkOrgId).mutation(
+        api.documentArchive.addEmployeeCredentialDocument,
+        args,
+      ),
+    ).rejects.toThrow('Forbidden')
+
+    // A profile belonging to a different tenant must not be writable.
+    const otherOrgId = 'org_emp_cred_other'
+    await seedTenant(t, otherOrgId, 'user_admin_emp_cred_other')
+    const otherProfileId = await seedEmployeeProfile(
+      t,
+      otherOrgId,
+      'user_cg_cred_other',
+    )
+    await expect(
+      asAdmin(t, adminId, clerkOrgId).mutation(
+        api.documentArchive.addEmployeeCredentialDocument,
+        { ...args, employeeProfileId: otherProfileId },
+      ),
+    ).rejects.toThrow()
+  })
+})

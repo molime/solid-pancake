@@ -316,17 +316,25 @@ export async function computeComplianceGaps(
     const allItems = [...items, ...itemsByClerkId]
 
     const categories = new Set(allItems.map((item) => item.category))
-    const missing = requirements
-      .filter((r) => r.isRequired && !categories.has(r.category))
-      .map((r) => r.label)
-    const expired = allItems
-      .filter(
-        (item) =>
-          item.overrideStatus !== 'overridden' &&
-          item.expiresAt &&
-          item.expiresAt < nowIso,
-      )
-      .map((item) => labelByCategory.get(item.category) ?? item.category)
+    // Raw categories alongside the display labels (same pattern as
+    // overriddenCategories below) so callers like the audit fix list can
+    // point an in-place upload at the right requirement without
+    // reverse-engineering the label.
+    const missingRequirements = requirements.filter(
+      (r) => r.isRequired && !categories.has(r.category),
+    )
+    const missing = missingRequirements.map((r) => r.label)
+    const missingCategories = missingRequirements.map((r) => r.category)
+    const expiredItems = allItems.filter(
+      (item) =>
+        item.overrideStatus !== 'overridden' &&
+        item.expiresAt &&
+        item.expiresAt < nowIso,
+    )
+    const expired = expiredItems.map(
+      (item) => labelByCategory.get(item.category) ?? item.category,
+    )
+    const expiredCategories = expiredItems.map((item) => item.category)
     const overridden = allItems
       .filter((item) => item.overrideStatus === 'overridden')
       .map((item) => labelByCategory.get(item.category) ?? item.category)
@@ -339,9 +347,12 @@ export async function computeComplianceGaps(
 
     gaps.push({
       clerkUserId: profile.clerkUserId ?? null,
+      profileId: profile._id as string,
       displayName: profile.displayName,
       missing,
+      missingCategories,
       expired,
+      expiredCategories,
       overridden,
       overriddenCategories,
     })
