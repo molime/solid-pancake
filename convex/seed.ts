@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
 import { internalMutation, mutation, type MutationCtx } from './_generated/server'
+import { internal } from './_generated/api'
 import { requireTenantRole } from './authHelpers'
 import type { Id } from './_generated/dataModel'
 import { DEFAULT_SHIFT_GEOFENCE } from './tenantSettings'
@@ -571,6 +572,13 @@ async function seedE2EFixtures(
 ) {
   const { tenantId } = await requireTenantRole(ctx, clerkOrgId, ['org:admin'])
 
+  // Billing dunning is live: a seeded test invoice aging past its due date
+  // would suspend this fixture tenant and blanket the app with the
+  // suspension overlay. Reset billing health on every fixture reset.
+  await ctx.runMutation(internal.migrations.reactivateTenantBillingInternal, {
+    tenantId,
+  })
+
   // Fixed fixture date so seeded shifts are always in the past and clock-in is
   // allowed regardless of the actual UTC time the tests run.
   const fixtureDate = REF_TODAY
@@ -871,6 +879,12 @@ async function seedE2ECandidateFixtures(
   userIds: E2ECandidateFixtureUserIds,
 ) {
   const { tenantId } = await requireTenantRole(ctx, clerkOrgId, ['org:admin'])
+
+  // See seedE2EFixtures: keep the fixture tenant out of billing suspension
+  // so the suspension overlay cannot blanket these specs.
+  await ctx.runMutation(internal.migrations.reactivateTenantBillingInternal, {
+    tenantId,
+  })
 
   const now = new Date().toISOString()
   const fixtureDate = REF_TODAY
