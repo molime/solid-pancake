@@ -25,6 +25,35 @@ export const RETENTION_REPORT_WINDOW_DAYS = 90
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
+/**
+ * Resolve an archive item's download URL one row at a time. The compliance
+ * page uses this instead of embedding per-item file lookups in
+ * listComplianceItems — an N+1 that blew past Convex read limits on tenants
+ * with thousands of archive rows and crashed the page in a remount loop.
+ */
+export const getItemDownloadUrl = query({
+  args: { clerkOrgId: v.string(), itemId: v.id('documentArchiveItems') },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:coordinator',
+      'org:hr',
+    ])
+    const item = await ctx.db.get(args.itemId)
+    if (!item) throw new ConvexError('Document not found.')
+    assertTenantDoc(item, tenantId)
+    const file = await ctx.db.get(item.fileId)
+    if (!file) return null
+    try {
+      return await ctx.storage.getUrl(file.storageId)
+    } catch {
+      // Legacy/seed rows can carry a non-storage placeholder id — treat as
+      // no URL instead of crashing the caller's render.
+      return null
+    }
+  },
+})
+
 /** Calendar-year addition on an ISO timestamp (UTC). */
 export function computeRetentionUntil(createdAtIso: string): string {
   const date = new Date(createdAtIso)
