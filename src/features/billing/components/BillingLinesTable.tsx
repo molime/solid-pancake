@@ -92,6 +92,13 @@ export function BillingLinesTable({
 
   return (
     <>
+      {/* The BillingPage ledger is the only view that passes showStatus; the
+          caption marks it as internal tracking, not client invoicing. */}
+      {showStatus && (
+        <p className="mb-2 text-xs text-atria-muted">
+          Internal tracking — invoices are generated per client.
+        </p>
+      )}
       <Table>
         <TableHead>
           <TableRow>

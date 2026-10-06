@@ -21,7 +21,7 @@ import { buildLic501FinalData, buildSoc341aFinalData } from '@/features/onboardi
 import { isGoldenAgesAgency } from '@/features/onboarding/components/application/legalText'
 import { isNonEmptyString } from '@/features/onboarding/components/application/types'
 import { DynamicFormReview } from '@/features/forms/components/DynamicFormReview'
-import { ArrowLeft, CheckCircle2, Download, RotateCcw, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, Download, RotateCcw, XCircle } from 'lucide-react'
 import { Component, useState, useMemo, useRef } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import type { Id, Doc } from '../../../../convex/_generated/dataModel'
@@ -1355,7 +1355,9 @@ export function ApplicationReviewPage() {
                       )}
                       {isOnlineForm && (
                         <p className="text-xs text-atria-text-muted">
-                          Completed via online form (no upload needed)
+                          {doc
+                            ? 'Completed via online form (no upload needed)'
+                            : 'Online form — not completed yet'}
                         </p>
                       )}
                     </div>
@@ -1883,6 +1885,20 @@ function DocumentVersionsPanel({
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState('')
+  const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set())
+  const uploadInputRef = useRef<HTMLInputElement>(null)
+
+  const toggleType = (type: string) => {
+    setExpandedTypes((prev) => {
+      const next = new Set(prev)
+      if (next.has(type)) {
+        next.delete(type)
+      } else {
+        next.add(type)
+      }
+      return next
+    })
+  }
 
   if (versions === undefined) {
     return <p className="text-sm text-atria-text-secondary">Loading versions…</p>
@@ -1913,6 +1929,7 @@ function DocumentVersionsPanel({
         fileName: uploadFile.name,
       })
       setUploadFile(null)
+      if (uploadInputRef.current) uploadInputRef.current.value = ''
     } catch (err) {
       setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Upload failed.')
     } finally {
@@ -1927,31 +1944,52 @@ function DocumentVersionsPanel({
           No uploaded versions yet. Uploads from the candidate and from HR appear here.
         </p>
       )}
-      {[...byType.entries()].map(([type, typeVersions]) => (
-        <div key={type}>
-          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-atria-text-muted">
-            {DOCUMENT_TYPE_LABELS_VERSIONS[type] ?? type}
-          </p>
-          <div className="space-y-1.5">
-            {typeVersions.map((version, index) => (
-              <div
-                key={version._id}
-                className="flex items-center justify-between gap-3 rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg px-3 py-2"
-              >
-                <span className="text-xs text-atria-text-secondary">
-                  Version {typeVersions.length - index} ·{' '}
-                  {version.uploadedBy === 'hr' ? 'HR' : 'Candidate'} ·{' '}
-                  {formatDateUS(version.createdAt)} · {version.fileName}
-                </span>
-                <DocumentVersionDownloadLink
-                  clerkOrgId={clerkOrgId}
-                  versionId={version._id}
-                />
+      {[...byType.entries()].map(([type, typeVersions]) => {
+        const expanded = expandedTypes.has(type)
+        return (
+          <div key={type}>
+            <button
+              type="button"
+              onClick={() => toggleType(type)}
+              aria-expanded={expanded}
+              className="mb-1 flex items-center gap-2"
+            >
+              {expanded ? (
+                <ChevronDown className="h-3.5 w-3.5 text-atria-text-muted" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 text-atria-text-muted" />
+              )}
+              <span className="rounded-full bg-atria-accent/10 px-2.5 py-0.5 text-xs font-medium text-atria-accent">
+                {DOCUMENT_TYPE_LABELS_VERSIONS[type] ?? type}
+              </span>
+              <span className="text-xs text-atria-text-muted">
+                {typeVersions.length}{' '}
+                {typeVersions.length === 1 ? 'version' : 'versions'}
+              </span>
+            </button>
+            {expanded && (
+              <div className="space-y-1.5">
+                {typeVersions.map((version, index) => (
+                  <div
+                    key={version._id}
+                    className="flex items-center justify-between gap-3 rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg px-3 py-2"
+                  >
+                    <span className="text-xs text-atria-text-secondary">
+                      Version {typeVersions.length - index} ·{' '}
+                      {version.uploadedBy === 'hr' ? 'HR' : 'Candidate'} ·{' '}
+                      {formatDateUS(version.createdAt)} · {version.fileName}
+                    </span>
+                    <DocumentVersionDownloadLink
+                      clerkOrgId={clerkOrgId}
+                      versionId={version._id}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      ))}
+        )
+      })}
 
       <div className="rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface-2 p-3">
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-atria-text-muted">
@@ -1971,11 +2009,19 @@ function DocumentVersionsPanel({
             ))}
           </Select>
           <input
+            ref={uploadInputRef}
             type="file"
             accept="image/jpeg,image/png,image/webp,application/pdf"
+            className="hidden"
             onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-            className="text-xs text-atria-text-secondary"
           />
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => uploadInputRef.current?.click()}
+          >
+            {uploadFile ? uploadFile.name : 'Select file'}
+          </Button>
           <Button
             variant="secondary"
             size="sm"

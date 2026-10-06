@@ -698,6 +698,97 @@ describe('employee notes + display email', () => {
     ).rejects.toThrow(/Forbidden/)
   })
 
+  it('admin deletes a note; coordinators and caregivers cannot', async () => {
+    const t = createTestConvex()
+    const { clerkOrgId, adminId, employeeProfileId } = await seedEmployee(t)
+
+    const noteId = await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.employeeProfiles.addEmployeeNote,
+      { clerkOrgId, employeeProfileId, text: 'Note to delete' },
+    )
+
+    await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenant._id,
+        clerkUserId: 'user_coord_notes',
+        role: 'org:coordinator',
+        displayName: 'Coordinator',
+        email: 'coordinator@example.com',
+      })
+    })
+
+    await expect(
+      asCoordinator(t, 'user_coord_notes', clerkOrgId).mutation(
+        api.employeeProfiles.deleteEmployeeNote,
+        { clerkOrgId, noteId },
+      ),
+    ).rejects.toThrow(/Forbidden/)
+
+    await expect(
+      asCaregiver(t, 'user_emp_notes', clerkOrgId).mutation(
+        api.employeeProfiles.deleteEmployeeNote,
+        { clerkOrgId, noteId },
+      ),
+    ).rejects.toThrow(/Forbidden/)
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.employeeProfiles.deleteEmployeeNote,
+      { clerkOrgId, noteId },
+    )
+
+    const notes = await asAdmin(t, adminId, clerkOrgId).query(
+      api.employeeProfiles.listEmployeeNotes,
+      { clerkOrgId, employeeProfileId },
+    )
+    expect(notes).toHaveLength(0)
+  })
+
+  it('rejects deleting a note from another tenant', async () => {
+    const t = createTestConvex()
+    const { clerkOrgId, adminId, employeeProfileId } = await seedEmployee(t)
+
+    const noteId = await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.employeeProfiles.addEmployeeNote,
+      { clerkOrgId, employeeProfileId, text: 'Tenant A note' },
+    )
+
+    const otherOrgId = 'org_notes_other'
+    const otherAdminId = 'user_admin_notes_other'
+    await t.run(async (ctx) => {
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId: otherOrgId,
+        name: 'Other Agency',
+        slug: 'other-agency',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: otherAdminId,
+        role: 'org:admin',
+        displayName: 'Other Admin',
+        email: 'other@example.com',
+      })
+    })
+
+    await expect(
+      asAdmin(t, otherAdminId, otherOrgId).mutation(
+        api.employeeProfiles.deleteEmployeeNote,
+        { clerkOrgId: otherOrgId, noteId },
+      ),
+    ).rejects.toThrow(/cross-tenant/)
+
+    const notes = await asAdmin(t, adminId, clerkOrgId).query(
+      api.employeeProfiles.listEmployeeNotes,
+      { clerkOrgId, employeeProfileId },
+    )
+    expect(notes).toHaveLength(1)
+  })
+
   it('updates the display email on member and profile; rejects bad emails', async () => {
     const t = createTestConvex()
     const { clerkOrgId, adminId, memberId, employeeProfileId } = await seedEmployee(t)
