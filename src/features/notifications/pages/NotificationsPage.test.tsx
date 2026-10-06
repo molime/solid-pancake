@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { getFunctionName } from 'convex/server'
 
@@ -28,9 +28,9 @@ vi.mock('convex/react', async () => {
   }
 })
 
-import { useQuery } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 
-function mockNotifications(notifications: unknown[]) {
+function mockNotifications(notifications: unknown[], memberRole?: string) {
   vi.mocked(useQuery).mockImplementation(
     ((queryRef: unknown) => {
       const name = getFunctionName(
@@ -38,6 +38,7 @@ function mockNotifications(notifications: unknown[]) {
       )
       if (name === 'notifications:list') return notifications
       if (name === 'notifications:unreadCount') return 0
+      if (name === 'members:me') return memberRole ? { role: memberRole } : undefined
       return undefined
     }) as unknown as typeof useQuery,
   )
@@ -105,5 +106,48 @@ describe('NotificationsPage', () => {
     expect(
       screen.queryByRole('link', { name: /view incident/i }),
     ).not.toBeInTheDocument()
+  })
+
+  it('shows the agency alert composer to admins', () => {
+    mockNotifications([], 'org:admin')
+    renderPage()
+    expect(
+      screen.getByRole('heading', { name: /send agency alert/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('hides the agency alert composer from non-admins', () => {
+    mockNotifications([], 'org:caregiver')
+    renderPage()
+    expect(
+      screen.queryByRole('heading', { name: /send agency alert/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('sends an agency alert with the entered message and selected roles', async () => {
+    const sendAlert = vi.fn().mockResolvedValue({ sent: 4 })
+    vi.mocked(useMutation).mockReturnValue(
+      sendAlert as unknown as ReturnType<typeof useMutation>,
+    )
+    mockNotifications([], 'org:admin')
+
+    renderPage()
+
+    fireEvent.change(screen.getByRole('textbox', { name: /alert message/i }), {
+      target: { value: 'Office closed Monday.' },
+    })
+    // Uncheck Caregivers so the alert targets the remaining three roles.
+    fireEvent.click(screen.getByRole('checkbox', { name: /caregivers/i }))
+    fireEvent.click(screen.getByRole('button', { name: /send alert/i }))
+
+    expect(sendAlert).toHaveBeenCalledWith({
+      clerkOrgId: 'org_123',
+      message: 'Office closed Monday.',
+      targetRoles: ['org:admin', 'org:hr', 'org:coordinator'],
+    })
+
+    expect(
+      await screen.findByText(/alert sent to 4 members/i),
+    ).toBeInTheDocument()
   })
 })

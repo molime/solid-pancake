@@ -15,7 +15,17 @@ import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 const typeBadgeVariant: Record<string, 'info' | 'accent' | 'neutral'> = {
   audit: 'info',
   review: 'accent',
+  agency_alert: 'accent',
 }
+
+const ALERT_ROLES = [
+  { value: 'org:admin', label: 'Admins' },
+  { value: 'org:hr', label: 'HR' },
+  { value: 'org:coordinator', label: 'Coordinators' },
+  { value: 'org:caregiver', label: 'Caregivers' },
+] as const
+
+type AlertRole = (typeof ALERT_ROLES)[number]['value']
 
 export function NotificationsPage() {
   const { clerkOrgId } = useTenant()
@@ -27,12 +37,55 @@ export function NotificationsPage() {
     api.notifications.unreadCount,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
+  const member = useQuery(
+    api.members.me,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
+  const isAdmin = member?.role === 'org:admin'
   const markRead = useMutation(api.notifications.markRead)
   const markAllRead = useMutation(api.notifications.markAllRead)
+  const sendAgencyAlert = useMutation(api.notifications.sendAgencyAlert)
 
   const [error, setError] = useState<string | null>(null)
   const [pendingId, setPendingId] = useState<Id<'notifications'> | null>(null)
   const [isMarkingAll, setIsMarkingAll] = useState(false)
+
+  const [alertMessage, setAlertMessage] = useState('')
+  const [alertRoles, setAlertRoles] = useState<AlertRole[]>(
+    ALERT_ROLES.map((r) => r.value),
+  )
+  const [isSendingAlert, setIsSendingAlert] = useState(false)
+  const [alertSentCount, setAlertSentCount] = useState<number | null>(null)
+
+  const toggleAlertRole = (role: AlertRole) => {
+    setAlertRoles((prev) =>
+      prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role],
+    )
+  }
+
+  const handleSendAlert = async () => {
+    if (!clerkOrgId) return
+    setIsSendingAlert(true)
+    setError(null)
+    setAlertSentCount(null)
+    try {
+      const result = await sendAgencyAlert({
+        clerkOrgId,
+        message: alertMessage,
+        targetRoles: alertRoles,
+      })
+      setAlertMessage('')
+      setAlertSentCount(result.sent)
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Failed to send alert.',
+      )
+    } finally {
+      setIsSendingAlert(false)
+    }
+  }
 
   const types = useMemo(
     () => [...new Set((notifications ?? []).map((n) => n.type))],
@@ -104,6 +157,71 @@ export function NotificationsPage() {
       </div>
 
       {error && <p className="text-sm text-atria-danger">{error}</p>}
+
+      {isAdmin && (
+        <div className="space-y-3 rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface p-4 shadow-[var(--shadow-atria-card)]">
+          <h2 className="text-base font-semibold text-atria-ink">
+            Send agency alert
+          </h2>
+          <textarea
+            aria-label="Alert message"
+            value={alertMessage}
+            onChange={(e) => setAlertMessage(e.target.value)}
+            placeholder="Message to staff…"
+            rows={3}
+            maxLength={500}
+            className="w-full rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg px-3 py-2 text-sm text-atria-ink placeholder:text-atria-muted focus:border-atria-accent focus:outline-none"
+          />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <label className="flex items-center gap-2 text-sm text-atria-ink">
+              <input
+                type="checkbox"
+                checked={alertRoles.length === ALERT_ROLES.length}
+                onChange={(e) =>
+                  setAlertRoles(
+                    e.target.checked ? ALERT_ROLES.map((r) => r.value) : [],
+                  )
+                }
+                className="h-4 w-4 accent-atria-accent"
+              />
+              All staff
+            </label>
+            {ALERT_ROLES.map((role) => (
+              <label
+                key={role.value}
+                className="flex items-center gap-2 text-sm text-atria-ink"
+              >
+                <input
+                  type="checkbox"
+                  checked={alertRoles.includes(role.value)}
+                  onChange={() => toggleAlertRole(role.value)}
+                  className="h-4 w-4 accent-atria-accent"
+                />
+                {role.label}
+              </label>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <Button
+              size="sm"
+              onClick={handleSendAlert}
+              disabled={
+                isSendingAlert ||
+                !alertMessage.trim() ||
+                alertRoles.length === 0
+              }
+            >
+              {isSendingAlert ? 'Sending…' : 'Send alert'}
+            </Button>
+            {alertSentCount !== null && (
+              <p className="text-sm text-atria-success">
+                Alert sent to {alertSentCount}{' '}
+                {alertSentCount === 1 ? 'member' : 'members'}.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {types.length > 0 && (
         <div className="flex flex-wrap gap-2">

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { Topbar } from './Topbar'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 
 vi.mock('@clerk/react', async () => {
   const actual =
@@ -61,7 +61,6 @@ describe('Topbar', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
-
   it('renders the agency logo for the Individuals Choice tenant', () => {
     mockTopbarState({
       orgId: 'org_123',
@@ -113,5 +112,95 @@ describe('Topbar', () => {
     expect(
       screen.queryByRole('img', { name: /logo/i }),
     ).not.toBeInTheDocument()
+  })
+})
+
+function LocationProbe() {
+  const location = useLocation()
+  return <div data-testid="location">{location.pathname}</div>
+}
+
+describe('Topbar navigation search', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('renders the search input', () => {
+    mockTopbarState({ orgId: 'org_123', memberRole: 'org:admin' })
+
+    render(
+      <MemoryRouter>
+        <Topbar />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('searchbox', { name: /search navigation/i })).toBeInTheDocument()
+  })
+
+  it('filters navigation targets by query, including keyword aliases', () => {
+    mockTopbarState({ orgId: 'org_123', memberRole: 'org:admin' })
+
+    render(
+      <MemoryRouter>
+        <Topbar />
+      </MemoryRouter>,
+    )
+
+    const input = screen.getByRole('searchbox', { name: /search navigation/i })
+    fireEvent.change(input, { target: { value: 'bill' } })
+
+    expect(screen.getByRole('button', { name: /^Billing/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Payroll/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Incidents/ })).not.toBeInTheDocument()
+  })
+
+  it('hides targets the current role cannot see', () => {
+    mockTopbarState({ orgId: 'org_123', memberRole: 'org:caregiver' })
+
+    render(
+      <MemoryRouter>
+        <Topbar />
+      </MemoryRouter>,
+    )
+
+    const input = screen.getByRole('searchbox', { name: /search navigation/i })
+    fireEvent.change(input, { target: { value: 'billing' } })
+
+    expect(screen.getByText('No matches')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Billing/ })).not.toBeInTheDocument()
+  })
+
+  it('navigates to the first match on Enter', () => {
+    mockTopbarState({ orgId: 'org_123', memberRole: 'org:admin' })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Topbar />
+        <LocationProbe />
+      </MemoryRouter>,
+    )
+
+    const input = screen.getByRole('searchbox', { name: /search navigation/i })
+    fireEvent.change(input, { target: { value: 'candidates' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/hr/candidates')
+  })
+
+  it('navigates when a match is clicked', () => {
+    mockTopbarState({ orgId: 'org_123', memberRole: 'org:admin' })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Topbar />
+        <LocationProbe />
+      </MemoryRouter>,
+    )
+
+    const input = screen.getByRole('searchbox', { name: /search navigation/i })
+    fireEvent.change(input, { target: { value: 'training' } })
+    fireEvent.mouseDown(screen.getByRole('button', { name: /^Training Hub/ }))
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/training')
   })
 })
