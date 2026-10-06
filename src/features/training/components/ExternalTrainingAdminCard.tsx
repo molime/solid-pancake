@@ -34,6 +34,8 @@ export function ExternalTrainingAdminCard({ clerkOrgId }: { clerkOrgId: string }
   const [title, setTitle] = useState('')
   const [instructions, setInstructions] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [memberSearch, setMemberSearch] = useState('')
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [dueAt, setDueAt] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -145,20 +147,75 @@ export function ExternalTrainingAdminCard({ clerkOrgId }: { clerkOrgId: string }
           <label className="text-xs font-medium uppercase tracking-wider text-atria-text-muted">
             Assign to
           </label>
-          <div className="flex flex-wrap gap-2">
-            {(members ?? []).map((m: { clerkUserId: string; displayName: string }) => (
-              <label
-                key={m.clerkUserId}
-                className="flex items-center gap-1.5 rounded-full border border-atria-border bg-atria-surface px-2.5 py-1 text-xs text-atria-ink"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(m.clerkUserId)}
-                  onChange={() => toggleMember(m.clerkUserId)}
+          <div className="rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between px-3 py-2 text-sm text-atria-ink"
+              onClick={() => setPickerOpen((o) => !o)}
+            >
+              <span>
+                {selectedIds.length
+                  ? `${selectedIds.length} selected`
+                  : 'Select members…'}
+              </span>
+              <span className="text-atria-text-muted">
+                {pickerOpen ? '▴' : '▾'}
+              </span>
+            </button>
+            {pickerOpen && (
+              <div className="space-y-2 border-t border-atria-border p-2">
+                <Input
+                  value={memberSearch}
+                  onChange={(e) => setMemberSearch(e.target.value)}
+                  placeholder="Search by name…"
+                  className="h-8 text-sm"
                 />
-                {m.displayName}
-              </label>
-            ))}
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-atria-accent hover:underline"
+                    onClick={() =>
+                      setSelectedIds(
+                        (members ?? [])
+                          .filter(
+                            (m: { clerkUserId: string; displayName: string }) =>
+                              m.displayName
+                                .toLowerCase()
+                                .includes(memberSearch.trim().toLowerCase()),
+                          )
+                          .map((m: { clerkUserId: string }) => m.clerkUserId),
+                      )
+                    }
+                  >
+                    Select all visible
+                  </button>
+                </div>
+                <div className="max-h-48 overflow-y-auto">
+                  <div className="flex flex-wrap gap-2">
+                    {(members ?? [])
+                      .filter(
+                        (m: { clerkUserId: string; displayName: string }) =>
+                          m.displayName
+                            .toLowerCase()
+                            .includes(memberSearch.trim().toLowerCase()),
+                      )
+                      .map((m: { clerkUserId: string; displayName: string }) => (
+                        <label
+                          key={m.clerkUserId}
+                          className="flex items-center gap-1.5 rounded-full border border-atria-border bg-atria-surface px-2.5 py-1 text-xs text-atria-ink"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(m.clerkUserId)}
+                            onChange={() => toggleMember(m.clerkUserId)}
+                          />
+                          {m.displayName}
+                        </label>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">

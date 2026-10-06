@@ -748,10 +748,20 @@ export const completeCourse = mutation({
   },
 })
 
+/** Slugify a course title into a courseKey base (e.g. "Care 101!" -> "care_101"). */
+function slugifyCourseKey(title: string): string {
+  const slug = title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  return slug || 'course'
+}
+
 export const createCourse = mutation({
   args: {
     clerkOrgId: v.string(),
-    courseKey: v.string(),
+    courseKey: v.optional(v.string()),
     title: v.string(),
     description: v.string(),
     category: v.union(
@@ -773,17 +783,40 @@ export const createCourse = mutation({
       ADMIN_ROLES,
     )
 
-    const existing = await ctx.db
-      .query('trainingCourses')
-      .withIndex('by_tenant_key', (q) =>
-        q.eq('tenantId', tenantId).eq('courseKey', args.courseKey),
-      )
-      .first()
+    // When no key is supplied, generate one from the title plus a random
+    // suffix, retrying until it is unique within the tenant.
+    let courseKey = args.courseKey?.trim() ?? ''
+    if (!courseKey) {
+      const base = slugifyCourseKey(args.title)
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const candidate = `${base}_${Math.random().toString(36).slice(2, 8)}`
+        const clash = await ctx.db
+          .query('trainingCourses')
+          .withIndex('by_tenant_key', (q) =>
+            q.eq('tenantId', tenantId).eq('courseKey', candidate),
+          )
+          .first()
+        if (!clash) {
+          courseKey = candidate
+          break
+        }
+      }
+      if (!courseKey) {
+        throw new ConvexError('Could not generate a unique course key.')
+      }
+    } else {
+      const existing = await ctx.db
+        .query('trainingCourses')
+        .withIndex('by_tenant_key', (q) =>
+          q.eq('tenantId', tenantId).eq('courseKey', courseKey),
+        )
+        .first()
 
-    if (existing) {
-      throw new ConvexError(
-        `A course with key "${args.courseKey}" already exists.`,
-      )
+      if (existing) {
+        throw new ConvexError(
+          `A course with key "${courseKey}" already exists.`,
+        )
+      }
     }
 
     if (!args.steps.length) {
@@ -792,7 +825,7 @@ export const createCourse = mutation({
 
     return ctx.db.insert('trainingCourses', {
       tenantId,
-      courseKey: args.courseKey,
+      courseKey,
       title: args.title,
       description: args.description,
       category: args.category,

@@ -7,6 +7,7 @@ import type { Id } from '../../../../convex/_generated/dataModel'
 import { AppLoader } from '@/shared/ui/AppLoader'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
+import { Checkbox } from '@/shared/ui/Checkbox'
 import { Input } from '@/shared/ui/Input'
 import { Select } from '@/shared/ui/Select'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
@@ -17,13 +18,24 @@ import {
   CATEGORY_LABELS,
 } from '../model/courseTypes'
 
-const EMPTY_STEP: TrainingStep = {
-  id: 'step-1',
-  title: 'Introduction',
-  type: 'text',
-  content:
-    'Replace this placeholder with your first training step. You can use text, video, image, policy, embed, or quiz steps.',
-  required: true,
+const STEP_TYPE_OPTIONS: {
+  value: TrainingStep['type']
+  label: string
+}[] = [
+  { value: 'text', label: 'Text' },
+  { value: 'policy', label: 'Policy' },
+  { value: 'video', label: 'Video (URL)' },
+  { value: 'image', label: 'Image (URL)' },
+]
+
+function makeEmptyStep(index: number): TrainingStep {
+  return {
+    id: `step-${index + 1}`,
+    title: '',
+    type: 'text',
+    content: '',
+    required: true,
+  }
 }
 
 export function TrainingAdminPage() {
@@ -43,16 +55,34 @@ export function TrainingAdminPage() {
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
 
-  const [courseKey, setCourseKey] = useState('')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] =
     useState<TrainingCourseCategory>('agency_onboarding')
   const [durationMinutes, setDurationMinutes] = useState('60')
   const [passingScore, setPassingScore] = useState('80')
-  const [stepsJson, setStepsJson] = useState(
-    JSON.stringify([EMPTY_STEP], null, 2),
-  )
+  const [steps, setSteps] = useState<TrainingStep[]>([makeEmptyStep(0)])
+
+  const updateStep = (index: number, patch: Partial<TrainingStep>) => {
+    setSteps((prev) =>
+      prev.map((s, i) => (i === index ? { ...s, ...patch } : s)),
+    )
+  }
+
+  const moveStep = (index: number, direction: -1 | 1) => {
+    setSteps((prev) => {
+      const target = index + direction
+      if (target < 0 || target >= prev.length) return prev
+      const next = [...prev]
+      const [moved] = next.splice(index, 1)
+      next.splice(target, 0, moved)
+      return next
+    })
+  }
+
+  const removeStep = (index: number) => {
+    setSteps((prev) => prev.filter((_, i) => i !== index))
+  }
 
   type TrainingCourseCategory =
     | 'agency_onboarding'
@@ -82,28 +112,34 @@ export function TrainingAdminPage() {
     if (!clerkOrgId) return
     setError('')
 
-    let steps: TrainingStep[]
-    try {
-      steps = JSON.parse(stepsJson)
-      if (!Array.isArray(steps) || !steps.length) {
-        throw new Error('Steps must be a non-empty array.')
-      }
-      for (const s of steps) {
-        if (
-          !s.id?.trim() ||
-          !s.title?.trim() ||
-          !s.type?.trim() ||
-          typeof s.content !== 'string'
-        ) {
-          throw new Error(`Invalid step: ${JSON.stringify(s)}`)
-        }
-      }
-    } catch (err) {
-      setError(
-        `Invalid steps JSON: ${err instanceof Error ? err.message : String(err)}`,
-      )
+    if (!title.trim()) {
+      setError('Title is required.')
       return
     }
+
+    if (!steps.length) {
+      setError('Add at least one step.')
+      return
+    }
+    for (const [i, s] of steps.entries()) {
+      if (!s.title.trim()) {
+        setError(`Step ${i + 1}: title is required.`)
+        return
+      }
+      if (!s.content.trim()) {
+        setError(
+          `Step ${i + 1}: ${s.type === 'video' || s.type === 'image' ? 'media URL' : 'content'} is required.`,
+        )
+        return
+      }
+    }
+    // Re-number step ids to match the final order before saving.
+    const orderedSteps: TrainingStep[] = steps.map((s, i) => ({
+      ...s,
+      id: `step-${i + 1}`,
+      title: s.title.trim(),
+      content: s.content.trim(),
+    }))
 
     const duration = Number(durationMinutes)
     if (!Number.isFinite(duration) || duration <= 0) {
@@ -121,21 +157,19 @@ export function TrainingAdminPage() {
     try {
       await createCourse({
         clerkOrgId,
-        courseKey: courseKey.trim(),
         title: title.trim(),
         description: description.trim(),
         category,
         durationMinutes: duration,
-        steps,
+        steps: orderedSteps,
         passingScore: score,
       })
       setShowForm(false)
-      setCourseKey('')
       setTitle('')
       setDescription('')
       setDurationMinutes('60')
       setPassingScore('80')
-      setStepsJson(JSON.stringify([EMPTY_STEP], null, 2))
+      setSteps([makeEmptyStep(0)])
     } catch (err) {
       setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Create failed')
     } finally {
@@ -193,23 +227,13 @@ export function TrainingAdminPage() {
             <CardTitle>Create course</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-atria-ink">Course key</label>
-                <Input
-                  value={courseKey}
-                  onChange={(e) => setCourseKey(e.target.value)}
-                  placeholder="e.g. golden_ages_onboarding"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-atria-ink">Title</label>
-                <Input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Course title"
-                />
-              </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-atria-ink">Title</label>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Course title"
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-atria-ink">Description</label>
@@ -252,19 +276,115 @@ export function TrainingAdminPage() {
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-atria-ink">Steps JSON</label>
-              <textarea
-                value={stepsJson}
-                onChange={(e) => setStepsJson(e.target.value)}
-                rows={12}
-                className="w-full rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface-2 p-3 font-mono text-sm text-atria-ink outline-none focus:border-atria-accent"
-              />
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-atria-ink">Steps</label>
               <p className="text-xs text-atria-text-muted">
-                Each step needs: id, title, type (text|policy|video|image|embed|quiz),
-                content, and required (boolean). For quiz steps, content is JSON with
-                a &quot;questions&quot; array.
+                Add steps one by one. Text and policy steps show written
+                content; video and image steps take a media URL.
               </p>
+              <div className="space-y-3">
+                {steps.map((step, i) => (
+                  <div
+                    key={i}
+                    className="space-y-2 rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface-2 p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-atria-text-muted">
+                        Step {i + 1}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={i === 0}
+                          onClick={() => moveStep(i, -1)}
+                          aria-label="Move step up"
+                        >
+                          ↑
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={i === steps.length - 1}
+                          onClick={() => moveStep(i, 1)}
+                          aria-label="Move step down"
+                        >
+                          ↓
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={steps.length === 1}
+                          onClick={() => removeStep(i)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-[1fr_10rem]">
+                      <Input
+                        value={step.title}
+                        onChange={(e) => updateStep(i, { title: e.target.value })}
+                        placeholder="Step title"
+                      />
+                      <Select
+                        value={step.type}
+                        onChange={(e) =>
+                          updateStep(i, {
+                            type: e.target.value as TrainingStep['type'],
+                          })
+                        }
+                        aria-label="Step type"
+                      >
+                        {STEP_TYPE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    {step.type === 'video' || step.type === 'image' ? (
+                      <Input
+                        value={step.content}
+                        onChange={(e) =>
+                          updateStep(i, { content: e.target.value })
+                        }
+                        placeholder={
+                          step.type === 'video'
+                            ? 'Video URL (e.g. https://youtube.com/watch?v=…)'
+                            : 'Image URL (https://…)'
+                        }
+                      />
+                    ) : (
+                      <textarea
+                        value={step.content}
+                        onChange={(e) =>
+                          updateStep(i, { content: e.target.value })
+                        }
+                        placeholder="Step content. Separate paragraphs with a blank line to create cards."
+                        rows={4}
+                        className="w-full rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface p-3 text-sm text-atria-ink outline-none focus:border-atria-accent"
+                      />
+                    )}
+                    <label className="flex items-center gap-2 text-sm text-atria-text-secondary">
+                      <Checkbox
+                        checked={step.required}
+                        onChange={(e) =>
+                          updateStep(i, { required: e.target.checked })
+                        }
+                      />
+                      Required to complete the course
+                    </label>
+                  </div>
+                ))}
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setSteps((prev) => [...prev, makeEmptyStep(prev.length)])}
+              >
+                + Add step
+              </Button>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setShowForm(false)}>
@@ -369,23 +489,45 @@ function AssignPanel({
   })
   const assignTraining = useMutation(api.training.assignTraining)
   const unassignTraining = useMutation(api.training.unassignTraining)
-  const [memberId, setMemberId] = useState('')
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [search, setSearch] = useState('')
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [dueAt, setDueAt] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
+  const assignedIds = new Set(
+    (assignments ?? []).map((a) => a.clerkUserId as string),
+  )
+  const availableMembers = (members ?? []).filter(
+    (m: { clerkUserId: string; displayName: string }) =>
+      !assignedIds.has(m.clerkUserId),
+  )
+  const visibleMembers = availableMembers.filter(
+    (m: { clerkUserId: string; displayName: string }) =>
+      m.displayName.toLowerCase().includes(search.trim().toLowerCase()),
+  )
+
+  const toggleMember = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    )
+  }
+
   const handleAssign = async () => {
-    if (!memberId) return
+    if (!selectedIds.length) return
     setBusy(true)
     setError('')
     try {
-      await assignTraining({
-        clerkOrgId,
-        courseId,
-        clerkUserId: memberId,
-        dueAt: dueAt || undefined,
-      })
-      setMemberId('')
+      for (const clerkUserId of selectedIds) {
+        await assignTraining({
+          clerkOrgId,
+          courseId,
+          clerkUserId,
+          dueAt: dueAt || undefined,
+        })
+      }
+      setSelectedIds([])
       setDueAt('')
     } catch (err) {
       setError(
@@ -401,21 +543,73 @@ function AssignPanel({
       <div className="flex flex-wrap items-end gap-2">
         <div className="space-y-1.5">
           <label className="text-xs font-medium uppercase tracking-wider text-atria-text-muted">
-            Member
+            Members
           </label>
-          <Select
-            aria-label="Member"
-            value={memberId}
-            onChange={(e) => setMemberId(e.target.value)}
-            className="w-56"
-          >
-            <option value="">Select a member…</option>
-            {(members ?? []).map((m: { clerkUserId: string; displayName: string }) => (
-              <option key={m.clerkUserId} value={m.clerkUserId}>
-                {m.displayName}
-              </option>
-            ))}
-          </Select>
+          <div className="w-72 rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between px-3 py-2 text-sm text-atria-ink"
+              onClick={() => setPickerOpen((o) => !o)}
+            >
+              <span>
+                {selectedIds.length
+                  ? `${selectedIds.length} selected`
+                  : 'Select members…'}
+              </span>
+              <span className="text-atria-text-muted">
+                {pickerOpen ? '▴' : '▾'}
+              </span>
+            </button>
+            {pickerOpen && (
+              <div className="space-y-2 border-t border-atria-border p-2">
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name…"
+                  className="h-8 text-sm"
+                />
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-atria-accent hover:underline"
+                    onClick={() =>
+                      setSelectedIds(
+                        visibleMembers.map(
+                          (m: { clerkUserId: string }) => m.clerkUserId,
+                        ),
+                      )
+                    }
+                  >
+                    Select all visible
+                  </button>
+                  <span className="text-xs text-atria-text-muted">
+                    {visibleMembers.length} of {availableMembers.length}
+                  </span>
+                </div>
+                <div className="max-h-48 space-y-1 overflow-y-auto">
+                  {visibleMembers.map(
+                    (m: { clerkUserId: string; displayName: string }) => (
+                      <label
+                        key={m.clerkUserId}
+                        className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm text-atria-ink hover:bg-atria-surface-2"
+                      >
+                        <Checkbox
+                          checked={selectedIds.includes(m.clerkUserId)}
+                          onChange={() => toggleMember(m.clerkUserId)}
+                        />
+                        {m.displayName}
+                      </label>
+                    ),
+                  )}
+                  {!visibleMembers.length && (
+                    <p className="px-1 py-1 text-xs text-atria-text-muted">
+                      No members match.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         <div className="space-y-1.5">
           <label className="text-xs font-medium uppercase tracking-wider text-atria-text-muted">
@@ -432,7 +626,7 @@ function AssignPanel({
           variant="primary"
           size="sm"
           onClick={handleAssign}
-          disabled={busy || !memberId}
+          disabled={busy || !selectedIds.length}
         >
           {busy ? 'Assigning…' : 'Assign training'}
         </Button>
