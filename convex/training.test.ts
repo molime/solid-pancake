@@ -102,6 +102,100 @@ describe('training.createCourse', () => {
     expect(courses[0].title).toBe('Test Course')
     expect(courses[0].progressPercent).toBe(0)
   })
+
+  it('rejects a duplicate explicit courseKey', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_create_course_dup'
+    await seedTenant(t, clerkOrgId)
+
+    await expect(
+      t
+        .withIdentity({
+          subject: 'user_admin',
+          org_id: clerkOrgId,
+          org_role: 'org:admin',
+        })
+        .run(async (ctx) => {
+          await ctx.runMutation(api.training.createCourse, {
+            clerkOrgId,
+            ...SAMPLE_COURSE,
+          })
+          return ctx.runMutation(api.training.createCourse, {
+            clerkOrgId,
+            ...SAMPLE_COURSE,
+          })
+        }),
+    ).rejects.toThrow(/already exists/)
+  })
+})
+
+describe('training.createCourse auto courseKey', () => {
+  it('generates a slugified unique key when courseKey is omitted', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_auto_course_key'
+    await seedTenant(t, clerkOrgId)
+
+    const { courseKey: _omit, ...rest } = SAMPLE_COURSE
+    const firstId = await t
+      .withIdentity({
+        subject: 'user_admin',
+        org_id: clerkOrgId,
+        org_role: 'org:admin',
+      })
+      .run(async (ctx) => {
+        return ctx.runMutation(api.training.createCourse, {
+          clerkOrgId,
+          ...rest,
+          title: 'Fire Safety 101!',
+        })
+      })
+
+    const first = await t.run(async (ctx) => ctx.db.get(firstId))
+    expect(first?.courseKey).toMatch(/^fire_safety_101_[a-z0-9]{6}$/)
+
+    // A second course with the same title must get a different key.
+    const secondId = await t
+      .withIdentity({
+        subject: 'user_admin',
+        org_id: clerkOrgId,
+        org_role: 'org:admin',
+      })
+      .run(async (ctx) => {
+        return ctx.runMutation(api.training.createCourse, {
+          clerkOrgId,
+          ...rest,
+          title: 'Fire Safety 101!',
+        })
+      })
+
+    const second = await t.run(async (ctx) => ctx.db.get(secondId))
+    expect(second?.courseKey).toMatch(/^fire_safety_101_[a-z0-9]{6}$/)
+    expect(second?.courseKey).not.toBe(first?.courseKey)
+  })
+
+  it('falls back to "course" when the title has no slug-able characters', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_auto_course_key_fallback'
+    await seedTenant(t, clerkOrgId)
+
+    const { courseKey: _omit, ...rest } = SAMPLE_COURSE
+    const courseId = await t
+      .withIdentity({
+        subject: 'user_admin',
+        org_id: clerkOrgId,
+        org_role: 'org:admin',
+      })
+      .run(async (ctx) => {
+        return ctx.runMutation(api.training.createCourse, {
+          clerkOrgId,
+          ...rest,
+          title: '!!!',
+        })
+      })
+
+    const course = await t.run(async (ctx) => ctx.db.get(courseId))
+    expect(course?.courseKey).toMatch(/^course_[a-z0-9]{6}$/)
+  })
 })
 
 describe('training.completeStep', () => {
