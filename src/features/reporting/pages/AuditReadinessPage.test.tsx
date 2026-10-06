@@ -306,7 +306,7 @@ describe('AuditReadinessPage — five pillars', () => {
     ).toBeInTheDocument()
 
     const expiredRow = screen
-      .getByText('No expired caregiver credentials')
+      .getByText('All caregiver credentials current')
       .closest('li')
     expect(expiredRow?.textContent).toContain('Review')
 
@@ -336,6 +336,42 @@ describe('AuditReadinessPage — five pillars', () => {
       .getByText('DS 1891 disclosure current (2-year cycle)')
       .closest('li')
     expect(ds1891Row?.textContent).toContain('Review')
+  })
+
+  it('routes unmet credential items to the ARC console instead of offering reminders', async () => {
+    mockState({
+      report: makeReport({
+        gaps: [
+          {
+            clerkUserId: 'user_cg1',
+            displayName: 'Care Giver',
+            missing: [],
+            expired: ['CPR certificate'],
+            overridden: [],
+            overriddenCategories: [],
+          },
+        ],
+      }),
+      timeliness: TIMELINESS_CLEAR,
+      summary: SUMMARY_CLEAR,
+      obligations: makeObligations(),
+      retention: RETENTION,
+    })
+
+    renderPage()
+
+    // Expand the unmet credential item.
+    fireEvent.click(screen.getByText('All caregiver credentials current'))
+
+    // The expansion routes to the ARC simple view (/audit) — reminders were
+    // removed from the full view per the review call.
+    const link = screen.getByRole('link', {
+      name: /open the audit ready center to fix these/i,
+    })
+    expect(link.getAttribute('href')).toBe('/audit')
+    expect(
+      screen.queryByRole('button', { name: /send reminder/i }),
+    ).not.toBeInTheDocument()
   })
 
   it('downloads the audit packet for the selected date range', async () => {
