@@ -1646,3 +1646,236 @@ export const createAgencyTenant = internalMutation({
     return { tenantId, created: true }
   },
 })
+
+/**
+ * E2E support (qa-oct4-features): insert a SENT platform invoice with a past
+ * due date for the caller's tenant, then trigger the real dunning transition
+ * (the same internal mutation the daily checkOverdueSubscriptionInvoices cron
+ * runs) so the tenant goes past_due with a grace window anchored to the due
+ * date — 5 days out, so nothing gets suspended mid-test. The invoice covers
+ * the subscription's current period so the Subscription page shows it as the
+ * current-period charge; a dummy hosted URL lets the Pay button render
+ * without touching Stripe. Pair with resetE2ETenantBilling for cleanup.
+ */
+export const seedPastDuePlatformInvoice = mutation({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, { clerkOrgId }) => {
+    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, ['org:admin'])
+    const subscription = await ctx.db
+      .query('tenantSubscriptions')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+      .unique()
+    if (!subscription) throw new Error('No subscription for tenant.')
+    if (
+      subscription.status === 'past_due' ||
+      subscription.status === 'suspended'
+    ) {
+      throw new Error(
+        `Subscription is already ${subscription.status}; reset billing first.`,
+      )
+    }
+
+    const now = new Date()
+    const dueDate = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10)
+    const invoiceId = await ctx.db.insert('platformInvoices', {
+      tenantId,
+      invoiceNumber: `E2E-${now.getTime()}`,
+      periodStart: subscription.currentPeriodStart,
+      periodEnd: subscription.currentPeriodEnd,
+      dueDate,
+      lineItems: [
+        {
+          description: 'E2E past-due banner test charge',
+          quantity: 1,
+          unitPrice: 42,
+          amount: 42,
+          source: 'manual',
+        },
+      ],
+      subtotal: 42,
+      total: 42,
+      status: 'sent',
+      stripeHostedInvoiceUrl: 'https://example.com/e2e-hosted-invoice',
+      createdBy: 'e2e-seed',
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    })
+
+    // Runs right after this mutation commits; the spec polls for past_due.
+    await ctx.runMutation(
+      internal.platformStripe.checkOverdueSubscriptionInvoices,
+      {},
+    )
+
+    return { invoiceId, dueDate }
+  },
+})
+
+/**
+ * E2E cleanup companion to seedPastDuePlatformInvoice: voids the tenant's
+ * unpaid (sent/overdue) platform invoices and flips a past_due/suspended
+ * subscription back to active, clearing the dunning dates. Mirrors
+ * migrations.reactivateTenantBillingInternal but is callable with the e2e
+ * admin's session token.
+ */
+export const resetE2ETenantBilling = mutation({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, { clerkOrgId }) => {
+    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, ['org:admin'])
+    const now = new Date().toISOString()
+    const invoices = await ctx.db
+      .query('platformInvoices')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    let voided = 0
+    for (const invoice of invoices) {
+      if (invoice.status === 'sent' || invoice.status === 'overdue') {
+        await ctx.db.patch(invoice._id, { status: 'void', updatedAt: now })
+        voided += 1
+      }
+    }
+    const subscription = await ctx.db
+      .query('tenantSubscriptions')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+      .unique()
+    let reactivated = false
+    if (
+      subscription &&
+      (subscription.status === 'past_due' ||
+        subscription.status === 'suspended')
+    ) {
+      await ctx.db.patch(subscription._id, {
+        status: 'active',
+        pastDueSince: undefined,
+        graceUntil: undefined,
+        updatedAt: now,
+      })
+      reactivated = true
+    }
+    return { voided, reactivated }
+  },
+})
+
+const E2E_OCT4_FIXTURE_SOURCE = 'e2e-oct4-fixture'
+
+/**
+ * E2E support (qa-oct4-features): attach one EXPIRED credential document to
+ * the fixture caregiver's compliance file so the compliance page (status
+ * dots, Upload renewal), the ARC fix list (credential fix-it dialog), the
+ * full-view checklist (credentials-current item), and the employee Documents
+ * tab all have data to exercise. The caller uploads the fixture bytes first
+ * (files:generateUploadUrl + POST) and passes the resulting storageId —
+ * mutations cannot write to storage directly. Idempotent — any earlier
+ * fixture is removed first. Pair with deleteE2EOct4ComplianceFixture for
+ * cleanup.
+ */
+export const seedExpiredEmployeeCredential = mutation({
+  args: { clerkOrgId: v.string(), storageId: v.string() },
+  handler: async (ctx, { clerkOrgId, storageId }) => {
+    const { tenantId, identity } = await requireTenantRole(ctx, clerkOrgId, [
+      'org:admin',
+    ])
+    const profiles = await ctx.db
+      .query('employeeProfiles')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    // Resolve the fixture caregiver the same way the employees LIST does
+    // (tenantMemberId, falling back to clerkUserId) — then make sure the
+    // profile is linked by tenantMemberId, because the profile page itself
+    // (getEmployeeProfileDetail) only resolves profiles by member and shows
+    // no Documents/Notes tabs otherwise.
+    const members = await ctx.db
+      .query('tenantMembers')
+      .withIndex('by_tenant_user', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    const withMember = profiles.filter((p) => p.tenantMemberId)
+    const profile =
+      withMember.find((p) => p.displayName.includes('QA Caregiver One')) ??
+      profiles.find((p) => p.displayName.includes('QA Caregiver One')) ??
+      withMember[0] ??
+      profiles[0]
+    if (!profile) throw new Error('No employee profiles for tenant.')
+    const member = profile.tenantMemberId
+      ? members.find((m) => m._id === profile.tenantMemberId)
+      : members.find((m) => m.clerkUserId === profile.clerkUserId)
+    if (member && profile.tenantMemberId !== member._id) {
+      await ctx.db.patch(profile._id, { tenantMemberId: member._id })
+    }
+
+    // Idempotency: clear any leftover fixture from a previous run.
+    const stale = (
+      await ctx.db
+        .query('documentArchiveItems')
+        .withIndex('by_tenant_created', (q) => q.eq('tenantId', tenantId))
+        .collect()
+    ).filter((item) => item.source === E2E_OCT4_FIXTURE_SOURCE)
+    for (const item of stale) {
+      const file = await ctx.db.get(item.fileId)
+      if (file) {
+        await ctx.storage
+          .delete(file.storageId as Id<'_storage'>)
+          .catch(() => {})
+        await ctx.db.delete(file._id)
+      }
+      await ctx.db.delete(item._id)
+    }
+
+    const now = new Date().toISOString()
+    const fileId = await ctx.db.insert('files', {
+      tenantId,
+      storageId,
+      uploadedBy: identity.subject,
+      fileName: 'e2e-oct4-fixture.pdf',
+      contentType: 'application/pdf',
+      size: 37,
+      linkedType: 'complianceDoc',
+      linkedId: profile._id as string,
+      visibility: 'admins_coordinators',
+      createdAt: now,
+    })
+    const itemId = await ctx.db.insert('documentArchiveItems', {
+      tenantId,
+      fileId,
+      subjectType: 'employee',
+      subjectId: profile._id as string,
+      category: 'qa_oct4_fixture',
+      status: 'active',
+      expiresAt: '2020-01-01T00:00:00.000Z',
+      source: E2E_OCT4_FIXTURE_SOURCE,
+      createdAt: now,
+    })
+    return {
+      itemId,
+      employeeProfileId: profile._id,
+      employeeName: profile.displayName,
+      memberId: member?._id ?? null,
+    }
+  },
+})
+
+/** E2E cleanup companion to seedExpiredEmployeeCredential. */
+export const deleteE2EOct4ComplianceFixture = mutation({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, { clerkOrgId }) => {
+    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, ['org:admin'])
+    const items = (
+      await ctx.db
+        .query('documentArchiveItems')
+        .withIndex('by_tenant_created', (q) => q.eq('tenantId', tenantId))
+        .collect()
+    ).filter((item) => item.source === E2E_OCT4_FIXTURE_SOURCE)
+    for (const item of items) {
+      const file = await ctx.db.get(item.fileId)
+      if (file) {
+        await ctx.storage
+          .delete(file.storageId as Id<'_storage'>)
+          .catch(() => {})
+        await ctx.db.delete(file._id)
+      }
+      await ctx.db.delete(item._id)
+    }
+    return { deleted: items.length }
+  },
+})
