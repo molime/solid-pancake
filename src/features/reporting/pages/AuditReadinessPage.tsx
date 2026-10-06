@@ -60,6 +60,20 @@ function percent(part: number, total: number) {
   return `${Math.round((part / total) * 100)}%`
 }
 
+// Human wording for the credential nudge email (review-call feedback: the old
+// message read like "Reminder from your agency: No expired credentials:
+// Expired Driver License").
+function credentialReminderText(kind: 'missing' | 'expired', labels: string[]) {
+  if (kind === 'expired') {
+    return labels.length === 1
+      ? `Reminder from your agency: your ${labels[0]} has expired — please upload a renewed one.`
+      : `Reminder from your agency: these credentials have expired: ${labels.join(', ')} — please upload renewed copies.`
+  }
+  return labels.length === 1
+    ? `Reminder from your agency: your ${labels[0]} is missing — please upload it as soon as you can.`
+    : `Reminder from your agency: these credentials are missing: ${labels.join(', ')} — please upload them as soon as you can.`
+}
+
 // The five audit pillars from docs/07 §1, each computed from real queries.
 
 function serviceDeliveryStatus(report: AuditReport): CategoryStatus {
@@ -221,7 +235,8 @@ function AuditFullView() {
     () => new Date().toISOString().slice(0, 10),
   )
   const [downloadingPacket, setDownloadingPacket] = useState(false)
-  // Inline checklist expansion + reminder actions (no redirects).
+  // Inline checklist expansion: concise count + link to the owning console;
+  // the reminder action stays for small offender lists (≤3 people).
   const [expandedChecklistItem, setExpandedChecklistItem] = useState<string | null>(null)
   const [remindingFor, setRemindingFor] = useState<string | null>(null)
   const [reminderSentFor, setReminderSentFor] = useState<string | null>(null)
@@ -230,7 +245,7 @@ function AuditFullView() {
   const handleSendReminder = async (
     itemLabel: string,
     clerkUserId: string,
-    issue: string,
+    message: string,
   ) => {
     if (!clerkOrgId) return
     const key = `${itemLabel}-${clerkUserId}`
@@ -239,7 +254,7 @@ function AuditFullView() {
       await sendReminder({
         clerkOrgId,
         clerkUserId,
-        message: `Reminder from your agency: ${issue}`,
+        message,
       })
       setReminderSentFor(key)
     } catch {
@@ -352,26 +367,36 @@ function AuditFullView() {
     report.documentation.total === 0
       ? 1
       : report.documentation.withNotes / report.documentation.total
-  // Each issue expands in place with the specific offenders and a contextual
-  // action — no more redirecting away and losing the trail.
-  type ChecklistPerson = { clerkUserId: string; displayName: string; issue: string }
+  // Unmet items expand with a concise count and a link to the owning
+  // console; small offender lists (≤3 people) keep the inline reminder.
+  type ChecklistPerson = {
+    clerkUserId: string
+    displayName: string
+    issue: string
+    reminder: string
+  }
   type ChecklistItem = {
     label: string
     met: boolean
     category: 'Documentation' | 'Incidents' | 'Agency obligations' | 'Operations'
     detail?: string
     people?: ChecklistPerson[]
+    consoleLink?: string
   }
   const credentialPeople = (
     kind: 'missing' | 'expired',
   ): ChecklistPerson[] =>
     report.gaps
       .filter((gap) => gap[kind].length > 0)
-      .map((gap) => ({
-        clerkUserId: gap.clerkUserId ?? gap.displayName,
-        displayName: gap.displayName,
-        issue: `${kind === 'missing' ? 'Missing' : 'Expired'}: ${gap[kind].join(', ')}`,
-      }))
+      .map((gap) => {
+        const labels = gap[kind]
+        return {
+          clerkUserId: gap.clerkUserId ?? gap.displayName,
+          displayName: gap.displayName,
+          issue: `${kind === 'missing' ? 'Missing' : 'Expired'}: ${labels.join(', ')}`,
+          reminder: credentialReminderText(kind, labels),
+        }
+      })
   const obligationDetail = (key: string) => {
     const obligation = obligations?.find((o) => o.key === key)
     return obligation
@@ -390,12 +415,14 @@ function AuditFullView() {
           ? `${report.personnel.expired} expired credential document(s) on file.`
           : undefined,
       people: credentialPeople('expired'),
+      consoleLink: '/compliance',
     },
     {
       label: 'No missing required credentials',
       met: report.gaps.every((gap) => gap.missing.length === 0),
       category: 'Documentation',
       people: credentialPeople('missing'),
+      consoleLink: '/compliance',
     },
     {
       label: 'All SIRs verbally reported within 24 hours (last 90 days)',
@@ -405,6 +432,7 @@ function AuditFullView() {
         (incidentTimeliness?.verbalBreached ?? 0) > 0
           ? `${incidentTimeliness!.verbalBreached} incident(s) breached the 24-hour verbal report window.`
           : undefined,
+      consoleLink: '/incidents',
     },
     {
       label: 'All SIR written reports submitted within 48 hours (last 90 days)',
@@ -414,24 +442,28 @@ function AuditFullView() {
         (incidentTimeliness?.writtenBreached ?? 0) > 0
           ? `${incidentTimeliness!.writtenBreached} incident(s) breached the 48-hour written report window.`
           : undefined,
+      consoleLink: '/incidents',
     },
     {
       label: 'General liability insurance COI current',
       met: obligationCurrent('insurance_general_liability'),
       category: 'Agency obligations',
       detail: obligationDetail('insurance_general_liability'),
+      consoleLink: '/compliance',
     },
     {
       label: "Workers' compensation insurance COI current",
       met: obligationCurrent('insurance_workers_comp'),
       category: 'Agency obligations',
       detail: obligationDetail('insurance_workers_comp'),
+      consoleLink: '/compliance',
     },
     {
       label: 'DS 1891 disclosure current (2-year cycle)',
       met: obligationCurrent('ds1891_disclosure'),
       category: 'Agency obligations',
       detail: obligationDetail('ds1891_disclosure'),
+      consoleLink: '/compliance',
     },
     {
       label: 'No overdue progress reports',
@@ -441,12 +473,14 @@ function AuditFullView() {
         (progressSummary?.overdue ?? 0) > 0
           ? `${progressSummary!.overdue} progress report(s) overdue.`
           : undefined,
+      consoleLink: '/clients',
     },
     {
       label: 'Documentation completeness at least 95%',
       met: documentationRate >= DOCUMENTATION_READY_THRESHOLD,
       category: 'Documentation',
       detail: `${report.documentation.withNotes} of ${report.documentation.total} visits have notes.`,
+      consoleLink: '/billing',
     },
     {
       label: 'No blocked billing lines',
@@ -456,6 +490,7 @@ function AuditFullView() {
         report.blockedBillingLines > 0
           ? `${report.blockedBillingLines} billing line(s) blocked by compliance.`
           : undefined,
+      consoleLink: '/billing',
     },
   ]
   const checklistMet = checklistItems.filter((item) => item.met).length
@@ -660,7 +695,11 @@ function AuditFullView() {
                   </p>
                   <ul className="space-y-2">
                     {items.map((item) => {
-                      const expandable = !item.met && (!!item.detail || (item.people?.length ?? 0) > 0)
+                      const expandable =
+                        !item.met &&
+                        (!!item.detail ||
+                          (item.people?.length ?? 0) > 0 ||
+                          !!item.consoleLink)
                       const expanded = expandedChecklistItem === item.label
                       return (
                         <li key={item.label}>
@@ -696,35 +735,53 @@ function AuditFullView() {
                                   {item.detail}
                                 </p>
                               )}
-                              {item.people?.map((person) => (
-                                <div
-                                  key={`${item.label}-${person.clerkUserId}`}
-                                  className="flex items-center justify-between gap-2"
-                                >
-                                  <p className="text-sm text-atria-ink">
-                                    <span className="font-medium">{person.displayName}</span>
-                                    <span className="text-atria-text-secondary"> — {person.issue}</span>
-                                  </p>
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    disabled={remindingFor === `${item.label}-${person.clerkUserId}`}
-                                    onClick={() =>
-                                      handleSendReminder(
-                                        item.label,
-                                        person.clerkUserId,
-                                        `${item.label}: ${person.issue}`,
-                                      )
-                                    }
+                              {/* Long offender lists live in the owning
+                                  console; short lists stay inline so the
+                                  reminder action is one click away. */}
+                              {(item.people?.length ?? 0) > 3 ? (
+                                <p className="text-sm text-atria-text-secondary">
+                                  {item.people!.length} people affected — the
+                                  console has the full list.
+                                </p>
+                              ) : (
+                                item.people?.map((person) => (
+                                  <div
+                                    key={`${item.label}-${person.clerkUserId}`}
+                                    className="flex items-center justify-between gap-2"
                                   >
-                                    {reminderSentFor === `${item.label}-${person.clerkUserId}`
-                                      ? 'Reminder sent ✓'
-                                      : remindingFor === `${item.label}-${person.clerkUserId}`
-                                        ? 'Sending…'
-                                        : 'Send reminder'}
-                                  </Button>
-                                </div>
-                              ))}
+                                    <p className="text-sm text-atria-ink">
+                                      <span className="font-medium">{person.displayName}</span>
+                                      <span className="text-atria-text-secondary"> — {person.issue}</span>
+                                    </p>
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      disabled={remindingFor === `${item.label}-${person.clerkUserId}`}
+                                      onClick={() =>
+                                        handleSendReminder(
+                                          item.label,
+                                          person.clerkUserId,
+                                          person.reminder,
+                                        )
+                                      }
+                                    >
+                                      {reminderSentFor === `${item.label}-${person.clerkUserId}`
+                                        ? 'Reminder sent ✓'
+                                        : remindingFor === `${item.label}-${person.clerkUserId}`
+                                          ? 'Sending…'
+                                          : 'Send reminder'}
+                                    </Button>
+                                  </div>
+                                ))
+                              )}
+                              {item.consoleLink && (
+                                <Link
+                                  to={item.consoleLink}
+                                  className="inline-block text-sm font-medium text-atria-accent hover:underline"
+                                >
+                                  Open the console to fix these →
+                                </Link>
+                              )}
                             </div>
                           )}
                         </li>
@@ -738,7 +795,7 @@ function AuditFullView() {
           <p className="mt-3 text-xs text-atria-muted">
             Self-inspection mirroring the biennial vendor-file review (17 CCR
             §54332(b)). Computed live — nothing is stored. Unmet items expand
-            in place with the details and the action to take.
+            with a count and a link to the console that fixes them.
           </p>
         </CardContent>
       </Card>

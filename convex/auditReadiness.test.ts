@@ -1095,4 +1095,139 @@ describe('auditReadiness.getFixList', () => {
     expect(result.status).toBe('ready')
     expect(result.items).toEqual([])
   })
+
+  it('dedupes blocked billing lines per client and reason', async () => {
+    const t = createTestConvex()
+    const tenantId = await seedTenant(t, CLERK_ORG_ID, 'Audit Agency')
+    await t.run(async (ctx) => {
+      const now = new Date().toISOString()
+      const clientId = await ctx.db.insert('clients', {
+        tenantId,
+        displayName: 'Client One',
+        serviceType: 'SLS',
+        authorizationHours: 100,
+        riskFlags: [],
+      })
+      await ctx.db.insert('employeeProfiles', {
+        tenantId,
+        clerkUserId: CAREGIVER_ID,
+        displayName: 'Caregiver One',
+        email: 'caregiver@example.com',
+        adpSyncStatus: 'synced',
+        createdAt: now,
+      })
+      const makeBlockedLine = async (blockedReason: string) => {
+        const shiftId = await ctx.db.insert('shifts', {
+          tenantId,
+          clientId,
+          caregiverId: CAREGIVER_ID,
+          scheduledStart: '2026-01-01T08:00:00.000Z',
+          scheduledEnd: '2026-01-01T16:00:00.000Z',
+          status: 'submitted',
+          serviceType: 'SLS',
+          rate: 25,
+        })
+        await ctx.db.insert('billingLines', {
+          tenantId,
+          shiftId,
+          hours: 4,
+          rate: 25,
+          amount: 100,
+          blockedReason,
+          blockedAt: now,
+          createdAt: now,
+        })
+      }
+      // Three lines blocked by the same credential gap collapse into one fix.
+      for (let i = 0; i < 3; i++) {
+        await makeBlockedLine('Missing required credential: Driver License')
+      }
+      // A different reason stays a separate item.
+      await makeBlockedLine('Shift is missing a progress note')
+    })
+
+    const result = await asAdmin(t).query(api.auditReadiness.getFixList, {
+      clerkOrgId: CLERK_ORG_ID,
+    })
+
+    const billingItems = result.items.filter((item) =>
+      item.id.startsWith('billing-'),
+    )
+    expect(billingItems).toHaveLength(2)
+    const merged = billingItems.find((item) =>
+      item.title.startsWith('3 shifts'),
+    )
+    expect(merged?.title).toBe("3 shifts for Client One can't be billed yet")
+    expect(merged?.clientName).toBe('Client One')
+    expect(merged?.employeeName).toBe('Caregiver One')
+    const single = billingItems.find(
+      (item) => item.detail === 'Shift is missing a progress note',
+    )
+    expect(single?.title).toBe("A shift for Client One can't be billed yet")
+  })
+
+  it('dedupes repeated expired labels and attaches the credential payload', async () => {
+    const t = createTestConvex()
+    const tenantId = await seedTenant(t, CLERK_ORG_ID, 'Audit Agency')
+    const profileId = await t.run(async (ctx) => {
+      const now = new Date().toISOString()
+      const fileId = await ctx.db.insert('files', {
+        tenantId,
+        storageId: 'storage_1',
+        uploadedBy: ADMIN_ID,
+        fileName: 'doc.pdf',
+        linkedType: 'complianceDoc',
+        linkedId: 'link_1',
+        visibility: 'admins_coordinators',
+        createdAt: now,
+      })
+      const profileId = await ctx.db.insert('employeeProfiles', {
+        tenantId,
+        clerkUserId: CAREGIVER_ID,
+        displayName: 'Caregiver One',
+        email: 'caregiver@example.com',
+        adpSyncStatus: 'synced',
+        createdAt: now,
+      })
+      await ctx.db.insert('credentialRequirements', {
+        tenantId,
+        role: 'org:caregiver',
+        category: 'health_screen',
+        label: 'Health Screen',
+        isRequired: true,
+      })
+      // Two expired documents of the same category — one fix, not two.
+      for (let i = 0; i < 2; i++) {
+        await ctx.db.insert('documentArchiveItems', {
+          tenantId,
+          fileId,
+          subjectType: 'employee',
+          subjectId: profileId as string,
+          category: 'health_screen',
+          status: 'verified',
+          expiresAt: new Date(Date.now() - DAY_MS).toISOString(),
+          createdAt: now,
+        })
+      }
+      return profileId
+    })
+
+    const result = await asAdmin(t).query(api.auditReadiness.getFixList, {
+      clerkOrgId: CLERK_ORG_ID,
+    })
+
+    const expiredItems = result.items.filter((item) =>
+      item.id.startsWith('credential-expired-'),
+    )
+    expect(expiredItems).toHaveLength(1)
+    expect(expiredItems[0]?.title).toBe("Caregiver One's Health Screen expired")
+    expect(expiredItems[0]?.employeeName).toBe('Caregiver One')
+    expect(expiredItems[0]?.credential).toEqual({
+      clerkUserId: CAREGIVER_ID,
+      employeeProfileId: profileId as string,
+      category: 'health_screen',
+      label: 'Health Screen',
+      state: 'expired',
+    })
+  })
 })

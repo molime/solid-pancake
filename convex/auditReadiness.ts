@@ -330,6 +330,19 @@ type FixItem = {
   // is admin/coordinator-only, so HR sees the item without a Fix button).
   linkTo: string | null
   dueAt?: string
+  // Who the fix belongs to — drives grouping, search, and the employee /
+  // client filters in the simple view.
+  employeeName?: string
+  clientName?: string
+  // Present on credential items: everything the in-place ARC dialog needs to
+  // upload the document or nudge the employee, without a redirect.
+  credential?: {
+    clerkUserId: string | null
+    employeeProfileId: string
+    category: string
+    label: string
+    state: 'missing' | 'expired' | 'expiring'
+  }
 }
 
 function hoursUntil(iso: string, now: Date) {
@@ -387,26 +400,45 @@ export const getFixList = query({
     const items: FixItem[] = []
 
     // Credential gaps — the exact same per-employee objects the full view
-    // renders in its gaps table.
+    // renders in its gaps table. Labels are deduped per employee (two expired
+    // documents of the same category are one fix, not two).
     const report = await buildReport(ctx, tenantId, tenant)
     for (const gap of report.gaps) {
       const subject = gap.clerkUserId ?? gap.displayName
-      for (const label of gap.expired) {
+      gap.expired.forEach((label, index) => {
+        if (gap.expired.indexOf(label) !== index) return
         items.push({
           id: `credential-expired-${subject}-${label}`,
           severity: 'critical',
           title: `${gap.displayName}'s ${label} expired`,
           linkTo: '/compliance',
+          employeeName: gap.displayName,
+          credential: {
+            clerkUserId: gap.clerkUserId,
+            employeeProfileId: gap.profileId,
+            category: gap.expiredCategories[index] ?? label,
+            label,
+            state: 'expired',
+          },
         })
-      }
-      for (const label of gap.missing) {
+      })
+      gap.missing.forEach((label, index) => {
+        if (gap.missing.indexOf(label) !== index) return
         items.push({
           id: `credential-missing-${subject}-${label}`,
           severity: 'critical',
           title: `${gap.displayName} is missing: ${label}`,
           linkTo: '/compliance',
+          employeeName: gap.displayName,
+          credential: {
+            clerkUserId: gap.clerkUserId,
+            employeeProfileId: gap.profileId,
+            category: gap.missingCategories[index] ?? label,
+            label,
+            state: 'missing',
+          },
         })
-      }
+      })
     }
 
     // Credentials expiring inside the same 30-day window the compliance page
@@ -426,11 +458,12 @@ export const getFixList = query({
       .query('employeeProfiles')
       .withIndex('by_tenant', (q) => q.eq('tenantId', tenantId))
       .collect()
-    const nameBySubject = new Map<string, string>()
+    // Archive items reference employees by profile id OR clerk user id.
+    const profileBySubject = new Map<string, (typeof profiles)[number]>()
     for (const profile of profiles) {
-      nameBySubject.set(profile._id as string, profile.displayName)
+      profileBySubject.set(profile._id as string, profile)
       if (profile.clerkUserId) {
-        nameBySubject.set(profile.clerkUserId, profile.displayName)
+        profileBySubject.set(profile.clerkUserId, profile)
       }
     }
     const archiveItems = await ctx.db
@@ -443,7 +476,8 @@ export const getFixList = query({
       if (!item.expiresAt || item.expiresAt < nowIso || item.expiresAt > soonCutoff) {
         continue
       }
-      const name = nameBySubject.get(item.subjectId) ?? 'A team member'
+      const profile = profileBySubject.get(item.subjectId)
+      const name = profile?.displayName ?? 'A team member'
       const label = labelByCategory.get(item.category) ?? item.category
       const days = Math.max(1, Math.round(hoursUntil(item.expiresAt, now) / 24))
       items.push({
@@ -452,6 +486,16 @@ export const getFixList = query({
         title: `${name}'s ${label} expires in ${days} day${days === 1 ? '' : 's'}`,
         linkTo: '/compliance',
         dueAt: item.expiresAt,
+        employeeName: profile?.displayName,
+        credential: profile
+          ? {
+              clerkUserId: profile.clerkUserId ?? null,
+              employeeProfileId: profile._id as string,
+              category: item.category,
+              label,
+              state: 'expiring',
+            }
+          : undefined,
       })
     }
 
@@ -485,6 +529,7 @@ export const getFixList = query({
                 detail: overdueByDetail(sla.verbalDueAt, now),
                 linkTo,
                 dueAt: sla.verbalDueAt,
+                clientName,
               }
             : {
                 id: `sir-verbal-${incident._id}`,
@@ -493,6 +538,7 @@ export const getFixList = query({
                 detail: dueInDetail(sla.verbalDueAt, now),
                 linkTo,
                 dueAt: sla.verbalDueAt,
+                clientName,
               },
         )
       }
@@ -506,6 +552,7 @@ export const getFixList = query({
                 detail: overdueByDetail(sla.writtenDueAt, now),
                 linkTo,
                 dueAt: sla.writtenDueAt,
+                clientName,
               }
             : {
                 id: `sir-written-${incident._id}`,
@@ -514,6 +561,7 @@ export const getFixList = query({
                 detail: dueInDetail(sla.writtenDueAt, now),
                 linkTo,
                 dueAt: sla.writtenDueAt,
+                clientName,
               },
         )
       }
@@ -572,6 +620,7 @@ export const getFixList = query({
           title: `${client.displayName}'s ${due.periodType} progress report is overdue`,
           linkTo: `/clients/${client._id}`,
           dueAt,
+          clientName: client.displayName,
         })
       } else if (due.dueStatus === 'due_soon') {
         items.push({
@@ -581,30 +630,60 @@ export const getFixList = query({
           detail: dueAt ? dueInDetail(dueAt, now) : undefined,
           linkTo: `/clients/${client._id}`,
           dueAt,
+          clientName: client.displayName,
         })
       }
     }
 
-    // Blocked billing lines. /billing is admin/coordinator-only, so HR sees
-    // the item without a Fix button (linkTo: null).
+    // Blocked billing lines, deduped per client + reason: a caregiver who is
+    // missing a credential blocks every shift they worked, which used to
+    // produce one near-identical row per line. /billing is
+    // admin/coordinator-only, so HR sees the item without a Fix button
+    // (linkTo: null).
     const canOpenBilling = role === 'org:admin'
     const lines = await ctx.db
       .query('billingLines')
       .withIndex('by_tenant_export_batch', (q) => q.eq('tenantId', tenantId))
       .collect()
+    const blockedByClientAndReason = new Map<
+      string,
+      { line: (typeof lines)[number]; clientName: string; caregiverName?: string; count: number }
+    >()
     for (const line of lines) {
       if (isBlank(line.blockedReason)) continue
       const shift = await ctx.db.get(line.shiftId)
       const clientName = shift
         ? (clientNames.get(shift.clientId as string) ?? 'a client')
         : 'a client'
+      const caregiverName = shift?.caregiverId
+        ? profileBySubject.get(shift.caregiverId)?.displayName
+        : undefined
+      const key = `${clientName} ${line.blockedReason}`
+      const existing = blockedByClientAndReason.get(key)
+      if (existing) {
+        existing.count += 1
+      } else {
+        blockedByClientAndReason.set(key, {
+          line,
+          clientName,
+          caregiverName,
+          count: 1,
+        })
+      }
+    }
+    for (const blocked of blockedByClientAndReason.values()) {
       items.push({
-        id: `billing-${line._id}`,
+        id: `billing-${blocked.line._id}`,
         severity: 'critical',
-        title: `A shift for ${clientName} can't be billed yet`,
-        detail: line.blockedReason,
+        title:
+          blocked.count === 1
+            ? `A shift for ${blocked.clientName} can't be billed yet`
+            : `${blocked.count} shifts for ${blocked.clientName} can't be billed yet`,
+        detail: blocked.line.blockedReason,
         linkTo: canOpenBilling ? '/billing' : null,
-        dueAt: line.blockedAt ?? line.createdAt,
+        dueAt: blocked.line.blockedAt ?? blocked.line.createdAt,
+        employeeName: blocked.caregiverName,
+        clientName: blocked.clientName,
       })
     }
 
