@@ -54,6 +54,8 @@ function mockState(state: QueryState, mutations: Record<string, unknown> = {}) {
     if (name === 'compliance:complianceGaps') return []
     if (name === 'training:getTrainingCompliance') return []
     if (name === 'files:getDownloadUrl') return 'https://files.example/download'
+    if (name === 'documentArchive:getItemDownloadUrl')
+      return 'https://files.example/download'
     if (name === 'members:me') {
       return { role: state.memberRole ?? 'org:admin' }
     }

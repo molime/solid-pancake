@@ -134,6 +134,48 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+describe('getItemDownloadUrl', () => {
+  it('throws Document not found for an unknown item', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_item_dl'
+    const adminId = 'user_admin_item_dl'
+    await seedTenant(t, clerkOrgId, adminId)
+    const { itemId } = await seedArchiveItem(t, clerkOrgId, {})
+    await t.run(async (ctx) => {
+      await ctx.db.delete(itemId)
+    })
+
+    await expect(
+      asAdmin(t, adminId, clerkOrgId).query(
+        api.documentArchive.getItemDownloadUrl,
+        { clerkOrgId, itemId },
+      ),
+    ).rejects.toThrow(/Document not found/i)
+    // Note: the storage.getUrl happy path needs a real storage id, which
+    // convex-test cannot mint — covered by the compliance-page e2e instead.
+  })
+
+  it('rejects cross-tenant access', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_item_dl_a'
+    const adminId = 'user_admin_item_dl_a'
+    await seedTenant(t, clerkOrgId, adminId)
+    const { itemId } = await seedArchiveItem(t, clerkOrgId, {})
+
+    // An admin from a second tenant must not read tenant A's item.
+    const otherOrgId = 'org_item_dl_b'
+    const otherAdminId = 'user_admin_item_dl_b'
+    await seedTenant(t, otherOrgId, otherAdminId)
+
+    await expect(
+      asAdmin(t, otherAdminId, otherOrgId).query(
+        api.documentArchive.getItemDownloadUrl,
+        { clerkOrgId: otherOrgId, itemId },
+      ),
+    ).rejects.toThrow(/cross-tenant/i)
+  })
+})
+
 describe('listDocumentArchive', () => {
   it('returns archive items joined with file metadata', async () => {
     const t = createTestConvex()

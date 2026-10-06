@@ -92,12 +92,15 @@ const employeeDotLabel: Record<EmployeeDotStatus, string> = {
 /** Opens/downloads the file backing a compliance item (CPR certificate, …). */
 function ViewDocumentLink({
   clerkOrgId,
-  storageId,
+  itemId,
 }: {
   clerkOrgId: string
-  storageId: string
+  itemId: Id<'documentArchiveItems'>
 }) {
-  const url = useQuery(api.files.getDownloadUrl, { clerkOrgId, storageId })
+  const url = useQuery(api.documentArchive.getItemDownloadUrl, {
+    clerkOrgId,
+    itemId,
+  })
 
   return (
     <a
@@ -801,10 +804,10 @@ export function ComplianceOverviewPage() {
                                 </TableCell>
                                 <TableCell>
                                   <span className="inline-flex items-center gap-2">
-                                    {item.fileStorageId && clerkOrgId && (
+                                    {clerkOrgId && (
                                       <ViewDocumentLink
                                         clerkOrgId={clerkOrgId}
-                                        storageId={item.fileStorageId}
+                                        itemId={item.itemId}
                                       />
                                     )}
                                     {canOverride &&
@@ -837,9 +840,7 @@ export function ComplianceOverviewPage() {
                                       >
                                         Override
                                       </Button>
-                                    ) : item.fileStorageId ? null : (
-                                      '—'
-                                    )}
+                                    ) : null}
                                   </span>
                                 </TableCell>
                               </TableRow>

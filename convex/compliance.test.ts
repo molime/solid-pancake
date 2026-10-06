@@ -251,7 +251,7 @@ describe('checkComplianceBlocked', () => {
 })
 
 describe('listComplianceItems', () => {
-  it('returns the backing file storageId and resolved subject name per item', async () => {
+  it('returns the resolved subject name and employeeProfileId per item', async () => {
     const t = createTestConvex()
     const seed = await seedTenant(t)
     await seedArchiveItem(t, seed, {})
@@ -261,9 +261,9 @@ describe('listComplianceItems', () => {
     })
 
     expect(items).toHaveLength(1)
-    expect(items[0]!.fileStorageId).toBe('storage_1')
     expect(items[0]!.subjectName).toBe('Caregiver One')
     expect(items[0]!.computedStatus).toBe('compliant')
+    expect(items[0]!.employeeProfileId).toBe(seed.employeeProfileId)
   })
 })
 
