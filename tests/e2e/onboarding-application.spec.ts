@@ -413,6 +413,9 @@ test.describe('onboarding application and document upload', { tag: '@auth' }, ()
     if (mockE2EEnabled()) {
       test.skip(true, 'This spec requires a live Clerk-backed candidate session.')
     }
+    // Same full two-session journey as the sibling spec above — give it the
+    // same headroom over the default 120s budget against the live dev backend.
+    test.setTimeout(300_000)
 
     await signInWithClerk(
       page,

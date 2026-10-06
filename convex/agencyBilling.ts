@@ -21,6 +21,7 @@ export const getMyBillingNotice = query({
       'org:coordinator',
       'org:caregiver',
       'org:hr',
+      'org:candidate',
     ])
     const subscription = await ctx.db
       .query('tenantSubscriptions')
