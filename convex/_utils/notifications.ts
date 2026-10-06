@@ -19,7 +19,7 @@ const STAFF_SUBJECTS: Record<string, string> = {
   compliance_expiring: 'Your credential expires soon',
   billing_ready: 'Shift ready to bill',
   invoice_created: 'Invoice created',
-  billing_blocked: 'Billing blocked by compliance',
+  billing_blocked: 'Billing blocked (hours or progress note)',
   escalation: 'Escalation notice',
 }
 

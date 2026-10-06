@@ -4,7 +4,7 @@ import type { MutationCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
 import { requireTenantRole, assertTenantDoc } from './authHelpers'
 import { internal } from './_generated/api'
-import { checkComplianceBlocked } from './compliance'
+import { checkBillingBlocked } from './billingHelpers'
 import { notifyTenantStaff } from './_utils/notifications'
 import {
   calculateDocumentedHours,
@@ -89,14 +89,15 @@ export const approve = mutation({
       throw new Error('Valid documented hours are required before approval.')
     }
 
-    const compliance = await checkComplianceBlocked(
-      ctx,
-      tenantId,
-      shift.caregiverId,
-    )
+    // Billing blocks are driven by the client's billing rules only: a
+    // missing/incomplete progress note, or worked hours exceeding the
+    // client's approved (authorized) hours. Professional credentials must
+    // NOT block billing (client request) — credential gaps stay visible in
+    // the compliance views instead.
+    const billingBlock = await checkBillingBlocked(ctx, tenantId, shift, hours)
 
     if (
-      compliance.blocked &&
+      billingBlock.blocked &&
       args.complianceOverride === true &&
       role !== 'org:admin'
     ) {
@@ -105,7 +106,7 @@ export const approve = mutation({
       )
     }
 
-    const blocked = compliance.blocked && args.complianceOverride !== true
+    const blocked = billingBlock.blocked && args.complianceOverride !== true
     const now = new Date().toISOString()
 
     await ctx.db.patch(args.shiftId, { status: 'billing_ready' })
@@ -116,7 +117,7 @@ export const approve = mutation({
       reviewerId: identity.subject,
       decision: 'approved',
       comment: args.comment,
-      ...(compliance.blocked && args.complianceOverride === true
+      ...(billingBlock.blocked && args.complianceOverride === true
         ? {
             complianceOverride: true,
             complianceOverrideReason: args.complianceOverrideReason,
@@ -134,7 +135,7 @@ export const approve = mutation({
       rate: shift.rate,
       amount,
       ...(blocked
-        ? { blockedReason: compliance.reason, blockedAt: now }
+        ? { blockedReason: billingBlock.reason, blockedAt: now }
         : {}),
       createdAt: now,
     })
@@ -142,11 +143,11 @@ export const approve = mutation({
     if (blocked) {
       await ctx.runMutation(internal.audit.record, {
         clerkOrgId: args.clerkOrgId,
-        action: 'billing_blocked_compliance',
+        action: 'billing_blocked',
         shiftId: args.shiftId,
         previousStatus: shift.status,
         nextStatus: 'billing_ready',
-        metadata: { reason: compliance.reason },
+        metadata: { reason: billingBlock.reason },
       })
 
       const caregiverName = await resolveCaregiverName(
@@ -154,7 +155,7 @@ export const approve = mutation({
         tenantId,
         shift.caregiverId,
       )
-      const warning = `Billing blocked for ${caregiverName}: ${compliance.reason}. Resolve or apply override.`
+      const warning = `Billing blocked for ${caregiverName}: ${billingBlock.reason}. Resolve or apply override.`
 
       // Overrides are admin/hr-only, so the actionable notification goes to
       // the back office — the caregiver cannot resolve or override the block.
@@ -164,26 +165,26 @@ export const approve = mutation({
         metadata: {
           shiftId: args.shiftId as string,
           caregiverName,
-          reason: compliance.reason,
+          reason: billingBlock.reason,
         },
       })
 
       // Return-shape note: approve normally resolves to the shift id (a
-      // string at runtime); a compliance-blocked approval resolves to a
+      // string at runtime); a billing-blocked approval resolves to a
       // human-readable warning string instead of throwing.
       return warning
     }
 
-    if (compliance.blocked) {
-      // Blocked but an org:admin applied a compliance override.
+    if (billingBlock.blocked) {
+      // Blocked but an org:admin applied an override.
       await ctx.runMutation(internal.audit.record, {
         clerkOrgId: args.clerkOrgId,
-        action: 'compliance_override_applied',
+        action: 'billing_block_override_applied',
         shiftId: args.shiftId,
         previousStatus: shift.status,
         nextStatus: 'billing_ready',
         metadata: {
-          complianceReason: compliance.reason,
+          billingBlockReason: billingBlock.reason,
           overrideReason: args.complianceOverrideReason,
         },
       })

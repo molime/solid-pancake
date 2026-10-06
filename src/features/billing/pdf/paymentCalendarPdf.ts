@@ -1,7 +1,9 @@
 /**
- * Printable monthly payment calendar for one client-caregiver pair (the
- * "calendario para pago" agencies attach to billing): Monday-first month grid,
- * worked days show "9AM-12PM (3HR)", total hours, consumer and instructor names.
+ * Printable monthly payment calendar for one client (the "calendario para
+ * pago" agencies attach to billing): Monday-first month grid, worked days show
+ * one line per caregiver shift as "ES 9AM-12PM (3HR)" (caregiver initials +
+ * time range + hours), total hours, consumer and instructor names. One
+ * consolidated calendar per client — all caregivers in the same grid.
  * Generated client-side with pdf-lib.
  */
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
@@ -11,6 +13,8 @@ export interface PaymentCalendarDay {
   beginAt: string
   endAt: string
   hours: number
+  caregiverName: string
+  caregiverInitials: string
 }
 
 const PAGE_W = 792
@@ -37,7 +41,7 @@ function hoursLabel(hours: number): string {
 
 export async function generatePaymentCalendarPdf(args: {
   clientName: string
-  caregiverName: string
+  caregiverNames: string[]
   month: string // yyyy-mm
   days: PaymentCalendarDay[]
 }): Promise<Uint8Array> {
@@ -79,7 +83,12 @@ export async function generatePaymentCalendarPdf(args: {
     })
   })
 
-  const byDate = new Map(args.days.map((d) => [d.date, d]))
+  const byDate = new Map<string, PaymentCalendarDay[]>()
+  for (const day of args.days) {
+    const list = byDate.get(day.date) ?? []
+    list.push(day)
+    byDate.set(day.date, list)
+  }
   const cellBorder = rgb(0.75, 0.78, 0.8)
   const cellFill = rgb(1, 0.97, 0.94)
 
@@ -105,15 +114,26 @@ export async function generatePaymentCalendarPdf(args: {
         font,
       })
       const iso = `${args.month}-${String(dayNumber).padStart(2, '0')}`
-      const worked = byDate.get(iso)
-      if (worked) {
-        const label = `${shortTime(worked.beginAt)}-${shortTime(worked.endAt)} ${hoursLabel(worked.hours)}`
+      const workedDays = byDate.get(iso) ?? []
+      // One line per caregiver shift, initials first so caregivers are
+      // distinguishable inside the single consolidated calendar.
+      const visible = workedDays.slice(0, 3)
+      visible.forEach((worked, i) => {
+        const label = `${worked.caregiverInitials} ${shortTime(worked.beginAt)}-${shortTime(worked.endAt)} ${hoursLabel(worked.hours)}`
         page.drawText(label, {
           x: x + 8,
-          y: y + rowH / 2 - 4,
-          size: 9,
+          y: y + rowH - 32 - i * 12,
+          size: 8,
           font: bold,
           maxWidth: colW - 14,
+        })
+      })
+      if (workedDays.length > visible.length) {
+        page.drawText(`+${workedDays.length - visible.length} more`, {
+          x: x + 8,
+          y: y + rowH - 32 - visible.length * 12,
+          size: 8,
+          font,
         })
       }
     }
@@ -127,11 +147,12 @@ export async function generatePaymentCalendarPdf(args: {
     size: 11,
     font: bold,
   })
-  page.drawText(`Instructor: ${args.caregiverName}`, {
+  page.drawText(`Instructor: ${args.caregiverNames.join(', ')}`, {
     x: MARGIN,
     y: 36,
     size: 11,
     font: bold,
+    maxWidth: PAGE_W - MARGIN * 2,
   })
 
   return doc.save()

@@ -34,6 +34,7 @@ interface InvoicesTableProps {
   downloadingId?: Id<'exportBatches'> | null
   onDownload: (invoiceId: Id<'exportBatches'>) => void
   onDownloadPdf: (invoiceId: Id<'exportBatches'>) => void
+  onDownloadCalendar?: (invoice: InvoiceRow) => void
 }
 
 export function InvoicesTable({
@@ -41,6 +42,7 @@ export function InvoicesTable({
   downloadingId,
   onDownload,
   onDownloadPdf,
+  onDownloadCalendar,
 }: InvoicesTableProps) {
   const { organization } = useOrganization()
   const clerkOrgId = organization?.id
@@ -290,6 +292,17 @@ export function InvoicesTable({
                         <Download className="h-4 w-4" />
                         PDF
                       </Button>
+                      {onDownloadCalendar && invoice.clientId && invoice.periodStart && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Download this client's payment calendar for the invoice month"
+                          onClick={() => onDownloadCalendar(invoice)}
+                        >
+                          <Download className="h-4 w-4" />
+                          Calendar
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
