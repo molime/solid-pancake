@@ -1,6 +1,6 @@
 import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -28,10 +28,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/ui/Table'
-import { ShieldCheck, Clock, XCircle, Ban, Download, ChevronDown, ChevronRight } from 'lucide-react'
+import { ShieldCheck, Clock, XCircle, Ban, Download, ChevronDown, ChevronRight, Upload, Pencil } from 'lucide-react'
 import { formatDateUS, formatDocumentCategoryLabel } from '@/shared/format'
 import { downloadCsv } from '@/shared/lib/downloadCsv'
+import { uploadFileToConvex } from '@/shared/lib/upload'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
+import { cn } from '@/shared/lib/cn'
 
 const computedStatusVariant: Record<string, StatusBadgeVariant> = {
   compliant: 'success',
@@ -113,6 +115,154 @@ function ViewDocumentLink({
   )
 }
 
+// Same file constraints as the ARC fix-it dialog (validated server-side too).
+const CREDENTIAL_FILE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+]
+const MAX_CREDENTIAL_FILE_SIZE = 10 * 1024 * 1024
+
+/**
+ * Upload a renewed credential without leaving the compliance page (review
+ * call: admins shouldn't have to hunt for the ARC to replace an expired
+ * CPR card). Goes through the same files + documentArchive pipeline as the
+ * ARC fix-it dialog; the backend replaces the existing same-category item.
+ */
+function UploadRenewalDialog({
+  clerkOrgId,
+  employeeProfileId,
+  category,
+  employeeName,
+  onClose,
+  onUploaded,
+}: {
+  clerkOrgId: string
+  employeeProfileId: Id<'employeeProfiles'>
+  category: string
+  employeeName: string
+  onClose: () => void
+  onUploaded: () => void
+}) {
+  const label = formatDocumentCategoryLabel(category)
+  const generateUploadUrl = useMutation(api.files.generateUploadUrl)
+  const addCredential = useMutation(
+    api.documentArchive.addEmployeeCredentialDocument,
+  )
+  const [file, setFile] = useState<File | null>(null)
+  const [expiresAt, setExpiresAt] = useState('')
+  const [error, setError] = useState('')
+  const [isUploading, setIsUploading] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileChange = (selected: File | null) => {
+    setError('')
+    if (!selected) return
+    if (!CREDENTIAL_FILE_TYPES.includes(selected.type)) {
+      setError('Only JPG, PNG, WebP, and PDF files are allowed.')
+      return
+    }
+    if (selected.size > MAX_CREDENTIAL_FILE_SIZE) {
+      setError('File must be smaller than 10 MB.')
+      return
+    }
+    setFile(selected)
+  }
+
+  const handleUpload = async () => {
+    if (!file) return
+    setIsUploading(true)
+    setError('')
+    try {
+      const storageId = await uploadFileToConvex({
+        generateUploadUrl,
+        clerkOrgId,
+        file,
+      })
+      await addCredential({
+        clerkOrgId,
+        employeeProfileId,
+        category,
+        label,
+        storageId,
+        fileName: file.name,
+        contentType: file.type,
+        size: file.size,
+        expiresAt: expiresAt ? `${expiresAt}T00:00:00.000Z` : undefined,
+      })
+      onUploaded()
+      onClose()
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Upload failed. Please try again.',
+      )
+      setIsUploading(false)
+    }
+  }
+
+  return (
+    <Dialog open onClose={onClose}>
+      <DialogHeader>
+        <DialogTitle>
+          Upload renewed {label} — {employeeName}
+        </DialogTitle>
+      </DialogHeader>
+      <DialogContent className="space-y-4">
+        <div
+          className={cn(
+            'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--radius-atria-md)] border-2 border-dashed p-6 transition-colors',
+            file
+              ? 'border-atria-accent bg-atria-accent-quiet'
+              : 'border-atria-border bg-atria-surface-2 hover:bg-atria-surface-3',
+          )}
+          onClick={() => inputRef.current?.click()}
+        >
+          <input
+            ref={inputRef}
+            type="file"
+            accept={CREDENTIAL_FILE_TYPES.join(',')}
+            className="hidden"
+            onChange={(event) =>
+              handleFileChange(event.target.files?.[0] ?? null)
+            }
+          />
+          <Upload className="h-5 w-5 text-atria-text-muted" />
+          <p className="text-center text-sm text-atria-text-secondary">
+            {file ? file.name : `Choose the renewed ${label} document`}
+          </p>
+        </div>
+        <label className="block text-sm text-atria-text-secondary">
+          Expiration date (if the document has one)
+          <USDateInput
+            aria-label="Credential expiration date"
+            value={expiresAt}
+            onChange={setExpiresAt}
+            className="mt-1"
+          />
+        </label>
+        {error && <p className="text-sm text-atria-danger">{error}</p>}
+        <Button
+          variant="primary"
+          size="md"
+          className="w-full"
+          disabled={!file || isUploading}
+          onClick={handleUpload}
+        >
+          {isUploading ? 'Uploading…' : `Upload ${label}`}
+        </Button>
+      </DialogContent>
+      <DialogFooter>
+        <Button variant="secondary" size="sm" onClick={onClose}>
+          Close
+        </Button>
+      </DialogFooter>
+    </Dialog>
+  )
+}
+
 export function ComplianceOverviewPage() {
   const { clerkOrgId } = useTenant()
     const overview = useQuery(
@@ -137,21 +287,6 @@ export function ComplianceOverviewPage() {
   const overrideComplianceBlock = useMutation(
     api.compliance.overrideComplianceBlock,
   )
-  const updateArchiveItem = useMutation(
-    api.documentArchive.updateDocumentArchiveItem,
-  )
-  // Verify a pending external training certificate into the record.
-  const handleVerify = async (itemId: Id<'documentArchiveItems'>) => {
-    if (!clerkOrgId) return
-    try {
-      await updateArchiveItem({ clerkOrgId, itemId, status: 'verified' })
-      setMessage('Document verified.')
-    } catch (err) {
-      setError(
-        err instanceof Error ? sanitizeConvexError(err.message) : 'Verify failed.',
-      )
-    }
-  }
   const exportReport = useMutation(api.reporting.exportReport)
 
   const canOverride = member?.role === 'org:admin' || member?.role === 'org:hr'
@@ -174,6 +309,7 @@ export function ComplianceOverviewPage() {
   )
   const addObligation = useMutation(api.agencyObligations.addObligation)
   const deleteObligation = useMutation(api.agencyObligations.deleteObligation)
+  const updateDueDate = useMutation(api.agencyObligations.updateDueDate)
 
   const isAdmin = member?.role === 'org:admin'
   const canManageObligations = isAdmin || member?.role === 'org:hr'
@@ -196,6 +332,11 @@ export function ComplianceOverviewPage() {
   const [newTaskDueDate, setNewTaskDueDate] = useState('')
   const [newTaskGuidelineUrl, setNewTaskGuidelineUrl] = useState('')
   const [isAddingTask, setIsAddingTask] = useState(false)
+  // Inline due-date editing on the obligations table (wires updateDueDate).
+  const [editingDueFor, setEditingDueFor] =
+    useState<Id<'agencyObligations'> | null>(null)
+  const [editDueValue, setEditDueValue] = useState('')
+  const [isSavingDue, setIsSavingDue] = useState(false)
 
   // listDocumentArchive is admin/hr-only; only fetch it while the Complete
   // dialog is open so coordinators viewing the page never trigger it.
@@ -213,6 +354,12 @@ export function ComplianceOverviewPage() {
   const [overrideReason, setOverrideReason] = useState('')
   const [overrideExpiry, setOverrideExpiry] = useState('')
   const [isOverriding, setIsOverriding] = useState(false)
+  // In-place credential renewal (review call: more actions than Override).
+  const [uploadRenewalFor, setUploadRenewalFor] = useState<{
+    subjectName: string
+    category: string
+    employeeProfileId: Id<'employeeProfiles'>
+  } | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -414,6 +561,30 @@ export function ComplianceOverviewPage() {
           ? sanitizeConvexError(err.message)
           : 'Could not delete the task.',
       )
+    }
+  }
+
+  const handleSaveDueDate = async () => {
+    if (!clerkOrgId || !editingDueFor || !editDueValue) return
+    setError(null)
+    setMessage(null)
+    setIsSavingDue(true)
+    try {
+      await updateDueDate({
+        clerkOrgId,
+        obligationId: editingDueFor,
+        dueAt: editDueValue,
+      })
+      setMessage('Due date updated.')
+      setEditingDueFor(null)
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Could not update the due date.',
+      )
+    } finally {
+      setIsSavingDue(false)
     }
   }
 
@@ -637,6 +808,25 @@ export function ComplianceOverviewPage() {
                                       />
                                     )}
                                     {canOverride &&
+                                    (item.computedStatus === 'expired' ||
+                                      item.status === 'rejected') &&
+                                    item.employeeProfileId && (
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() =>
+                                          setUploadRenewalFor({
+                                            subjectName: item.subjectName,
+                                            category: item.category,
+                                            employeeProfileId:
+                                              item.employeeProfileId as Id<'employeeProfiles'>,
+                                          })
+                                        }
+                                      >
+                                        Upload renewal
+                                      </Button>
+                                    )}
+                                    {canOverride &&
                                     !isOverridden(item) &&
                                     (item.computedStatus === 'expired' ||
                                       item.status === 'rejected') ? (
@@ -646,14 +836,6 @@ export function ComplianceOverviewPage() {
                                         onClick={() => openOverride(item)}
                                       >
                                         Override
-                                      </Button>
-                                    ) : canOverride && item.status === 'pending' ? (
-                                      <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        onClick={() => handleVerify(item.itemId)}
-                                      >
-                                        Verify
                                       </Button>
                                     ) : item.fileStorageId ? null : (
                                       '—'
@@ -813,7 +995,52 @@ export function ComplianceOverviewPage() {
                             )}
                           </span>
                         </TableCell>
-                        <TableCell>{formatDateUS(obligation.dueAt)}</TableCell>
+                        <TableCell>
+                          {editingDueFor === obligation._id ? (
+                            <span className="inline-flex items-center gap-2">
+                              <USDateInput
+                                aria-label="Obligation due date"
+                                value={editDueValue}
+                                onChange={setEditDueValue}
+                                className="h-8 w-32"
+                              />
+                              <Button
+                                size="sm"
+                                disabled={isSavingDue || !editDueValue}
+                                onClick={handleSaveDueDate}
+                              >
+                                {isSavingDue ? 'Saving…' : 'Save'}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setEditingDueFor(null)}
+                              >
+                                Cancel
+                              </Button>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1">
+                              {formatDateUS(obligation.dueAt)}
+                              {canManageObligations && (
+                                <button
+                                  type="button"
+                                  aria-label="Edit due date"
+                                  title="Edit due date"
+                                  onClick={() => {
+                                    setEditingDueFor(obligation._id)
+                                    setEditDueValue(
+                                      obligation.dueAt.slice(0, 10),
+                                    )
+                                  }}
+                                  className="text-atria-text-muted hover:text-atria-ink"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           Every {obligation.cadenceMonths} months
                         </TableCell>
@@ -968,6 +1195,21 @@ export function ComplianceOverviewPage() {
           </Button>
         </DialogFooter>
       </Dialog>
+
+      {uploadRenewalFor && clerkOrgId && (
+        <UploadRenewalDialog
+          clerkOrgId={clerkOrgId}
+          employeeProfileId={uploadRenewalFor.employeeProfileId}
+          category={uploadRenewalFor.category}
+          employeeName={uploadRenewalFor.subjectName}
+          onClose={() => setUploadRenewalFor(null)}
+          onUploaded={() =>
+            setMessage(
+              `Renewed ${formatDocumentCategoryLabel(uploadRenewalFor.category)} uploaded for ${uploadRenewalFor.subjectName}.`,
+            )
+          }
+        />
+      )}
 
       <Dialog open={overrideItem !== null} onClose={() => setOverrideItem(null)}>
         <DialogHeader>

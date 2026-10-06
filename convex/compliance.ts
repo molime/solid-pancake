@@ -109,6 +109,17 @@ export const listComplianceItems = query({
       names.set(candidate._id as string, candidate.displayName)
     }
 
+    // Resolve each item's employee profile (subjectId may hold the profile id
+    // or the clerk user id) so the UI can offer an upload-renewal action that
+    // targets documentArchive.addEmployeeCredentialDocument.
+    const profileIdBySubject = new Map<string, string>()
+    for (const profile of employeeProfiles) {
+      profileIdBySubject.set(profile._id as string, profile._id as string)
+      if (profile.clerkUserId) {
+        profileIdBySubject.set(profile.clerkUserId, profile._id as string)
+      }
+    }
+
     const now = new Date()
     const nowIso = now.toISOString()
     const expiringCutoff = new Date(
@@ -136,6 +147,7 @@ export const listComplianceItems = query({
           expiresAt: item.expiresAt,
           computedStatus,
           fileStorageId: file?.storageId ?? null,
+          employeeProfileId: profileIdBySubject.get(item.subjectId) ?? null,
         }
       }),
     )
