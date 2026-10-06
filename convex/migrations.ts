@@ -161,6 +161,51 @@ export const setCandidateStatusInternal = internalMutation({
   },
 })
 
+
+/**
+ * Reset a tenant's platform-billing health (dev/e2e support): voids any
+ * unpaid platform invoices and flips a past_due/suspended subscription back
+ * to active, clearing the dunning dates. Used 2026-10-06 after the dunning
+ * crons legitimately suspended the e2e fixture tenants on dev (a seeded
+ * test invoice aged past its due date) and the full-screen suspension
+ * overlay broke every Playwright spec.
+ */
+export const reactivateTenantBillingInternal = internalMutation({
+  args: { tenantId: v.id('tenants') },
+  handler: async (ctx, args) => {
+    const now = new Date().toISOString()
+    const invoices = await ctx.db
+      .query('platformInvoices')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', args.tenantId))
+      .collect()
+    let voided = 0
+    for (const invoice of invoices) {
+      if (invoice.status === 'sent' || invoice.status === 'overdue') {
+        await ctx.db.patch(invoice._id, { status: 'void', updatedAt: now })
+        voided += 1
+      }
+    }
+    const subscription = await ctx.db
+      .query('tenantSubscriptions')
+      .withIndex('by_tenant', (q) => q.eq('tenantId', args.tenantId))
+      .unique()
+    let reactivated = false
+    if (
+      subscription &&
+      (subscription.status === 'past_due' || subscription.status === 'suspended')
+    ) {
+      await ctx.db.patch(subscription._id, {
+        status: 'active',
+        pastDueSince: undefined,
+        graceUntil: undefined,
+        updatedAt: now,
+      })
+      reactivated = true
+    }
+    return { voided, reactivated }
+  },
+})
+
 /**
  * One-off: set a tenant's allowed payment method. Used 2026-09-24 for Golden
  * Ages — the field was never set, so the Stripe setup page defaulted to card
