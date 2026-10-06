@@ -655,26 +655,20 @@ export default defineSchema({
   // docs/07 §3.5: DS 1891, DS 1896, insurance certificates, CPA audit/review,
   // COI statements, whistleblower policy, program design). Completing an
   // obligation rolls dueAt forward by cadenceMonths; evidenceItemId links an
-  // uploaded documentArchiveItems row as proof.
+  // uploaded documentArchiveItems row as proof. Agencies can also add their
+  // own custom obligations (custom: true) — key is a free-form string so
+  // custom slugs fit alongside the seeded CA literals.
   agencyObligations: defineTable({
     tenantId: v.id('tenants'),
-    key: v.union(
-      v.literal('ds1891_disclosure'),
-      v.literal('hcbs_agreement_ds1896'),
-      v.literal('insurance_general_liability'),
-      v.literal('insurance_workers_comp'),
-      v.literal('insurance_auto'),
-      v.literal('cpa_audit_or_review'),
-      v.literal('conflict_of_interest'),
-      v.literal('whistleblower_policy'),
-      v.literal('program_design'),
-    ),
+    key: v.string(),
     label: v.string(),
     cadenceMonths: v.number(),
     dueAt: v.string(),
     completedAt: v.optional(v.string()),
     evidenceItemId: v.optional(v.id('documentArchiveItems')),
     notes: v.optional(v.string()),
+    guidelineUrl: v.optional(v.string()),
+    custom: v.optional(v.boolean()),
     createdAt: v.string(),
   }).index('by_tenant_due', ['tenantId', 'dueAt']),
 

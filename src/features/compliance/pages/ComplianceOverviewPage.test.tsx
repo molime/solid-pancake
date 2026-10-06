@@ -34,6 +34,7 @@ type QueryState = {
   requirements?: unknown[]
   obligations?: unknown[]
   archiveItems?: unknown[]
+  items?: unknown[]
   memberRole?: string
 }
 
@@ -49,9 +50,10 @@ function mockState(state: QueryState, mutations: Record<string, unknown> = {}) {
     if (name === 'compliance:getComplianceOverview') {
       return { compliant: 0, expiring: 0, expired: 0, blocked: 0, total: 0 }
     }
-    if (name === 'compliance:listComplianceItems') return []
+    if (name === 'compliance:listComplianceItems') return state.items ?? []
     if (name === 'compliance:complianceGaps') return []
     if (name === 'training:getTrainingCompliance') return []
+    if (name === 'files:getDownloadUrl') return 'https://files.example/download'
     if (name === 'members:me') {
       return { role: state.memberRole ?? 'org:admin' }
     }
@@ -372,5 +374,188 @@ describe('ComplianceOverviewPage — agency obligations', () => {
     expect(
       screen.getByText('DS 1891 applicant/vendor disclosure statement'),
     ).toBeInTheDocument()
+  })
+})
+
+describe('ComplianceOverviewPage — employee status dots', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const module = await import('./ComplianceOverviewPage')
+    ComplianceOverviewPageUnderTest = module.ComplianceOverviewPage
+  })
+
+  const makeItem = (overrides: Record<string, unknown>) => ({
+    itemId: 'item_1',
+    subjectName: 'Alice',
+    category: 'cpr_first_aid',
+    status: 'verified',
+    expiresAt: null,
+    computedStatus: 'compliant',
+    fileStorageId: null,
+    ...overrides,
+  })
+
+  it('shows a red dot when any item is expired or rejected', () => {
+    mockState({
+      items: [
+        makeItem({ itemId: 'i1', subjectName: 'Alice', computedStatus: 'expired' }),
+        makeItem({ itemId: 'i2', subjectName: 'Bob' }),
+      ],
+    })
+
+    renderPage()
+
+    expect(
+      screen.getByRole('img', { name: 'Has expired or rejected items' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('img', { name: 'All items current' }),
+    ).toBeInTheDocument()
+  })
+
+  it('treats a rejected item as red even when not expired', () => {
+    mockState({
+      items: [
+        makeItem({ itemId: 'i1', subjectName: 'Alice', status: 'rejected' }),
+      ],
+    })
+
+    renderPage()
+
+    expect(
+      screen.getByRole('img', { name: 'Has expired or rejected items' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows an amber dot when items are expiring but none are expired or rejected', () => {
+    mockState({
+      items: [
+        makeItem({ itemId: 'i1', subjectName: 'Alice', computedStatus: 'expiring' }),
+        makeItem({ itemId: 'i2', subjectName: 'Alice' }),
+      ],
+    })
+
+    renderPage()
+
+    expect(
+      screen.getByRole('img', { name: 'Has items expiring soon' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('img', { name: 'Has expired or rejected items' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('links the View action to the backing file download', async () => {
+    mockState({
+      items: [makeItem({ itemId: 'i1', fileStorageId: 'storage_cpr' })],
+    })
+
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: /alice/i }))
+    const link = await screen.findByRole('link', { name: 'View' })
+    expect(link).toHaveAttribute('href', 'https://files.example/download')
+    expect(link).toHaveAttribute('target', '_blank')
+  })
+})
+
+describe('ComplianceOverviewPage — custom obligation tasks', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const module = await import('./ComplianceOverviewPage')
+    ComplianceOverviewPageUnderTest = module.ComplianceOverviewPage
+  })
+
+  const seededObligation = {
+    _id: 'obl_seed',
+    key: 'ds1891_disclosure',
+    label: 'DS 1891 applicant/vendor disclosure statement',
+    cadenceMonths: 24,
+    dueAt: new Date(Date.now() + 200 * DAY_MS).toISOString(),
+    createdAt: new Date().toISOString(),
+  }
+
+  it('submits the add-task form with title and guideline link', async () => {
+    const add = vi.fn().mockResolvedValue('obl_new')
+    mockState(
+      { obligations: [seededObligation] },
+      { 'agencyObligations:addObligation': add },
+    )
+
+    renderPage()
+
+    fireEvent.change(
+      screen.getByPlaceholderText(/renew facility license/i),
+      { target: { value: 'Pest control service' } },
+    )
+    fireEvent.change(screen.getByPlaceholderText('https://…'), {
+      target: { value: 'https://example.com/pest' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /add task/i }))
+
+    await waitFor(() =>
+      expect(add).toHaveBeenCalledWith({
+        clerkOrgId: 'org_123',
+        label: 'Pest control service',
+        guidelineUrl: 'https://example.com/pest',
+      }),
+    )
+  })
+
+  it('deletes a custom obligation and renders its guideline link', async () => {
+    const del = vi.fn().mockResolvedValue('obl_custom')
+    const now = Date.now()
+    mockState(
+      {
+        obligations: [
+          seededObligation,
+          {
+            _id: 'obl_custom',
+            key: 'custom_pest_control',
+            label: 'Pest control service',
+            cadenceMonths: 12,
+            dueAt: new Date(now + 100 * DAY_MS).toISOString(),
+            createdAt: new Date(now).toISOString(),
+            custom: true,
+            guidelineUrl: 'https://example.com/pest',
+          },
+        ],
+      },
+      { 'agencyObligations:deleteObligation': del },
+    )
+
+    renderPage()
+
+    expect(screen.getByRole('link', { name: 'Guideline' })).toHaveAttribute(
+      'href',
+      'https://example.com/pest',
+    )
+    // Only the custom row gets a delete button.
+    expect(screen.getAllByRole('button', { name: /^delete$/i })).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+
+    await waitFor(() =>
+      expect(del).toHaveBeenCalledWith({
+        clerkOrgId: 'org_123',
+        obligationId: 'obl_custom',
+      }),
+    )
+  })
+
+  it('hides the add-task form from coordinators', () => {
+    mockState({
+      obligations: [seededObligation],
+      memberRole: 'org:coordinator',
+    })
+
+    renderPage()
+
+    expect(
+      screen.queryByRole('button', { name: /add task/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByPlaceholderText(/renew facility license/i),
+    ).not.toBeInTheDocument()
   })
 })
