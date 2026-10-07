@@ -217,6 +217,7 @@ export const setTenantPaymentMethodAllowed = internalMutation({
     paymentMethodAllowed: v.union(
       v.literal('card'),
       v.literal('us_bank_account'),
+      v.literal('card_and_ach'),
     ),
   },
   handler: async (ctx, args) => {

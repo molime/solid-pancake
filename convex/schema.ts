@@ -53,10 +53,15 @@ export default defineSchema({
         exportFormat: v.union(v.literal('csv'), v.literal('json')),
       }),
     ),
-    // Allowed payment method for the one-time Stripe setup link, chosen by
-    // the platform admin at agency creation (Phase 3 — Maria's review).
+    // Allowed payment method(s) for the Stripe setup link and hosted invoices,
+    // chosen by the platform admin at agency creation (Phase 3 — Maria's
+    // review). 'card_and_ach' offers both (Golden Ages, 2026-10-06).
     paymentMethodAllowed: v.optional(
-      v.union(v.literal('card'), v.literal('us_bank_account')),
+      v.union(
+        v.literal('card'),
+        v.literal('us_bank_account'),
+        v.literal('card_and_ach'),
+      ),
     ),
     // Platform sections this agency cannot access (e.g. a basic-tier agency
     // with Dashboard/Billing/Incidents disabled). Empty/absent = full access.

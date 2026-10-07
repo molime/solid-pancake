@@ -2028,7 +2028,11 @@ export const createTenantInternal = internalMutation({
     billingEmails: v.array(v.string()),
     actorId: v.string(),
     paymentMethodAllowed: v.optional(
-      v.union(v.literal('card'), v.literal('us_bank_account')),
+      v.union(
+        v.literal('card'),
+        v.literal('us_bank_account'),
+        v.literal('card_and_ach'),
+      ),
     ),
   },
   handler: async (ctx, args) => {
@@ -2134,7 +2138,11 @@ export const createTenant = action({
     ownerEmail: v.optional(v.string()),
     ownerDisplayName: v.optional(v.string()),
     paymentMethodAllowed: v.optional(
-      v.union(v.literal('card'), v.literal('us_bank_account')),
+      v.union(
+        v.literal('card'),
+        v.literal('us_bank_account'),
+        v.literal('card_and_ach'),
+      ),
     ),
   },
   handler: async (ctx, args) => {
@@ -2292,7 +2300,11 @@ export const updateTenantInfo = mutation({
     ein: v.optional(v.string()),
     address: v.optional(v.string()),
     paymentMethodAllowed: v.optional(
-      v.union(v.literal('card'), v.literal('us_bank_account')),
+      v.union(
+        v.literal('card'),
+        v.literal('us_bank_account'),
+        v.literal('card_and_ach'),
+      ),
     ),
     disabledSections: v.optional(v.array(v.string())),
   },

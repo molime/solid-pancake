@@ -169,6 +169,44 @@ describe('createStripeInvoice', () => {
     expect(params.get('due_date')).toBeTruthy()
     expect(params.has('default_payment_method')).toBe(false)
   })
+
+  it('sets both payment method types on the invoice for card_and_ach', async () => {
+    const fetchMock = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >(async () => new Response(JSON.stringify({ id: 'in_1' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const original = process.env.STRIPE_SECRET_KEY
+    process.env.STRIPE_SECRET_KEY = 'sk_test_key'
+
+    try {
+      const t = createTestConvex()
+      await t.action(internal._utils.stripe.createStripeInvoice, {
+        customerId: 'cus_1',
+        dueDate: '2026-08-15',
+        lineItems: [],
+        paymentMethodAllowed: 'card_and_ach',
+      })
+    } finally {
+      if (original === undefined) {
+        delete process.env.STRIPE_SECRET_KEY
+      } else {
+        process.env.STRIPE_SECRET_KEY = original
+      }
+    }
+
+    const invoiceCall = fetchMock.mock.calls.find((call) =>
+      String(call[0]).endsWith('/invoices'),
+    )
+    const params = new URLSearchParams(
+      (invoiceCall as unknown as [string, { body: string }])[1].body,
+    )
+    expect(params.get('payment_settings[payment_method_types][0]')).toBe(
+      'card',
+    )
+    expect(params.get('payment_settings[payment_method_types][1]')).toBe(
+      'us_bank_account',
+    )
+  })
 })
 
 describe('createCheckoutSession', () => {
@@ -221,6 +259,45 @@ describe('createCheckoutSession', () => {
     expect(params.get('success_url')).toBe(
       'https://app.test/?payment_setup=success',
     )
+  })
+
+  it('offers both card and ACH when paymentMethodAllowed is card_and_ach', async () => {
+    const fetchMock = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >(
+      async () =>
+        new Response(
+          JSON.stringify({ id: 'cs_1', url: 'https://checkout.stripe.com/x' }),
+          { status: 200 },
+        ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const original = process.env.STRIPE_SECRET_KEY
+    process.env.STRIPE_SECRET_KEY = 'sk_test_key'
+
+    try {
+      const t = createTestConvex()
+      await t.action(internal._utils.stripe.createCheckoutSession, {
+        customerId: 'cus_1',
+        paymentMethodAllowed: 'card_and_ach',
+        successUrl: 'https://app.test/?payment_setup=success',
+        cancelUrl: 'https://app.test/?payment_setup=cancelled',
+      })
+    } finally {
+      if (original === undefined) {
+        delete process.env.STRIPE_SECRET_KEY
+      } else {
+        process.env.STRIPE_SECRET_KEY = original
+      }
+    }
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      { body: string },
+    ]
+    const params = new URLSearchParams(init.body)
+    expect(params.get('payment_method_types[0]')).toBe('card')
+    expect(params.get('payment_method_types[1]')).toBe('us_bank_account')
   })
 })
 

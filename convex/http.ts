@@ -149,6 +149,17 @@ http.route({
           stripeInvoiceId,
           paymentMethod,
         })
+        // Adopt the payment method used as the subscription's auto-charge
+        // default. Best-effort: a capture failure must not fail the webhook
+        // (the payment itself is already recorded above).
+        try {
+          await ctx.runAction(
+            internal.platformStripe.capturePaymentMethodFromPaidInvoice,
+            { stripeInvoiceId },
+          )
+        } catch (err) {
+          console.warn('Payment-method capture failed:', err)
+        }
       }
     } else if (event.type === 'invoice.payment_failed') {
       if (stripeInvoiceId) {
