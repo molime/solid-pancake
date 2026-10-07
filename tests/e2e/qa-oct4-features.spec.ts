@@ -494,7 +494,14 @@ test.describe('oct4 feature QA', { tag: '@auth' }, () => {
         )
         tab?.click()
       })
-      docsSeen = await currentHeading.first().isVisible({ timeout: 8000 }).catch(() => false)
+      try {
+        // Web-first wait: profile + documents queries can take a while to
+        // resolve before the tab content renders at all.
+        await expect(currentHeading.first()).toBeVisible({ timeout: 10000 })
+        docsSeen = true
+      } catch {
+        // Not rendered yet (or no documents) — re-click and retry.
+      }
     }
     if (!docsSeen) {
       console.warn('SKIP (data-dependent): selected employee has no archived documents — Documents headings not exercised.')
