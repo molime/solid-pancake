@@ -296,6 +296,13 @@ export const capturePaymentMethodFromPaidInvoice = internalAction({
     )
     if (!paymentMethodId) return { skipped: 'no_payment_method' }
 
+    // Hosted-page payments arrive detached — attach before Stripe accepts
+    // the method as the customer's default (learned from GA's first card
+    // payment, which failed capture with a 400).
+    await ctx.runAction(internal._utils.stripe.attachPaymentMethodToCustomer, {
+      customerId: billing.stripeCustomerId,
+      paymentMethodId,
+    })
     await ctx.runAction(internal._utils.stripe.setCustomerDefaultPaymentMethod, {
       customerId: billing.stripeCustomerId,
       paymentMethodId,
