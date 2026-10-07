@@ -263,6 +263,62 @@ export const applyStripeInvoicePaid = internalMutation({
 })
 
 /**
+ * Follow-up to invoice.paid: adopt the payment method the agency just used
+ * as the subscription's default so future monthly invoices auto-charge it
+ * (Maria, 2026-10-06: "que sea recurrente... en esa tarjeta que designó").
+ * Best-effort and idempotent — skips when a default is already set so a
+ * deliberately replaced method is never clobbered.
+ */
+export const capturePaymentMethodFromPaidInvoice = internalAction({
+  args: { stripeInvoiceId: v.string() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ skipped: string | null; paymentMethodId?: string }> => {
+    const invoice = await ctx.runQuery(
+      internal.platformStripe.getInvoiceByStripeIdInternal,
+      { stripeInvoiceId: args.stripeInvoiceId },
+    )
+    if (!invoice) return { skipped: 'unknown_invoice' }
+
+    const billing = await ctx.runQuery(
+      internal.platformStripe.getTenantBillingInternal,
+      { tenantId: invoice.tenantId },
+    )
+    if (!billing.stripeCustomerId) return { skipped: 'no_customer' }
+    if (billing.stripeDefaultPaymentMethod) {
+      return { skipped: 'default_already_set' }
+    }
+
+    const { paymentMethodId } = await ctx.runAction(
+      internal._utils.stripe.retrieveInvoicePaymentMethod,
+      { invoiceId: args.stripeInvoiceId },
+    )
+    if (!paymentMethodId) return { skipped: 'no_payment_method' }
+
+    await ctx.runAction(internal._utils.stripe.setCustomerDefaultPaymentMethod, {
+      customerId: billing.stripeCustomerId,
+      paymentMethodId,
+    })
+    await ctx.runMutation(internal.platformStripe.saveStripeDefaultPaymentMethod, {
+      stripeCustomerId: billing.stripeCustomerId,
+      paymentMethodId,
+    })
+    await ctx.runMutation(internal.platformStripe.recordStripeAudit, {
+      tenantId: invoice.tenantId,
+      actorId: 'stripe_webhook',
+      action: 'payment_method_captured',
+      metadata: {
+        stripeInvoiceId: args.stripeInvoiceId,
+        paymentMethodId,
+        source: 'capturePaymentMethodFromPaidInvoice',
+      },
+    })
+    return { skipped: null, paymentMethodId }
+  },
+})
+
+/**
  * Webhook: invoice.payment_failed — enter the dunning state. The platform
  * invoice goes 'overdue'; the subscription goes 'past_due' with a 5-day
  * grace window. Repeated failures recompute the dates (never stack). A

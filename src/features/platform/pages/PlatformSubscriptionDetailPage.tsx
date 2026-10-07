@@ -261,7 +261,7 @@ function PlatformSubscriptionDetailContent() {
 
   const [paymentMethodBusy, setPaymentMethodBusy] = useState(false);
   const handlePaymentMethodChange = async (
-    method: "card" | "us_bank_account",
+    method: "card" | "us_bank_account" | "card_and_ach",
   ) => {
     if (!tenantId || method === (detail?.tenant.paymentMethodAllowed ?? "card"))
       return;
@@ -583,6 +583,7 @@ function PlatformSubscriptionDetailContent() {
                     [
                       ["card", "Card"],
                       ["us_bank_account", "Bank account (ACH)"],
+                      ["card_and_ach", "Card + ACH"],
                     ] as const
                   ).map(([value, label]) => (
                     <label

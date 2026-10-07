@@ -81,6 +81,25 @@ export const createStripeCustomer = internalAction({
   },
 })
 
+export const paymentMethodAllowedValidator = v.union(
+  v.literal('card'),
+  v.literal('us_bank_account'),
+  v.literal('card_and_ach'),
+)
+
+export type PaymentMethodAllowed =
+  | 'card'
+  | 'us_bank_account'
+  | 'card_and_ach'
+
+/** Maps the tenant's allowed-method setting to Stripe payment_method_types. */
+export function paymentMethodTypesFor(
+  allowed: PaymentMethodAllowed,
+): Array<'card' | 'us_bank_account'> {
+  if (allowed === 'card_and_ach') return ['card', 'us_bank_account']
+  return [allowed]
+}
+
 /**
  * Create a draft Stripe invoice and attach line items.
  * dueDate is an ISO date string; Stripe wants a unix timestamp (seconds).
@@ -98,9 +117,7 @@ export const createStripeInvoice = internalAction({
     defaultPaymentMethod: v.optional(v.string()),
     // Restricts the payment methods offered on the hosted invoice page
     // (e.g. ACH-only agencies). Absent = Stripe account defaults.
-    paymentMethodAllowed: v.optional(
-      v.union(v.literal('card'), v.literal('us_bank_account')),
-    ),
+    paymentMethodAllowed: v.optional(paymentMethodAllowedValidator),
   },
   handler: async (_ctx, args) => {
     const collectionMethod = args.collectionMethod ?? 'send_invoice'
@@ -109,13 +126,17 @@ export const createStripeInvoice = internalAction({
     const requestedSeconds = Math.floor(new Date(args.dueDate).getTime() / 1000)
     const nowSeconds = Math.floor(Date.now() / 1000)
     const dueDateSeconds = Math.max(requestedSeconds, nowSeconds + 3600)
+    const paymentMethodTypes = args.paymentMethodAllowed
+      ? paymentMethodTypesFor(args.paymentMethodAllowed)
+      : []
     const invoice = await stripeRequest('/invoices', 'POST', {
       customer: args.customerId,
       collection_method: collectionMethod,
       due_date:
         collectionMethod === 'send_invoice' ? dueDateSeconds : undefined,
       default_payment_method: args.defaultPaymentMethod,
-      'payment_settings[payment_method_types][0]': args.paymentMethodAllowed,
+      'payment_settings[payment_method_types][0]': paymentMethodTypes[0],
+      'payment_settings[payment_method_types][1]': paymentMethodTypes[1],
     })
     const invoiceId = invoice.id as string
 
@@ -242,18 +263,17 @@ export const createPaymentLink = internalAction({
 export const createCheckoutSession = internalAction({
   args: {
     customerId: v.string(),
-    paymentMethodAllowed: v.union(
-      v.literal('card'),
-      v.literal('us_bank_account'),
-    ),
+    paymentMethodAllowed: paymentMethodAllowedValidator,
     successUrl: v.string(),
     cancelUrl: v.string(),
   },
   handler: async (_ctx, args) => {
+    const types = paymentMethodTypesFor(args.paymentMethodAllowed)
     const payload = await stripeRequest('/checkout/sessions', 'POST', {
       mode: 'setup',
       customer: args.customerId,
-      'payment_method_types[0]': args.paymentMethodAllowed,
+      'payment_method_types[0]': types[0],
+      'payment_method_types[1]': types[1],
       success_url: args.successUrl,
       cancel_url: args.cancelUrl,
     })
@@ -297,5 +317,69 @@ export const setCustomerDefaultPaymentMethod = internalAction({
       'invoice_settings[default_payment_method]': args.paymentMethodId,
     })
     return { id: payload.id as string }
+  },
+})
+
+/**
+ * Resolve the payment method (pm_xxx) a customer used to pay an invoice.
+ * Stripe API versions differ on where this lives, so probe in order:
+ * expanded payment_intent (older APIs), the invoice payments collection
+ * (newer APIs), then the invoice's charges (oldest). Null when the invoice
+ * has no recorded payment method yet.
+ */
+export const retrieveInvoicePaymentMethod = internalAction({
+  args: { invoiceId: v.string() },
+  handler: async (_ctx, args): Promise<{ paymentMethodId: string | null }> => {
+    const invoice = await stripeRequest(
+      `/invoices/${args.invoiceId}?expand[]=payment_intent`,
+      'GET',
+    )
+    const paymentIntent = invoice.payment_intent as
+      | { payment_method?: unknown }
+      | string
+      | undefined
+    if (paymentIntent && typeof paymentIntent === 'object') {
+      if (typeof paymentIntent.payment_method === 'string') {
+        return { paymentMethodId: paymentIntent.payment_method }
+      }
+    }
+    if (typeof paymentIntent === 'string') {
+      const intent = await stripeRequest(
+        `/payment_intents/${paymentIntent}`,
+        'GET',
+      )
+      if (typeof intent.payment_method === 'string') {
+        return { paymentMethodId: intent.payment_method as string }
+      }
+    }
+
+    const payments = await stripeRequest(
+      `/invoices/${args.invoiceId}/payments?limit=1`,
+      'GET',
+    ).catch(() => null)
+    const firstPayment = (
+      payments?.data as Array<{
+        payment?: { payment_intent?: unknown }
+      }> | undefined
+    )?.[0]
+    const intentId = firstPayment?.payment?.payment_intent
+    if (typeof intentId === 'string') {
+      const intent = await stripeRequest(`/payment_intents/${intentId}`, 'GET')
+      if (typeof intent.payment_method === 'string') {
+        return { paymentMethodId: intent.payment_method as string }
+      }
+    }
+
+    const charges = await stripeRequest(
+      `/charges?invoice=${args.invoiceId}&limit=1`,
+      'GET',
+    ).catch(() => null)
+    const firstCharge = (
+      charges?.data as Array<{ payment_method?: unknown }> | undefined
+    )?.[0]
+    if (typeof firstCharge?.payment_method === 'string') {
+      return { paymentMethodId: firstCharge.payment_method }
+    }
+    return { paymentMethodId: null }
   },
 })

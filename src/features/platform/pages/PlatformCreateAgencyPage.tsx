@@ -57,7 +57,7 @@ export function PlatformCreateAgencyPage() {
   ])
   const [alertThresholdInput, setAlertThresholdInput] = useState('')
   const [paymentMethodAllowed, setPaymentMethodAllowed] = useState<
-    'card' | 'us_bank_account'
+    'card' | 'us_bank_account' | 'card_and_ach'
   >('card')
   const [billingEmailsInput, setBillingEmailsInput] = useState('')
   const [ownerEmail, setOwnerEmail] = useState('')
@@ -404,6 +404,18 @@ export function PlatformCreateAgencyPage() {
                   />
                   <span className="text-[15px] font-medium text-[#f5f7f6]">
                     ACH bank debit
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#2a3437] bg-[#1e2629] px-4 py-3">
+                  <input
+                    type="radio"
+                    name="paymentMethodAllowed"
+                    checked={paymentMethodAllowed === 'card_and_ach'}
+                    onChange={() => setPaymentMethodAllowed('card_and_ach')}
+                    className="accent-[#22c55e]"
+                  />
+                  <span className="text-[15px] font-medium text-[#f5f7f6]">
+                    Card + ACH bank debit
                   </span>
                 </label>
               </div>
