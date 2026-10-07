@@ -135,6 +135,11 @@ export const createStripeInvoice = internalAction({
       due_date:
         collectionMethod === 'send_invoice' ? dueDateSeconds : undefined,
       default_payment_method: args.defaultPaymentMethod,
+      // Stripe attaches the payment method used on the hosted page to the
+      // customer ('always' because our invoices are standalone, not Stripe
+      // Subscription invoices) — that is what makes recurring auto-charge
+      // possible.
+      'payment_settings[save_default_payment_method]': 'always',
       'payment_settings[payment_method_types][0]': paymentMethodTypes[0],
       'payment_settings[payment_method_types][1]': paymentMethodTypes[1],
     })
@@ -317,6 +322,33 @@ export const setCustomerDefaultPaymentMethod = internalAction({
       'invoice_settings[default_payment_method]': args.paymentMethodId,
     })
     return { id: payload.id as string }
+  },
+})
+
+/**
+ * Attach a payment method to a customer (required before it can be set as
+ * their default — hosted-page payments come in detached). Already-attached
+ * is treated as success.
+ */
+export const attachPaymentMethodToCustomer = internalAction({
+  args: {
+    customerId: v.string(),
+    paymentMethodId: v.string(),
+  },
+  handler: async (_ctx, args) => {
+    const method = await stripeRequest(
+      `/payment_methods/${args.paymentMethodId}`,
+      'GET',
+    )
+    if (method.customer === args.customerId) {
+      return { id: args.paymentMethodId, attached: false }
+    }
+    const payload = await stripeRequest(
+      `/payment_methods/${args.paymentMethodId}/attach`,
+      'POST',
+      { customer: args.customerId },
+    )
+    return { id: payload.id as string, attached: true }
   },
 })
 
