@@ -524,12 +524,17 @@ test.describe('oct4 feature QA', { tag: '@auth' }, () => {
     await expect(page.getByRole('heading', { name: 'Billing' })).toBeVisible({ timeout: 20000 })
 
     // Client-first panel (in the Ready to bill card): monthly default with a
-    // prefilled month + custom option, and no per-line selection anywhere.
+    // year+month selector (no free-text month input) + custom option, and no
+    // per-line selection anywhere.
     await expect(page.locator('#clientInvoiceMode')).toBeVisible()
     await expect(page.locator('#clientInvoiceMode')).toHaveValue('monthly')
-    const monthInput = page.locator('#clientInvoiceMonth')
-    const expectedMonth = new Date().toISOString().slice(0, 7)
-    await expect(monthInput).toHaveValue(expectedMonth)
+    const now = new Date()
+    await expect(page.locator('#clientInvoiceMonthMonth')).toHaveValue(
+      String(now.getUTCMonth()),
+    )
+    await expect(page.locator('#clientInvoiceMonthYear')).toHaveValue(
+      String(now.getUTCFullYear()),
+    )
     await page.locator('#clientInvoiceMode').selectOption('custom')
     await expect(page.locator('#clientInvoiceStart')).toBeVisible()
     await expect(page.locator('#clientInvoiceEnd')).toBeVisible()
