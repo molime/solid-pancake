@@ -66,6 +66,9 @@ export default defineSchema({
     // Platform sections this agency cannot access (e.g. a basic-tier agency
     // with Dashboard/Billing/Incidents disabled). Empty/absent = full access.
     disabledSections: v.optional(v.array(v.string())),
+    // QA/demo agencies. Test tenants are excluded from platform revenue and
+    // agency metrics and badged in the platform lists (Batch H).
+    isTest: v.optional(v.boolean()),
     // Churn/offboarding metadata (soft — set by offboardTenant).
     churnedAt: v.optional(v.number()),
     churnReason: v.optional(v.string()),
@@ -486,6 +489,9 @@ export default defineSchema({
     invitationFailed: v.optional(v.boolean()),
     invitationError: v.optional(v.string()),
     manualSetup: v.optional(v.boolean()),
+    // Standing recruiter notes on the application (review-page textarea).
+    // Persisted so they survive navigation (Maria's review, 2026-10-10).
+    recruiterNotes: v.optional(v.string()),
     requiresPasswordChange: v.optional(v.boolean()),
     magicLink: v.optional(v.string()),
     manualSetupTicketExpiresAt: v.optional(v.string()),
