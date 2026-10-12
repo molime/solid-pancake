@@ -8,6 +8,7 @@ import { usePlatformAdmin } from '../usePlatformAdmin'
 import { PlatformGate } from '../components/PlatformGate'
 import { PlatformKpiCard } from '../components/PlatformKpiCard'
 import { PlatformStatusPill } from '../components/PlatformStatusPill'
+import { PlatformTestBadge } from '../components/PlatformTestBadge'
 import {
   PlatformTable,
   PlatformTableBody,
@@ -123,7 +124,10 @@ export function PlatformSubscriptionsPage() {
                   }
                 >
                   <PlatformTableCell className="font-medium">
-                    {tenant.name}
+                    <span className="flex items-center gap-2">
+                      {tenant.name}
+                      {tenant.isTest && <PlatformTestBadge />}
+                    </span>
                   </PlatformTableCell>
                   <PlatformTableCell className="text-[#9aa6a8]">
                     {planLabel(tenant.subscription?.planKey)}

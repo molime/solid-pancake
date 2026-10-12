@@ -653,8 +653,14 @@ function PlatformSubscriptionDetailContent() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-[#2a3437] bg-[#151b1d] p-5">
-            <h2 className="text-lg font-bold text-[#f5f7f6]">Testing presets</h2>
+          <details className="rounded-2xl border border-[#2a3437] bg-[#151b1d] p-5">
+            <summary className="cursor-pointer text-lg font-bold text-[#f5f7f6]">
+              Developer tools (QA only)
+            </summary>
+            <p className="mt-1 text-sm text-[#f59e0b]">
+              QA utilities — never run these on a real production agency.
+            </p>
+            <h2 className="mt-4 text-lg font-bold text-[#f5f7f6]">Testing presets</h2>
             <p className="mt-1 text-sm text-[#687173]">
               One-click seed content for QA. Use with care on production tenants.
             </p>
@@ -718,7 +724,7 @@ function PlatformSubscriptionDetailContent() {
                 </button>
               </div>
             </div>
-          </div>
+          </details>
 
           <div className="rounded-2xl border border-[#2a3437] bg-[#151b1d] p-5">
             <h2 className="text-lg font-bold text-[#f5f7f6]">Modules</h2>

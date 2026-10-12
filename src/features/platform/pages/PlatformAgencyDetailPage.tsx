@@ -11,6 +11,7 @@ import { usePlatformAdmin } from '../usePlatformAdmin'
 import { PlatformGate } from '../components/PlatformGate'
 import { PlatformKpiCard } from '../components/PlatformKpiCard'
 import { PlatformStatusPill } from '../components/PlatformStatusPill'
+import { PlatformTestBadge } from '../components/PlatformTestBadge'
 import {
   PlatformTable,
   PlatformTableBody,
@@ -326,6 +327,23 @@ function PlatformAgencyDetailContent() {
     }
   }
 
+  const handleToggleTestFlag = async (isTest: boolean) => {
+    if (!tenantId) return
+    setBusy(true)
+    setError('')
+    try {
+      await updateTenantInfo({ tenantId: typedTenantId, isTest })
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Failed to update the test flag.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const handleSaveInfo = async () => {
     if (!tenantId || !editName.trim() || !editSlug.trim()) {
       setError('Name and slug are required.')
@@ -561,6 +579,7 @@ function PlatformAgencyDetailContent() {
               {detail.tenant.churnedAt !== undefined && (
                 <PlatformStatusPill status="churned" />
               )}
+              {detail.tenant.isTest === true && <PlatformTestBadge />}
               <button onClick={openEditDialog} className={ghostButtonClass}>
                 Edit Info
               </button>
@@ -576,6 +595,16 @@ function PlatformAgencyDetailContent() {
                   Offboard agency
                 </button>
               )}
+              <label className="flex items-center gap-2 text-sm text-[#9aa6a8]">
+                <input
+                  type="checkbox"
+                  checked={detail.tenant.isTest === true}
+                  disabled={busy}
+                  onChange={(e) => handleToggleTestFlag(e.target.checked)}
+                  className="h-4 w-4 accent-[#22c55e] disabled:opacity-50"
+                />
+                Test agency (excluded from metrics)
+              </label>
             </div>
 
             {detail.tenant.churnedAt !== undefined && (

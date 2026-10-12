@@ -484,6 +484,7 @@ export const listTenantsWithUsage = query({
           subscription: subscription ?? null,
           mrr,
           churnedAt: tenant.churnedAt ?? null,
+          isTest: tenant.isTest ?? false,
         }
       }),
     )
@@ -785,8 +786,15 @@ export const getPlatformStats = query({
   handler: async (ctx) => {
     await requirePlatformAdmin(ctx)
 
-    const tenants = await ctx.db.query('tenants').collect()
-    const subscriptions = await ctx.db.query('tenantSubscriptions').collect()
+    // Test/QA agencies are excluded so the numbers are real accounting
+    // figures. They still appear (badged) in the subscriptions/agencies lists.
+    const tenants = (await ctx.db.query('tenants').collect()).filter(
+      (tenant) => tenant.isTest !== true,
+    )
+    const tenantIds = new Set(tenants.map((tenant) => tenant._id))
+    const subscriptions = (
+      await ctx.db.query('tenantSubscriptions').collect()
+    ).filter((subscription) => tenantIds.has(subscription.tenantId))
     const { start, end } = currentMonthRange()
 
     let mrr = 0
@@ -2307,6 +2315,7 @@ export const updateTenantInfo = mutation({
       ),
     ),
     disabledSections: v.optional(v.array(v.string())),
+    isTest: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const identity = await requirePlatformAdmin(ctx)
@@ -2325,6 +2334,7 @@ export const updateTenantInfo = mutation({
       ...(args.disabledSections !== undefined
         ? { disabledSections: args.disabledSections }
         : {}),
+      ...(args.isTest !== undefined ? { isTest: args.isTest } : {}),
     })
     await recordPlatformAudit(ctx, identity, args.tenantId, 'tenant_updated', {
       name: args.name,
@@ -2333,6 +2343,7 @@ export const updateTenantInfo = mutation({
       address: args.address,
       paymentMethodAllowed: args.paymentMethodAllowed,
       disabledSections: args.disabledSections,
+      isTest: args.isTest,
     })
     return args.tenantId
   },

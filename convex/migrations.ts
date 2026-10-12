@@ -488,3 +488,18 @@ export const voidPlatformInvoiceById = internalMutation({
     return { ok: true }
   },
 })
+
+/**
+ * One-off: flag or unflag a tenant as a test/QA agency. Test tenants are
+ * excluded from platform revenue/agency metrics and badged in the platform
+ * lists. Reversible — data is never deleted. (Batch H, prod cleanup.)
+ */
+export const setTenantTestFlag = internalMutation({
+  args: { tenantId: v.id('tenants'), isTest: v.boolean() },
+  handler: async (ctx, args) => {
+    const tenant = await ctx.db.get(args.tenantId)
+    if (!tenant) throw new ConvexError('Tenant not found.')
+    await ctx.db.patch(args.tenantId, { isTest: args.isTest })
+    return { ok: true }
+  },
+})
