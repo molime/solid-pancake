@@ -335,13 +335,12 @@ test.describe('delivery packet screenshots', { tag: '@auth' }, () => {
       console.warn('SKIP versions-panel.png: no document versions available and HR upload did not produce one.')
     }
 
-    // 13. billing-invoice-dialog.png
+    // 13. billing-invoice-dialog.png — the client-first Ready-to-bill panel
+    // (year/month selects + client checkboxes replace the old dialog).
     await page.goto('/billing')
     await expect(page.getByRole('heading', { name: 'Billing' })).toBeVisible({ timeout: 30000 })
-    await page.getByRole('button', { name: 'Create per-patient invoices' }).click()
-    await expect(page.locator('#perPatientMode')).toBeVisible()
+    await expect(page.locator('#clientInvoiceMode')).toBeVisible()
     await shot(page, 'billing-invoice-dialog.png')
-    await page.getByRole('button', { name: 'Cancel' }).click()
 
     // 14. billing-calendar.png
     await page.getByRole('button', { name: /Payment calendars/ }).click()
