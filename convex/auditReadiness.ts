@@ -8,7 +8,6 @@ import {
   computeComplianceGaps,
   EXPIRING_SOON_DAYS,
 } from './compliance'
-import { loadLineEvidence } from './evidence'
 import { withSlaFields } from './incidents'
 import { computeDueInfo } from './progressReports'
 
@@ -94,15 +93,23 @@ export async function buildReport(
     .query('shifts')
     .withIndex('by_tenant_status_start', (q) => q.eq('tenantId', tenantId))
     .collect()
+  // Batched evidence lookups (the per-shift / per-line queries used to time
+  // out with "too many system operations" on large tenants): one collect
+  // per table, grouped by shiftId in memory. The completeness definition is
+  // identical to evidence.loadLineEvidence (clock-in + clock-out + non-blank
+  // note + a review event).
+  const allNotes = await ctx.db
+    .query('progressNotes')
+    .withIndex('by_tenant_shift', (q) => q.eq('tenantId', tenantId))
+    .collect()
+  const shiftsWithNotes = new Set(
+    allNotes
+      .filter((note) => !isBlank(note.narrative))
+      .map((note) => note.shiftId as string),
+  )
   let withNotes = 0
   for (const shift of shifts) {
-    const notes = await ctx.db
-      .query('progressNotes')
-      .withIndex('by_tenant_shift', (q) =>
-        q.eq('tenantId', tenantId).eq('shiftId', shift._id),
-      )
-      .collect()
-    if (notes.some((note) => !isBlank(note.narrative))) withNotes += 1
+    if (shiftsWithNotes.has(shift._id as string)) withNotes += 1
   }
 
   const lines = await ctx.db
@@ -113,14 +120,41 @@ export async function buildReport(
     (line) => !isBlank(line.blockedReason),
   ).length
 
+  const allPunches = await ctx.db
+    .query('timePunches')
+    .withIndex('by_tenant_shift', (q) => q.eq('tenantId', tenantId))
+    .collect()
+  const punchTypesByShift = new Map<string, Set<string>>()
+  for (const punch of allPunches) {
+    const types = punchTypesByShift.get(punch.shiftId as string) ?? new Set()
+    types.add(punch.punchType)
+    punchTypesByShift.set(punch.shiftId as string, types)
+  }
+  const allReviews = await ctx.db
+    .query('reviewEvents')
+    .withIndex('by_tenant_shift', (q) => q.eq('tenantId', tenantId))
+    .collect()
+  const shiftsWithReviews = new Set(
+    allReviews.map((review) => review.shiftId as string),
+  )
+  const shiftIds = new Set(shifts.map((shift) => shift._id as string))
+
   // Lineage spot check (docs/07 gap row B7): how many billing lines have a
-  // complete evidence chain (clock-in + clock-out punches, a non-blank
-  // progress note, and a review event). Shared definition with
-  // evidence.loadLineEvidence so the dashboard and the lineage view agree.
+  // complete evidence chain. Shared definition with evidence.loadLineEvidence
+  // so the dashboard and the lineage view agree.
   let evidenceCompleteLines = 0
   for (const line of lines) {
-    const evidence = await loadLineEvidence(ctx, tenantId, line)
-    if (evidence.complete) evidenceCompleteLines += 1
+    const shiftId = line.shiftId as string
+    const punchTypes = punchTypesByShift.get(shiftId)
+    if (
+      shiftIds.has(shiftId) &&
+      punchTypes?.has('clock_in') &&
+      punchTypes.has('clock_out') &&
+      shiftsWithNotes.has(shiftId) &&
+      shiftsWithReviews.has(shiftId)
+    ) {
+      evidenceCompleteLines += 1
+    }
   }
 
   const events = await ctx.db
