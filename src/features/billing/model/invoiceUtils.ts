@@ -10,6 +10,7 @@ export interface BillingLineRow {
   exportBatchId?: Id<'exportBatches'>
   blockedReason?: string
   blockedAt?: string
+  clientId?: Id<'clients'> | null
   clientName: string
   serviceType: 'SLS' | 'ILS'
   scheduledStart: string

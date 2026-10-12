@@ -29,6 +29,7 @@ export async function enrichLine(
 
   return {
     ...line,
+    clientId: shift?.clientId ?? null,
     clientName: client?.displayName ?? 'Unknown client',
     serviceType: shift?.serviceType ?? 'SLS',
     scheduledStart: shift?.scheduledStart ?? '',

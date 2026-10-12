@@ -1,17 +1,10 @@
 import { useOrganization } from '@clerk/react'
-import { useConvex, useQuery, useMutation } from 'convex/react'
+import { useConvex, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/shared/ui/Dialog'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { USDateInput } from '@/shared/ui/USDateInput'
 import { Input } from '@/shared/ui/Input'
@@ -21,7 +14,7 @@ import { generatePaymentCalendarPdf } from '../pdf/paymentCalendarPdf'
 import { saveAndDownload } from '@/features/onboarding/pdf/generatePrefilledPdf'
 import { downloadCsv } from '@/shared/lib/downloadCsv'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
-import { BillingInvoicePanel } from '../components/BillingInvoicePanel'
+import { ClientInvoicePanel } from '../components/ClientInvoicePanel'
 import { CollapsibleCard } from '../components/CollapsibleCard'
 import { BillingLinesTable } from '../components/BillingLinesTable'
 import { EmptyBillingState } from '../components/EmptyBillingState'
@@ -30,12 +23,7 @@ import { InvoicesTable } from '../components/InvoicesTable'
 import {
   buildInvoiceCsv,
   buildInvoicePdf,
-  currentMonth,
-  defaultInvoiceName,
-  filterBillingLines,
-  monthRange,
   summarizeLines,
-  type BillingFilters,
   type BillingLineRow,
   type InvoiceDetails,
   type InvoiceRow,
@@ -57,37 +45,10 @@ export function BillingPage() {
     api.billing.invoices,
     clerkOrgId ? { clerkOrgId } : 'skip',
   ) as InvoiceRow[] | undefined
-  const createInvoice = useMutation(api.billing.createInvoice)
-  const createPerPatientInvoices = useMutation(
-    api.billing.createPerPatientInvoices,
-  )
 
-  const [invoiceName, setInvoiceName] = useState('')
-  const [selectedLineIds, setSelectedLineIds] = useState<Id<'billingLines'>[]>(
-    [],
-  )
-  const [filters, setFilters] = useState<BillingFilters>({
-    caregiverId: '',
-    periodStart: '',
-    periodEnd: '',
-  })
   const [downloadInvoiceId, setDownloadInvoiceId] =
     useState<Id<'exportBatches'> | null>(null)
-  const [isCreating, setIsCreating] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [perPatientOpen, setPerPatientOpen] = useState(false)
-  // Monthly is the default invoice period; a custom range is available when
-  // needed (client request: "default que sea mensual... si se requiere, la
-  // opción custom").
-  const [perPatientMode, setPerPatientMode] = useState<'monthly' | 'custom'>(
-    'monthly',
-  )
-  const [perPatientMonth, setPerPatientMonth] = useState(currentMonth)
-  const [perPatientStart, setPerPatientStart] = useState('')
-  const [perPatientEnd, setPerPatientEnd] = useState('')
-  const [isCreatingPerPatient, setIsCreatingPerPatient] = useState(false)
-  const [perPatientError, setPerPatientError] = useState<string | null>(null)
   const [evidenceLineId, setEvidenceLineId] = useState<Id<'billingLines'> | null>(
     null,
   )
@@ -118,24 +79,6 @@ export function BillingPage() {
       : 'skip',
   ) as InvoiceDetails | undefined
 
-  const filteredLines = useMemo(
-    () => filterBillingLines(readyLines ?? [], filters),
-    [readyLines, filters],
-  )
-  const visibleIds = useMemo(
-    () => new Set(filteredLines.map((line) => line._id)),
-    [filteredLines],
-  )
-  const visibleSelectedLineIds = useMemo(
-    () => selectedLineIds.filter((id) => visibleIds.has(id)),
-    [selectedLineIds, visibleIds],
-  )
-  const selectedLines = useMemo(
-    () =>
-      filteredLines.filter((line) => visibleSelectedLineIds.includes(line._id)),
-    [filteredLines, visibleSelectedLineIds],
-  )
-  const selectedSummary = summarizeLines(selectedLines)
   const readySummary = summarizeLines(readyLines ?? [])
 
   useEffect(() => {
@@ -183,53 +126,6 @@ export function BillingPage() {
     return <AppLoader label="Loading billing workspace" />
   }
 
-  const caregivers = Array.from(
-    new Map(
-      readyLines
-        .filter((line) => line.caregiverId)
-        .map((line) => [
-          line.caregiverId,
-          line.caregiverEmail || line.caregiverName,
-        ]),
-    ).entries(),
-  )
-
-  const toggleLine = (id: Id<'billingLines'>) => {
-    setSelectedLineIds((current) =>
-      current.includes(id)
-        ? current.filter((lineId) => lineId !== id)
-        : [...current, id],
-    )
-  }
-
-  const handleCreateInvoice = async () => {
-    if (!clerkOrgId || visibleSelectedLineIds.length === 0) return
-    setIsCreating(true)
-    setError(null)
-    setMessage(null)
-    try {
-      const id = (await createInvoice({
-        clerkOrgId,
-        name: invoiceName.trim() || defaultInvoiceName(selectedLines, filters),
-        lineIds: visibleSelectedLineIds,
-        periodStart: filters.periodStart || undefined,
-        periodEnd: filters.periodEnd || undefined,
-        caregiverId: filters.caregiverId || undefined,
-      })) as Id<'exportBatches'>
-
-      setSelectedLineIds([])
-      setInvoiceName('')
-      setDownloadInvoiceId(id)  // defaults to PDF download in useEffect
-      setMessage(
-        `Created invoice for ${visibleSelectedLineIds.length} billing line(s).`,
-      )
-    } catch (err) {
-      setError(err instanceof Error ? sanitizeConvexError(err.message) : 'Invoice creation failed.')
-    } finally {
-      setIsCreating(false)
-    }
-  }
-
   /** Downloads the consolidated per-client payment calendar PDF for a month. */
   const downloadClientCalendar = async (
     clientId: Id<'clients'>,
@@ -264,57 +160,6 @@ export function BillingPage() {
           ? sanitizeConvexError(err.message)
           : 'Could not generate the calendar.',
       )
-    }
-  }
-
-  const handleCreatePerPatientInvoices = async () => {
-    if (!clerkOrgId) return
-    const range =
-      perPatientMode === 'monthly'
-        ? monthRange(perPatientMonth)
-        : { startDate: perPatientStart, endDate: perPatientEnd }
-    if (!range.startDate || !range.endDate) return
-    setIsCreatingPerPatient(true)
-    setPerPatientError(null)
-    try {
-      const result = await createPerPatientInvoices({
-        clerkOrgId,
-        startDate: range.startDate,
-        endDate: range.endDate,
-      })
-      setPerPatientOpen(false)
-      setPerPatientStart('')
-      setPerPatientEnd('')
-      setError(null)
-      // Companion document: generate each client's payment calendar at the
-      // same time as their invoice (one consolidated calendar per client).
-      let calendars = 0
-      for (const created of result.invoices ?? []) {
-        try {
-          await downloadClientCalendar(
-            created.clientId,
-            created.periodStart.slice(0, 7),
-          )
-          calendars++
-        } catch {
-          // Calendar generation is best-effort; the invoice already exists
-          // and the calendar stays downloadable from the invoice history.
-        }
-      }
-      setMessage(
-        `Created ${result.count} per-patient invoice(s) for ${range.startDate} - ${range.endDate}.` +
-          (calendars > 0
-            ? ` Downloaded ${calendars} payment calendar(s).`
-            : ''),
-      )
-    } catch (err) {
-      setPerPatientError(
-        err instanceof Error
-          ? sanitizeConvexError(err.message)
-          : 'Per-patient invoice creation failed.',
-      )
-    } finally {
-      setIsCreatingPerPatient(false)
     }
   }
 
@@ -380,23 +225,15 @@ export function BillingPage() {
         <div>
           <h1 className="text-lg font-semibold text-atria-ink">Billing</h1>
           <p className="text-sm text-atria-muted">
-            Create invoices only from approved, documented shifts.
+            Invoices are created per client — pick the client(s) and every
+            unbilled line in the period is included automatically.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => setPerPatientOpen(true)}>
-            Create per-patient invoices
-          </Button>
-          <div className="grid grid-cols-2 gap-2 text-sm lg:min-w-[360px]">
-            <SummaryTile
-              label="Ready"
-              value={`$${readySummary.amount.toFixed(2)}`}
-            />
-            <SummaryTile
-              label="Selected"
-              value={`$${selectedSummary.amount.toFixed(2)}`}
-            />
-          </div>
+        <div className="grid grid-cols-1 gap-2 text-sm lg:min-w-[180px]">
+          <SummaryTile
+            label="Ready"
+            value={`$${readySummary.amount.toFixed(2)}`}
+          />
         </div>
       </div>
 
@@ -405,29 +242,15 @@ export function BillingPage() {
         defaultOpen
         badge={
           <span className="text-xs text-atria-muted">
-            {filteredLines.length} unbilled line(s)
+            {readyLines.length} unbilled line(s)
           </span>
         }
       >
-      <BillingInvoicePanel
-        caregivers={caregivers}
-        filters={filters}
-        invoiceName={invoiceName}
-        lines={filteredLines}
-        selectedLineIds={visibleSelectedLineIds}
-        isCreating={isCreating}
-        error={error}
-        message={message}
-        onFiltersChange={setFilters}
-        onInvoiceNameChange={setInvoiceName}
-        onToggleLine={toggleLine}
-        onToggleAll={(checked) =>
-          setSelectedLineIds(
-            checked ? filteredLines.map((line) => line._id) : [],
-          )
-        }
-        onCreateInvoice={handleCreateInvoice}
-      />
+        <ClientInvoicePanel
+          clerkOrgId={clerkOrgId}
+          lines={readyLines}
+          onDownloadCalendar={downloadClientCalendar}
+        />
       </CollapsibleCard>
 
       <CollapsibleCard
@@ -439,6 +262,7 @@ export function BillingPage() {
           </span>
         }
       >
+        {error && <p className="mb-2 text-sm text-atria-danger">{error}</p>}
         <InvoicesTable invoices={invoices} onDownload={requestInvoiceDownload} onDownloadPdf={requestInvoicePdfDownload} onDownloadCalendar={handleInvoiceCalendarDownload} />
       </CollapsibleCard>
 
@@ -546,78 +370,6 @@ export function BillingPage() {
         onClose={() => setEvidenceLineId(null)}
       />
 
-      <Dialog open={perPatientOpen} onClose={() => setPerPatientOpen(false)}>
-        <DialogHeader>
-          <DialogTitle>Create per-patient invoices</DialogTitle>
-        </DialogHeader>
-        <DialogContent className="space-y-4">
-          <p className="text-sm text-atria-muted">
-            Groups every unbilled, unblocked billing line in the period into
-            one draft invoice per client, and downloads each client's payment
-            calendar for the same period.
-          </p>
-          <FieldGroup label="Period type" htmlFor="perPatientMode">
-            <Select
-              id="perPatientMode"
-              value={perPatientMode}
-              onChange={(e) =>
-                setPerPatientMode(e.target.value as 'monthly' | 'custom')
-              }
-              className="w-52"
-            >
-              <option value="monthly">Monthly (default)</option>
-              <option value="custom">Custom date range</option>
-            </Select>
-          </FieldGroup>
-          {perPatientMode === 'monthly' ? (
-            <FieldGroup label="Month" htmlFor="perPatientMonth" required>
-              <Input
-                id="perPatientMonth"
-                type="month"
-                value={perPatientMonth}
-                onChange={(e) => setPerPatientMonth(e.target.value)}
-              />
-            </FieldGroup>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <FieldGroup label="Start date" htmlFor="perPatientStart" required>
-                <USDateInput
-                  id="perPatientStart"
-                  value={perPatientStart}
-                  onChange={setPerPatientStart}
-                />
-              </FieldGroup>
-              <FieldGroup label="End date" htmlFor="perPatientEnd" required>
-                <USDateInput
-                  id="perPatientEnd"
-                  value={perPatientEnd}
-                  onChange={setPerPatientEnd}
-                />
-              </FieldGroup>
-            </div>
-          )}
-          {perPatientError && (
-            <p className="text-sm text-atria-danger">{perPatientError}</p>
-          )}
-        </DialogContent>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => setPerPatientOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            onClick={handleCreatePerPatientInvoices}
-            disabled={
-              isCreatingPerPatient ||
-              (perPatientMode === 'monthly'
-                ? !perPatientMonth
-                : !perPatientStart || !perPatientEnd)
-            }
-          >
-            {isCreatingPerPatient ? 'Creating…' : 'Create invoices'}
-          </Button>
-        </DialogFooter>
-      </Dialog>
     </div>
   )
 }

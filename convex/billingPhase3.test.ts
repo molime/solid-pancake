@@ -191,6 +191,45 @@ describe('createPerPatientInvoices', () => {
     )
     expect(second.count).toBe(0)
   })
+
+  it('only invoices the clients passed in clientIds', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_billing_p3_filter'
+    const adminId = 'user_admin_p3_filter'
+    const { tenantId } = await seedTenant(t, { clerkOrgId, adminId })
+
+    const doe = await seedClientWithLine(t, {
+      tenantId,
+      caregiverId: 'user_cg_1',
+      clientName: 'Jane Doe',
+      createdAt: '2026-07-10T12:00:00.000Z',
+    })
+    const smith = await seedClientWithLine(t, {
+      tenantId,
+      caregiverId: 'user_cg_2',
+      clientName: 'Bob Smith',
+      createdAt: '2026-07-11T12:00:00.000Z',
+    })
+
+    const result = await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.billing.createPerPatientInvoices,
+      {
+        clerkOrgId,
+        startDate: '2026-07-01T00:00:00.000Z',
+        endDate: '2026-07-31T23:59:59.999Z',
+        clientIds: [doe.clientId],
+      },
+    )
+    expect(result.count).toBe(1)
+    expect(result.invoices).toHaveLength(1)
+    expect(result.invoices[0]!.clientName).toBe('Jane Doe')
+
+    // Only Doe's line was consumed; Smith's line is still unexported.
+    const doeLine = await t.run(async (ctx) => ctx.db.get(doe.lineId))
+    const smithLine = await t.run(async (ctx) => ctx.db.get(smith.lineId))
+    expect(doeLine?.exportBatchId).toBeDefined()
+    expect(smithLine?.exportBatchId).toBeUndefined()
+  })
 })
 
 describe('releaseBillingBlock', () => {
