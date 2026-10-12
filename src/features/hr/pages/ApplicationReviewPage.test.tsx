@@ -183,6 +183,52 @@ describe('ApplicationReviewPage', () => {
     expect(downloadUrlMock).toHaveBeenCalled()
   })
 
+  it('labels a passport photo ID with its captured ID type', async () => {
+    const { useQuery } = await import('convex/react')
+    vi.mocked(useQuery).mockImplementation(
+      ((query: unknown) => {
+        const name = getFunctionName(query as Parameters<typeof getFunctionName>[0])
+        if (name === 'candidates:getCandidateDetail') {
+          return createDetailResponse({
+            documents: [
+              {
+                _id: 'doc_1',
+                category: 'photo_id',
+                status: 'active',
+                fileName: 'passport.png',
+                storageId: 'storage-1',
+                expiresAt: '2027-12-31',
+                photoIdType: 'passport',
+              },
+            ],
+          })
+        }
+        if (name === 'candidates:listCandidateTasksForHR') return []
+        if (name === 'files:getDownloadUrl') {
+          return 'https://example.com/download/storage-1'
+        }
+        return undefined
+      }) as unknown as typeof useQuery,
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/hr/candidates/cand_1']}>
+        <Routes>
+          <Route
+            path='/hr/candidates/:candidateId'
+            element={<ApplicationReviewPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Photo identification — Passport (US)'),
+      ).toBeInTheDocument()
+    })
+  })
+
   it('labels the I-9 SSN field with the selected ID type', async () => {
     const { useQuery } = await import('convex/react')
     vi.mocked(useQuery).mockImplementation(

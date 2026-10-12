@@ -35,6 +35,23 @@ function initials(name: string) {
     .toUpperCase()
 }
 
+// ID-type values captured at the photo-ID upload step (DocumentUploadPage).
+// Surfaced in the "Documents submitted" list so HR can tell a passport from a
+// driver's license without opening the file.
+const PHOTO_ID_TYPE_LABELS: Record<string, string> = {
+  passport: 'Passport (US)',
+  drivers_license: "Driver's License",
+  foreign_passport: 'Foreign Passport',
+}
+
+function formatDocumentRowLabel(doc: { category: string; photoIdType?: string }) {
+  const base = formatDocumentCategoryLabel(doc.category)
+  if (doc.category === 'photo_id' && doc.photoIdType) {
+    return `${base} — ${PHOTO_ID_TYPE_LABELS[doc.photoIdType] ?? doc.photoIdType}`
+  }
+  return base
+}
+
 function getInitialW4EmployerData(
   prefilledDocs: Doc<'prefilledDocuments'>[] | undefined,
   organizationName: string | undefined,
@@ -364,6 +381,7 @@ export function ApplicationReviewPage() {
   )
 
   const reviewApplication = useMutation(api.candidates.reviewApplication)
+  const saveRecruiterNotes = useMutation(api.candidates.saveRecruiterNotes)
   const sendOffer = useMutation(api.candidates.sendOffer)
   const saveW4EmployerSection = useMutation(api.candidates.saveW4EmployerSection)
   const saveI9Section2 = useMutation(api.candidates.saveI9Section2ForHR)
@@ -401,6 +419,26 @@ export function ApplicationReviewPage() {
   )
 
   const [hrNotes, setHrNotes] = useState('')
+  // Recruiter notes persist on the candidate record (review feedback: they
+  // used to live only in local state and vanished on navigation). Same
+  // re-sync idiom as the offer fields: the key changes only when the
+  // persisted value changes, so in-progress edits are never wiped.
+  const [notesSourceKey, setNotesSourceKey] = useState<string | null>(null)
+  const persistedNotes = candidate?.recruiterNotes ?? ''
+  const nextNotesKey = `${candidateId}:${persistedNotes}`
+  if (notesSourceKey !== nextNotesKey) {
+    setNotesSourceKey(nextNotesKey)
+    setHrNotes(persistedNotes)
+  }
+  const handleNotesBlur = () => {
+    if (!clerkOrgId || !candidateId) return
+    if (hrNotes === persistedNotes) return
+    void saveRecruiterNotes({
+      clerkOrgId,
+      candidateId: candidateId as Id<'candidates'>,
+      notes: hrNotes,
+    })
+  }
   const [payRate, setPayRate] = useState(String(fields.payRate || '$22.00 / hr'))
   const [startDate, setStartDate] = useState(String(fields.startDate || ''))
   const [schedule, setSchedule] = useState(String(fields.schedule || 'Flexible, based on availability'))
@@ -665,7 +703,8 @@ export function ApplicationReviewPage() {
         decision: 'needs_correction',
         hrNotes: hrNotes.trim(),
       })
-      setHrNotes('')
+      // Notes persist on the candidate (auto-saved) — keep them visible as
+      // the correction reason instead of clearing the textarea.
       show('warning', 'Correction requested', 'The candidate has been notified.')
     } catch (err) {
       show(
@@ -1448,6 +1487,7 @@ export function ApplicationReviewPage() {
                     expiresAt?: string
                     status: string
                     storageId?: string
+                    photoIdType?: string
                   }) => (
                     <div
                       key={doc._id}
@@ -1455,7 +1495,7 @@ export function ApplicationReviewPage() {
                     >
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-atria-ink">
-                          {formatDocumentCategoryLabel(doc.category)}
+                          {formatDocumentRowLabel(doc)}
                         </p>
                         {(doc.fileName || doc.expiresAt) && (
                           <p className="truncate text-xs text-atria-text-secondary">
@@ -1555,13 +1595,14 @@ export function ApplicationReviewPage() {
             <FieldGroup
               label="Recruiter notes"
               htmlFor="hr-notes"
-              helperText="Required when requesting a correction."
+              helperText="Saved automatically. Required when requesting a correction."
             >
               <Textarea
                 id="hr-notes"
                 data-testid="hr-notes-input"
                 value={hrNotes}
                 onChange={(e) => setHrNotes(e.target.value)}
+                onBlur={handleNotesBlur}
                 placeholder="Add notes about the application…"
               />
             </FieldGroup>

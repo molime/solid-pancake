@@ -113,6 +113,18 @@ describe('Topbar', () => {
       screen.queryByRole('img', { name: /logo/i }),
     ).not.toBeInTheDocument()
   })
+
+  it('shows "Audit Ready Center" as the breadcrumb on /audit', () => {
+    mockTopbarState({ orgId: 'org_123', memberRole: 'org:admin' })
+
+    render(
+      <MemoryRouter initialEntries={['/audit']}>
+        <Topbar />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Audit Ready Center')).toBeInTheDocument()
+  })
 })
 
 function LocationProbe() {
