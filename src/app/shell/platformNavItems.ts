@@ -6,6 +6,7 @@ import {
   BarChart3,
   LifeBuoy,
   ScrollText,
+  UserRound,
 } from 'lucide-react'
 
 export const NAV_ITEMS = [
@@ -17,4 +18,5 @@ export const NAV_ITEMS = [
   { to: '/platform/support', label: 'Support', icon: LifeBuoy },
   { to: '/platform/audit', label: 'Audit Log', icon: ScrollText },
   { to: '/platform/billing', label: 'Billing', icon: FileText },
+  { to: '/platform/account', label: 'Account', icon: UserRound },
 ]

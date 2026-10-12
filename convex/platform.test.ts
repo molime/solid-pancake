@@ -498,6 +498,50 @@ describe('listTenantsWithUsage / getPlatformStats', () => {
       newThisMonth: 1,
     })
   })
+
+  it('excludes test tenants from stats and badges them in the list', async () => {
+    const t = createTestConvex()
+    await seedAdmin(t)
+    const asAdmin = t.withIdentity(ADMIN)
+    const realTenantId = await seedTenantWithStarterSubscription(t, 7)
+
+    // A QA agency with its own subscription — must not pollute the metrics.
+    const testTenantId = await t.run(async (ctx) =>
+      ctx.db.insert('tenants', {
+        clerkOrgId: 'org_qa',
+        name: 'QA Sandbox',
+        slug: 'qa-sandbox',
+        isTest: true,
+        createdAt: new Date().toISOString(),
+      }),
+    )
+    await asAdmin.mutation(api.platform.setTenantSubscription, {
+      tenantId: testTenantId,
+      planKey: 'starter',
+      status: 'active',
+      billingEmails: ['qa@example.com'],
+      currentPeriodStart: '2026-07-01',
+      currentPeriodEnd: '2026-07-31',
+    })
+
+    const stats = await asAdmin.query(api.platform.getPlatformStats, {})
+    expect(stats).toMatchObject({
+      totalAgencies: 1,
+      activeCount: 1,
+      trialingCount: 0,
+      pastDueCount: 0,
+      suspendedCount: 0,
+      churnedCount: 0,
+      mrr: 199,
+      newThisMonth: 1,
+    })
+
+    // The list still returns both agencies, flagged for the UI badge.
+    const rows = await asAdmin.query(api.platform.listTenantsWithUsage, {})
+    expect(rows).toHaveLength(2)
+    expect(rows.find((r) => r._id === realTenantId)?.isTest).toBe(false)
+    expect(rows.find((r) => r._id === testTenantId)?.isTest).toBe(true)
+  })
 })
 
 describe('updateTenantInfo', () => {
@@ -513,6 +557,7 @@ describe('updateTenantInfo', () => {
       ein: '12-3456789',
       paymentMethodAllowed: 'us_bank_account',
       disabledSections: ['billing', 'dashboard'],
+      isTest: true,
     })
 
     const tenant = await t.run((ctx) => ctx.db.get(tenantId))
@@ -522,6 +567,7 @@ describe('updateTenantInfo', () => {
       ein: '12-3456789',
       paymentMethodAllowed: 'us_bank_account',
       disabledSections: ['billing', 'dashboard'],
+      isTest: true,
     })
 
     const audit = await t.run(async (ctx) =>
@@ -571,6 +617,43 @@ describe('updateTenantInfo', () => {
       asAdmin.mutation(api.platform.updateTenantInfo, {
         tenantId: otherTenantId,
         name: 'Nope',
+      }),
+    ).rejects.toThrow(/tenant not found/i)
+  })
+})
+
+describe('setTenantTestFlag', () => {
+  it('flags and unflags a tenant as test', async () => {
+    const t = createTestConvex()
+    const tenantId = await seedTenant(t)
+
+    await t.mutation(internal.migrations.setTenantTestFlag, {
+      tenantId,
+      isTest: true,
+    })
+    let tenant = await t.run((ctx) => ctx.db.get(tenantId))
+    expect(tenant?.isTest).toBe(true)
+
+    await t.mutation(internal.migrations.setTenantTestFlag, {
+      tenantId,
+      isTest: false,
+    })
+    tenant = await t.run((ctx) => ctx.db.get(tenantId))
+    expect(tenant?.isTest).toBe(false)
+  })
+
+  it('throws when the tenant does not exist', async () => {
+    const t = createTestConvex()
+    const tenantId = await seedTenant(t)
+    const deletedId = await t.run(async (ctx) => {
+      await ctx.db.delete(tenantId)
+      return tenantId
+    })
+
+    await expect(
+      t.mutation(internal.migrations.setTenantTestFlag, {
+        tenantId: deletedId,
+        isTest: true,
       }),
     ).rejects.toThrow(/tenant not found/i)
   })

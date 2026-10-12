@@ -200,6 +200,11 @@ const PlatformInvoiceDetailPage = lazy(() =>
     }),
   ),
 )
+const PlatformAccountPage = lazy(() =>
+  import('@/features/platform/pages/PlatformAccountPage').then((module) => ({
+    default: module.PlatformAccountPage,
+  })),
+)
 const SearchPage = lazy(() =>
   import('@/features/search/pages/SearchPage').then((module) => ({
     default: module.SearchPage,
@@ -625,6 +630,16 @@ export function AppRouter() {
           element={
             <RouteSuspense>
               <PlatformInvoiceDetailPage />
+            </RouteSuspense>
+          }
+        />
+        {/* Wildcard: Clerk's UserProfile navigates to sub-paths (e.g.
+            /platform/account/security). */}
+        <Route
+          path="platform/account/*"
+          element={
+            <RouteSuspense>
+              <PlatformAccountPage />
             </RouteSuspense>
           }
         />
