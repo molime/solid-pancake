@@ -517,24 +517,26 @@ test.describe('oct4 feature QA', { tag: '@auth' }, () => {
   })
 
   // ---- 8. Billing --------------------------------------------------------------
-  test('billing: monthly-default invoice dialog, ledger caption, calendar card shape', async ({ page }) => {
+  test('billing: client-first ready-to-bill panel, ledger caption, calendar card shape', async ({ page }) => {
     test.setTimeout(AUTH_TIMEOUT)
     await signInAsAdmin(page)
     await page.goto('/billing')
     await expect(page.getByRole('heading', { name: 'Billing' })).toBeVisible({ timeout: 20000 })
 
-    // Create-invoice dialog: monthly default with a prefilled month + custom option.
-    await page.getByRole('button', { name: 'Create per-patient invoices' }).click()
-    const periodType = page.locator('#perPatientMode')
-    await expect(periodType).toBeVisible()
-    await expect(periodType).toHaveValue('monthly')
-    const monthInput = page.locator('#perPatientMonth')
+    // Client-first panel (in the Ready to bill card): monthly default with a
+    // prefilled month + custom option, and no per-line selection anywhere.
+    await expect(page.locator('#clientInvoiceMode')).toBeVisible()
+    await expect(page.locator('#clientInvoiceMode')).toHaveValue('monthly')
+    const monthInput = page.locator('#clientInvoiceMonth')
     const expectedMonth = new Date().toISOString().slice(0, 7)
     await expect(monthInput).toHaveValue(expectedMonth)
-    await periodType.selectOption('custom')
-    await expect(page.locator('#perPatientStart')).toBeVisible()
-    await expect(page.locator('#perPatientEnd')).toBeVisible()
-    await page.getByRole('button', { name: 'Cancel' }).click()
+    await page.locator('#clientInvoiceMode').selectOption('custom')
+    await expect(page.locator('#clientInvoiceStart')).toBeVisible()
+    await expect(page.locator('#clientInvoiceEnd')).toBeVisible()
+    await page.locator('#clientInvoiceMode').selectOption('monthly')
+    // The old per-patient dialog button and per-line table are gone.
+    await expect(page.getByRole('button', { name: 'Create per-patient invoices' })).toHaveCount(0)
+    await expect(page.locator('#perPatientMode')).toHaveCount(0)
 
     // Ledger caption (card collapses by default; the table only renders when
     // the tenant has billing lines).

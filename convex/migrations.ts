@@ -474,6 +474,78 @@ export const seedBillingDemo = internalMutation({
   },
 })
 
+/**
+ * Demo data for the client-first billing flow (Test Agency, current month):
+ * TWO clients with billing-ready October 2026 shifts + lines and NO
+ * invoices, so Ready to bill shows multiple selectable clients. Idempotent
+ * per client name.
+ */
+export const seedBillingDemoCurrent = internalMutation({
+  args: { tenantId: v.id('tenants'), caregiverClerkUserId: v.string() },
+  handler: async (ctx, args) => {
+    const demos = [
+      {
+        name: 'Rosa Martinez',
+        serviceType: 'SLS' as const,
+        rate: 30,
+        dates: ['2026-10-02', '2026-10-07', '2026-10-09'],
+        hours: 3,
+      },
+      {
+        name: 'Pedro Alvarez',
+        serviceType: 'ILS' as const,
+        rate: 28,
+        dates: ['2026-10-05', '2026-10-10'],
+        hours: 4,
+      },
+    ]
+    const created: string[] = []
+    for (const demo of demos) {
+      const existing = await ctx.db
+        .query('clients')
+        .filter((q) =>
+          q.and(
+            q.eq(q.field('tenantId'), args.tenantId),
+            q.eq(q.field('displayName'), demo.name),
+          ),
+        )
+        .first()
+      if (existing) continue
+      const clientId = await ctx.db.insert('clients', {
+        tenantId: args.tenantId,
+        displayName: demo.name,
+        serviceType: demo.serviceType,
+        authorizationHours: 40,
+        riskFlags: [],
+      })
+      for (const date of demo.dates) {
+        const shiftId = await ctx.db.insert('shifts', {
+          tenantId: args.tenantId,
+          clientId,
+          caregiverId: args.caregiverClerkUserId,
+          scheduledStart: `${date}T09:00:00.000Z`,
+          scheduledEnd: `${date}T${String(9 + demo.hours).padStart(2, '0')}:00:00.000Z`,
+          clockInAt: `${date}T09:01:00.000Z`,
+          clockOutAt: `${date}T${String(9 + demo.hours).padStart(2, '0')}:02:00.000Z`,
+          status: 'billing_ready',
+          serviceType: demo.serviceType,
+          rate: demo.rate,
+        })
+        await ctx.db.insert('billingLines', {
+          tenantId: args.tenantId,
+          shiftId,
+          hours: demo.hours,
+          rate: demo.rate,
+          amount: demo.hours * demo.rate,
+          createdAt: `${date}T13:00:00.000Z`,
+        })
+      }
+      created.push(demo.name)
+    }
+    return { created }
+  },
+})
+
 /** One-off: mark a platform invoice void (repair for the Stripe sync bug). */
 export const voidPlatformInvoiceById = internalMutation({
   args: { invoiceId: v.id('platformInvoices') },

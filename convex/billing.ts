@@ -159,8 +159,11 @@ export const createPerPatientInvoices = mutation({
     startDate: v.string(),
     endDate: v.string(),
     payerType: v.optional(v.string()),
+    // Client-first flow: when present, only these clients get invoices —
+    // the admin picks the client(s), never individual lines.
+    clientIds: v.optional(v.array(v.id('clients'))),
   },
-  handler: async (ctx, { clerkOrgId, startDate, endDate, payerType }) => {
+  handler: async (ctx, { clerkOrgId, startDate, endDate, payerType, clientIds }) => {
     const { tenantId, tenant, identity } = await requireTenantRole(
       ctx,
       clerkOrgId,
@@ -196,6 +199,7 @@ export const createPerPatientInvoices = mutation({
       const shift = await ctx.db.get(line.shiftId)
       if (!shift) continue
       assertTenantDoc(shift, tenantId)
+      if (clientIds && !clientIds.includes(shift.clientId)) continue
       const key = shift.clientId as string
       const group = groups.get(key) ?? { clientId: shift.clientId, lines: [] }
       group.lines.push(line)
