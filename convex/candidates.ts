@@ -1209,6 +1209,33 @@ export const submitApplication = mutation({
   },
 })
 
+/**
+ * Persist the recruiter notes textarea (auto-saved on blur from the review
+ * page). Same role set as reviewApplication. Stored on the candidate so the
+ * notes survive status changes and page navigation.
+ */
+export const saveRecruiterNotes = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    candidateId: v.id('candidates'),
+    notes: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+    const candidate = await ctx.db.get(args.candidateId)
+    if (!candidate) {
+      throw new ConvexError('Candidate not found.')
+    }
+    assertTenantDoc(candidate, tenantId)
+    await ctx.db.patch(candidate._id, { recruiterNotes: args.notes })
+    return candidate._id
+  },
+})
+
 export const reviewApplication = mutation({
   args: {
     clerkOrgId: v.string(),

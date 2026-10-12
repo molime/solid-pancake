@@ -1646,6 +1646,63 @@ describe('removeClerkOrgMembership', () => {
   })
 })
 
+describe('saveRecruiterNotes', () => {
+  it('persists notes on the candidate and overwrites on re-save', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_notes'
+    const adminId = 'user_admin_notes'
+    const { candidateId } = await seedCandidateForOffer(
+      t,
+      clerkOrgId,
+      adminId,
+      'user_cand_notes',
+    )
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.candidates.saveRecruiterNotes,
+      { clerkOrgId, candidateId, notes: 'Strong applicant, fast-track.' },
+    )
+    let candidate = await t.run(async (ctx) => ctx.db.get(candidateId))
+    expect(candidate?.recruiterNotes).toBe('Strong applicant, fast-track.')
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.candidates.saveRecruiterNotes,
+      { clerkOrgId, candidateId, notes: 'Called 10/10 — pending docs.' },
+    )
+    candidate = await t.run(async (ctx) => ctx.db.get(candidateId))
+    expect(candidate?.recruiterNotes).toBe('Called 10/10 — pending docs.')
+  })
+
+  it('rejects candidates and other tenants', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_notes_guard'
+    const adminId = 'user_admin_notes_guard'
+    const { candidateId } = await seedCandidateForOffer(
+      t,
+      clerkOrgId,
+      adminId,
+      'user_cand_notes_guard',
+    )
+
+    await expect(
+      t.withIdentity({ subject: 'user_cand_notes_guard' }).mutation(
+        api.candidates.saveRecruiterNotes,
+        { clerkOrgId, candidateId, notes: 'nope' },
+      ),
+    ).rejects.toThrow(/required one of|not a member|Forbidden/i)
+
+    const otherOrg = 'org_notes_other'
+    const otherAdmin = 'user_admin_notes_other'
+    await seedTenant(t, otherOrg, otherAdmin)
+    await expect(
+      asAdmin(t, otherAdmin, otherOrg).mutation(
+        api.candidates.saveRecruiterNotes,
+        { clerkOrgId: otherOrg, candidateId, notes: 'cross-tenant' },
+      ),
+    ).rejects.toThrow(/cross-tenant/i)
+  })
+})
+
 describe('reviewApplication and offer lifecycle', () => {
   it('transitions candidate through approved -> offer -> accepted -> hired', async () => {
     stubAdpEnv()
