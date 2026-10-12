@@ -96,6 +96,30 @@ describe('HRDashboardPage', () => {
     expect(screen.getByText('Sofia Herrera')).toBeInTheDocument()
   })
 
+  it('links each KPI card to its section', async () => {
+    const { HRDashboardPage } = await import('./HRDashboardPage')
+    mockDashboardState({})
+
+    render(
+      <MemoryRouter>
+        <HRDashboardPage />
+      </MemoryRouter>,
+    )
+
+    expect(
+      screen.getByRole('link', { name: /in pipeline/i }),
+    ).toHaveAttribute('href', '/hr/candidates')
+    expect(
+      screen.getByRole('link', { name: /active employees/i }),
+    ).toHaveAttribute('href', '/hr/employees')
+    expect(
+      screen.getByRole('link', { name: /expiring credentials/i }),
+    ).toHaveAttribute('href', '/compliance')
+    expect(
+      screen.getByRole('link', { name: /open cases/i }),
+    ).toHaveAttribute('href', '/hr/cases')
+  })
+
   it('opens invite candidate modal', async () => {
     const { HRDashboardPage } = await import('./HRDashboardPage')
     mockDashboardState({})

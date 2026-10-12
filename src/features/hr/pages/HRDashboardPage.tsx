@@ -65,54 +65,64 @@ export function HRDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard
-          label="In pipeline"
-          value={String(stats?.inPipeline ?? 0)}
-          icon={<Users className="h-5 w-5" />}
-          valueClassName="text-atria-info"
-          trend={
-            <span className="text-sm text-atria-text-secondary">
-              Active candidates
-            </span>
-          }
-        />
-        <KpiCard
-          label="Active employees"
-          value={String(stats?.activeEmployees ?? 0)}
-          icon={<Building2 className="h-5 w-5" />}
-          valueClassName="text-atria-success"
-          trend={
-            <span className="text-sm text-atria-text-secondary">
-              Hired caregivers
-            </span>
-          }
-        />
-        <KpiCard
-          label="Expiring credentials"
-          value={String(stats?.expiringCredentials ?? 0)}
-          icon={<AlertTriangle className="h-5 w-5" />}
-          valueClassName="text-atria-warning"
-          trend={
-            <span className="text-sm text-atria-text-secondary">
-              Requires renewal
-            </span>
-          }
-        />
-        <KpiCard
-          label="Open cases"
-          value={String(stats?.openCases ?? 0)}
-          icon={<ClipboardCheck className="h-5 w-5" />}
-          valueClassName="text-atria-danger"
-          trend={
-            <span className="text-sm text-atria-text-secondary">
-              HR issues to resolve
-            </span>
-          }
-        />
+        <Link to="/hr/candidates" className="block transition-opacity hover:opacity-80">
+          <KpiCard
+            label="In pipeline"
+            value={String(stats?.inPipeline ?? 0)}
+            icon={<Users className="h-5 w-5" />}
+            valueClassName="text-atria-info"
+            trend={
+              <span className="text-sm text-atria-text-secondary">
+                Active candidates
+              </span>
+            }
+          />
+        </Link>
+        <Link to="/hr/employees" className="block transition-opacity hover:opacity-80">
+          <KpiCard
+            label="Active employees"
+            value={String(stats?.activeEmployees ?? 0)}
+            icon={<Building2 className="h-5 w-5" />}
+            valueClassName="text-atria-success"
+            trend={
+              <span className="text-sm text-atria-text-secondary">
+                Hired caregivers
+              </span>
+            }
+          />
+        </Link>
+        <Link to="/compliance" className="block transition-opacity hover:opacity-80">
+          <KpiCard
+            label="Expiring credentials"
+            value={String(stats?.expiringCredentials ?? 0)}
+            icon={<AlertTriangle className="h-5 w-5" />}
+            valueClassName="text-atria-warning"
+            trend={
+              <span className="text-sm text-atria-text-secondary">
+                Requires renewal
+              </span>
+            }
+          />
+        </Link>
+        <Link to="/hr/cases" className="block transition-opacity hover:opacity-80">
+          <KpiCard
+            label="Open cases"
+            value={String(stats?.openCases ?? 0)}
+            icon={<ClipboardCheck className="h-5 w-5" />}
+            valueClassName="text-atria-danger"
+            trend={
+              <span className="text-sm text-atria-text-secondary">
+                HR issues to resolve
+              </span>
+            }
+          />
+        </Link>
       </div>
 
+      {/* Pipeline spans the full row — it is the only card in this grid, so a
+          half-width column left dead space to its right (Maria's feedback). */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
+        <Card className="lg:col-span-2">
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Candidate pipeline</CardTitle>
             <Link

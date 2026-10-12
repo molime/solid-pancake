@@ -127,8 +127,16 @@ const NAV_SEARCH_TARGETS: Array<{
   },
 ]
 
+// Client-facing names that differ from the raw path segment (the section is
+// "Audit Ready Center", not "Audit").
+const BREADCRUMB_LABEL_OVERRIDES: Record<string, string> = {
+  '/audit': 'Audit Ready Center',
+}
+
 function breadcrumbFromPath(path: string): string {
   if (path === '/') return 'Dashboard'
+  const override = BREADCRUMB_LABEL_OVERRIDES[path]
+  if (override) return override
   const segments = path.split('/').filter(Boolean)
   return segments
     .map((s) => s.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()))
