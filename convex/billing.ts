@@ -57,8 +57,15 @@ export const ledger = query({
 })
 
 export const unexported = query({
-  args: { clerkOrgId: v.string() },
-  handler: async (ctx, { clerkOrgId }) => {
+  args: {
+    clerkOrgId: v.string(),
+    // Optional createdAt bounds (same semantics as createPerPatientInvoices):
+    // the client-first panel passes the selected period so the 200-line cap
+    // can never hide current work behind a backlog of old lines.
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+  },
+  handler: async (ctx, { clerkOrgId, startDate, endDate }) => {
     const { tenantId } = await requireTenantRole(ctx, clerkOrgId, [
       'org:admin',
       'org:coordinator',
@@ -67,12 +74,23 @@ export const unexported = query({
     const lines = await ctx.db
       .query('billingLines')
       .withIndex('by_tenant_export_batch', (q) => q.eq('tenantId', tenantId))
-      .filter((q) =>
-        q.and(
+      .filter((q) => {
+        const base = q.and(
           q.eq(q.field('exportBatchId'), undefined),
           q.eq(q.field('blockedReason'), undefined),
-        ),
-      )
+        )
+        if (!startDate && !endDate) return base
+        const bounds = []
+        if (startDate) bounds.push(q.gte(q.field('createdAt'), startDate))
+        if (endDate)
+          bounds.push(
+            q.lte(
+              q.field('createdAt'),
+              endDate.length === 10 ? `${endDate}T23:59:59.999Z` : endDate,
+            ),
+          )
+        return q.and(base, ...bounds)
+      })
       .take(200)
 
     const enriched = []

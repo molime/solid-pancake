@@ -1,15 +1,29 @@
 import { useMemo, useState } from 'react'
-import { useMutation } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { Button } from '@/shared/ui/Button'
 import { Checkbox } from '@/shared/ui/Checkbox'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
-import { Input } from '@/shared/ui/Input'
 import { Select } from '@/shared/ui/Select'
 import { USDateInput } from '@/shared/ui/USDateInput'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
-import { currentMonth, monthRange, type BillingLineRow } from '../model/invoiceUtils'
+import { monthRange, type BillingLineRow } from '../model/invoiceUtils'
+
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
 
 type ClientGroup = {
   clientId: Id<'clients'>
@@ -29,18 +43,21 @@ type ClientGroup = {
  */
 export function ClientInvoicePanel({
   clerkOrgId,
-  lines,
   onDownloadCalendar,
 }: {
   clerkOrgId: string | undefined
-  lines: BillingLineRow[]
   onDownloadCalendar: (clientId: Id<'clients'>, month: string) => Promise<void>
 }) {
   const createPerPatientInvoices = useMutation(
     api.billing.createPerPatientInvoices,
   )
   const [mode, setMode] = useState<'monthly' | 'custom'>('monthly')
-  const [month, setMonth] = useState(currentMonth)
+  // Month/year selects instead of <input type="month"> — that input renders
+  // as plain text in several browsers (Safari), which made the monthly view
+  // silently depend on typing 'yyyy-mm' correctly (review feedback).
+  const now = new Date()
+  const [monthIndex, setMonthIndex] = useState(now.getUTCMonth())
+  const [year, setYear] = useState(now.getUTCFullYear())
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -48,24 +65,26 @@ export function ClientInvoicePanel({
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
+  const month = `${year}-${String(monthIndex + 1).padStart(2, '0')}`
+
   const range =
     mode === 'monthly'
       ? monthRange(month)
       : { startDate: customStart, endDate: customEnd }
-  // Mirrors the backend's createdAt bounds so the listed clients match what
-  // the invoice will actually contain (date-only end = inclusive end of day).
-  const endBound = range.endDate
-    ? range.endDate.length === 10
-      ? `${range.endDate}T23:59:59.999Z`
-      : range.endDate
-    : ''
+  const rangeReady = !!range.startDate && !!range.endDate
+  // The query applies the period bounds server-side, so the 200-line cap in
+  // `unexported` can never hide current work behind a backlog of old lines.
+  const lines = useQuery(
+    api.billing.unexported,
+    clerkOrgId && rangeReady
+      ? { clerkOrgId, startDate: range.startDate, endDate: range.endDate }
+      : 'skip',
+  ) as BillingLineRow[] | undefined
 
   const clients = useMemo(() => {
     const map = new Map<string, ClientGroup>()
-    for (const line of lines) {
+    for (const line of lines ?? []) {
       if (!line.clientId) continue
-      if (range.startDate && line.createdAt < range.startDate) continue
-      if (endBound && line.createdAt > endBound) continue
       const group = map.get(line.clientId as string) ?? {
         clientId: line.clientId,
         clientName: line.clientName,
@@ -79,11 +98,14 @@ export function ClientInvoicePanel({
     return [...map.values()].sort((a, b) =>
       a.clientName.localeCompare(b.clientName),
     )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lines, range.startDate, endBound])
+  }, [lines])
 
   const allSelected =
     clients.length > 0 && clients.every((c) => selected.has(c.clientId))
+
+  // Only selections that still exist in the chosen period count — switching
+  // period can leave a selected client with no work in it.
+  const effectiveSelected = clients.filter((c) => selected.has(c.clientId))
 
   const toggleAll = (checked: boolean) => {
     setSelected(checked ? new Set(clients.map((c) => c.clientId)) : new Set())
@@ -98,7 +120,12 @@ export function ClientInvoicePanel({
   }
 
   const handleCreate = async () => {
-    if (!clerkOrgId || selected.size === 0 || !range.startDate || !range.endDate)
+    if (
+      !clerkOrgId ||
+      effectiveSelected.length === 0 ||
+      !range.startDate ||
+      !range.endDate
+    )
       return
     setIsCreating(true)
     setError(null)
@@ -108,7 +135,7 @@ export function ClientInvoicePanel({
         clerkOrgId,
         startDate: range.startDate,
         endDate: range.endDate,
-        clientIds: [...selected] as Id<'clients'>[],
+        clientIds: effectiveSelected.map((c) => c.clientId),
       })
       // Companion document: consolidated payment calendar per client, same
       // period, downloaded alongside the invoice.
@@ -155,14 +182,38 @@ export function ClientInvoicePanel({
           </Select>
         </FieldGroup>
         {mode === 'monthly' ? (
-          <FieldGroup label="Month" htmlFor="clientInvoiceMonth">
-            <Input
-              id="clientInvoiceMonth"
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-            />
-          </FieldGroup>
+          <>
+            <FieldGroup label="Month" htmlFor="clientInvoiceMonthMonth">
+              <Select
+                id="clientInvoiceMonthMonth"
+                value={String(monthIndex)}
+                onChange={(e) => setMonthIndex(Number(e.target.value))}
+                className="w-36"
+              >
+                {MONTH_NAMES.map((name, index) => (
+                  <option key={name} value={index}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
+            </FieldGroup>
+            <FieldGroup label="Year" htmlFor="clientInvoiceMonthYear">
+              <Select
+                id="clientInvoiceMonthYear"
+                value={String(year)}
+                onChange={(e) => setYear(Number(e.target.value))}
+                className="w-28"
+              >
+                {[now.getUTCFullYear() - 1, now.getUTCFullYear(), now.getUTCFullYear() + 1].map(
+                  (optionYear) => (
+                    <option key={optionYear} value={optionYear}>
+                      {optionYear}
+                    </option>
+                  ),
+                )}
+              </Select>
+            </FieldGroup>
+          </>
         ) : (
           <>
             <FieldGroup label="Start date" htmlFor="clientInvoiceStart">
@@ -183,7 +234,11 @@ export function ClientInvoicePanel({
         )}
       </div>
 
-      {clients.length === 0 ? (
+      {lines === undefined ? (
+        <p className="py-4 text-center text-sm text-atria-muted">
+          Loading unbilled work…
+        </p>
+      ) : clients.length === 0 ? (
         <p className="py-4 text-center text-sm text-atria-muted">
           No unbilled work in this period.
         </p>
@@ -230,7 +285,7 @@ export function ClientInvoicePanel({
         variant="primary"
         disabled={
           isCreating ||
-          selected.size === 0 ||
+          effectiveSelected.length === 0 ||
           !range.startDate ||
           !range.endDate
         }
@@ -239,7 +294,7 @@ export function ClientInvoicePanel({
       >
         {isCreating
           ? 'Creating…'
-          : `Create invoice${selected.size > 1 ? 's' : ''} for ${selected.size} client${selected.size === 1 ? '' : 's'}`}
+          : `Create invoice${effectiveSelected.length > 1 ? 's' : ''} for ${effectiveSelected.length} client${effectiveSelected.length === 1 ? '' : 's'}`}
       </Button>
     </div>
   )

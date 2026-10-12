@@ -248,7 +248,6 @@ export function BillingPage() {
       >
         <ClientInvoicePanel
           clerkOrgId={clerkOrgId}
-          lines={readyLines}
           onDownloadCalendar={downloadClientCalendar}
         />
       </CollapsibleCard>
