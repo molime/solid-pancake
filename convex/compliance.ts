@@ -301,29 +301,29 @@ export async function computeComplianceGaps(
 
   const nowIso = new Date().toISOString()
 
+  // One scan instead of two queries per profile (this used to time out on
+  // tenants with hundreds of employees): group the tenant's employee
+  // archive items by subjectId once, then read from the map. Semantics are
+  // identical — items keyed by profile id and by clerk user id are merged
+  // per profile exactly as before.
+  const employeeItems = await ctx.db
+    .query('documentArchiveItems')
+    .withIndex('by_tenant_created', (q) => q.eq('tenantId', tenantId))
+    .filter((q) => q.eq(q.field('subjectType'), 'employee'))
+    .collect()
+  const itemsBySubject = new Map<string, typeof employeeItems>()
+  for (const item of employeeItems) {
+    const list = itemsBySubject.get(item.subjectId) ?? []
+    list.push(item)
+    itemsBySubject.set(item.subjectId, list)
+  }
+
   const gaps = []
   for (const profile of profiles) {
-    const items = await ctx.db
-      .query('documentArchiveItems')
-      .withIndex('by_tenant_subject', (q) =>
-        q
-          .eq('tenantId', tenantId)
-          .eq('subjectType', 'employee')
-          .eq('subjectId', profile._id as string),
-      )
-      .collect()
-    // Also try by clerkUserId (some archive items use that instead of profile._id)
+    const items = itemsBySubject.get(profile._id as string) ?? []
     const profileClerkUserId = profile.clerkUserId
     const itemsByClerkId = profileClerkUserId
-      ? await ctx.db
-          .query('documentArchiveItems')
-          .withIndex('by_tenant_subject', (q) =>
-            q
-              .eq('tenantId', tenantId)
-              .eq('subjectType', 'employee')
-              .eq('subjectId', profileClerkUserId),
-          )
-          .collect()
+      ? (itemsBySubject.get(profileClerkUserId) ?? [])
       : []
     const allItems = [...items, ...itemsByClerkId]
 
