@@ -546,6 +546,58 @@ export const seedBillingDemoCurrent = internalMutation({
   },
 })
 
+/**
+ * One-off: demo escalation for the Test Agency (prod) so Diego can see the
+ * Active Escalations dashboard section during validation. CLI-callable
+ * variant of seed.seedE2EDemoEscalation (which needs an admin session).
+ */
+export const seedDemoEscalationByTenant = internalMutation({
+  args: { tenantId: v.id('tenants') },
+  handler: async (ctx, args) => {
+    const now = new Date().toISOString()
+    const cases = await ctx.db
+      .query('hrCases')
+      .withIndex('by_tenant_status', (q) => q.eq('tenantId', args.tenantId))
+      .collect()
+    let hrCase = cases.find((c) => c.caseNumber === 'E2E-DEMO-ESC')
+    if (!hrCase) {
+      const caseId = await ctx.db.insert('hrCases', {
+        tenantId: args.tenantId,
+        caseNumber: 'E2E-DEMO-ESC',
+        subjectType: 'employee',
+        subjectId: 'e2e-demo',
+        category: 'documentation',
+        title: 'E2E demo — caregiver file missing updated CPR card',
+        status: 'open',
+        description:
+          'Demo escalation fixture so the Active Escalations dashboard section is visible.',
+        createdAt: now,
+      })
+      hrCase = (await ctx.db.get(caseId))!
+    }
+    const escalations = await ctx.db
+      .query('escalations')
+      .withIndex('by_tenant_level', (q) =>
+        q.eq('tenantId', args.tenantId).eq('escalationLevel', 1),
+      )
+      .collect()
+    const existing = escalations.find(
+      (e) => e.subjectId === (hrCase._id as string) && !e.resolvedAt,
+    )
+    if (existing) return { escalationId: existing._id, created: false }
+    const escalationId = await ctx.db.insert('escalations', {
+      tenantId: args.tenantId,
+      subjectType: 'hrCase',
+      subjectId: hrCase._id as string,
+      escalationLevel: 1,
+      escalatedTo: 'org:coordinator',
+      reason: `HR case ${hrCase.caseNumber} ('${hrCase.title}') unresolved — demo escalation for the agency dashboard.`,
+      createdAt: now,
+    })
+    return { escalationId, created: true }
+  },
+})
+
 /** One-off: mark a platform invoice void (repair for the Stripe sync bug). */
 export const voidPlatformInvoiceById = internalMutation({
   args: { invoiceId: v.id('platformInvoices') },
