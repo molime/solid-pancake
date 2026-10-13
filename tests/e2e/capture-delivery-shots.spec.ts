@@ -158,10 +158,11 @@ test.describe('delivery packet screenshots', { tag: '@auth' }, () => {
       .first()
     if (await credentialItem.isVisible().catch(() => false)) {
       await credentialItem.click()
+      // In-place fix rows replaced the console redirect link.
       await expect(
-        page.getByRole('link', { name: 'Open the Audit Ready Center to fix these →' }).first(),
-      ).toBeVisible()
-      await page.getByRole('link', { name: 'Open the Audit Ready Center to fix these →' })
+        page.getByRole('button', { name: 'Fix it' }).first(),
+      ).toBeVisible({ timeout: 60000 })
+      await page.getByRole('button', { name: 'Fix it' })
         .first()
         .scrollIntoViewIfNeeded()
       await shot(page, 'arc-full-checklist.png')
