@@ -70,8 +70,8 @@ test.describe('final batch QA', { tag: '@auth' }, () => {
     await signOut(page)
   })
 
-  // ---- 2. Recruiter notes persistence ---------------------------------------
-  test('recruiter notes persist across navigation and clear cleanly', async ({ page }) => {
+  // ---- 2. Recruiter notes CRUD ----------------------------------------------
+  test('recruiter notes: save via button, persists across navigation, delete works', async ({ page }) => {
     test.setTimeout(AUTH_TIMEOUT)
     await signInAsAdmin(page)
     await page.goto('/hr/candidates')
@@ -82,28 +82,28 @@ test.describe('final batch QA', { tag: '@auth' }, () => {
     await expect(page).toHaveURL(/\/hr\/candidates\/[^/]+$/, { timeout: 15000 })
     const reviewUrl = page.url()
 
-    const notes = page.getByTestId('hr-notes-input')
-    await expect(notes).toBeVisible({ timeout: 30000 })
+    const notesCard = page.getByTestId('candidate-notes')
+    await expect(notesCard).toBeVisible({ timeout: 30000 })
 
     const noteText = `QA final-batch note ${Date.now()}`
-    await notes.fill(noteText)
-    // Blur triggers the save (handleNotesBlur → saveRecruiterNotes).
-    await page.locator('h1').first().click()
-    await page.waitForTimeout(1500)
+    await page.getByTestId('new-note-input').fill(noteText)
+    await page.getByTestId('save-note-button').click()
+    // The new note appears in the list (explicit save, no autosave).
+    const savedNote = notesCard.locator('li', { hasText: noteText })
+    await expect(savedNote).toBeVisible({ timeout: 15000 })
 
     await page.goto('/hr/candidates')
     await page.goto(reviewUrl)
-    await expect(notes).toBeVisible({ timeout: 30000 })
-    await expect(notes).toHaveValue(noteText)
+    await expect(notesCard).toBeVisible({ timeout: 30000 })
+    await expect(notesCard.locator('li', { hasText: noteText })).toBeVisible({ timeout: 15000 })
 
-    // Clear and verify the empty state persists too (leaves clean state).
-    await notes.fill('')
-    await page.locator('h1').first().click()
-    await page.waitForTimeout(1500)
-    await page.goto('/hr/candidates')
-    await page.goto(reviewUrl)
-    await expect(notes).toBeVisible({ timeout: 30000 })
-    await expect(notes).toHaveValue('')
+    // Delete it (leaves clean state).
+    const noteId = (await savedNote.getAttribute('data-testid'))!.replace('candidate-note-', '')
+    await page.getByTestId(`delete-note-${noteId}`).click()
+    const confirm = page.getByRole('button', { name: /delete/i }).last()
+    await expect(confirm).toBeVisible({ timeout: 10000 })
+    await confirm.click()
+    await expect(notesCard.locator('li', { hasText: noteText })).toHaveCount(0, { timeout: 15000 })
     await signOut(page)
   })
 
@@ -169,7 +169,7 @@ test.describe('final batch QA', { tag: '@auth' }, () => {
     // candidate id below ("Juan Sancho", applied) has a photo_id document.
     // If dev data changes, the typed branch asserts the type label instead.
     await page.goto('/hr/candidates/mx7adspwkvsc7935c5z0xkvptn8bhj0a')
-    await expect(page.getByTestId('hr-notes-input')).toBeVisible({ timeout: 45000 })
+    await expect(page.getByTestId('candidate-notes')).toBeVisible({ timeout: 45000 })
 
     const typedLabel = page.getByText(/Photo identification — (Passport|Driver's License|Foreign Passport)/)
     const plainLabel = page.getByText('Photo identification', { exact: true })

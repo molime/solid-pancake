@@ -1703,6 +1703,154 @@ describe('saveRecruiterNotes', () => {
   })
 })
 
+describe('candidateNotes CRUD', () => {
+  it('adds, lists newest-first, updates, and deletes notes', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_cnotes'
+    const adminId = 'user_admin_cnotes'
+    const { candidateId } = await seedCandidateForOffer(
+      t,
+      clerkOrgId,
+      adminId,
+      'user_cand_cnotes',
+    )
+
+    await expect(
+      asAdmin(t, adminId, clerkOrgId).mutation(api.candidates.addCandidateNote, {
+        clerkOrgId,
+        candidateId,
+        text: '   ',
+      }),
+    ).rejects.toThrow(/cannot be empty/i)
+
+    const firstId = await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.candidates.addCandidateNote,
+      { clerkOrgId, candidateId, text: '  First note  ' },
+    )
+    const secondId = await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.candidates.addCandidateNote,
+      { clerkOrgId, candidateId, text: 'Second note' },
+    )
+
+    let notes = await asAdmin(t, adminId, clerkOrgId).query(
+      api.candidates.listCandidateNotes,
+      { clerkOrgId, candidateId },
+    )
+    expect(notes.map((n) => n._id)).toEqual([secondId, firstId])
+    expect(notes[1].text).toBe('First note')
+    expect(notes[1].authorId).toBe(adminId)
+    expect(notes[1].authorName).toBe('Admin')
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.candidates.updateCandidateNote,
+      { clerkOrgId, noteId: firstId, text: 'First note (edited)' },
+    )
+    notes = await asAdmin(t, adminId, clerkOrgId).query(
+      api.candidates.listCandidateNotes,
+      { clerkOrgId, candidateId },
+    )
+    expect(notes.find((n) => n._id === firstId)?.text).toBe('First note (edited)')
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.candidates.deleteCandidateNote,
+      { clerkOrgId, noteId: secondId },
+    )
+    notes = await asAdmin(t, adminId, clerkOrgId).query(
+      api.candidates.listCandidateNotes,
+      { clerkOrgId, candidateId },
+    )
+    expect(notes).toHaveLength(1)
+  })
+
+  it('restricts edit/delete to the author or an admin', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_cnotes_acl'
+    const adminId = 'user_admin_cnotes_acl'
+    const hrId = 'user_hr_cnotes_acl'
+    const { candidateId } = await seedCandidateForOffer(
+      t,
+      clerkOrgId,
+      adminId,
+      'user_cand_cnotes_acl',
+    )
+    await seedHR(t, clerkOrgId, hrId)
+
+    const noteId = await asHR(t, hrId, clerkOrgId).mutation(
+      api.candidates.addCandidateNote,
+      { clerkOrgId, candidateId, text: 'HR note' },
+    )
+
+    // The author can edit their own note.
+    await asHR(t, hrId, clerkOrgId).mutation(api.candidates.updateCandidateNote, {
+      clerkOrgId,
+      noteId,
+      text: 'HR note v2',
+    })
+
+    // An admin can edit and delete someone else's note.
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.candidates.updateCandidateNote,
+      { clerkOrgId, noteId, text: 'HR note v3' },
+    )
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.candidates.deleteCandidateNote,
+      { clerkOrgId, noteId },
+    )
+
+    // A different non-admin author cannot touch it (re-created by admin).
+    const adminNoteId = await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.candidates.addCandidateNote,
+      { clerkOrgId, candidateId, text: 'Admin note' },
+    )
+    await expect(
+      asHR(t, hrId, clerkOrgId).mutation(api.candidates.updateCandidateNote, {
+        clerkOrgId,
+        noteId: adminNoteId,
+        text: 'hijack',
+      }),
+    ).rejects.toThrow(/author or an admin/i)
+    await expect(
+      asHR(t, hrId, clerkOrgId).mutation(api.candidates.deleteCandidateNote, {
+        clerkOrgId,
+        noteId: adminNoteId,
+      }),
+    ).rejects.toThrow(/author or an admin/i)
+  })
+
+  it('rejects candidates and cross-tenant access', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_cnotes_guard'
+    const adminId = 'user_admin_cnotes_guard'
+    const { candidateId } = await seedCandidateForOffer(
+      t,
+      clerkOrgId,
+      adminId,
+      'user_cand_cnotes_guard',
+    )
+
+    await expect(
+      t.withIdentity({ subject: 'user_cand_cnotes_guard' }).query(
+        api.candidates.listCandidateNotes,
+        { clerkOrgId, candidateId },
+      ),
+    ).rejects.toThrow(/required one of|not a member|Forbidden/i)
+
+    const noteId = await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.candidates.addCandidateNote,
+      { clerkOrgId, candidateId, text: 'Private note' },
+    )
+    const otherOrg = 'org_cnotes_other'
+    const otherAdmin = 'user_admin_cnotes_other'
+    await seedTenant(t, otherOrg, otherAdmin)
+    await expect(
+      asAdmin(t, otherAdmin, otherOrg).mutation(api.candidates.deleteCandidateNote, {
+        clerkOrgId: otherOrg,
+        noteId,
+      }),
+    ).rejects.toThrow(/cross-tenant/i)
+  })
+})
+
 describe('reviewApplication and offer lifecycle', () => {
   it('transitions candidate through approved -> offer -> accepted -> hired', async () => {
     stubAdpEnv()

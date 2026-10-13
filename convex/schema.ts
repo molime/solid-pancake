@@ -500,6 +500,18 @@ export default defineSchema({
     .index('by_tenant_email', ['tenantId', 'email'])
     .index('by_tenant_clerk_user', ['tenantId', 'clerkUserId']),
 
+  // Per-candidate recruiter notes with explicit CRUD (Diego's correction,
+  // 2026-10-12: no autosave — notes are individual records).
+  candidateNotes: defineTable({
+    tenantId: v.id('tenants'),
+    candidateId: v.id('candidates'),
+    authorId: v.string(),
+    authorName: v.string(),
+    text: v.string(),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  }).index('by_tenant_candidate', ['tenantId', 'candidateId']),
+
   applications: defineTable({
     tenantId: v.id('tenants'),
     candidateId: v.id('candidates'),

@@ -457,7 +457,7 @@ function SidebarContent({
             <p className="truncate text-xs font-medium text-white">
               {userName}
             </p>
-            <p className="truncate text-[11px] text-atria-sidebar-text/60">
+            <p className="truncate text-[11px] text-atria-sidebar-text">
               {role.replace('org:', '')}
             </p>
           </div>

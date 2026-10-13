@@ -43,9 +43,11 @@ type ClientGroup = {
  */
 export function ClientInvoicePanel({
   clerkOrgId,
+  onDownloadInvoice,
   onDownloadCalendar,
 }: {
   clerkOrgId: string | undefined
+  onDownloadInvoice: (invoiceId: Id<'exportBatches'>) => Promise<void>
   onDownloadCalendar: (clientId: Id<'clients'>, month: string) => Promise<void>
 }) {
   const createPerPatientInvoices = useMutation(
@@ -137,10 +139,19 @@ export function ClientInvoicePanel({
         endDate: range.endDate,
         clientIds: effectiveSelected.map((c) => c.clientId),
       })
-      // Companion document: consolidated payment calendar per client, same
-      // period, downloaded alongside the invoice.
+      // Companion documents: the invoice PDF AND the consolidated payment
+      // calendar per client download immediately on creation (review
+      // feedback: calendar-only left the invoice nowhere to be found). Both
+      // remain downloadable from the invoice row afterwards.
+      let invoicesDownloaded = 0
       let calendars = 0
       for (const created of result.invoices ?? []) {
+        try {
+          await onDownloadInvoice(created.invoiceId)
+          invoicesDownloaded++
+        } catch {
+          // Best-effort — the invoice row has a PDF button either way.
+        }
         try {
           await onDownloadCalendar(
             created.clientId,
@@ -152,9 +163,12 @@ export function ClientInvoicePanel({
         }
       }
       setSelected(new Set())
+      const downloads =
+        invoicesDownloaded > 0 || calendars > 0
+          ? ` Downloaded ${invoicesDownloaded} invoice PDF(s) and ${calendars} payment calendar(s).`
+          : ' Downloads are available from each invoice row below.'
       setMessage(
-        `Created ${result.count} invoice(s) for ${range.startDate} – ${range.endDate}.` +
-          (calendars > 0 ? ` Downloaded ${calendars} payment calendar(s).` : ''),
+        `Created ${result.count} invoice(s) for ${range.startDate} – ${range.endDate}.${downloads}`,
       )
     } catch (err) {
       setError(

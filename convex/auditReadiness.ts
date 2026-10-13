@@ -54,7 +54,9 @@ export async function buildReport(
     .withIndex('by_tenant_created', (q) => q.eq('tenantId', tenantId))
     .collect()
 
-  const gaps = await computeComplianceGaps(ctx, tenantId)
+  // Hand the already-collected archive items to the gaps computation so the
+  // report scans documentArchiveItems once, not twice.
+  const gaps = await computeComplianceGaps(ctx, tenantId, undefined, archiveItems)
 
   const checks = await ctx.db
     .query('backgroundChecks')
@@ -157,13 +159,16 @@ export async function buildReport(
     }
   }
 
+  // Ranged index read instead of a full-table collect — the all-time count
+  // was only used by the CSV's "Total Events" row (now dropped; the all-time
+  // scan alone pushed large tenants past Convex's per-query read limit).
   const events = await ctx.db
     .query('auditEvents')
-    .withIndex('by_tenant_created_at', (q) => q.eq('tenantId', tenantId))
+    .withIndex('by_tenant_created_at', (q) =>
+      q.eq('tenantId', tenantId).gte('createdAt', auditWindowStart),
+    )
     .collect()
-  const recentEvents = events.filter(
-    (event) => event.createdAt >= auditWindowStart,
-  ).length
+  const recentEvents = events.length
 
   return {
     agency: {
@@ -195,7 +200,6 @@ export async function buildReport(
       total: lines.length,
     },
     auditEvents: {
-      total: events.length,
       last30Days: recentEvents,
     },
   }
@@ -325,7 +329,6 @@ function buildCsv(report: AuditReport, generatedAt: string) {
 
   rows.push(csvRow(['Audit Events']))
   rows.push(csvRow(['Metric', 'Count']))
-  rows.push(csvRow(['Total Events', report.auditEvents.total]))
   rows.push(csvRow(['Events Last 30 Days', report.auditEvents.last30Days]))
 
   return rows.join('\r\n')
@@ -355,21 +358,40 @@ export const exportCsv = query({
 
 const FIX_SOON_DAYS = 30
 
+// What the ARC dialog can do with the item in place (docs/design-oct12-corrections.md,
+// stage 2: no redirects anywhere for fixing issues).
+type FixItemKind =
+  | 'credential'
+  | 'billing'
+  | 'sir-verbal'
+  | 'sir-written'
+  | 'obligation'
+  | 'progress-report'
+
 type FixItem = {
   id: string
+  kind: FixItemKind
   severity: 'critical' | 'soon'
   title: string
   detail?: string
   // Null when the caller's role cannot open the target page (e.g. /billing
   // is admin/coordinator-only, so HR sees the item without a Fix button).
+  // Kept as display metadata only — the ARC dialog never redirects.
   linkTo: string | null
   dueAt?: string
   // Who the fix belongs to — drives grouping, search, and the employee /
   // client filters in the simple view.
   employeeName?: string
   clientName?: string
-  // Present on credential items: everything the in-place ARC dialog needs to
-  // upload the document or nudge the employee, without a redirect.
+  // In-place action payloads per kind.
+  incidentId?: string // sir-verbal / sir-written
+  obligationId?: string // obligation
+  clientId?: string // progress-report
+  clerkUserId?: string // billing: the shift's caregiver, for reminders
+  lineIds?: string[] // billing: the merged lines a release targets
+  // Present on credential items (and credential-flavored billing blocks):
+  // everything the in-place ARC dialog needs to upload the document or nudge
+  // the employee, without a redirect.
   credential?: {
     clerkUserId: string | null
     employeeProfileId: string
@@ -443,6 +465,7 @@ export const getFixList = query({
         if (gap.expired.indexOf(label) !== index) return
         items.push({
           id: `credential-expired-${subject}-${label}`,
+          kind: 'credential',
           severity: 'critical',
           title: `${gap.displayName}'s ${label} expired`,
           linkTo: '/compliance',
@@ -460,6 +483,7 @@ export const getFixList = query({
         if (gap.missing.indexOf(label) !== index) return
         items.push({
           id: `credential-missing-${subject}-${label}`,
+          kind: 'credential',
           severity: 'critical',
           title: `${gap.displayName} is missing: ${label}`,
           linkTo: '/compliance',
@@ -500,22 +524,29 @@ export const getFixList = query({
         profileBySubject.set(profile.clerkUserId, profile)
       }
     }
+    // Expiring soon — read through the by_tenant_expires_at index so large
+    // archives don't blow the per-query read limit (a full collect here plus
+    // buildReport's scans timed out the whole page).
     const archiveItems = await ctx.db
       .query('documentArchiveItems')
-      .withIndex('by_tenant_created', (q) => q.eq('tenantId', tenantId))
+      .withIndex('by_tenant_expires_at', (q) =>
+        q
+          .eq('tenantId', tenantId)
+          .gte('expiresAt', nowIso)
+          .lte('expiresAt', soonCutoff),
+      )
       .collect()
     for (const item of archiveItems) {
       if (item.subjectType !== 'employee') continue
       if (item.overrideStatus === 'overridden') continue
-      if (!item.expiresAt || item.expiresAt < nowIso || item.expiresAt > soonCutoff) {
-        continue
-      }
       const profile = profileBySubject.get(item.subjectId)
       const name = profile?.displayName ?? 'A team member'
       const label = labelByCategory.get(item.category) ?? item.category
-      const days = Math.max(1, Math.round(hoursUntil(item.expiresAt, now) / 24))
+      // The by_tenant_expires_at range query only returns rows WITH expiresAt.
+      const days = Math.max(1, Math.round(hoursUntil(item.expiresAt!, now) / 24))
       items.push({
         id: `credential-expiring-${item._id}`,
+        kind: 'credential',
         severity: 'soon',
         title: `${name}'s ${label} expires in ${days} day${days === 1 ? '' : 's'}`,
         linkTo: '/compliance',
@@ -558,7 +589,9 @@ export const getFixList = query({
           sla.verbalBreached
             ? {
                 id: `sir-verbal-${incident._id}`,
-                severity: 'critical',
+                kind: 'sir-verbal' as const,
+                incidentId: incident._id as string,
+                severity: 'critical' as const,
                 title: `${clientName}'s incident still needs the 24-hour call to the regional center`,
                 detail: overdueByDetail(sla.verbalDueAt, now),
                 linkTo,
@@ -567,7 +600,9 @@ export const getFixList = query({
               }
             : {
                 id: `sir-verbal-${incident._id}`,
-                severity: 'soon',
+                kind: 'sir-verbal' as const,
+                incidentId: incident._id as string,
+                severity: 'soon' as const,
                 title: `Call the regional center about ${clientName}'s incident`,
                 detail: dueInDetail(sla.verbalDueAt, now),
                 linkTo,
@@ -581,7 +616,9 @@ export const getFixList = query({
           sla.writtenBreached
             ? {
                 id: `sir-written-${incident._id}`,
-                severity: 'critical',
+                kind: 'sir-written' as const,
+                incidentId: incident._id as string,
+                severity: 'critical' as const,
                 title: `${clientName}'s incident is missing its written report`,
                 detail: overdueByDetail(sla.writtenDueAt, now),
                 linkTo,
@@ -590,7 +627,9 @@ export const getFixList = query({
               }
             : {
                 id: `sir-written-${incident._id}`,
-                severity: 'soon',
+                kind: 'sir-written' as const,
+                incidentId: incident._id as string,
+                severity: 'soon' as const,
                 title: `${clientName}'s incident needs its written report`,
                 detail: dueInDetail(sla.writtenDueAt, now),
                 linkTo,
@@ -612,6 +651,8 @@ export const getFixList = query({
       if (obligation.dueAt < nowIso) {
         items.push({
           id: `obligation-${obligation._id}`,
+          kind: 'obligation',
+          obligationId: obligation._id as string,
           severity: 'critical',
           title: `${label} is overdue`,
           detail: overdueByDetail(obligation.dueAt, now),
@@ -621,6 +662,8 @@ export const getFixList = query({
       } else if (obligation.dueAt <= soonCutoff) {
         items.push({
           id: `obligation-${obligation._id}`,
+          kind: 'obligation',
+          obligationId: obligation._id as string,
           severity: 'soon',
           title: `${label} is due soon`,
           detail: dueInDetail(obligation.dueAt, now),
@@ -631,25 +674,38 @@ export const getFixList = query({
     }
 
     // Progress reports — the same computeDueInfo math as
-    // progressReports.getProgressReportSummary.
+    // progressReports.getProgressReportSummary. Both tables are scanned once
+    // and grouped by client (per-client queries timed out at scale).
+    const allReports = await ctx.db
+      .query('progressReports')
+      .withIndex('by_tenant_client_period', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    const allObjectives = await ctx.db
+      .query('clientObjectives')
+      .withIndex('by_tenant_client', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    const reportsByClient = new Map<string, typeof allReports>()
+    for (const reportRow of allReports) {
+      const list = reportsByClient.get(reportRow.clientId as string) ?? []
+      list.push(reportRow)
+      reportsByClient.set(reportRow.clientId as string, list)
+    }
+    const objectivesByClient = new Map<string, typeof allObjectives>()
+    for (const objective of allObjectives) {
+      const list = objectivesByClient.get(objective.clientId as string) ?? []
+      list.push(objective)
+      objectivesByClient.set(objective.clientId as string, list)
+    }
     for (const client of clients) {
-      const clientReports = await ctx.db
-        .query('progressReports')
-        .withIndex('by_tenant_client_period', (q) =>
-          q.eq('tenantId', tenantId).eq('clientId', client._id),
-        )
-        .collect()
-      const objectives = await ctx.db
-        .query('clientObjectives')
-        .withIndex('by_tenant_client', (q) =>
-          q.eq('tenantId', tenantId).eq('clientId', client._id),
-        )
-        .collect()
+      const clientReports = reportsByClient.get(client._id as string) ?? []
+      const objectives = objectivesByClient.get(client._id as string) ?? []
       const due = computeDueInfo(client, objectives, clientReports, todayDateOnly)
       const dueAt = due.nextDueAt ? `${due.nextDueAt}T00:00:00.000Z` : undefined
       if (due.dueStatus === 'overdue') {
         items.push({
           id: `progress-report-${client._id}`,
+          kind: 'progress-report',
+          clientId: client._id as string,
           severity: 'critical',
           title: `${client.displayName}'s ${due.periodType} progress report is overdue`,
           linkTo: `/clients/${client._id}`,
@@ -659,6 +715,8 @@ export const getFixList = query({
       } else if (due.dueStatus === 'due_soon') {
         items.push({
           id: `progress-report-${client._id}`,
+          kind: 'progress-report',
+          clientId: client._id as string,
           severity: 'soon',
           title: `${client.displayName}'s ${due.periodType} progress report is coming up`,
           detail: dueAt ? dueInDetail(dueAt, now) : undefined,
@@ -669,55 +727,117 @@ export const getFixList = query({
       }
     }
 
-    // Blocked billing lines, deduped per client + reason: a caregiver who is
-    // missing a credential blocks every shift they worked, which used to
-    // produce one near-identical row per line. /billing is
-    // admin/coordinator-only, so HR sees the item without a Fix button
-    // (linkTo: null).
+    // Blocked billing lines, deduped so a systemic block produces one fix,
+    // not one row per line. Credential-flavored blocks (the legacy reasons
+    // 'Missing required credential: X', 'Expired credential: X', 'Rejected
+    // credential: X') regroup per employee + category + reason and carry the
+    // credential payload, so the ARC dialog can upload the document and then
+    // release the block in place. Everything else keeps the client + reason
+    // dedupe. /billing is admin/coordinator-only, so HR sees the item without
+    // a deep link (linkTo: null) — the dialog never redirects either way.
     const canOpenBilling = role === 'org:admin'
     const lines = await ctx.db
       .query('billingLines')
       .withIndex('by_tenant_export_batch', (q) => q.eq('tenantId', tenantId))
       .collect()
-    const blockedByClientAndReason = new Map<
-      string,
-      { line: (typeof lines)[number]; clientName: string; caregiverName?: string; count: number }
-    >()
+    // One scan for the shifts behind blocked lines instead of a get() per
+    // line (timed out at scale).
+    const tenantShifts = await ctx.db
+      .query('shifts')
+      .withIndex('by_tenant_status_start', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    const shiftById = new Map(tenantShifts.map((shift) => [shift._id as string, shift]))
+    type BlockedGroup = {
+      line: (typeof lines)[number]
+      clientName: string
+      caregiverName?: string
+      clerkUserId?: string
+      count: number
+      lineIds: string[]
+      credential?: FixItem['credential']
+    }
+    const blockedGroups = new Map<string, BlockedGroup>()
     for (const line of lines) {
       if (isBlank(line.blockedReason)) continue
-      const shift = await ctx.db.get(line.shiftId)
+      const reason = line.blockedReason!
+      const shift = shiftById.get(line.shiftId as string)
       const clientName = shift
         ? (clientNames.get(shift.clientId as string) ?? 'a client')
         : 'a client'
-      const caregiverName = shift?.caregiverId
-        ? profileBySubject.get(shift.caregiverId)?.displayName
+      const caregiverId = shift?.caregiverId
+      const caregiverProfile = caregiverId
+        ? profileBySubject.get(caregiverId)
         : undefined
-      const key = `${clientName}\0${line.blockedReason}`
-      const existing = blockedByClientAndReason.get(key)
+      const caregiverName = caregiverProfile?.displayName
+
+      // Credential-flavored? The token after the prefix is a requirement
+      // label for 'Missing required credential' and a category for the
+      // Expired/Rejected variants — resolve both against labelByCategory.
+      let credential: FixItem['credential']
+      if (
+        caregiverProfile &&
+        /credential|Health Screening|TB Test/i.test(reason)
+      ) {
+        const token = reason
+          .replace(
+            /^(?:Missing required credential|Expired credential|Rejected credential):\s*/i,
+            '',
+          )
+          .trim()
+        const category = labelByCategory.has(token)
+          ? token
+          : ([...labelByCategory.entries()].find(([, l]) => l === token)?.[0] ??
+            token)
+        credential = {
+          clerkUserId: caregiverProfile.clerkUserId ?? null,
+          employeeProfileId: caregiverProfile._id as string,
+          category,
+          label: labelByCategory.get(category) ?? token,
+          // A rejected document needs a renewed upload, same as an expired one.
+          state: /^Missing/i.test(reason) ? 'missing' : 'expired',
+        }
+      }
+
+      const key = credential
+        ? `credential\0${caregiverId}\0${credential.category}\0${reason}`
+        : `${clientName}\0${reason}`
+      const existing = blockedGroups.get(key)
       if (existing) {
         existing.count += 1
+        existing.lineIds.push(line._id as string)
       } else {
-        blockedByClientAndReason.set(key, {
+        blockedGroups.set(key, {
           line,
           clientName,
           caregiverName,
+          clerkUserId: caregiverId,
           count: 1,
+          lineIds: [line._id as string],
+          credential,
         })
       }
     }
-    for (const blocked of blockedByClientAndReason.values()) {
+    for (const blocked of blockedGroups.values()) {
+      const who = blocked.credential
+        ? `by ${blocked.caregiverName ?? 'a caregiver'}`
+        : `for ${blocked.clientName}`
       items.push({
         id: `billing-${blocked.line._id}`,
+        kind: 'billing',
         severity: 'critical',
         title:
           blocked.count === 1
-            ? `A shift for ${blocked.clientName} can't be billed yet`
-            : `${blocked.count} shifts for ${blocked.clientName} can't be billed yet`,
+            ? `A shift ${who} can't be billed yet`
+            : `${blocked.count} shifts ${who} can't be billed yet`,
         detail: blocked.line.blockedReason,
         linkTo: canOpenBilling ? '/billing' : null,
         dueAt: blocked.line.blockedAt ?? blocked.line.createdAt,
         employeeName: blocked.caregiverName,
-        clientName: blocked.clientName,
+        // Credential groups span clients; client+reason groups keep the name.
+        clientName: blocked.credential ? undefined : blocked.clientName,
+        clerkUserId: blocked.clerkUserId,
+        lineIds: blocked.lineIds,
+        credential: blocked.credential,
       })
     }
 

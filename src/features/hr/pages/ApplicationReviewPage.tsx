@@ -342,6 +342,68 @@ function SectionBlock({ title, children }: { title: string; children: React.Reac
   )
 }
 
+// "Request a correction" needs a required reason (Diego's correction,
+// 2026-10-12: the autosaved notes textarea that used to supply it is gone,
+// so the reason is collected in this dialog and sent as hrNotes).
+function CorrectionDialog({
+  open,
+  reason,
+  submitting,
+  onReasonChange,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean
+  reason: string
+  submitting: boolean
+  onReasonChange: (value: string) => void
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  if (!open) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onCancel}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="w-full max-w-md rounded-[var(--radius-atria-lg)] border border-atria-border bg-atria-surface p-6 shadow-[var(--shadow-atria-pop)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-lg font-semibold text-atria-ink">Request a correction</h3>
+        <p className="mt-2 text-base text-atria-text-secondary">
+          Describe what the candidate needs to fix. This reason is sent with the request.
+        </p>
+        <div className="mt-4">
+          <Textarea
+            data-testid="correction-reason-input"
+            value={reason}
+            onChange={(e) => onReasonChange(e.target.value)}
+            placeholder="e.g. The address on your application does not match your photo ID…"
+          />
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            data-testid="confirm-correction-button"
+            disabled={submitting || !reason.trim()}
+            onClick={onConfirm}
+          >
+            Request correction
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ApplicationReviewPage() {
   const { candidateId } = useParams<{ candidateId: string }>()
   const navigate = useNavigate()
@@ -379,9 +441,17 @@ export function ApplicationReviewPage() {
       ? { clerkOrgId, candidateId: candidateId as Id<'candidates'> }
       : 'skip',
   )
+  const candidateNotes = useQuery(
+    api.candidates.listCandidateNotes,
+    clerkOrgId && candidateId
+      ? { clerkOrgId, candidateId: candidateId as Id<'candidates'> }
+      : 'skip',
+  )
 
   const reviewApplication = useMutation(api.candidates.reviewApplication)
-  const saveRecruiterNotes = useMutation(api.candidates.saveRecruiterNotes)
+  const addCandidateNote = useMutation(api.candidates.addCandidateNote)
+  const updateCandidateNote = useMutation(api.candidates.updateCandidateNote)
+  const deleteCandidateNote = useMutation(api.candidates.deleteCandidateNote)
   const sendOffer = useMutation(api.candidates.sendOffer)
   const saveW4EmployerSection = useMutation(api.candidates.saveW4EmployerSection)
   const saveI9Section2 = useMutation(api.candidates.saveI9Section2ForHR)
@@ -418,27 +488,14 @@ export function ApplicationReviewPage() {
       : 'skip',
   )
 
-  const [hrNotes, setHrNotes] = useState('')
-  // Recruiter notes persist on the candidate record (review feedback: they
-  // used to live only in local state and vanished on navigation). Same
-  // re-sync idiom as the offer fields: the key changes only when the
-  // persisted value changes, so in-progress edits are never wiped.
-  const [notesSourceKey, setNotesSourceKey] = useState<string | null>(null)
-  const persistedNotes = candidate?.recruiterNotes ?? ''
-  const nextNotesKey = `${candidateId}:${persistedNotes}`
-  if (notesSourceKey !== nextNotesKey) {
-    setNotesSourceKey(nextNotesKey)
-    setHrNotes(persistedNotes)
-  }
-  const handleNotesBlur = () => {
-    if (!clerkOrgId || !candidateId) return
-    if (hrNotes === persistedNotes) return
-    void saveRecruiterNotes({
-      clerkOrgId,
-      candidateId: candidateId as Id<'candidates'>,
-      notes: hrNotes,
-    })
-  }
+  // Candidate notes CRUD (Diego's correction, 2026-10-12): explicit create,
+  // edit, and delete per note — no autosave.
+  const [newNoteText, setNewNoteText] = useState('')
+  const [editingNoteId, setEditingNoteId] = useState<Id<'candidateNotes'> | null>(null)
+  const [editingNoteText, setEditingNoteText] = useState('')
+  const [confirmDeleteNoteId, setConfirmDeleteNoteId] = useState<Id<'candidateNotes'> | null>(null)
+  const [correctionOpen, setCorrectionOpen] = useState(false)
+  const [correctionReason, setCorrectionReason] = useState('')
   const [payRate, setPayRate] = useState(String(fields.payRate || '$22.00 / hr'))
   const [startDate, setStartDate] = useState(String(fields.startDate || ''))
   const [schedule, setSchedule] = useState(String(fields.schedule || 'Flexible, based on availability'))
@@ -693,18 +750,79 @@ export function ApplicationReviewPage() {
     }
   }
 
+  const handleAddNote = async () => {
+    if (!clerkOrgId || !candidateId || !newNoteText.trim()) return
+    setSubmitting(true)
+    try {
+      await addCandidateNote({
+        clerkOrgId,
+        candidateId: candidateId as Id<'candidates'>,
+        text: newNoteText,
+      })
+      setNewNoteText('')
+    } catch (err) {
+      show(
+        'danger',
+        'Could not save note',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleSaveEditedNote = async () => {
+    if (!clerkOrgId || !editingNoteId || !editingNoteText.trim()) return
+    setSubmitting(true)
+    try {
+      await updateCandidateNote({
+        clerkOrgId,
+        noteId: editingNoteId,
+        text: editingNoteText,
+      })
+      setEditingNoteId(null)
+      setEditingNoteText('')
+    } catch (err) {
+      show(
+        'danger',
+        'Could not update note',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDeleteNote = async () => {
+    if (!clerkOrgId || !confirmDeleteNoteId) return
+    setSubmitting(true)
+    try {
+      await deleteCandidateNote({ clerkOrgId, noteId: confirmDeleteNoteId })
+      setConfirmDeleteNoteId(null)
+    } catch (err) {
+      show(
+        'danger',
+        'Could not delete note',
+        err instanceof Error ? sanitizeConvexError(err.message) : 'Unknown error.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handleCorrection = async () => {
-    if (!clerkOrgId || !candidateId || !hrNotes.trim()) return
+    const reason = correctionReason.trim()
+    if (!clerkOrgId || !candidateId || !reason) return
     setSubmitting(true)
     try {
       await reviewApplication({
         clerkOrgId,
         candidateId: candidateId as Id<'candidates'>,
         decision: 'needs_correction',
-        hrNotes: hrNotes.trim(),
+        hrNotes: reason,
       })
-      // Notes persist on the candidate (auto-saved) — keep them visible as
-      // the correction reason instead of clearing the textarea.
+      setCorrectionOpen(false)
+      setCorrectionReason('')
       show('warning', 'Correction requested', 'The candidate has been notified.')
     } catch (err) {
       show(
@@ -725,7 +843,6 @@ export function ApplicationReviewPage() {
         clerkOrgId,
         candidateId: candidateId as Id<'candidates'>,
         decision: 'rejected',
-        hrNotes: hrNotes.trim() || undefined,
       })
       setConfirmReject(false)
       show('danger', 'Application rejected')
@@ -1592,20 +1709,107 @@ export function ApplicationReviewPage() {
               </div>
             </SectionBlock>
 
-            <FieldGroup
-              label="Recruiter notes"
-              htmlFor="hr-notes"
-              helperText="Saved automatically. Required when requesting a correction."
-            >
-              <Textarea
-                id="hr-notes"
-                data-testid="hr-notes-input"
-                value={hrNotes}
-                onChange={(e) => setHrNotes(e.target.value)}
-                onBlur={handleNotesBlur}
-                placeholder="Add notes about the application…"
-              />
-            </FieldGroup>
+            <div className="space-y-3" data-testid="candidate-notes">
+              <p className="text-sm font-medium text-atria-ink">Recruiter notes</p>
+              {candidateNotes === undefined ? (
+                <p className="text-sm text-atria-text-secondary">Loading notes…</p>
+              ) : candidateNotes.length === 0 ? (
+                <p className="text-sm text-atria-text-secondary">No notes yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {candidateNotes.map((note) => (
+                    <li
+                      key={note._id}
+                      data-testid={`candidate-note-${note._id}`}
+                      className="rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3"
+                    >
+                      {editingNoteId === note._id ? (
+                        <div className="space-y-2">
+                          <Textarea
+                            data-testid="edit-note-input"
+                            value={editingNoteText}
+                            onChange={(e) => setEditingNoteText(e.target.value)}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => {
+                                setEditingNoteId(null)
+                                setEditingNoteText('')
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              data-testid="save-edited-note-button"
+                              disabled={submitting || !editingNoteText.trim()}
+                              onClick={() => void handleSaveEditedNote()}
+                            >
+                              Save
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs text-atria-text-muted">
+                              {note.authorName} · {formatDateUS(note.createdAt)}
+                              {note.updatedAt !== note.createdAt ? ' (edited)' : ''}
+                            </p>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                data-testid={`edit-note-${note._id}`}
+                                onClick={() => {
+                                  setEditingNoteId(note._id)
+                                  setEditingNoteText(note.text)
+                                }}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="danger"
+                                size="sm"
+                                data-testid={`delete-note-${note._id}`}
+                                onClick={() => setConfirmDeleteNoteId(note._id)}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                          <p className="mt-2 whitespace-pre-wrap text-sm text-atria-ink">
+                            {note.text}
+                          </p>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="space-y-2">
+                <Textarea
+                  data-testid="new-note-input"
+                  value={newNoteText}
+                  onChange={(e) => setNewNoteText(e.target.value)}
+                  placeholder="Add a note about this candidate…"
+                />
+                <div className="flex justify-end">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    data-testid="save-note-button"
+                    disabled={submitting || !newNoteText.trim()}
+                    onClick={() => void handleAddNote()}
+                  >
+                    Save note
+                  </Button>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -1859,8 +2063,8 @@ export function ApplicationReviewPage() {
               size="lg"
               className="w-full border-atria-warning text-atria-warning hover:bg-atria-warning-bg"
               data-testid="request-correction-button"
-              disabled={submitting || !hrNotes.trim()}
-              onClick={handleCorrection}
+              disabled={submitting}
+              onClick={() => setCorrectionOpen(true)}
             >
               <RotateCcw className="h-4 w-4" />
               Request a correction
@@ -1888,6 +2092,22 @@ export function ApplicationReviewPage() {
         confirmLabel="Reject"
         onConfirm={handleReject}
         onCancel={() => setConfirmReject(false)}
+      />
+      <ConfirmDialog
+        open={confirmDeleteNoteId !== null}
+        title="Delete note"
+        message="Are you sure you want to delete this note? This action cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={() => void handleDeleteNote()}
+        onCancel={() => setConfirmDeleteNoteId(null)}
+      />
+      <CorrectionDialog
+        open={correctionOpen}
+        reason={correctionReason}
+        submitting={submitting}
+        onReasonChange={setCorrectionReason}
+        onConfirm={() => void handleCorrection()}
+        onCancel={() => setCorrectionOpen(false)}
       />
       <HrToast toast={toast} onClose={hide} />
     </div>

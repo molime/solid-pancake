@@ -461,7 +461,7 @@ export function DocumentUploadPage() {
             <button
               type='button'
               onClick={handleSignOut}
-              className='mt-2 text-xs text-atria-text-muted hover:text-atria-ink hover:underline'
+              className='mt-2 text-xs text-atria-text-secondary hover:text-atria-ink hover:underline'
             >
               Sign out
             </button>

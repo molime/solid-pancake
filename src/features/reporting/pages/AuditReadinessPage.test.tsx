@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { getFunctionName } from 'convex/server'
 
@@ -148,6 +148,13 @@ type MockState = {
     status: 'ready' | 'almost' | 'not_ready'
     items: {
       id: string
+      kind?:
+        | 'credential'
+        | 'billing'
+        | 'sir-verbal'
+        | 'sir-written'
+        | 'obligation'
+        | 'progress-report'
       severity: 'critical' | 'soon'
       title: string
       detail?: string
@@ -155,6 +162,11 @@ type MockState = {
       dueAt?: string
       employeeName?: string
       clientName?: string
+      incidentId?: string
+      obligationId?: string
+      clientId?: string
+      clerkUserId?: string
+      lineIds?: string[]
       credential?: {
         clerkUserId: string | null
         employeeProfileId: string
@@ -338,7 +350,7 @@ describe('AuditReadinessPage — five pillars', () => {
     expect(ds1891Row?.textContent).toContain('Review')
   })
 
-  it('routes unmet credential items to the ARC console instead of offering reminders', async () => {
+  it('shows in-place fix rows for unmet credential items instead of console links', async () => {
     mockState({
       report: makeReport({
         gaps: [
@@ -356,6 +368,26 @@ describe('AuditReadinessPage — five pillars', () => {
       summary: SUMMARY_CLEAR,
       obligations: makeObligations(),
       retention: RETENTION,
+      fixList: {
+        status: 'not_ready',
+        items: [
+          {
+            id: 'credential-expired-1',
+            kind: 'credential',
+            severity: 'critical',
+            title: "Care Giver's CPR certificate expired",
+            linkTo: '/compliance',
+            employeeName: 'Care Giver',
+            credential: {
+              clerkUserId: 'user_cg1',
+              employeeProfileId: 'profile_cg1',
+              category: 'cpr',
+              label: 'CPR certificate',
+              state: 'expired',
+            },
+          },
+        ],
+      },
     })
 
     renderPage()
@@ -363,14 +395,23 @@ describe('AuditReadinessPage — five pillars', () => {
     // Expand the unmet credential item.
     fireEvent.click(screen.getByText('All caregiver credentials current'))
 
-    // The expansion routes to the ARC simple view (/audit) — reminders were
-    // removed from the full view per the review call.
-    const link = screen.getByRole('link', {
-      name: /open the audit ready center to fix these/i,
-    })
-    expect(link.getAttribute('href')).toBe('/audit')
+    // The expansion shows the matching fix row with an in-place Fix it
+    // button — no link to /audit, /compliance, or any other page.
+    const row = screen
+      .getByText('All caregiver credentials current')
+      .closest('li')!
+    expect(row.textContent).toContain("Care Giver's CPR certificate expired")
     expect(
-      screen.queryByRole('button', { name: /send reminder/i }),
+      within(row).getByRole('button', { name: /fix it/i }),
+    ).toBeInTheDocument()
+    expect(within(row).queryAllByRole('link')).toHaveLength(0)
+    expect(
+      screen.queryByRole('link', {
+        name: /open the audit ready center to fix these/i,
+      }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: /open the console to fix these/i }),
     ).not.toBeInTheDocument()
   })
 
@@ -428,10 +469,18 @@ describe('AuditReadinessPage — simple view (default)', () => {
         items: [
           {
             id: 'credential-expiring-1',
+            kind: 'credential',
             severity: 'soon',
             title: "Maria's CPR card expires in 12 days",
             linkTo: '/compliance',
             employeeName: 'Maria',
+            credential: {
+              clerkUserId: 'user_maria',
+              employeeProfileId: 'profile_maria',
+              category: 'cpr',
+              label: 'CPR card',
+              state: 'expiring',
+            },
           },
         ],
       },
@@ -448,33 +497,41 @@ describe('AuditReadinessPage — simple view (default)', () => {
       screen.getByText("Maria's CPR card expires in 12 days"),
     ).toBeInTheDocument()
 
-    // Fix it opens the popup instead of redirecting.
+    // Fix it opens the in-place popup — no redirect link anywhere.
     fireEvent.click(screen.getByRole('button', { name: /fix it/i }))
     const dialog = screen.getByRole('dialog')
     expect(dialog.textContent).toContain("Maria's CPR card expires in 12 days")
     expect(
-      screen.getByRole('link', { name: /open it in the console/i }),
-    ).toHaveAttribute('href', '/compliance')
+      screen.getByRole('button', { name: /upload cpr card/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: /open it in the console/i }),
+    ).not.toBeInTheDocument()
   })
 
-  it('shows a fix-it button per item, even when there is no console link', () => {
+  it('shows a fix-it button per item with in-place actions per kind', () => {
     mockState({
       fixList: {
         status: 'not_ready',
         items: [
           {
             id: 'sir-written-1',
+            kind: 'sir-written',
             severity: 'critical',
             title: "John's incident is missing its written report",
             detail: 'overdue by 6 hours',
             linkTo: '/incidents/abc123',
+            incidentId: 'incident_1',
           },
           {
             id: 'billing-1',
+            kind: 'billing',
             severity: 'critical',
-            title: "A shift for John can't be billed yet",
+            title: "A shift by John can't be billed yet",
             detail: 'Missing required credential: Driver License',
             linkTo: null,
+            clerkUserId: 'user_cg',
+            lineIds: ['line_1'],
           },
         ],
       },
@@ -487,10 +544,20 @@ describe('AuditReadinessPage — simple view (default)', () => {
     expect(fixButtons).toHaveLength(2)
     expect(screen.getByText('overdue by 6 hours')).toBeInTheDocument()
 
-    // The item without a console link explains who can resolve it.
+    // SIR items record the report in place instead of redirecting.
+    fireEvent.click(fixButtons[0]!)
+    expect(
+      screen.getByRole('button', {
+        name: /mark the written report as submitted/i,
+      }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /close/i }))
+
+    // Billing blocks explain the admin-only release when the viewer is not
+    // an admin (members.me returns undefined here).
     fireEvent.click(fixButtons[1]!)
     expect(screen.getByRole('dialog').textContent).toContain(
-      'Only an admin can resolve this',
+      'Only an agency admin can release a billing block',
     )
   })
 
@@ -501,6 +568,7 @@ describe('AuditReadinessPage — simple view (default)', () => {
         items: [
           {
             id: 'credential-missing-1',
+            kind: 'credential',
             severity: 'critical',
             title: 'Diego is missing: Background Check',
             linkTo: '/compliance',
@@ -537,6 +605,7 @@ describe('AuditReadinessPage — simple view (default)', () => {
         items: [
           {
             id: 'credential-expired-1',
+            kind: 'credential',
             severity: 'critical',
             title: "Carlos Rivera's Driver License expired",
             linkTo: '/compliance',
@@ -544,9 +613,11 @@ describe('AuditReadinessPage — simple view (default)', () => {
           },
           {
             id: 'sir-written-1',
+            kind: 'sir-written',
             severity: 'critical',
             title: "Jane Doe's incident is missing its written report",
             linkTo: '/incidents/abc123',
+            incidentId: 'incident_1',
             clientName: 'Jane Doe',
           },
         ],

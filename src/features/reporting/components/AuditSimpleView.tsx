@@ -75,7 +75,7 @@ const STATUS_PRESENTATION = {
   },
 } as const
 
-type FixListItem = FunctionReturnType<
+export type FixListItem = FunctionReturnType<
   typeof api.auditReadiness.getFixList
 >['items'][number]
 
@@ -104,13 +104,17 @@ function credentialReminderMessage(
 }
 
 /**
- * In-place fix popup (no redirect). Credential items show only the relevant
- * artifact: the admin uploads the missing/expired document right here via the
- * same files + documentArchive pipeline as the rest of the app, or emails the
- * employee a reminder to upload it themselves. Other items show the issue
- * detail plus a link into the console that owns the fix.
+ * In-place fix popup (docs/design-oct12-corrections.md, stage 2: no redirects
+ * anywhere for fixing issues). Every kind is resolved right here:
+ * - credential: upload the document, or email the employee a reminder.
+ * - billing: credential blocks get the same upload + an admin "Release the
+ *   billing block"; progress-note blocks nudge the caregiver; hours-mismatch
+ *   blocks get an admin override with a required reason.
+ * - sir-verbal / sir-written: record the 24h call / 48h written report.
+ * - obligation: mark complete (rolls the due date forward).
+ * - progress-report: notify admins + coordinators to write the report.
  */
-function FixDialog({
+export function FixDialog({
   item,
   clerkOrgId,
   onClose,
@@ -124,16 +128,67 @@ function FixDialog({
     api.documentArchive.addEmployeeCredentialDocument,
   )
   const sendReminder = useMutation(api.notifications.sendReminderToMember)
+  const releaseBlock = useMutation(api.billing.releaseBillingBlock)
+  const markVerbalReported = useMutation(api.incidents.markVerbalReported)
+  const markWrittenSubmitted = useMutation(api.incidents.markWrittenSubmitted)
+  const completeObligation = useMutation(
+    api.agencyObligations.completeObligation,
+  )
+  const sendAlert = useMutation(api.notifications.sendAgencyAlert)
+  const member = useQuery(api.members.me, { clerkOrgId })
+  const isAdmin = member?.role === 'org:admin'
 
   const [file, setFile] = useState<File | null>(null)
   const [expiresAt, setExpiresAt] = useState('')
   const [error, setError] = useState('')
   const [isUploading, setIsUploading] = useState(false)
+  const [uploaded, setUploaded] = useState(false)
   const [isReminding, setIsReminding] = useState(false)
   const [reminderSent, setReminderSent] = useState(false)
+  const [releaseReason, setReleaseReason] = useState('')
+  const [isReleasing, setIsReleasing] = useState(false)
+  const [obligationNotes, setObligationNotes] = useState('')
+  const [isActing, setIsActing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const credential = item.credential
+  const isBilling = item.kind === 'billing'
+  const detailText = item.detail ?? ''
+  const isProgressNoteBlock =
+    isBilling && !credential && /missing progress note|incomplete/i.test(detailText)
+  const isHoursMismatch =
+    isBilling && !credential && /hours exceed/i.test(detailText)
+
+  const kindIntro = (() => {
+    switch (item.kind) {
+      case 'billing':
+        if (credential) {
+          return 'This shift is blocked because of the credential below. Upload it here, then release the block.'
+        }
+        if (isProgressNoteBlock) {
+          return 'The caregiver must complete the progress note for this shift before it can be billed.'
+        }
+        if (isHoursMismatch) {
+          return "The recorded hours exceed the client's approved hours. An admin can release this block with an override reason."
+        }
+        return 'An admin can release this block with an override reason.'
+      case 'sir-verbal':
+        return 'State rules require a phone call to the regional center within 24 hours of learning about the incident. If the call already happened, record it here.'
+      case 'sir-written':
+        return 'A written report must be submitted to the regional center within 48 hours of the incident. If it has been submitted, record it here.'
+      case 'obligation':
+        return "Marking this complete records today's date and rolls the due date forward to the next filing cycle."
+      case 'progress-report':
+        return "The report must be written by the coordinator from the client's record. Notify the team so someone picks it up."
+      default:
+        return null
+    }
+  })()
+
+  const actionError = (err: unknown, fallback: string) =>
+    setError(
+      err instanceof Error ? sanitizeConvexError(err.message) : fallback,
+    )
 
   const handleFileChange = (selected: File | null) => {
     setError('')
@@ -171,13 +226,15 @@ function FixDialog({
         size: file.size,
         expiresAt: expiresAt ? `${expiresAt}T00:00:00.000Z` : undefined,
       })
-      onClose()
+      // Billing blocks stay open so the admin can release them right after.
+      if (isBilling) {
+        setUploaded(true)
+        setIsUploading(false)
+      } else {
+        onClose()
+      }
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? sanitizeConvexError(err.message)
-          : 'Upload failed. Please try again.',
-      )
+      actionError(err, 'Upload failed. Please try again.')
       setIsUploading(false)
     }
   }
@@ -199,6 +256,98 @@ function FixDialog({
     }
   }
 
+  const handleSendCaregiverReminder = async () => {
+    if (!item.clerkUserId) return
+    setIsReminding(true)
+    try {
+      await sendReminder({
+        clerkOrgId,
+        clerkUserId: item.clerkUserId,
+        message: `Reminder from your agency: a shift you worked${item.clientName ? ` for ${item.clientName}` : ''} is missing a complete progress note — please finish it so the shift can be billed.`,
+      })
+      setReminderSent(true)
+    } catch {
+      // The button re-enables so the admin can retry.
+    } finally {
+      setIsReminding(false)
+    }
+  }
+
+  const handleRelease = async () => {
+    const lineIds = item.lineIds ?? []
+    if (lineIds.length === 0) return
+    const reason = credential
+      ? 'Credential resolved via Audit Ready Center'
+      : releaseReason.trim()
+    if (!reason) return
+    setIsReleasing(true)
+    setError('')
+    try {
+      for (const lineId of lineIds) {
+        await releaseBlock({
+          clerkOrgId,
+          billingLineId: lineId as Id<'billingLines'>,
+          reason,
+        })
+      }
+      onClose()
+    } catch (err) {
+      actionError(err, 'Release failed. Please try again.')
+      setIsReleasing(false)
+    }
+  }
+
+  const handleMarkIncident = async () => {
+    if (!item.incidentId) return
+    setIsActing(true)
+    setError('')
+    try {
+      const mark =
+        item.kind === 'sir-verbal' ? markVerbalReported : markWrittenSubmitted
+      await mark({
+        clerkOrgId,
+        incidentId: item.incidentId as Id<'specialIncidents'>,
+      })
+      onClose()
+    } catch (err) {
+      actionError(err, 'Could not record it. Please try again.')
+      setIsActing(false)
+    }
+  }
+
+  const handleCompleteObligation = async () => {
+    if (!item.obligationId) return
+    setIsActing(true)
+    setError('')
+    try {
+      await completeObligation({
+        clerkOrgId,
+        obligationId: item.obligationId as Id<'agencyObligations'>,
+        notes: obligationNotes.trim() || undefined,
+      })
+      onClose()
+    } catch (err) {
+      actionError(err, 'Could not mark it complete. Please try again.')
+      setIsActing(false)
+    }
+  }
+
+  const handleNotifyTeam = async () => {
+    setIsActing(true)
+    setError('')
+    try {
+      await sendAlert({
+        clerkOrgId,
+        message: `${item.title}${item.dueAt ? ` (due ${item.dueAt.slice(0, 10)})` : ''} — please write and submit the progress report.`,
+        targetRoles: ['org:admin', 'org:coordinator'],
+      })
+      onClose()
+    } catch (err) {
+      actionError(err, 'Could not notify the team. Please try again.')
+      setIsActing(false)
+    }
+  }
+
   return (
     <Dialog open onClose={onClose}>
       <DialogHeader>
@@ -208,7 +357,10 @@ function FixDialog({
         {item.detail && (
           <p className="text-sm text-atria-text-secondary">{item.detail}</p>
         )}
-        {credential ? (
+        {kindIntro && (
+          <p className="text-sm text-atria-text-secondary">{kindIntro}</p>
+        )}
+        {credential && (
           <>
             <div
               className={cn(
@@ -244,15 +396,21 @@ function FixDialog({
               />
             </label>
             {error && <p className="text-sm text-atria-danger">{error}</p>}
-            <Button
-              variant="primary"
-              size="md"
-              className="w-full"
-              disabled={!file || isUploading}
-              onClick={handleUpload}
-            >
-              {isUploading ? 'Uploading…' : `Upload ${credential.label}`}
-            </Button>
+            {uploaded ? (
+              <p className="text-sm font-medium text-atria-success">
+                {credential.label} uploaded ✓
+              </p>
+            ) : (
+              <Button
+                variant="primary"
+                size="md"
+                className="w-full"
+                disabled={!file || isUploading}
+                onClick={handleUpload}
+              >
+                {isUploading ? 'Uploading…' : `Upload ${credential.label}`}
+              </Button>
+            )}
             {credential.clerkUserId && (
               <div className="border-t border-atria-border pt-4">
                 <p className="mb-2 text-sm text-atria-text-secondary">
@@ -275,16 +433,100 @@ function FixDialog({
               </div>
             )}
           </>
-        ) : item.linkTo ? (
-          <Link to={item.linkTo} onClick={onClose}>
-            <Button variant="primary" size="md" className="w-full">
-              Open it in the console →
+        )}
+        {isProgressNoteBlock && item.clerkUserId && (
+          <Button
+            variant="secondary"
+            size="md"
+            className="w-full"
+            disabled={isReminding || reminderSent}
+            onClick={handleSendCaregiverReminder}
+          >
+            {reminderSent
+              ? 'Reminder sent ✓'
+              : isReminding
+                ? 'Sending…'
+                : `Send reminder email to ${item.employeeName ?? 'the caregiver'}`}
+          </Button>
+        )}
+        {isBilling &&
+          ((item.lineIds?.length ?? 0) > 0 ? (
+            isAdmin ? (
+              <div className="space-y-2 border-t border-atria-border pt-4">
+                {!credential && (
+                  <Input
+                    aria-label="Override reason"
+                    placeholder="Reason for releasing the block"
+                    value={releaseReason}
+                    onChange={(event) => setReleaseReason(event.target.value)}
+                  />
+                )}
+                <Button
+                  variant="primary"
+                  size="md"
+                  className="w-full"
+                  disabled={
+                    isReleasing || (!credential && !releaseReason.trim())
+                  }
+                  onClick={handleRelease}
+                >
+                  {isReleasing ? 'Releasing…' : 'Release the billing block'}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-atria-text-secondary">
+                Only an agency admin can release a billing block — share this
+                with your agency admin.
+              </p>
+            )
+          ) : null)}
+        {(item.kind === 'sir-verbal' || item.kind === 'sir-written') && (
+          <Button
+            variant="primary"
+            size="md"
+            className="w-full"
+            disabled={isActing}
+            onClick={handleMarkIncident}
+          >
+            {isActing
+              ? 'Recording…'
+              : item.kind === 'sir-verbal'
+                ? 'Mark the call as made'
+                : 'Mark the written report as submitted'}
+          </Button>
+        )}
+        {item.kind === 'obligation' && (
+          <>
+            <Input
+              aria-label="Completion notes"
+              placeholder="Notes (optional)"
+              value={obligationNotes}
+              onChange={(event) => setObligationNotes(event.target.value)}
+            />
+            <Button
+              variant="primary"
+              size="md"
+              className="w-full"
+              disabled={isActing}
+              onClick={handleCompleteObligation}
+            >
+              {isActing ? 'Saving…' : 'Mark complete'}
             </Button>
-          </Link>
-        ) : (
-          <p className="text-sm text-atria-text-secondary">
-            Only an admin can resolve this — share it with your agency admin.
-          </p>
+          </>
+        )}
+        {item.kind === 'progress-report' && (
+          <Button
+            variant="primary"
+            size="md"
+            className="w-full"
+            disabled={isActing}
+            onClick={handleNotifyTeam}
+          >
+            {isActing ? 'Notifying…' : 'Notify the team'}
+          </Button>
+        )}
+        {!credential && error && (
+          <p className="text-sm text-atria-danger">{error}</p>
         )}
       </DialogContent>
       <DialogFooter>
