@@ -182,16 +182,22 @@ test.describe('oct4 feature QA', { tag: '@auth' }, () => {
     await page.goto('/dashboard')
     await expect(page.getByText('Active Escalations')).toBeVisible({ timeout: 20000 })
 
+    // First escalation row is a clickable header (cursor-pointer div); the
+    // reason paragraph is the reliable click target.
+    const firstRow = page.locator('div.cursor-pointer').filter({ hasText: /Level \d/ }).first()
+    // Wait until the escalations query settles: either a row or the empty
+    // state (the dashboard fires several queries; on a loaded backend the
+    // list can take a moment longer than the heading).
+    await expect(
+      firstRow.or(page.getByText('No active escalations')),
+    ).toBeVisible({ timeout: 45000 })
+
     if (await page.getByText('No active escalations').isVisible().catch(() => false)) {
       console.warn('SKIP (data-dependent): no active escalations on the dev tenant — expand/Open case not exercised.')
       await signOut(page)
       return
     }
 
-    // First escalation row is a clickable header (cursor-pointer div); the
-    // reason paragraph is the reliable click target.
-    const firstRow = page.locator('div.cursor-pointer').filter({ hasText: /Level \d/ }).first()
-    await expect(firstRow).toBeVisible({ timeout: 15000 })
     await firstRow.click()
     await expect(page.getByText('escalated to', { exact: false })).toBeVisible()
 
@@ -281,21 +287,23 @@ test.describe('oct4 feature QA', { tag: '@auth' }, () => {
     }
     if (!expandedAny) {
       console.warn('Note: no non-credential checklist item is unmet — generic expansion not exercised (data-dependent).')
-    } else {
-      await expect(
-        page.getByRole('link', { name: /Open the (console|Audit Ready Center) to fix these →/ }).first(),
-      ).toBeVisible()
     }
+    // Console/console-link redirects are gone from the full view.
+    await expect(
+      page.getByRole('link', { name: /Open the (console|Audit Ready Center) to fix these →/ }),
+    ).toHaveCount(0)
 
-    // Credential items specifically link back to the ARC simple view.
-    const credentialItem = page.locator('button').filter({ hasText: /All caregiver credentials current|All required credentials on file/ }).first()
+    // Credential rows map to in-place fix rows: 'All required credentials on
+    // file' is unmet whenever a missing-credential fix exists (the seeded
+    // fixture guarantees one on the dev tenant).
+    const credentialItem = page.locator('button').filter({ hasText: 'All required credentials on file' }).first()
     if (await credentialItem.isVisible().catch(() => false)) {
       await credentialItem.click()
       await expect(
-        page.getByRole('link', { name: 'Open the Audit Ready Center to fix these →' }).first(),
-      ).toBeVisible()
+        page.getByRole('button', { name: 'Fix it' }).first(),
+      ).toBeVisible({ timeout: 60000 })
     } else {
-      console.warn('Note: both credential checklist items are Met — ARC-specific link not exercised (data-dependent).')
+      console.warn('Note: credential checklist items are Met or missing-state fixes absent — credential fix rows not exercised (data-dependent).')
     }
     await signOut(page)
   })

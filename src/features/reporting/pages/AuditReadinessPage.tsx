@@ -18,7 +18,11 @@ import {
 } from '@/shared/ui/Table'
 import { downloadCsv } from '@/shared/lib/downloadCsv'
 import { CorrectiveActionsCard } from '@/features/reporting/components/CorrectiveActionsCard'
-import { AuditSimpleView } from '@/features/reporting/components/AuditSimpleView'
+import {
+  AuditSimpleView,
+  FixDialog,
+  type FixListItem,
+} from '@/features/reporting/components/AuditSimpleView'
 import { Select } from '@/shared/ui/Select'
 import { USDateInput } from '@/shared/ui/USDateInput'
 import { formatHours, formatStatusLabel, formatDateUS } from '@/shared/format'
@@ -221,13 +225,18 @@ function AuditFullView() {
     () => new Date().toISOString().slice(0, 10),
   )
   const [downloadingPacket, setDownloadingPacket] = useState(false)
-  // Inline checklist expansion: concise count + link to the owning console.
-  // Reminders live only in the ARC simple view (/audit) — the full view
-  // routes there instead of duplicating them (review-call decision).
+  // Inline checklist expansion: the matching fix items with Fix it buttons
+  // that open the same in-place dialog as the simple view — no redirects to
+  // other pages for fixing issues (docs/design-oct12-corrections.md, stage 2).
   const [expandedChecklistItem, setExpandedChecklistItem] = useState<string | null>(null)
+  const [fixItem, setFixItem] = useState<FixListItem | null>(null)
 
   const report = useQuery(
     api.auditReadiness.getReport,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
+  const fixList = useQuery(
+    api.auditReadiness.getFixList,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
   const incidentTimeliness = useQuery(
@@ -329,9 +338,9 @@ function AuditFullView() {
     report.documentation.total === 0
       ? 1
       : report.documentation.withNotes / report.documentation.total
-  // Unmet items expand with a concise count and a link to the owning
-  // console (credential items go to the ARC simple view, where the in-place
-  // fix and reminder actions live).
+  // Unmet items expand with a concise count plus the matching fix items from
+  // getFixList, each with a Fix it button opening the same in-place dialog as
+  // the simple view.
   type ChecklistPerson = {
     clerkUserId: string
     displayName: string
@@ -343,7 +352,6 @@ function AuditFullView() {
     category: 'Documentation' | 'Incidents' | 'Agency obligations' | 'Operations'
     detail?: string
     people?: ChecklistPerson[]
-    consoleLink?: string
   }
   const credentialPeople = (
     kind: 'missing' | 'expired',
@@ -376,14 +384,12 @@ function AuditFullView() {
           ? `${report.personnel.expired} expired credential document(s) on file.`
           : undefined,
       people: credentialPeople('expired'),
-      consoleLink: '/audit',
     },
     {
       label: 'All required credentials on file',
       met: report.gaps.every((gap) => gap.missing.length === 0),
       category: 'Documentation',
       people: credentialPeople('missing'),
-      consoleLink: '/audit',
     },
     {
       label: 'All SIRs verbally reported within 24 hours (last 90 days)',
@@ -393,7 +399,6 @@ function AuditFullView() {
         (incidentTimeliness?.verbalBreached ?? 0) > 0
           ? `${incidentTimeliness!.verbalBreached} incident(s) breached the 24-hour verbal report window.`
           : undefined,
-      consoleLink: '/incidents',
     },
     {
       label: 'All SIR written reports submitted within 48 hours (last 90 days)',
@@ -403,28 +408,24 @@ function AuditFullView() {
         (incidentTimeliness?.writtenBreached ?? 0) > 0
           ? `${incidentTimeliness!.writtenBreached} incident(s) breached the 48-hour written report window.`
           : undefined,
-      consoleLink: '/incidents',
     },
     {
       label: 'General liability insurance COI current',
       met: obligationCurrent('insurance_general_liability'),
       category: 'Agency obligations',
       detail: obligationDetail('insurance_general_liability'),
-      consoleLink: '/compliance',
     },
     {
       label: "Workers' compensation insurance COI current",
       met: obligationCurrent('insurance_workers_comp'),
       category: 'Agency obligations',
       detail: obligationDetail('insurance_workers_comp'),
-      consoleLink: '/compliance',
     },
     {
       label: 'DS 1891 disclosure current (2-year cycle)',
       met: obligationCurrent('ds1891_disclosure'),
       category: 'Agency obligations',
       detail: obligationDetail('ds1891_disclosure'),
-      consoleLink: '/compliance',
     },
     {
       label: 'No overdue progress reports',
@@ -434,14 +435,12 @@ function AuditFullView() {
         (progressSummary?.overdue ?? 0) > 0
           ? `${progressSummary!.overdue} progress report(s) overdue.`
           : undefined,
-      consoleLink: '/clients',
     },
     {
       label: 'Documentation completeness at least 95%',
       met: documentationRate >= DOCUMENTATION_READY_THRESHOLD,
       category: 'Documentation',
       detail: `${report.documentation.withNotes} of ${report.documentation.total} visits have notes.`,
-      consoleLink: '/billing',
     },
     {
       label: 'No blocked billing lines',
@@ -451,7 +450,6 @@ function AuditFullView() {
         report.blockedBillingLines > 0
           ? `${report.blockedBillingLines} billing line(s) blocked by compliance.`
           : undefined,
-      consoleLink: '/billing',
     },
   ]
   const checklistMet = checklistItems.filter((item) => item.met).length
@@ -461,6 +459,55 @@ function AuditFullView() {
     'Agency obligations',
     'Operations',
   ]
+
+  // The fix items matching each checklist row — the same getFixList data as
+  // the simple view, filtered by kind (credential rows split expired/missing,
+  // obligation rows match on the obligation label).
+  const fixesForChecklistItem = (label: string): FixListItem[] => {
+    const all = fixList?.items ?? []
+    switch (label) {
+      case 'All caregiver credentials current':
+        return all.filter(
+          (fix) =>
+            fix.kind === 'credential' && fix.credential?.state !== 'missing',
+        )
+      case 'All required credentials on file':
+        return all.filter(
+          (fix) =>
+            fix.kind === 'credential' && fix.credential?.state === 'missing',
+        )
+      case 'All SIRs verbally reported within 24 hours (last 90 days)':
+        return all.filter((fix) => fix.kind === 'sir-verbal')
+      case 'All SIR written reports submitted within 48 hours (last 90 days)':
+        return all.filter((fix) => fix.kind === 'sir-written')
+      case 'General liability insurance COI current':
+        return all.filter(
+          (fix) =>
+            fix.kind === 'obligation' && /general liability/i.test(fix.title),
+        )
+      case "Workers' compensation insurance COI current":
+        return all.filter(
+          (fix) =>
+            fix.kind === 'obligation' && /workers'? compensation/i.test(fix.title),
+        )
+      case 'DS 1891 disclosure current (2-year cycle)':
+        return all.filter(
+          (fix) => fix.kind === 'obligation' && /ds 1891/i.test(fix.title),
+        )
+      case 'No overdue progress reports':
+        return all.filter((fix) => fix.kind === 'progress-report')
+      case 'Documentation completeness at least 95%':
+        return all.filter(
+          (fix) =>
+            fix.kind === 'billing' &&
+            /missing progress note|incomplete/i.test(fix.detail ?? ''),
+        )
+      case 'No blocked billing lines':
+        return all.filter((fix) => fix.kind === 'billing')
+      default:
+        return []
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -656,11 +703,14 @@ function AuditFullView() {
                   </p>
                   <ul className="space-y-2">
                     {items.map((item) => {
+                      const fixes = item.met
+                        ? []
+                        : fixesForChecklistItem(item.label)
                       const expandable =
                         !item.met &&
                         (!!item.detail ||
                           (item.people?.length ?? 0) > 0 ||
-                          !!item.consoleLink)
+                          fixes.length > 0)
                       const expanded = expandedChecklistItem === item.label
                       return (
                         <li key={item.label}>
@@ -696,28 +746,33 @@ function AuditFullView() {
                                   {item.detail}
                                 </p>
                               )}
-                              {/* Offender lists and reminders live in the
-                                  owning console — the full view only routes. */}
                               {(item.people?.length ?? 0) > 0 && (
                                 <p className="text-sm text-atria-text-secondary">
                                   {item.people!.length}{' '}
                                   {item.people!.length === 1 ? 'person' : 'people'}{' '}
-                                  affected
-                                  {item.consoleLink
-                                    ? ' — open the console to see who and take action.'
-                                    : '.'}
+                                  affected.
                                 </p>
                               )}
-                              {item.consoleLink && (
-                                <Link
-                                  to={item.consoleLink}
-                                  className="inline-block text-sm font-medium text-atria-accent hover:underline"
+                              {/* The matching fixes resolve in place — the
+                                  same dialog as the ARC simple view. */}
+                              {fixes.map((fix) => (
+                                <div
+                                  key={fix.id}
+                                  className="flex items-center justify-between gap-2"
                                 >
-                                  {item.consoleLink === '/audit'
-                                    ? 'Open the Audit Ready Center to fix these →'
-                                    : 'Open the console to fix these →'}
-                                </Link>
-                              )}
+                                  <p className="text-sm text-atria-text-secondary">
+                                    {fix.title}
+                                  </p>
+                                  <Button
+                                    variant="primary"
+                                    size="sm"
+                                    className="shrink-0"
+                                    onClick={() => setFixItem(fix)}
+                                  >
+                                    Fix it
+                                  </Button>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </li>
@@ -731,7 +786,8 @@ function AuditFullView() {
           <p className="mt-3 text-xs text-atria-muted">
             Self-inspection mirroring the biennial vendor-file review (17 CCR
             §54332(b)). Computed live — nothing is stored. Unmet items expand
-            with a count and a link to the console that fixes them.
+            with the matching fixes, each resolved in place via the Fix it
+            button.
           </p>
         </CardContent>
       </Card>
@@ -868,6 +924,14 @@ function AuditFullView() {
           )}
         </CardContent>
       </Card>
+
+      {fixItem && clerkOrgId && (
+        <FixDialog
+          item={fixItem}
+          clerkOrgId={clerkOrgId}
+          onClose={() => setFixItem(null)}
+        />
+      )}
     </div>
   )
 }

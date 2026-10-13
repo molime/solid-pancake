@@ -373,7 +373,7 @@ describe('auditReadiness.getReport', () => {
       withoutNotes: 0,
     })
     expect(report.blockedBillingLines).toBe(0)
-    expect(report.auditEvents).toEqual({ total: 0, last30Days: 0 })
+    expect(report.auditEvents).toEqual({ last30Days: 0 })
   })
 
   it('aggregates all nine sections correctly', async () => {
@@ -423,7 +423,7 @@ describe('auditReadiness.getReport', () => {
       withoutNotes: 2,
     })
     expect(report.blockedBillingLines).toBe(1)
-    expect(report.auditEvents).toEqual({ total: 2, last30Days: 1 })
+    expect(report.auditEvents).toEqual({ last30Days: 1 })
   })
 
   it('isolates tenants — org A sees none of org B data', async () => {
@@ -477,7 +477,7 @@ describe('auditReadiness.getReport', () => {
 
     expect(report.gaps).toEqual([])
     expect(report.backgroundChecks.total).toBe(0)
-    expect(report.auditEvents.total).toBe(0)
+    expect(report.auditEvents.last30Days).toBe(0)
   })
 })
 
@@ -867,6 +867,7 @@ describe('auditReadiness.getFixList', () => {
     const expired = result.items.find((item) =>
       item.id.startsWith('credential-expired-'),
     )
+    expect(expired?.kind).toBe('credential')
     expect(expired?.title).toBe("Caregiver One's health_screen expired")
     expect(expired?.severity).toBe('critical')
     expect(expired?.linkTo).toBe('/compliance')
@@ -874,13 +875,25 @@ describe('auditReadiness.getFixList', () => {
     const missing = result.items.find((item) =>
       item.id.startsWith('credential-missing-'),
     )
+    expect(missing?.kind).toBe('credential')
     expect(missing?.title).toBe('Caregiver One is missing: Driver License')
     expect(missing?.linkTo).toBe('/compliance')
 
+    // Credential-flavored billing blocks regroup per employee and carry the
+    // credential payload + lineIds so the dialog can fix and release in place.
     const billing = result.items.find((item) => item.id.startsWith('billing-'))
-    expect(billing?.title).toBe("A shift for Client One can't be billed yet")
+    expect(billing?.kind).toBe('billing')
+    expect(billing?.title).toBe("A shift by Caregiver One can't be billed yet")
     expect(billing?.severity).toBe('critical')
     expect(billing?.linkTo).toBe('/billing')
+    expect(billing?.clerkUserId).toBe(CAREGIVER_ID)
+    expect(billing?.lineIds).toHaveLength(1)
+    expect(billing?.credential).toMatchObject({
+      clerkUserId: CAREGIVER_ID,
+      category: 'license',
+      label: 'Driver License',
+      state: 'missing',
+    })
 
     // Every seeded problem is critical, and all criticals sort before any
     // soon items.
@@ -906,6 +919,7 @@ describe('auditReadiness.getFixList', () => {
 
     const billing = result.items.find((item) => item.id.startsWith('billing-'))
     expect(billing).toBeDefined()
+    expect(billing?.kind).toBe('billing')
     expect(billing?.linkTo).toBeNull()
     expect(
       result.items.find((item) => item.id.startsWith('credential-expired-'))
@@ -954,6 +968,7 @@ describe('auditReadiness.getFixList', () => {
 
     expect(result.status).toBe('almost')
     expect(result.items).toHaveLength(1)
+    expect(result.items[0]?.kind).toBe('credential')
     expect(result.items[0]?.severity).toBe('soon')
     expect(result.items[0]?.title).toBe(
       "Caregiver One's cpr expires in 10 days",
@@ -997,6 +1012,8 @@ describe('auditReadiness.getFixList', () => {
     expect(result.status).toBe('not_ready')
 
     const verbal = result.items.find((item) => item.id.startsWith('sir-verbal-'))
+    expect(verbal?.kind).toBe('sir-verbal')
+    expect(verbal?.incidentId).toBe(incidentId as string)
     expect(verbal?.severity).toBe('critical')
     expect(verbal?.title).toContain('24-hour call')
     expect(verbal?.detail).toMatch(/^overdue by 6 hours$/)
@@ -1005,6 +1022,8 @@ describe('auditReadiness.getFixList', () => {
     const written = result.items.find((item) =>
       item.id.startsWith('sir-written-'),
     )
+    expect(written?.kind).toBe('sir-written')
+    expect(written?.incidentId).toBe(incidentId as string)
     expect(written?.severity).toBe('soon')
     expect(written?.detail).toMatch(/^due in 1[78] hours$/)
 
@@ -1021,8 +1040,8 @@ describe('auditReadiness.getFixList', () => {
   it('strips statutory citations from overdue obligation labels', async () => {
     const t = createTestConvex()
     const tenantId = await seedTenant(t, CLERK_ORG_ID, 'Audit Agency')
-    await t.run(async (ctx) => {
-      await ctx.db.insert('agencyObligations', {
+    const obligationId = await t.run(async (ctx) => {
+      return ctx.db.insert('agencyObligations', {
         tenantId,
         key: 'cpa_audit_or_review',
         label: 'Independent CPA audit or review (WIC §4652.5)',
@@ -1038,6 +1057,8 @@ describe('auditReadiness.getFixList', () => {
 
     expect(result.status).toBe('not_ready')
     expect(result.items).toHaveLength(1)
+    expect(result.items[0]?.kind).toBe('obligation')
+    expect(result.items[0]?.obligationId).toBe(obligationId as string)
     expect(result.items[0]?.title).toBe(
       'Independent CPA audit or review is overdue',
     )
@@ -1077,6 +1098,8 @@ describe('auditReadiness.getFixList', () => {
     const progress = result.items.find((item) =>
       item.id.startsWith('progress-report-'),
     )
+    expect(progress?.kind).toBe('progress-report')
+    expect(progress?.clientId).toBe(clientId as string)
     expect(progress?.title).toBe(
       "Client One's quarterly progress report is overdue",
     )
@@ -1096,7 +1119,7 @@ describe('auditReadiness.getFixList', () => {
     expect(result.items).toEqual([])
   })
 
-  it('dedupes blocked billing lines per client and reason', async () => {
+  it('regroups credential-reason blocks per employee, dedupes the rest per client and reason', async () => {
     const t = createTestConvex()
     const tenantId = await seedTenant(t, CLERK_ORG_ID, 'Audit Agency')
     await t.run(async (ctx) => {
@@ -1154,16 +1177,31 @@ describe('auditReadiness.getFixList', () => {
       item.id.startsWith('billing-'),
     )
     expect(billingItems).toHaveLength(2)
-    const merged = billingItems.find((item) =>
-      item.title.startsWith('3 shifts'),
-    )
-    expect(merged?.title).toBe("3 shifts for Client One can't be billed yet")
-    expect(merged?.clientName).toBe('Client One')
+    // Credential-flavored reasons regroup per employee (not per client) and
+    // carry the credential payload so the dialog can fix + release in place.
+    const merged = billingItems.find((item) => item.title.startsWith('3 shifts'))
+    expect(merged?.kind).toBe('billing')
+    expect(merged?.title).toBe("3 shifts by Caregiver One can't be billed yet")
+    expect(merged?.clientName).toBeUndefined()
     expect(merged?.employeeName).toBe('Caregiver One')
+    expect(merged?.clerkUserId).toBe(CAREGIVER_ID)
+    expect(merged?.lineIds).toHaveLength(3)
+    expect(merged?.credential).toMatchObject({
+      clerkUserId: CAREGIVER_ID,
+      category: 'Driver License',
+      label: 'Driver License',
+      state: 'missing',
+    })
+    // Other reasons keep the client + reason dedupe and carry the caregiver
+    // id + line ids for reminders and releases.
     const single = billingItems.find(
       (item) => item.detail === 'Shift is missing a progress note',
     )
+    expect(single?.kind).toBe('billing')
     expect(single?.title).toBe("A shift for Client One can't be billed yet")
+    expect(single?.credential).toBeUndefined()
+    expect(single?.clerkUserId).toBe(CAREGIVER_ID)
+    expect(single?.lineIds).toHaveLength(1)
   })
 
   it('dedupes repeated expired labels and attaches the credential payload', async () => {
@@ -1220,6 +1258,7 @@ describe('auditReadiness.getFixList', () => {
       item.id.startsWith('credential-expired-'),
     )
     expect(expiredItems).toHaveLength(1)
+    expect(expiredItems[0]?.kind).toBe('credential')
     expect(expiredItems[0]?.title).toBe("Caregiver One's Health Screen expired")
     expect(expiredItems[0]?.employeeName).toBe('Caregiver One')
     expect(expiredItems[0]?.credential).toEqual({

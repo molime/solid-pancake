@@ -13,6 +13,9 @@ vi.mock('@clerk/react', () => ({
 const reviewApplicationMock = vi.fn()
 const sendOfferMock = vi.fn()
 const downloadUrlMock = vi.fn()
+const addCandidateNoteMock = vi.fn()
+const updateCandidateNoteMock = vi.fn()
+const deleteCandidateNoteMock = vi.fn()
 
 function createDetailResponse(options?: {
   status?: string
@@ -62,6 +65,7 @@ function defaultUseQueryImplementation(query: unknown, _args?: unknown) {
   const name = getFunctionName(query as Parameters<typeof getFunctionName>[0])
   if (name === 'candidates:getCandidateDetail') return createDetailResponse()
   if (name === 'candidates:listCandidateTasksForHR') return []
+  if (name === 'candidates:listCandidateNotes') return []
   if (name === 'files:getDownloadUrl') {
     downloadUrlMock()
     return 'https://example.com/download/storage-1'
@@ -76,6 +80,9 @@ vi.mock('convex/react', () => ({
     const name = getFunctionName(mutation as Parameters<typeof getFunctionName>[0])
     if (name === 'candidates:reviewApplication') return reviewApplicationMock
     if (name === 'candidates:sendOffer') return sendOfferMock
+    if (name === 'candidates:addCandidateNote') return addCandidateNoteMock
+    if (name === 'candidates:updateCandidateNote') return updateCandidateNoteMock
+    if (name === 'candidates:deleteCandidateNote') return deleteCandidateNoteMock
     return vi.fn()
   }),
 }))
@@ -89,6 +96,9 @@ describe('ApplicationReviewPage', () => {
     vi.clearAllMocks()
     reviewApplicationMock.mockResolvedValue(undefined)
     sendOfferMock.mockResolvedValue(undefined)
+    addCandidateNoteMock.mockResolvedValue('note_new')
+    updateCandidateNoteMock.mockResolvedValue('note_1')
+    deleteCandidateNoteMock.mockResolvedValue('note_1')
     const { useQuery } = await import('convex/react')
     vi.mocked(useQuery).mockImplementation(defaultUseQueryImplementation)
   })
@@ -437,6 +447,163 @@ describe('ApplicationReviewPage', () => {
     expect(reviewApplicationMock.mock.invocationCallOrder[0]).toBeLessThan(
       sendOfferMock.mock.invocationCallOrder[0],
     )
+  })
+
+  describe('candidate notes CRUD', () => {
+    const existingNotes = [
+      {
+        _id: 'note_2',
+        candidateId: 'cand_1',
+        authorId: 'user_hr',
+        authorName: 'HR Person',
+        text: 'Called 10/10 — pending docs.',
+        createdAt: '2026-10-10T12:00:00.000Z',
+        updatedAt: '2026-10-10T12:00:00.000Z',
+      },
+      {
+        _id: 'note_1',
+        candidateId: 'cand_1',
+        authorId: 'user_hr',
+        authorName: 'HR Person',
+        text: 'Strong applicant, fast-track.',
+        createdAt: '2026-10-09T12:00:00.000Z',
+        updatedAt: '2026-10-09T12:00:00.000Z',
+      },
+    ]
+
+    async function renderWithNotes() {
+      const { useQuery } = await import('convex/react')
+      vi.mocked(useQuery).mockImplementation(
+        ((query: unknown) => {
+          const name = getFunctionName(query as Parameters<typeof getFunctionName>[0])
+          if (name === 'candidates:getCandidateDetail') return createDetailResponse()
+          if (name === 'candidates:listCandidateTasksForHR') return []
+          if (name === 'candidates:listCandidateNotes') return existingNotes
+          if (name === 'files:getDownloadUrl') return 'https://example.com/download/storage-1'
+          return undefined
+        }) as unknown as typeof useQuery,
+      )
+
+      render(
+        <MemoryRouter initialEntries={['/hr/candidates/cand_1']}>
+          <Routes>
+            <Route
+              path='/hr/candidates/:candidateId'
+              element={<ApplicationReviewPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      return waitFor(() => screen.getByTestId('candidate-notes'))
+    }
+
+    it('lists existing notes with author and text', async () => {
+      const section = await renderWithNotes()
+
+      expect(within(section).getByText('Strong applicant, fast-track.')).toBeInTheDocument()
+      expect(within(section).getByText('Called 10/10 — pending docs.')).toBeInTheDocument()
+      expect(within(section).getAllByText(/HR Person ·/).length).toBe(2)
+    })
+
+    it('creates a note only via the Save note button (no autosave)', async () => {
+      const user = userEvent.setup()
+      const section = await renderWithNotes()
+
+      const input = within(section).getByTestId('new-note-input')
+      const saveButton = within(section).getByTestId('save-note-button')
+      expect(saveButton).toBeDisabled()
+
+      await user.type(input, '  Needs updated CPR card.  ')
+      expect(saveButton).not.toBeDisabled()
+      expect(addCandidateNoteMock).not.toHaveBeenCalled()
+
+      await user.click(saveButton)
+      await waitFor(() => {
+        expect(addCandidateNoteMock).toHaveBeenCalledWith({
+          clerkOrgId: 'org_123',
+          candidateId: 'cand_1',
+          text: '  Needs updated CPR card.  ',
+        })
+      })
+    })
+
+    it('edits a note inline', async () => {
+      const user = userEvent.setup()
+      await renderWithNotes()
+
+      await user.click(screen.getByTestId('edit-note-note_1'))
+      const editInput = screen.getByTestId('edit-note-input')
+      await user.clear(editInput)
+      await user.type(editInput, 'Updated text')
+      await user.click(screen.getByTestId('save-edited-note-button'))
+
+      await waitFor(() => {
+        expect(updateCandidateNoteMock).toHaveBeenCalledWith({
+          clerkOrgId: 'org_123',
+          noteId: 'note_1',
+          text: 'Updated text',
+        })
+      })
+    })
+
+    it('deletes a note after confirmation', async () => {
+      const user = userEvent.setup()
+      await renderWithNotes()
+
+      await user.click(screen.getByTestId('delete-note-note_1'))
+      const dialog = await screen.findByRole('dialog')
+      await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+      await waitFor(() => {
+        expect(deleteCandidateNoteMock).toHaveBeenCalledWith({
+          clerkOrgId: 'org_123',
+          noteId: 'note_1',
+        })
+      })
+    })
+  })
+
+  describe('request correction dialog', () => {
+    it('requires a reason and passes it as hrNotes', async () => {
+      const user = userEvent.setup()
+      render(
+        <MemoryRouter initialEntries={['/hr/candidates/cand_1']}>
+          <Routes>
+            <Route
+              path='/hr/candidates/:candidateId'
+              element={<ApplicationReviewPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      const correctionButton = await waitFor(() =>
+        screen.getByTestId('request-correction-button'),
+      )
+      await user.click(correctionButton)
+
+      const dialog = await screen.findByRole('dialog')
+      const confirmButton = within(dialog).getByTestId('confirm-correction-button')
+      expect(confirmButton).toBeDisabled()
+      expect(reviewApplicationMock).not.toHaveBeenCalled()
+
+      await user.type(
+        within(dialog).getByTestId('correction-reason-input'),
+        'SSN does not match the I-9',
+      )
+      expect(confirmButton).not.toBeDisabled()
+      await user.click(confirmButton)
+
+      await waitFor(() => {
+        expect(reviewApplicationMock).toHaveBeenCalledWith({
+          clerkOrgId: 'org_123',
+          candidateId: 'cand_1',
+          decision: 'needs_correction',
+          hrNotes: 'SSN does not match the I-9',
+        })
+      })
+    })
   })
 
   describe('car insurance section', () => {

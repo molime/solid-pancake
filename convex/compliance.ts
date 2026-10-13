@@ -279,6 +279,9 @@ export async function computeComplianceGaps(
   ctx: QueryCtx | MutationCtx,
   tenantId: Id<'tenants'>,
   clerkUserId?: string,
+  // Optional preloaded archive items (buildReport already collected them) —
+  // skips the second full scan when the caller has them in hand.
+  preloadedItems?: Doc<'documentArchiveItems'>[],
 ) {
   let profiles = await ctx.db
     .query('employeeProfiles')
@@ -306,11 +309,13 @@ export async function computeComplianceGaps(
   // archive items by subjectId once, then read from the map. Semantics are
   // identical — items keyed by profile id and by clerk user id are merged
   // per profile exactly as before.
-  const employeeItems = await ctx.db
-    .query('documentArchiveItems')
-    .withIndex('by_tenant_created', (q) => q.eq('tenantId', tenantId))
-    .filter((q) => q.eq(q.field('subjectType'), 'employee'))
-    .collect()
+  const employeeItems =
+    preloadedItems ??
+    (await ctx.db
+      .query('documentArchiveItems')
+      .withIndex('by_tenant_created', (q) => q.eq('tenantId', tenantId))
+      .filter((q) => q.eq(q.field('subjectType'), 'employee'))
+      .collect())
   const itemsBySubject = new Map<string, typeof employeeItems>()
   for (const item of employeeItems) {
     const list = itemsBySubject.get(item.subjectId) ?? []

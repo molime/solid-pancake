@@ -280,26 +280,29 @@ test.describe('delivery packet screenshots', { tag: '@auth' }, () => {
     test.setTimeout(AUTH_TIMEOUT)
     await signInAsAdmin(page)
 
-    // 10. candidate-notes.png — recruiter notes filled, then cleared.
+    // 10. candidate-notes.png — notes CRUD card with one saved note.
     await page.goto('/hr/candidates')
     const firstRow = page.locator('[data-testid^="candidate-row-"]').first()
     await expect(firstRow).toBeVisible({ timeout: 30000 })
     await firstRow.locator('a[href^="/hr/candidates/"]:not([href$="/hire"])').first().click()
     await expect(page).toHaveURL(/\/hr\/candidates\/[^/]+$/, { timeout: 15000 })
-    const notes = page.getByTestId('hr-notes-input')
-    await expect(notes).toBeVisible({ timeout: 30000 })
-    await notes.fill('QA evidence note')
-    await page.locator('h1').first().click()
-    await page.waitForTimeout(1500)
-    await notes.scrollIntoViewIfNeeded()
+    const notesCard = page.getByTestId('candidate-notes')
+    await expect(notesCard).toBeVisible({ timeout: 30000 })
+    await page.getByTestId('new-note-input').fill('QA evidence note')
+    await page.getByTestId('save-note-button').click()
+    const savedNote = notesCard.locator('li', { hasText: 'QA evidence note' })
+    await expect(savedNote).toBeVisible({ timeout: 15000 })
+    await notesCard.scrollIntoViewIfNeeded()
     await shot(page, 'candidate-notes.png')
-    await notes.fill('')
-    await page.locator('h1').first().click()
-    await page.waitForTimeout(1500)
+    // Clean up: delete the note again.
+    const noteId = (await savedNote.getAttribute('data-testid'))!.replace('candidate-note-', '')
+    await page.getByTestId(`delete-note-${noteId}`).click()
+    await page.getByRole('button', { name: /delete/i }).last().click()
+    await expect(notesCard.locator('li', { hasText: 'QA evidence note' })).toHaveCount(0, { timeout: 15000 })
 
     // 11. candidate-passport.png — photo-ID row with the type label.
     await page.goto('/hr/candidates/mx7adspwkvsc7935c5z0xkvptn8bhj0a')
-    await expect(page.getByTestId('hr-notes-input')).toBeVisible({ timeout: 45000 })
+    await expect(page.getByTestId('candidate-notes')).toBeVisible({ timeout: 45000 })
     const passportRow = page.getByText(/Photo identification — (Passport|Driver's License|Foreign Passport)/).first()
     if (await passportRow.isVisible({ timeout: 10000 }).catch(() => false)) {
       await passportRow.scrollIntoViewIfNeeded()

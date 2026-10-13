@@ -1236,6 +1236,133 @@ export const saveRecruiterNotes = mutation({
   },
 })
 
+/**
+ * Candidate notes CRUD (Diego's correction, 2026-10-12): individual notes
+ * with explicit create/edit/delete instead of the autosaved textarea.
+ * Same role set as reviewApplication; add/delete are audited.
+ */
+export const listCandidateNotes = query({
+  args: {
+    clerkOrgId: v.string(),
+    candidateId: v.id('candidates'),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+    return ctx.db
+      .query('candidateNotes')
+      .withIndex('by_tenant_candidate', (q) =>
+        q.eq('tenantId', tenantId).eq('candidateId', args.candidateId),
+      )
+      .order('desc')
+      .collect()
+  },
+})
+
+export const addCandidateNote = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    candidateId: v.id('candidates'),
+    text: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity, member } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+    const candidate = await ctx.db.get(args.candidateId)
+    if (!candidate) {
+      throw new ConvexError('Candidate not found.')
+    }
+    assertTenantDoc(candidate, tenantId)
+    const text = args.text.trim()
+    if (!text) {
+      throw new ConvexError('Note text cannot be empty.')
+    }
+    const now = new Date().toISOString()
+    const noteId = await ctx.db.insert('candidateNotes', {
+      tenantId,
+      candidateId: candidate._id,
+      authorId: identity.subject,
+      authorName: member?.displayName ?? identity.name ?? identity.subject,
+      text,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await recordCandidateAudit(ctx, {
+      clerkOrgId: args.clerkOrgId,
+      action: 'candidate.note.added',
+      metadata: { candidateId: candidate._id as string, noteId: noteId as string },
+    })
+    return noteId
+  },
+})
+
+export const updateCandidateNote = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    noteId: v.id('candidateNotes'),
+    text: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity, role } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+    const note = await ctx.db.get(args.noteId)
+    if (!note) {
+      throw new ConvexError('Note not found.')
+    }
+    assertTenantDoc(note, tenantId)
+    if (note.authorId !== identity.subject && role !== 'org:admin') {
+      throw new ConvexError('Only the author or an admin can edit this note.')
+    }
+    const text = args.text.trim()
+    if (!text) {
+      throw new ConvexError('Note text cannot be empty.')
+    }
+    await ctx.db.patch(note._id, {
+      text,
+      updatedAt: new Date().toISOString(),
+    })
+    return note._id
+  },
+})
+
+export const deleteCandidateNote = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    noteId: v.id('candidateNotes'),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity, role } = await requireTenantRole(ctx, args.clerkOrgId, [
+      'org:admin',
+      'org:hr',
+      'org:coordinator',
+    ])
+    const note = await ctx.db.get(args.noteId)
+    if (!note) {
+      throw new ConvexError('Note not found.')
+    }
+    assertTenantDoc(note, tenantId)
+    if (note.authorId !== identity.subject && role !== 'org:admin') {
+      throw new ConvexError('Only the author or an admin can delete this note.')
+    }
+    await ctx.db.delete(note._id)
+    await recordCandidateAudit(ctx, {
+      clerkOrgId: args.clerkOrgId,
+      action: 'candidate.note.deleted',
+      metadata: { candidateId: note.candidateId as string, noteId: note._id as string },
+    })
+    return note._id
+  },
+})
+
 export const reviewApplication = mutation({
   args: {
     clerkOrgId: v.string(),

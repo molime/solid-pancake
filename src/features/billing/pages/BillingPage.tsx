@@ -146,6 +146,26 @@ export function BillingPage() {
     saveAndDownload(bytes, `payment-calendar-${data.clientName}-${month}.pdf`)
   }
 
+  /** Imperative invoice PDF download (used by the client-first create flow
+      so a freshly created invoice downloads immediately, not just from the
+      Invoices table). */
+  const downloadInvoicePdfById = async (invoiceId: Id<'exportBatches'>) => {
+    if (!clerkOrgId) return
+    const details = (await convex.query(api.billing.invoiceDetails, {
+      clerkOrgId,
+      invoiceId,
+    })) as InvoiceDetails
+    const blob = buildInvoicePdf(details, organization?.name ?? 'Agency')
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${details.invoice.invoiceNumber}.pdf`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   const handleInvoiceCalendarDownload = async (invoice: InvoiceRow) => {
     if (!invoice.clientId || !invoice.periodStart) return
     setError(null)
@@ -248,6 +268,7 @@ export function BillingPage() {
       >
         <ClientInvoicePanel
           clerkOrgId={clerkOrgId}
+          onDownloadInvoice={downloadInvoicePdfById}
           onDownloadCalendar={downloadClientCalendar}
         />
       </CollapsibleCard>

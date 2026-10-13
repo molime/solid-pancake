@@ -1879,3 +1879,66 @@ export const deleteE2EOct4ComplianceFixture = mutation({
     return { deleted: items.length }
   },
 })
+
+/**
+ * Demo fixture so the "Active Escalations" section on the agency admin
+ * dashboard is visible during e2e/client walkthroughs (Diego could not find
+ * it because the Test Agency has no escalations, 2026-10-12). Seeds one
+ * minimal open HR case plus one unresolved escalation pointing at it so the
+ * "Open case" modal also works. Idempotent: re-running reuses the fixture
+ * case and the existing unresolved escalation.
+ */
+export const seedE2EDemoEscalation = mutation({
+  args: { clerkOrgId: v.string() },
+  handler: async (ctx, { clerkOrgId }) => {
+    const { tenantId } = await requireTenantRole(ctx, clerkOrgId, ['org:admin'])
+
+    const E2E_DEMO_CASE_NUMBER = 'E2E-DEMO-ESC'
+    const now = new Date().toISOString()
+
+    const cases = await ctx.db
+      .query('hrCases')
+      .withIndex('by_tenant_status', (q) => q.eq('tenantId', tenantId))
+      .collect()
+    let hrCase = cases.find((c) => c.caseNumber === E2E_DEMO_CASE_NUMBER)
+    if (!hrCase) {
+      const caseId = await ctx.db.insert('hrCases', {
+        tenantId,
+        caseNumber: E2E_DEMO_CASE_NUMBER,
+        subjectType: 'employee',
+        subjectId: 'e2e-demo',
+        category: 'documentation',
+        title: 'E2E demo — caregiver file missing updated CPR card',
+        status: 'open',
+        description:
+          'Demo escalation fixture so the Active Escalations dashboard section is visible.',
+        createdAt: now,
+      })
+      hrCase = (await ctx.db.get(caseId))!
+    }
+
+    const escalations = await ctx.db
+      .query('escalations')
+      .withIndex('by_tenant_level', (q) =>
+        q.eq('tenantId', tenantId).eq('escalationLevel', 1),
+      )
+      .collect()
+    const existing = escalations.find(
+      (e) => e.subjectId === (hrCase._id as string) && !e.resolvedAt,
+    )
+    if (existing) {
+      return { escalationId: existing._id, hrCaseId: hrCase._id, created: false }
+    }
+
+    const escalationId = await ctx.db.insert('escalations', {
+      tenantId,
+      subjectType: 'hrCase',
+      subjectId: hrCase._id as string,
+      escalationLevel: 1,
+      escalatedTo: 'org:coordinator',
+      reason: `HR case ${hrCase.caseNumber} ('${hrCase.title}') unresolved — demo escalation for the agency dashboard.`,
+      createdAt: now,
+    })
+    return { escalationId, hrCaseId: hrCase._id, created: true }
+  },
+})
