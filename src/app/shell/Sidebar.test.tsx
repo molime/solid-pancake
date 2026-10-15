@@ -8,6 +8,7 @@ vi.mock('@clerk/react', async () => {
     await vi.importActual<typeof import('@clerk/react')>('@clerk/react')
   return {
     ...actual,
+    useClerk: vi.fn(() => ({ setActive: vi.fn(), signOut: vi.fn() })),
     useOrganization: vi.fn(),
     useUser: vi.fn(),
   }

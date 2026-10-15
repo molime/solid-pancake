@@ -1,9 +1,14 @@
-import { useOrganization } from '@clerk/react'
+import { useOrganization, useClerk } from '@clerk/react'
 import { useQuery, useConvexAuth } from 'convex/react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../../convex/_generated/api'
 
 const SELECTED_ORG_STORAGE_KEY = 'atria.selectedClerkOrgId'
+
+// The apex domain serving agency workspaces as <agency>.atriaxsolutions.com.
+export const APEX_DOMAIN = 'atriaxsolutions.com'
+// Subdomains that are not agency workspaces.
+const RESERVED_SUBDOMAINS = new Set(['www', 'platform', 'app', 'api'])
 
 function getCurrentSubdomain(): string | null {
   if (typeof window === 'undefined') return null
@@ -14,10 +19,27 @@ function getCurrentSubdomain(): string | null {
   return parts[0].toLowerCase()
 }
 
+/**
+ * The agency workspace subdomain for the current host, or null when the
+ * host is not an agency workspace address (apex, www, platform, localhost,
+ * Vercel previews, …). Only `<agency>.atriaxsolutions.com` pins the tenant —
+ * every other host keeps the legacy Clerk-org/localStorage resolution.
+ */
+export function getAgencySubdomain(hostname: string): string | null {
+  const host = (hostname || '').toLowerCase()
+  if (!host.endsWith(`.${APEX_DOMAIN}`)) return null
+  const sub = host.slice(0, host.length - APEX_DOMAIN.length - 1)
+  if (!sub || sub.includes('.') || RESERVED_SUBDOMAINS.has(sub)) return null
+  return sub
+}
+
+function normalizeSlug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
 function slugMatchesSubdomain(slug: string | undefined, subdomain: string | null): boolean {
   if (!slug || !subdomain) return false
-  const normalized = slug.toLowerCase().replace(/[^a-z0-9]+/g, '')
-  return normalized.includes(subdomain.replace(/[^a-z0-9]+/g, ''))
+  return normalizeSlug(slug).includes(normalizeSlug(subdomain))
 }
 
 type DbTenant = {
@@ -26,6 +48,22 @@ type DbTenant = {
   slug?: string
   agencyAddress?: string | null
   role: string
+}
+
+export type TenantMismatch = {
+  /** Agency workspace subdomain the user is on (e.g. "goldenages"). */
+  subdomain: string
+  /** Name of the agency that owns the subdomain, once resolved. */
+  agencyName: string | null
+}
+
+/** The membership whose slug matches the workspace subdomain, if any. */
+export function findTenantForSubdomain(
+  tenants: DbTenant[] | undefined,
+  subdomain: string | null,
+): DbTenant | undefined {
+  if (!tenants || !subdomain) return undefined
+  return tenants.find((t) => slugMatchesSubdomain(t.slug, subdomain))
 }
 
 export function pickPreferredDbTenant(
@@ -56,6 +94,10 @@ export function pickPreferredDbTenant(
 // a no-org caregiver/candidate has and strands them on /select-agency. A
 // genuine revocation persists, so the clear still lands — just deferred.
 const STALE_STORED_TENANT_GRACE_MS = 10_000
+
+// Roles that always hold a Clerk org membership (caregivers and candidates
+// are DB-only members with no Clerk org to activate).
+const CLERK_ORG_ROLES = new Set(['org:admin', 'org:hr', 'org:coordinator'])
 
 /**
  * Persists the tenant a no-org user picked on SelectAgencyPage. Caregivers
@@ -91,25 +133,133 @@ export function getStoredClerkOrgId(): string | null {
  * persisted in localStorage and used synchronously on every later render —
  * a transient `useOrganization()` flap during a Clerk token refresh must
  * never drop the resolved tenant or flip the hook back into a loading state.
+ *
+ * On an agency workspace subdomain (`<agency>.atriaxsolutions.com`) the
+ * subdomain is authoritative: the tenant is pinned to the membership whose
+ * slug matches the subdomain, ignoring the Clerk active org and the stored
+ * pick, so a user can never see one agency's data under another agency's
+ * URL. Clerk's active org is synced to the pinned tenant (pages that read
+ * `useOrganization()` directly follow along). When the user is not a member
+ * of the subdomain's agency the hook reports a `tenantMismatch` instead of
+ * silently serving another agency's workspace.
  */
 export function useTenant() {
   const { organization, isLoaded } = useOrganization()
+  const { setActive } = useClerk()
   const orgClerkOrgId = organization?.id
+  const agencySubdomain = getAgencySubdomain(
+    typeof window === 'undefined' ? '' : window.location.hostname,
+  )
 
   // The query still runs when a stored id exists so role/tenantName stay
   // fresh and revoked memberships are detected — it just never gates
-  // clerkOrgId or isLoading.
+  // clerkOrgId or isLoading. On an agency subdomain it also runs for Clerk
+  // org members, because the subdomain (not the Clerk active org) decides
+  // the tenant and the membership list is needed to resolve it.
   const dbTenants = useQuery(
     api.candidates.getMyTenant,
-    isLoaded && !orgClerkOrgId ? {} : 'skip',
+    isLoaded && (!orgClerkOrgId || agencySubdomain) ? {} : 'skip',
   )
 
   const storedClerkOrgId = getStoredClerkOrgId()
   const dbTenant = pickPreferredDbTenant(dbTenants, storedClerkOrgId)
 
+  // Subdomain pinning. `pinnedTenant` is the live resolution; `lastPinned`
+  // keeps the last good pin across transient mid-refresh query drops so the
+  // resolved workspace never flaps back into a loader or a mismatch notice.
+  const pinnedTenant = findTenantForSubdomain(dbTenants, agencySubdomain)
+  const [lastPinned, setLastPinned] = useState<DbTenant | null>(null)
+  useEffect(() => {
+    if (pinnedTenant && pinnedTenant.clerkOrgId !== lastPinned?.clerkOrgId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLastPinned(pinnedTenant)
+    }
+  }, [pinnedTenant, lastPinned])
+
+  // Wrong-workspace detection: the memberships resolved but none matches the
+  // subdomain. Flag it immediately when this session never pinned a tenant
+  // here; otherwise defer by the grace period so a transient mid-refresh
+  // resolution without the pinned tenant can't flash the notice.
+  const noMatch =
+    !!agencySubdomain && dbTenants !== undefined && !pinnedTenant
+  const [mismatchConfirmed, setMismatchConfirmed] = useState(false)
+  useEffect(() => {
+    if (!noMatch) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMismatchConfirmed(false)
+      return
+    }
+    if (!lastPinned) {
+      setMismatchConfirmed(true)
+      return
+    }
+    const timeout = setTimeout(
+      () => setMismatchConfirmed(true),
+      STALE_STORED_TENANT_GRACE_MS,
+    )
+    return () => clearTimeout(timeout)
+  }, [noMatch, lastPinned])
+
+  // Best-effort name of the agency that owns the subdomain, for the
+  // wrong-workspace notice. Public query; only runs once a mismatch is
+  // confirmed.
+  const mismatchAgency = useQuery(
+    api.agencyConfig.getPublicAgencyBySubdomain,
+    mismatchConfirmed && agencySubdomain
+      ? { subdomain: agencySubdomain }
+      : 'skip',
+  )
+
   const { isLoading: convexAuthLoading } = useConvexAuth()
-  const clerkOrgId = orgClerkOrgId ?? storedClerkOrgId ?? dbTenant?.clerkOrgId
-  const isLoading = !clerkOrgId && (!isLoaded || dbTenants === undefined || convexAuthLoading)
+
+  let clerkOrgId: string | undefined
+  let resolvedDbTenant = dbTenant
+  if (agencySubdomain) {
+    const pinned =
+      pinnedTenant ??
+      (mismatchConfirmed ? undefined : (lastPinned ?? undefined))
+    clerkOrgId = pinned?.clerkOrgId
+    resolvedDbTenant = pinned
+  } else {
+    clerkOrgId = orgClerkOrgId ?? storedClerkOrgId ?? dbTenant?.clerkOrgId
+  }
+  const isLoading =
+    !clerkOrgId &&
+    !mismatchConfirmed &&
+    (!isLoaded || dbTenants === undefined || convexAuthLoading)
+
+  // While a pinned org-member tenant hasn't become Clerk's active org yet
+  // (and the Convex JWT still carries the old org claim), server-side org
+  // checks would transiently reject the pinned tenant. Guards must wait this
+  // out instead of acting on the stale false/error.
+  const orgSyncPending =
+    !!agencySubdomain &&
+    !!pinnedTenant &&
+    CLERK_ORG_ROLES.has(pinnedTenant.role) &&
+    (orgClerkOrgId !== pinnedTenant.clerkOrgId || convexAuthLoading)
+
+  // Sync side effects with the pinned tenant: align Clerk's active org so
+  // pages reading `useOrganization()` directly follow the subdomain (this is
+  // what unsticks e.g. Billing when Clerk has no/different active org), and
+  // persist the pick for no-org users.
+  useEffect(() => {
+    if (!agencySubdomain || !pinnedTenant) return
+    if (
+      CLERK_ORG_ROLES.has(pinnedTenant.role) &&
+      orgClerkOrgId !== pinnedTenant.clerkOrgId
+    ) {
+      const result = setActive?.({ organization: pinnedTenant.clerkOrgId })
+      // Transient failures are safe to ignore: the pin above still guards
+      // which tenant's data is loaded, and the effect retries on re-render.
+      void Promise.resolve(result).catch(() => {})
+    }
+    if (
+      !orgClerkOrgId &&
+      getStoredClerkOrgId() !== pinnedTenant.clerkOrgId
+    ) {
+      setSelectedClerkOrgId(pinnedTenant.clerkOrgId)
+    }
+  }, [agencySubdomain, pinnedTenant, orgClerkOrgId, setActive])
 
   // First-time resolution: persist the query-resolved tenant so later renders
   // (and page reloads) never depend on query timing. Also validates the
@@ -136,9 +286,20 @@ export function useTenant() {
 
   return {
     clerkOrgId,
-    tenantName: organization?.name ?? dbTenant?.tenantName,
-    agencyAddress: dbTenant?.agencyAddress ?? null,
-    role: dbTenant?.role,
+    tenantName: agencySubdomain
+      ? (resolvedDbTenant?.tenantName ?? organization?.name)
+      : (organization?.name ?? dbTenant?.tenantName),
+    agencyAddress: resolvedDbTenant?.agencyAddress ?? null,
+    role: resolvedDbTenant?.role,
     isLoading,
+    orgSyncPending,
+    isPinnedWorkspace: !!agencySubdomain,
+    tenantMismatch:
+      mismatchConfirmed && agencySubdomain
+        ? {
+            subdomain: agencySubdomain,
+            agencyName: mismatchAgency?.name ?? null,
+          }
+        : null,
   }
 }

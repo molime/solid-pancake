@@ -1,12 +1,36 @@
+import { useEffect, useState } from 'react'
+import { useClerk } from '@clerk/react'
+import { clearSessionData } from '@/shared/lib/clearSession'
+
 interface AppLoaderProps {
   label?: string
   fullScreen?: boolean
 }
 
+// A loader that never resolves is usually a stale session (expired Clerk org
+// context, revoked membership, dropped connection). Rather than spinning
+// forever, surface a reset escape hatch after this threshold.
+const STALL_THRESHOLD_MS = 15_000
+
 export function AppLoader({
   label = 'Preparing ATRIA-X',
   fullScreen = false,
 }: AppLoaderProps) {
+  const { signOut } = useClerk()
+  const [stalled, setStalled] = useState(false)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setStalled(true), STALL_THRESHOLD_MS)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const handleReset = () => {
+    clearSessionData()
+    void Promise.resolve(signOut?.())
+      .catch(() => {})
+      .finally(() => window.location.assign('/sign-in'))
+  }
+
   return (
     <div
       className={`flex items-center justify-center bg-atria-bg ${
@@ -26,6 +50,20 @@ export function AppLoader({
           <p className="mt-1 text-sm text-atria-text-secondary">
             Securing agency workspace
           </p>
+          {stalled && (
+            <div className="mt-3 border-t border-atria-border pt-3">
+              <p className="text-xs text-atria-text-secondary">
+                Taking longer than expected — your session may be stale.
+              </p>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="mt-1 text-xs font-medium text-atria-accent underline underline-offset-2 hover:text-atria-accent/80"
+              >
+                Sign out &amp; reset
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
