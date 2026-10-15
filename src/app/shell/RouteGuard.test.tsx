@@ -18,6 +18,7 @@ vi.mock('@clerk/react', async () => {
     useAuth: vi.fn(),
     useOrganization: vi.fn(),
     useOrganizationList: vi.fn(),
+    useClerk: vi.fn(() => ({ setActive: vi.fn(), signOut: vi.fn() })),
   }
 })
 
