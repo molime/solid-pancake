@@ -1852,6 +1852,38 @@ describe('candidateNotes CRUD', () => {
 })
 
 describe('reviewApplication and offer lifecycle', () => {
+  it('rejects a draft candidate who never submitted (no application row)', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_reject_draft'
+    const adminId = 'user_admin_reject_draft'
+    await seedTenant(t, clerkOrgId, adminId)
+
+    // Candidate in application_draft with NO application row — the Golden
+    // Ages "Rejection failed" support case (2026-10-11).
+    const candidateId = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      return await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        email: 'draft@example.com',
+        displayName: 'Draft Candidate',
+        status: 'application_draft',
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    await asAdmin(t, adminId, clerkOrgId).mutation(
+      api.candidates.reviewApplication,
+      { clerkOrgId, candidateId, decision: 'rejected' },
+    )
+
+    const candidate = await t.run(async (ctx) => ctx.db.get(candidateId))
+    expect(candidate?.status).toBe('rejected')
+  })
+
   it('transitions candidate through approved -> offer -> accepted -> hired', async () => {
     stubAdpEnv()
     stubClerkMembershipUpdate()

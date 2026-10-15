@@ -1402,7 +1402,11 @@ export const reviewApplication = mutation({
     }
 
     const latest = await getLatestApplication(ctx, candidate._id)
-    if (!latest) {
+    // A candidate who never submitted has no application row — rejections must
+    // still work for them (Samira's "Rejection failed" support ticket,
+    // 2026-10-11: a draft candidate could not be rejected). Approve/correction
+    // mutate the application itself, so only those require the row.
+    if (!latest && args.decision !== 'rejected') {
       throw new ConvexError('No application found for candidate.')
     }
 
@@ -1414,13 +1418,15 @@ export const reviewApplication = mutation({
           ? 'rejected'
           : 'application_draft'
 
-    await ctx.db.patch(latest._id, {
-      decision: args.decision,
-      hrNotes: args.hrNotes,
-      reviewedBy: identity.subject,
-      decisionAt: now,
-      status: nextStatus,
-    })
+    if (latest) {
+      await ctx.db.patch(latest._id, {
+        decision: args.decision,
+        hrNotes: args.hrNotes,
+        reviewedBy: identity.subject,
+        decisionAt: now,
+        status: nextStatus,
+      })
+    }
 
     await ctx.db.patch(candidate._id, { status: nextStatus })
 
