@@ -50,8 +50,8 @@ async function detectBlocker(page) {
   return null;
 }
 
-async function clerkSignIn(page, email) {
-  await page.goto(`${BASE}/sign-in`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+async function clerkSignIn(page, email, base = BASE) {
+  await page.goto(`${base}/sign-in`, { waitUntil: 'domcontentloaded', timeout: 45000 });
   const idInput = page.locator('input[name="identifier"]');
   await idInput.waitFor({ state: 'visible', timeout: 30000 });
   await idInput.fill(email);
@@ -77,7 +77,7 @@ async function clerkSignIn(page, email) {
   throw new Error(`Timeout 45s: sign-in did not complete, stuck on ${page.url()}`);
 }
 
-async function clerkTicketSignIn(page, email, clerkSecret) {
+async function clerkTicketSignIn(page, email, clerkSecret, base = BASE) {
   // Project-documented alternate auth path (see scripts/bootstrap-admin.mjs /
   // gen-signin-links.cjs): mint a single-use Clerk sign-in ticket with the
   // instance secret key and complete sign-in through the real sign-in UI.
@@ -97,7 +97,7 @@ async function clerkTicketSignIn(page, email, clerkSecret) {
   const tokenBody = await ticketResp.json();
   const ticket = tokenBody.token || tokenBody.ticket;
   if (!ticket) throw new Error('Clerk ticket creation returned no token');
-  await page.goto(`${BASE}/sign-in?__clerk_ticket=${ticket}`, {
+  await page.goto(`${base}/sign-in?__clerk_ticket=${ticket}`, {
     waitUntil: 'domcontentloaded',
     timeout: 45000,
   });
@@ -137,8 +137,8 @@ async function waitSettled(page) {
 
 // ---------- Per-role checks (light read actions) ----------
 
-async function checkPlatformAdmin(page) {
-  await page.goto(`${BASE}/platform/subscriptions`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+async function checkPlatformAdmin(page, base = BASE) {
+  await page.goto(`${base}/platform/subscriptions`, { waitUntil: 'domcontentloaded', timeout: 45000 });
   await waitSettled(page);
   const url = page.url();
   if (!url.includes('/platform')) throw new Error(`expected /platform area, landed on ${url}`);
@@ -146,8 +146,8 @@ async function checkPlatformAdmin(page) {
   if (!/subscription|agenc/i.test(text)) throw new Error('/platform/subscriptions shows no subscription/agency content');
 }
 
-async function checkAgencyAdmin(page) {
-  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+async function checkAgencyAdmin(page, base = BASE) {
+  await page.goto(`${base}/admin`, { waitUntil: 'domcontentloaded', timeout: 45000 });
   await waitSettled(page);
   const url = page.url();
   // Golden Ages has the Admin section disabled, so admins land on /hr there.
@@ -157,8 +157,8 @@ async function checkAgencyAdmin(page) {
     throw new Error('admin/HR workspace content not rendered');
 }
 
-async function checkCoordinator(page) {
-  await page.goto(`${BASE}/coordinator/review`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+async function checkCoordinator(page, base = BASE) {
+  await page.goto(`${base}/coordinator/review`, { waitUntil: 'domcontentloaded', timeout: 45000 });
   await waitSettled(page);
   const url = page.url();
   // Golden Ages has Review disabled, so coordinators land on /compliance there.
@@ -208,10 +208,14 @@ async function checkCandidate(page) {
 // two real accounts below; the previous Diego/Maria GA test accounts were
 // removed from the org. Password sign-in is only exercised for Diego's own
 // platform account — run the rest with SMOKE_AUTH=ticket.
+// Since 2026-10-15 agency subdomains pin the tenant: agency accounts must be
+// exercised on their own agency host (GA accounts on goldenages.*), or the
+// wrong-workspace notice (correctly) blocks them on another agency's URL.
+const GA_BASE = 'https://goldenages.atriaxsolutions.com';
 const ACCOUNTS = [
   { key: 'platform-admin', email: 'diego.molina.sieiro+admin@gmail.com', check: checkPlatformAdmin },
-  { key: 'agency-admin', email: 'admin@goldenagesinhomecare.com', check: checkAgencyAdmin },
-  { key: 'coordinator', email: 'supervisor@goldenagesinhomecare.com', check: checkCoordinator },
+  { key: 'agency-admin', email: 'admin@goldenagesinhomecare.com', base: GA_BASE, check: checkAgencyAdmin },
+  { key: 'coordinator', email: 'supervisor@goldenagesinhomecare.com', base: GA_BASE, check: checkCoordinator },
 ];
 
 // ---------- One login attempt (with a per-account ~90s budget) ----------
@@ -240,16 +244,16 @@ async function attemptAccount(browser, acct, headed, authMode, clerkSecret) {
 
   try {
     if (authMode === 'ticket') {
-      await clerkTicketSignIn(page, acct.email, clerkSecret);
+      await clerkTicketSignIn(page, acct.email, clerkSecret, acct.base);
     } else {
-      await clerkSignIn(page, acct.email);
+      await clerkSignIn(page, acct.email, acct.base);
       const blocker = await detectBlocker(page);
       if (blocker === 'mfa') throw new Error('FAILURE: MFA/second-factor prompt appeared');
       if (blocker === 'captcha') throw new Error('BLOCKED-HEADLESS: anti-bot/headless challenge appeared');
       if (blocker === 'email-otp') throw new Error('BLOCKED-HEADLESS: Clerk email-code (new-device) verification required');
     }
     await selectOrgIfAsked(page);
-    const note = await acct.check(page);
+    const note = await acct.check(page, acct.base);
     if (pageErrors.length) {
       await shot(page, `${acct.key}-pageerror`);
       throw new Error(`page errors: ${pageErrors.join(' | ')}`);
