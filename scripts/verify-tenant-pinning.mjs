@@ -159,12 +159,12 @@ const cases = [
     expectNotice: true,
   },
   {
-    // Regression: Maria on her own agency URL must work normally.
-    label: 'maria-on-individualschoice-ok',
+    // hello+admin is a Test Agency admin only (prod) — the IC URL must also
+    // show the notice, not Test Agency data under IC's address.
+    label: 'maria-on-individualschoice-sees-notice',
     email: 'hello+admin@atriaxsolutions.com',
     host: 'individualschoice.atriaxsolutions.com',
-    expectNotice: false,
-    markers: ['HR Home'],
+    expectNotice: true,
   },
   {
     // GA admin on their own URL lands in GA (pin + setActive sync).
