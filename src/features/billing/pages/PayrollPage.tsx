@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Doc, Id } from '../../../../convex/_generated/dataModel'
@@ -36,8 +36,7 @@ const statusVariant: Record<string, 'warning' | 'success' | 'neutral'> = {
 }
 
 export function PayrollPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
   const payPeriods = useQuery(
     api.billing.listPayPeriods,
     clerkOrgId ? { clerkOrgId } : 'skip',

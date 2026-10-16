@@ -9,6 +9,7 @@ vi.mock('@clerk/react', async () => {
   const actual = await vi.importActual<typeof import('@clerk/react')>('@clerk/react')
   return {
     ...actual,
+    useClerk: vi.fn(() => ({ setActive: vi.fn() })),
     useOrganization: vi.fn(() => ({
       organization: { id: 'org_123', name: 'Agency' },
     })),
@@ -20,6 +21,7 @@ vi.mock('convex/react', async () => {
   return {
     ...actual,
     useConvexAuth: () => ({ isLoading: false, isAuthenticated: true }),
+    useQuery: vi.fn(),
     useAction: vi.fn(() => inviteCandidateMock),
   }
 })

@@ -5,6 +5,7 @@ import { HireConvertPage } from './HireConvertPage'
 import { getFunctionName } from 'convex/server'
 
 vi.mock('@clerk/react', () => ({
+  useClerk: () => ({ setActive: vi.fn() }),
   useOrganization: () => ({ organization: { id: 'org_123' }, isLoaded: true }),
 }))
 

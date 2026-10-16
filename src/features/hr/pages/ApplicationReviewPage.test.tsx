@@ -6,6 +6,7 @@ import { ApplicationReviewPage } from './ApplicationReviewPage'
 import { getFunctionName } from 'convex/server'
 
 vi.mock('@clerk/react', () => ({
+  useClerk: () => ({ setActive: vi.fn() }),
   useOrganization: () => ({ organization: { id: 'org_123' } }),
   useUser: () => ({ user: { fullName: 'HR Person' } }),
 }))

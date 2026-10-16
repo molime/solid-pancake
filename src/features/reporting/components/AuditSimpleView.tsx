@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useConvex, useMutation, useQuery } from 'convex/react'
 import type { FunctionReturnType } from 'convex/server'
 import { useMemo, useRef, useState } from 'react'
@@ -539,8 +539,7 @@ export function FixDialog({
 }
 
 export function AuditSimpleView() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
   const convex = useConvex()
 
   const fixList = useQuery(

@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery, useMutation } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Doc, Id } from '../../../../convex/_generated/dataModel'
@@ -51,8 +51,7 @@ function todayInputValue() {
 }
 
 export function ClientsPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
 
   const clients = useQuery(
     api.clients.list,

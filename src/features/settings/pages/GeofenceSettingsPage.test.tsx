@@ -11,6 +11,7 @@ vi.mock('@clerk/react', async () => {
   const actual = await vi.importActual<typeof import('@clerk/react')>('@clerk/react')
   return {
     ...actual,
+    useClerk: vi.fn(() => ({ setActive: vi.fn() })),
     useOrganization: vi.fn(() => ({
       organization: { id: 'org_123', name: 'Agency' },
     })),

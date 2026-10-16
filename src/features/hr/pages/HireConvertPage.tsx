@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery, useMutation } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -28,9 +28,8 @@ function ApplicationField({ label, value }: { label: string; value: string }) {
 
 export function HireConvertPage() {
   const { candidateId } = useParams<{ candidateId: string }>()
-  const { organization } = useOrganization()
+  const { clerkOrgId } = useTenant()
   const navigate = useNavigate()
-  const clerkOrgId = organization?.id
 
   const detail = useQuery(
     api.candidates.getCandidateDetail,

@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -25,8 +25,7 @@ function initials(name: string) {
 }
 
 export function HRDashboardPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
   const stats = useQuery(
     api.hrCases.hrDashboardStats,
     clerkOrgId ? { clerkOrgId } : 'skip',

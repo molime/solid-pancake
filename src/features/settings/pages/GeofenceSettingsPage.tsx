@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery, useMutation } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { useState } from 'react'
@@ -10,8 +10,7 @@ import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { MapPin } from 'lucide-react'
 
 export function GeofenceSettingsPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
 
   const settings = useQuery(
     api.tenantSettings.get,

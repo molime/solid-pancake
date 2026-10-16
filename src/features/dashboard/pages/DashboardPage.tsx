@@ -1,4 +1,5 @@
-import { useOrganization, useUser } from '@clerk/react'
+import { useUser } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -12,9 +13,8 @@ import {
 import { Link, Navigate } from 'react-router-dom'
 
 export function DashboardPage() {
-  const { organization } = useOrganization()
+  const { clerkOrgId } = useTenant()
   const { user } = useUser()
-  const clerkOrgId = organization?.id
   const member = useQuery(api.members.me, clerkOrgId ? { clerkOrgId } : 'skip')
   const caregivers = useQuery(
     api.members.listCaregivers,

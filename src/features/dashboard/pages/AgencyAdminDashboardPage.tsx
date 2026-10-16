@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { useState } from 'react'
 import { api } from '../../../../convex/_generated/api'
@@ -22,8 +22,7 @@ import { Link } from 'react-router-dom'
 import { CaseDetailModal } from '@/features/hr/components/CaseDetailModal'
 
 export function AgencyAdminDashboardPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId, tenantName } = useTenant()
   const summary = useQuery(
     api.reporting.getAdminDashboardSummary,
     clerkOrgId ? { clerkOrgId } : 'skip',
@@ -93,8 +92,8 @@ export function AgencyAdminDashboardPage() {
       <div>
         <h1 className="text-2xl font-bold text-atria-ink">Admin Dashboard</h1>
         <p className="text-base text-atria-text-secondary">
-          {organization?.name
-            ? `Agency overview for ${organization.name}.`
+          {tenantName
+            ? `Agency overview for ${tenantName}.`
             : 'Agency overview.'}
         </p>
       </div>

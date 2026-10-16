@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
@@ -35,8 +35,7 @@ function ReportField({ label, value }: { label: string; value?: string }) {
 }
 
 export function IncidentDetailPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
   const { incidentId } = useParams<{ incidentId: string }>()
 
   const incident = useQuery(

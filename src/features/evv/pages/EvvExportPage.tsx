@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useConvex, useQuery } from 'convex/react'
 import { useState } from 'react'
 import { api } from '../../../../convex/_generated/api'
@@ -25,8 +25,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const DEFAULT_WINDOW_DAYS = 30
 
 export function EvvExportPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId, tenantName } = useTenant()
   const convex = useConvex()
 
   const [startDate, setStartDate] = useState(
@@ -42,11 +41,11 @@ export function EvvExportPage() {
   const [downloadingPdf, setDownloadingPdf] = useState(false)
 
   const handleDownloadPdf = async () => {
-    if (!data || !organization?.name) return
+    if (!data || !tenantName) return
     setDownloadingPdf(true)
     try {
       const bytes = await generateEvvExportPdf({
-        agencyName: organization.name,
+        agencyName: tenantName,
         startDate,
         endDate,
         visits: data.visits,

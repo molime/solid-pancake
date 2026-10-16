@@ -13,6 +13,7 @@ vi.mock('@clerk/react', async () => {
   )
   return {
     ...actual,
+    useClerk: vi.fn(() => ({ setActive: vi.fn() })),
     useOrganization: vi.fn(() => ({
       organization: { id: 'org_123', name: 'Agency' },
     })),

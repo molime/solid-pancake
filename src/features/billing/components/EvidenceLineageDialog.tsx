@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
@@ -24,8 +24,7 @@ export function EvidenceLineageDialog({
   billingLineId: Id<'billingLines'> | null
   onClose: () => void
 }) {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
   const evidence = useQuery(
     api.evidence.getShiftEvidence,
     clerkOrgId && billingLineId ? { clerkOrgId, billingLineId } : 'skip',
