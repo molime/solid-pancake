@@ -52,6 +52,11 @@ export function PlatformSupportPage() {
   const [selectedTicketId, setSelectedTicketId] =
     useState<Id<'supportTickets'> | null>(null)
   const [noteInput, setNoteInput] = useState('')
+  const [statusUpdating, setStatusUpdating] = useState(false)
+  const [statusSaved, setStatusSaved] = useState(false)
+  // Ticket dialog errors are separate from the access-request form's `error`
+  // so a failed status change can't surface in two unrelated places at once.
+  const [ticketError, setTicketError] = useState('')
 
   // Fetch the open ticket unfiltered so the dialog stays alive when a status
   // change drops it out of the active list filter.
@@ -90,23 +95,28 @@ export function PlatformSupportPage() {
   }
 
   const handleSetTicketStatus = async (status: TicketStatus) => {
-    if (!selectedTicketId) return
-    setError('')
+    if (!selectedTicketId || statusUpdating) return
+    setTicketError('')
+    setStatusSaved(false)
+    setStatusUpdating(true)
     try {
       await setTicketStatus({ ticketId: selectedTicketId, status })
+      setStatusSaved(true)
     } catch (err) {
-      setError(
+      setTicketError(
         err instanceof Error
           ? sanitizeConvexError(err.message)
           : 'Failed to update ticket status.',
       )
+    } finally {
+      setStatusUpdating(false)
     }
   }
 
   const handleAddNote = async () => {
     if (!selectedTicketId || !noteInput.trim()) return
     setBusy(true)
-    setError('')
+    setTicketError('')
     try {
       await addTicketNote({
         ticketId: selectedTicketId,
@@ -114,7 +124,7 @@ export function PlatformSupportPage() {
       })
       setNoteInput('')
     } catch (err) {
-      setError(
+      setTicketError(
         err instanceof Error
           ? sanitizeConvexError(err.message)
           : 'Failed to add note.',
@@ -240,7 +250,8 @@ export function PlatformSupportPage() {
                     onClick={() => {
                       setSelectedTicketId(ticket._id)
                       setNoteInput('')
-                      setError('')
+                      setTicketError('')
+                      setStatusSaved(false)
                     }}
                   >
                     <PlatformTableCell className="font-medium">
@@ -375,6 +386,7 @@ export function PlatformSupportPage() {
                   </label>
                   <select
                     value={selectedTicket.status}
+                    disabled={statusUpdating}
                     onChange={(e) =>
                       handleSetTicketStatus(e.target.value as TicketStatus)
                     }
@@ -386,6 +398,16 @@ export function PlatformSupportPage() {
                       </option>
                     ))}
                   </select>
+                  {statusUpdating && (
+                    <p className="mt-1 text-xs text-[#9aa6a8]">
+                      Updating status…
+                    </p>
+                  )}
+                  {statusSaved && !statusUpdating && !ticketError && (
+                    <p className="mt-1 text-xs text-[#22c55e]">
+                      Status updated.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-[#9aa6a8]">
@@ -399,7 +421,9 @@ export function PlatformSupportPage() {
                     className={fieldClass}
                   />
                 </div>
-                {error && <p className="text-sm text-[#ef4444]">{error}</p>}
+                {ticketError && (
+                  <p className="text-sm text-[#ef4444]">{ticketError}</p>
+                )}
               </>
             )}
           </div>

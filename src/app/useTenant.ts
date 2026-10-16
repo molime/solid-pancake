@@ -151,6 +151,22 @@ export function useTenant() {
     typeof window === 'undefined' ? '' : window.location.hostname,
   )
 
+  // Platform staff (platformAdmins table) are exempt from pinning: they
+  // legitimately jump between agencies and the platform portal from any
+  // host, so the legacy Clerk-org/localStorage resolution stays in charge
+  // for them. The query only runs on workspace subdomains; while it is in
+  // flight (undefined) or the auth token hasn't attached yet (null, per
+  // platform.isAdmin's "unknown" contract), the hook stays in its loading
+  // state so a non-exempt user never gets even a flash of another agency's
+  // data under the wrong URL.
+  const isPlatformAdmin = useQuery(
+    api.platform.isAdmin,
+    agencySubdomain ? {} : 'skip',
+  )
+  const adminCheckPending = !!agencySubdomain && isPlatformAdmin == null
+  const effectiveSubdomain =
+    isPlatformAdmin === true ? null : agencySubdomain
+
   // The query still runs when a stored id exists so role/tenantName stay
   // fresh and revoked memberships are detected — it just never gates
   // clerkOrgId or isLoading. On an agency subdomain it also runs for Clerk
@@ -158,7 +174,7 @@ export function useTenant() {
   // the tenant and the membership list is needed to resolve it.
   const dbTenants = useQuery(
     api.candidates.getMyTenant,
-    isLoaded && (!orgClerkOrgId || agencySubdomain) ? {} : 'skip',
+    isLoaded && (!orgClerkOrgId || effectiveSubdomain) ? {} : 'skip',
   )
 
   const storedClerkOrgId = getStoredClerkOrgId()
@@ -167,7 +183,8 @@ export function useTenant() {
   // Subdomain pinning. `pinnedTenant` is the live resolution; `lastPinned`
   // keeps the last good pin across transient mid-refresh query drops so the
   // resolved workspace never flaps back into a loader or a mismatch notice.
-  const pinnedTenant = findTenantForSubdomain(dbTenants, agencySubdomain)
+  // Pinning uses `effectiveSubdomain`: null for platform admins (exempt).
+  const pinnedTenant = findTenantForSubdomain(dbTenants, effectiveSubdomain)
   const [lastPinned, setLastPinned] = useState<DbTenant | null>(null)
   useEffect(() => {
     if (pinnedTenant && pinnedTenant.clerkOrgId !== lastPinned?.clerkOrgId) {
@@ -184,7 +201,7 @@ export function useTenant() {
   // previously-pinned case goes through the grace timer, so a transient
   // mid-refresh resolution without the pinned tenant can't flash the notice.
   const noMatch =
-    !!agencySubdomain && dbTenants !== undefined && !pinnedTenant
+    !!effectiveSubdomain && dbTenants !== undefined && !pinnedTenant
   const [graceExpired, setGraceExpired] = useState(false)
   useEffect(() => {
     if (!noMatch) {
@@ -206,8 +223,8 @@ export function useTenant() {
   // confirmed.
   const mismatchAgency = useQuery(
     api.agencyConfig.getPublicAgencyBySubdomain,
-    mismatchConfirmed && agencySubdomain
-      ? { subdomain: agencySubdomain }
+    mismatchConfirmed && effectiveSubdomain
+      ? { subdomain: effectiveSubdomain }
       : 'skip',
   )
 
@@ -215,7 +232,7 @@ export function useTenant() {
 
   let clerkOrgId: string | undefined
   let resolvedDbTenant = dbTenant
-  if (agencySubdomain) {
+  if (effectiveSubdomain) {
     const pinned =
       pinnedTenant ??
       (mismatchConfirmed ? undefined : (lastPinned ?? undefined))
@@ -225,9 +242,10 @@ export function useTenant() {
     clerkOrgId = orgClerkOrgId ?? storedClerkOrgId ?? dbTenant?.clerkOrgId
   }
   const isLoading =
-    !clerkOrgId &&
-    !mismatchConfirmed &&
-    (!isLoaded || dbTenants === undefined || convexAuthLoading)
+    adminCheckPending ||
+    (!clerkOrgId &&
+      !mismatchConfirmed &&
+      (!isLoaded || dbTenants === undefined || convexAuthLoading))
 
   // Which Clerk org the session should carry on a pinned workspace: the
   // pinned org when this user can activate it in Clerk, otherwise null — a
@@ -237,7 +255,7 @@ export function useTenant() {
   // setActive marks the org as not Clerk-activatable for this session.
   const [unactivatablePin, setUnactivatablePin] = useState<string | null>(null)
   const desiredActiveOrg =
-    agencySubdomain && pinnedTenant
+    effectiveSubdomain && pinnedTenant
       ? CLERK_ORG_ROLES.has(pinnedTenant.role) &&
         unactivatablePin !== pinnedTenant.clerkOrgId
         ? pinnedTenant.clerkOrgId
@@ -255,7 +273,7 @@ export function useTenant() {
   // for no-org users. setActive failures converge on the claim-less DB path
   // instead of retrying forever.
   useEffect(() => {
-    if (!agencySubdomain || !pinnedTenant || desiredActiveOrg === undefined) {
+    if (!effectiveSubdomain || !pinnedTenant || desiredActiveOrg === undefined) {
       return
     }
     if ((orgClerkOrgId ?? null) !== desiredActiveOrg) {
@@ -270,7 +288,7 @@ export function useTenant() {
     ) {
       setSelectedClerkOrgId(pinnedTenant.clerkOrgId)
     }
-  }, [agencySubdomain, pinnedTenant, orgClerkOrgId, desiredActiveOrg, setActive])
+  }, [effectiveSubdomain, pinnedTenant, orgClerkOrgId, desiredActiveOrg, setActive])
 
   // First-time resolution: persist the query-resolved tenant so later renders
   // (and page reloads) never depend on query timing. Also validates the
@@ -297,18 +315,18 @@ export function useTenant() {
 
   return {
     clerkOrgId,
-    tenantName: agencySubdomain
+    tenantName: effectiveSubdomain
       ? (resolvedDbTenant?.tenantName ?? organization?.name)
       : (organization?.name ?? dbTenant?.tenantName),
     agencyAddress: resolvedDbTenant?.agencyAddress ?? null,
     role: resolvedDbTenant?.role,
     isLoading,
     orgSyncPending,
-    isPinnedWorkspace: !!agencySubdomain,
+    isPinnedWorkspace: !!effectiveSubdomain,
     tenantMismatch:
-      mismatchConfirmed && agencySubdomain
+      mismatchConfirmed && effectiveSubdomain
         ? {
-            subdomain: agencySubdomain,
+            subdomain: effectiveSubdomain,
             agencyName: mismatchAgency?.name ?? null,
           }
         : null,

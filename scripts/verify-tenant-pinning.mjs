@@ -174,6 +174,16 @@ const cases = [
     expectNotice: false,
     markers: ['HR Home'],
   },
+  {
+    // Platform staff are exempt from pinning: Diego's platform admin can use
+    // the platform portal from any agency subdomain (and the legacy tenant
+    // resolution for agency workspaces) — never the wrong-workspace notice.
+    label: 'platform-admin-on-goldenages-ok',
+    email: 'diego.molina.sieiro+admin@gmail.com',
+    host: 'goldenages.atriaxsolutions.com',
+    expectNotice: false,
+    markers: ['Subscriptions'],
+  },
 ]
 
 const results = []
