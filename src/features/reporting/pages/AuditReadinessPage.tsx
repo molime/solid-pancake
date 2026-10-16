@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useConvex, useQuery } from 'convex/react'
 import type { FunctionReturnType } from 'convex/server'
 import { api } from '../../../../convex/_generated/api'
@@ -209,8 +209,7 @@ export function AuditReadinessPage() {
 }
 
 function AuditFullView() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
   const convex = useConvex()
   const [downloading, setDownloading] = useState(false)
   const [fiscalYearEnd, setFiscalYearEnd] = useState(currentFiscalYearEnd)

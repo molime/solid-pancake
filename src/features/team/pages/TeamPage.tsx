@@ -1,4 +1,5 @@
 import { useOrganization, useUser } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useAction, useQuery, useMutation } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Doc } from '../../../../convex/_generated/dataModel'
@@ -144,7 +145,7 @@ function cacheClerkInvitations(orgId: string, invitations: ClerkInvitation[]) {
 export function TeamPage() {
   const { organization, isLoaded: orgLoaded } = useOrganization()
   const { user } = useUser()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
 
   const members = useQuery(
     api.members.list,

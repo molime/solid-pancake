@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
@@ -26,8 +26,7 @@ import { AgencyBranding } from '@/shared/ui/AgencyBranding'
 import type { Id } from '../../../../convex/_generated/dataModel'
 
 export function HRCasesPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
   const cases = useQuery(
     api.hrCases.listHrCases,
     clerkOrgId ? { clerkOrgId } : 'skip',

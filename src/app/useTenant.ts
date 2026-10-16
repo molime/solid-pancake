@@ -229,30 +229,40 @@ export function useTenant() {
     !mismatchConfirmed &&
     (!isLoaded || dbTenants === undefined || convexAuthLoading)
 
-  // While a pinned org-member tenant hasn't become Clerk's active org yet
-  // (and the Convex JWT still carries the old org claim), server-side org
-  // checks would transiently reject the pinned tenant. Guards must wait this
-  // out instead of acting on the stale false/error.
+  // Which Clerk org the session should carry on a pinned workspace: the
+  // pinned org when this user can activate it in Clerk, otherwise null — a
+  // JWT without an org claim makes server auth fall back to the DB
+  // tenantMembers path, which covers every role (this is how DB-only members
+  // like agency owners without a Clerk org seat are authorized). A rejected
+  // setActive marks the org as not Clerk-activatable for this session.
+  const [unactivatablePin, setUnactivatablePin] = useState<string | null>(null)
+  const desiredActiveOrg =
+    agencySubdomain && pinnedTenant
+      ? CLERK_ORG_ROLES.has(pinnedTenant.role) &&
+        unactivatablePin !== pinnedTenant.clerkOrgId
+        ? pinnedTenant.clerkOrgId
+        : null
+      : undefined
+  // While Clerk's active org hasn't reached the desired state the JWT still
+  // carries the previous org claim, so server-side org checks would
+  // transiently reject the pinned tenant. Guards wait this out instead of
+  // acting on the stale false/error.
   const orgSyncPending =
-    !!agencySubdomain &&
-    !!pinnedTenant &&
-    CLERK_ORG_ROLES.has(pinnedTenant.role) &&
-    (orgClerkOrgId !== pinnedTenant.clerkOrgId || convexAuthLoading)
+    desiredActiveOrg !== undefined &&
+    (orgClerkOrgId ?? null) !== desiredActiveOrg
 
-  // Sync side effects with the pinned tenant: align Clerk's active org so
-  // pages reading `useOrganization()` directly follow the subdomain (this is
-  // what unsticks e.g. Billing when Clerk has no/different active org), and
-  // persist the pick for no-org users.
+  // Sync Clerk's active org with the pinned workspace, and persist the pick
+  // for no-org users. setActive failures converge on the claim-less DB path
+  // instead of retrying forever.
   useEffect(() => {
-    if (!agencySubdomain || !pinnedTenant) return
-    if (
-      CLERK_ORG_ROLES.has(pinnedTenant.role) &&
-      orgClerkOrgId !== pinnedTenant.clerkOrgId
-    ) {
-      const result = setActive?.({ organization: pinnedTenant.clerkOrgId })
-      // Transient failures are safe to ignore: the pin above still guards
-      // which tenant's data is loaded, and the effect retries on re-render.
-      void Promise.resolve(result).catch(() => {})
+    if (!agencySubdomain || !pinnedTenant || desiredActiveOrg === undefined) {
+      return
+    }
+    if ((orgClerkOrgId ?? null) !== desiredActiveOrg) {
+      const result = setActive?.({ organization: desiredActiveOrg })
+      void Promise.resolve(result).catch(() => {
+        if (desiredActiveOrg) setUnactivatablePin(desiredActiveOrg)
+      })
     }
     if (
       !orgClerkOrgId &&
@@ -260,7 +270,7 @@ export function useTenant() {
     ) {
       setSelectedClerkOrgId(pinnedTenant.clerkOrgId)
     }
-  }, [agencySubdomain, pinnedTenant, orgClerkOrgId, setActive])
+  }, [agencySubdomain, pinnedTenant, orgClerkOrgId, desiredActiveOrg, setActive])
 
   // First-time resolution: persist the query-resolved tenant so later renders
   // (and page reloads) never depend on query timing. Also validates the

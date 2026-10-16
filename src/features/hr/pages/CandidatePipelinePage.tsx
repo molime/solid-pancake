@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery, useAction } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent } from '@/shared/ui/Card'
@@ -55,8 +55,7 @@ function matchesTab(candidate: { status: string }, tab: TabValue): boolean {
 }
 
 export function CandidatePipelinePage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
   const candidates = useQuery(
     api.candidates.listCandidates,
     clerkOrgId ? { clerkOrgId } : 'skip',

@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useConvex, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
@@ -30,8 +30,7 @@ import {
 } from '../model/invoiceUtils'
 
 export function BillingPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId, tenantName } = useTenant()
   const convex = useConvex()
   const readyLines = useQuery(
     api.billing.unexported,
@@ -95,7 +94,7 @@ export function BillingPage() {
     }
     // PDF download path (explicitly requested via PDF button)
     if (pdfDownloadRef.current === downloadInvoiceId) {
-      const blob = buildInvoicePdf(invoiceDetails, organization?.name ?? 'Agency')
+      const blob = buildInvoicePdf(invoiceDetails, tenantName ?? 'Agency')
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -110,7 +109,7 @@ export function BillingPage() {
     }
     // Default: PDF download for newly created invoices
     if (downloadedInvoiceIdRef.current === downloadInvoiceId) return
-    const blob = buildInvoicePdf(invoiceDetails, organization?.name ?? 'Agency')
+    const blob = buildInvoicePdf(invoiceDetails, tenantName ?? 'Agency')
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -120,7 +119,7 @@ export function BillingPage() {
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
     downloadedInvoiceIdRef.current = downloadInvoiceId
-  }, [downloadInvoiceId, invoiceDetails, organization?.name])
+  }, [downloadInvoiceId, invoiceDetails, tenantName])
 
   if (!readyLines || !ledger || !invoices) {
     return <AppLoader label="Loading billing workspace" />
@@ -155,7 +154,7 @@ export function BillingPage() {
       clerkOrgId,
       invoiceId,
     })) as InvoiceDetails
-    const blob = buildInvoicePdf(details, organization?.name ?? 'Agency')
+    const blob = buildInvoicePdf(details, tenantName ?? 'Agency')
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -221,7 +220,7 @@ export function BillingPage() {
 
   const requestInvoicePdfDownload = (id: Id<'exportBatches'>) => {
     if (invoiceDetails?.invoice._id === id) {
-      const blob = buildInvoicePdf(invoiceDetails, organization?.name ?? 'Agency')
+      const blob = buildInvoicePdf(invoiceDetails, tenantName ?? 'Agency')
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

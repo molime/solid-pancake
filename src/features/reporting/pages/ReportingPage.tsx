@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { useState } from 'react'
@@ -20,8 +20,7 @@ import { downloadCsv } from '@/shared/lib/downloadCsv'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 
 export function ReportingPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
   const report = useQuery(
     api.reporting.getAgencyReport,
     clerkOrgId ? { clerkOrgId } : 'skip',

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import {
@@ -33,8 +33,7 @@ export function NewCaseModal({
   onClose: () => void
   onCreated?: () => void
 }) {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
   const createHrCase = useMutation(api.hrCases.createHrCase)
   const employees = useQuery(
     api.employeeProfiles.listEmployeeProfiles,

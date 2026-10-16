@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useQuery, useMutation } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -407,9 +407,7 @@ function CorrectionDialog({
 export function ApplicationReviewPage() {
   const { candidateId } = useParams<{ candidateId: string }>()
   const navigate = useNavigate()
-  const { organization } = useOrganization()
-
-  const clerkOrgId = organization?.id
+  const { clerkOrgId, tenantName } = useTenant()
 
   const detail = useQuery(
     api.candidates.getCandidateDetail,
@@ -529,7 +527,7 @@ export function ApplicationReviewPage() {
   }
 
   const todayIso = new Date().toISOString().split('T')[0]
-  const [employerName, setEmployerName] = useState(organization?.name ?? '')
+  const [employerName, setEmployerName] = useState(tenantName ?? '')
   const [ein, setEin] = useState('')
   const [firstDateOfEmployment, setFirstDateOfEmployment] = useState(todayIso)
   const [isGeneratingW4, setIsGeneratingW4] = useState(false)
@@ -565,7 +563,7 @@ export function ApplicationReviewPage() {
   const [i9Dirty, setI9Dirty] = useState(false)
   const nextW4Key = `${prefilledDocs?.map((d) => d._id).join(',') ?? 'loading'}|${w4ForHR?.agencyEin ?? ''}`
   const nextI9Key = JSON.stringify(fields.i9Section2)
-  const initialW4Employer = getInitialW4EmployerData(prefilledDocs, organization?.name, w4ForHR?.agencyEin)
+  const initialW4Employer = getInitialW4EmployerData(prefilledDocs, tenantName, w4ForHR?.agencyEin)
   const initialI9Section2 = getInitialI9Section2(fields)
   if (w4SourceKey !== nextW4Key) {
     setW4SourceKey(nextW4Key)
@@ -966,7 +964,7 @@ export function ApplicationReviewPage() {
         personal: (fields.personal ?? {}) as Record<string, unknown>,
         i9: (fields.i9 ?? {}) as { ssn?: string },
         w4: (fields.w4 ?? {}) as { ssn?: string },
-        agencyName: employerName || organization?.name || '',
+        agencyName: employerName || tenantName || '',
         agencyAddress: w4ForHR?.agencyAddress ?? '',
         todayUs: new Date().toLocaleDateString('en-US'),
       }
@@ -1440,7 +1438,7 @@ export function ApplicationReviewPage() {
 
             <SectionBlock title="Prefilled documents">
               <div className="space-y-2">
-                {(isGoldenAgesAgency(organization?.name)
+                {(isGoldenAgesAgency(tenantName)
                   // Golden Ages uses LIC 501 (not HCS 501) and the GA-specific
                   // DE 34 / BCIA 8016 (not LIC 9163); other agencies use
                   // HCS 501 and LIC 9163 and none of the GA-only forms.
@@ -1522,7 +1520,7 @@ export function ApplicationReviewPage() {
               </div>
             </SectionBlock>
 
-            {isGoldenAgesAgency(organization?.name) &&
+            {isGoldenAgesAgency(tenantName) &&
               (!prefilledDocByType.get('lic_501') || !prefilledDocByType.get('soc_341a')) && (
               <SectionBlock title="Generate missing documents">
                 <p className="mb-3 text-sm text-atria-text-secondary">

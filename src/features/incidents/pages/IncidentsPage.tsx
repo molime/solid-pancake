@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useConvex, useQuery } from 'convex/react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -45,8 +45,7 @@ const statusVariant: Record<IncidentStatus, StatusBadgeVariant> = {
 }
 
 export function IncidentsPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
   const convex = useConvex()
   const navigate = useNavigate()
 

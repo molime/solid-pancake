@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
@@ -91,8 +91,7 @@ function profileFormFromClient(client: Client): ProfileFormState {
 }
 
 export function ClientDetailPage() {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
   const { clientId } = useParams<{ clientId: string }>()
   const typedClientId = clientId as Id<'clients'> | undefined
 

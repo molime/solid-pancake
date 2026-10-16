@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useAction } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import {
@@ -30,8 +30,7 @@ export function InviteCandidateModal({
   onClose: () => void
   onInvited?: () => void
 }) {
-  const { organization } = useOrganization()
-  const clerkOrgId = organization?.id
+  const { clerkOrgId } = useTenant()
   const inviteCandidate = useAction(api.candidates.inviteCandidate)
 
   const [displayName, setDisplayName] = useState('')

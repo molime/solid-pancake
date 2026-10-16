@@ -1,4 +1,4 @@
-import { useOrganization } from '@clerk/react'
+import { useTenant } from '@/app/useTenant'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
@@ -39,8 +39,8 @@ export function CoverageRequestsPanel({
 }: {
   clerkOrgId?: string
 }) {
-  const { organization } = useOrganization()
-  const clerkOrgId = propClerkOrgId ?? organization?.id
+  const { clerkOrgId: tenantClerkOrgId } = useTenant()
+  const clerkOrgId = propClerkOrgId ?? tenantClerkOrgId
 
   const requests = useQuery(
     api.scheduling.listCoverageRequests,

@@ -64,13 +64,17 @@ function TenantMembershipGuard({ children }: PropsWithChildren) {
     api.members.checkMembership,
     queryOrgId ? { clerkOrgId: queryOrgId } : 'skip',
   )
+  // me/disabledSections throw server-side while the JWT org claim lags the
+  // pinned tenant (requireTenant rejects an org mismatch). checkMembership
+  // only returns false instead, so these two wait until membership is
+  // positively confirmed.
   const disabledSections = useQuery(
     api.agencyConfig.getDisabledSections,
-    queryOrgId ? { clerkOrgId: queryOrgId } : 'skip',
+    queryOrgId && membership === true ? { clerkOrgId: queryOrgId } : 'skip',
   )
   const member = useQuery(
     api.members.me,
-    queryOrgId ? { clerkOrgId: queryOrgId } : 'skip',
+    queryOrgId && membership === true ? { clerkOrgId: queryOrgId } : 'skip',
   )
 
   if (membership === true && !hasAuthorized) {
