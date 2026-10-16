@@ -177,28 +177,29 @@ export function useTenant() {
   }, [pinnedTenant, lastPinned])
 
   // Wrong-workspace detection: the memberships resolved but none matches the
-  // subdomain. Flag it immediately when this session never pinned a tenant
-  // here; otherwise defer by the grace period so a transient mid-refresh
-  // resolution without the pinned tenant can't flash the notice.
+  // subdomain. When this session never pinned a tenant here the mismatch is
+  // derived synchronously — an effect-based flag would let guards redirect
+  // to /select-agency in the one-render gap before the effect runs (the
+  // picker's auto-select then bounces back: an infinite loop). Only the
+  // previously-pinned case goes through the grace timer, so a transient
+  // mid-refresh resolution without the pinned tenant can't flash the notice.
   const noMatch =
     !!agencySubdomain && dbTenants !== undefined && !pinnedTenant
-  const [mismatchConfirmed, setMismatchConfirmed] = useState(false)
+  const [graceExpired, setGraceExpired] = useState(false)
   useEffect(() => {
     if (!noMatch) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setMismatchConfirmed(false)
+      setGraceExpired(false)
       return
     }
-    if (!lastPinned) {
-      setMismatchConfirmed(true)
-      return
-    }
+    if (!lastPinned) return
     const timeout = setTimeout(
-      () => setMismatchConfirmed(true),
+      () => setGraceExpired(true),
       STALE_STORED_TENANT_GRACE_MS,
     )
     return () => clearTimeout(timeout)
   }, [noMatch, lastPinned])
+  const mismatchConfirmed = (noMatch && !lastPinned) || (noMatch && graceExpired)
 
   // Best-effort name of the agency that owns the subdomain, for the
   // wrong-workspace notice. Public query; only runs once a mismatch is
