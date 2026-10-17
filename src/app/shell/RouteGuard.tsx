@@ -8,7 +8,6 @@ import { AppLoader } from '@/shared/ui/AppLoader'
 import { getStoredClerkOrgId, useTenant } from '@/app/useTenant'
 import { roleHomePath } from '@/app/roleHomePath'
 import { isSectionDisabled, sectionFallbackPath } from './sections'
-import { WrongWorkspace } from './WrongWorkspace'
 
 function signInUrlWithRedirect(redirectPath: string): string {
   const search = new URLSearchParams()
@@ -50,54 +49,30 @@ export function TenantRouteGuard({ children }: PropsWithChildren) {
 }
 
 function TenantMembershipGuard({ children }: PropsWithChildren) {
-  const { clerkOrgId, isLoading, tenantMismatch, orgSyncPending, isPinnedWorkspace } = useTenant()
+  const { clerkOrgId, isLoading } = useTenant()
   const location = useLocation()
   const effectiveClerkOrgId = clerkOrgId ?? getStoredClerkOrgId() ?? undefined
-  // While the Clerk active org is being synced to the pinned workspace
-  // tenant, the JWT still carries the previous org claim — membership
-  // queries against the pinned tenant would transiently fail. Skip them
-  // until the sync settles.
-  const queryOrgId = orgSyncPending ? undefined : effectiveClerkOrgId
   const [hasAuthorized, setHasAuthorized] = useState(false)
 
   const membership = useQuery(
     api.members.checkMembership,
-    queryOrgId ? { clerkOrgId: queryOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
-  // me/disabledSections throw server-side while the JWT org claim lags the
-  // pinned tenant (requireTenant rejects an org mismatch). checkMembership
-  // only returns false instead, so these two wait until membership is
-  // positively confirmed.
   const disabledSections = useQuery(
     api.agencyConfig.getDisabledSections,
-    queryOrgId && membership === true ? { clerkOrgId: queryOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
   const member = useQuery(
     api.members.me,
-    queryOrgId && membership === true ? { clerkOrgId: queryOrgId } : 'skip',
+    effectiveClerkOrgId ? { clerkOrgId: effectiveClerkOrgId } : 'skip',
   )
 
   if (membership === true && !hasAuthorized) {
     setHasAuthorized(true)
   }
 
-  if (orgSyncPending) {
-    return <AppLoader fullScreen label="Opening agency workspace" />
-  }
-
   if (isLoading) {
     return hasAuthorized ? <>{children}</> : <AppLoader fullScreen />
-  }
-
-  // The URL's agency subdomain is not one of the user's agencies — never
-  // serve another tenant's data under it, even if a stored id exists.
-  if (tenantMismatch) {
-    return (
-      <WrongWorkspace
-        subdomain={tenantMismatch.subdomain}
-        agencyName={tenantMismatch.agencyName}
-      />
-    )
   }
 
   if (!effectiveClerkOrgId) {
@@ -109,13 +84,6 @@ function TenantMembershipGuard({ children }: PropsWithChildren) {
   }
 
   if (membership === false) {
-    // On a pinned workspace the tenant was resolved from the live DB
-    // membership list, so a false here is the JWT org claim still lagging
-    // the pin — wait for the sync instead of bouncing to the picker. The
-    // loader watchdog offers a reset if it ever gets genuinely stuck.
-    if (isPinnedWorkspace) {
-      return <AppLoader fullScreen label="Opening agency workspace" />
-    }
     return <Navigate to="/select-agency" replace />
   }
 

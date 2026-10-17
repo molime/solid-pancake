@@ -1,20 +1,23 @@
 /**
- * Verify the tenant-pinning hardening on PROD (2026-10-15):
+ * Verify workspace routing on PROD (2026-10-17):
  *
- *  1. A user opening an agency subdomain they are NOT a member of gets the
- *     wrong-workspace notice (never another agency's data).
- *  2. The same user on THEIR OWN agency subdomain works normally.
- *  3. A member of the subdomain's agency lands in that agency even when
- *     Clerk's active org points elsewhere (pin + setActive sync).
+ * From any URL, on any agency subdomain, signing in must take the user to
+ * THEIR OWN org + role home — never a wrong-workspace block:
+ *
+ *  1. A Test Agency admin logging in on the Golden Ages URL lands in their
+ *     own (Test Agency) workspace.
+ *  2. The same account on the Individuals Choice URL — same outcome.
+ *  3. A Golden Ages admin logging in on the IC URL lands in the GA workspace.
+ *  4. Platform staff can use the platform portal from any agency subdomain.
  *
  * Read-only: Clerk sign-in tickets + page loads, zero data mutations.
  *
- * Usage: node scripts/verify-tenant-pinning.mjs
+ * Usage: node scripts/verify-workspace-routing.mjs
  */
 import { chromium } from 'playwright'
 import { readFileSync, mkdirSync } from 'node:fs'
 
-const SHOTS = 'test-results/tenant-pinning'
+const SHOTS = 'test-results/workspace-routing'
 mkdirSync(SHOTS, { recursive: true })
 
 // --- secrets: parse .env.prod (never print) ---
@@ -152,32 +155,32 @@ async function check({ label, email, host, expectNotice, markers }) {
 
 const cases = [
   {
-    // Maria (IC member on prod) opening Golden Ages' URL must get the notice.
-    label: 'maria-on-goldenages-sees-notice',
+    // Maria's account is a Test Agency admin (prod). Logging in on the
+    // Golden Ages URL must take her to HER OWN workspace — never a block.
+    label: 'maria-on-goldenages-lands-own-workspace',
     email: 'hello+admin@atriaxsolutions.com',
-    host: 'goldenages.atriaxsolutions.com',
-    expectNotice: true,
-  },
-  {
-    // hello+admin is a Test Agency admin only (prod) — the IC URL must also
-    // show the notice, not Test Agency data under IC's address.
-    label: 'maria-on-individualschoice-sees-notice',
-    email: 'hello+admin@atriaxsolutions.com',
-    host: 'individualschoice.atriaxsolutions.com',
-    expectNotice: true,
-  },
-  {
-    // GA admin on their own URL lands in GA (pin + setActive sync).
-    label: 'ga-admin-on-goldenages-ok',
-    email: 'admin@goldenagesinhomecare.com',
     host: 'goldenages.atriaxsolutions.com',
     expectNotice: false,
     markers: ['HR Home'],
   },
   {
-    // Platform staff are exempt from pinning: Diego's platform admin can use
-    // the platform portal from any agency subdomain (and the legacy tenant
-    // resolution for agency workspaces) — never the wrong-workspace notice.
+    // Same on the Individuals Choice URL: her own org + role, no notice.
+    label: 'maria-on-individualschoice-lands-own-workspace',
+    email: 'hello+admin@atriaxsolutions.com',
+    host: 'individualschoice.atriaxsolutions.com',
+    expectNotice: false,
+    markers: ['HR Home'],
+  },
+  {
+    // GA admin logging in on the IC URL lands in the GA workspace.
+    label: 'ga-admin-on-individualschoice-lands-ga',
+    email: 'admin@goldenagesinhomecare.com',
+    host: 'individualschoice.atriaxsolutions.com',
+    expectNotice: false,
+    markers: ['HR Home'],
+  },
+  {
+    // Platform staff can use the platform portal from any agency subdomain.
     label: 'platform-admin-on-goldenages-ok',
     email: 'diego.molina.sieiro+admin@gmail.com',
     host: 'goldenages.atriaxsolutions.com',
