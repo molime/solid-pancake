@@ -4,8 +4,6 @@ import {
   useTenant,
   setSelectedClerkOrgId,
   getStoredClerkOrgId,
-  getAgencySubdomain,
-  findTenantForSubdomain,
 } from './useTenant'
 
 vi.mock('@clerk/react', async () => {
@@ -14,7 +12,6 @@ vi.mock('@clerk/react', async () => {
   return {
     ...actual,
     useOrganization: vi.fn(),
-    useClerk: vi.fn(() => ({ setActive: vi.fn() })),
   }
 })
 
@@ -237,69 +234,5 @@ describe('useTenant', () => {
     expect(getStoredClerkOrgId()).toBe('org_x')
     setSelectedClerkOrgId(null)
     expect(getStoredClerkOrgId()).toBeNull()
-  })
-})
-
-describe('getAgencySubdomain', () => {
-  it('returns the subdomain on agency workspace hosts', () => {
-    expect(getAgencySubdomain('goldenages.atriaxsolutions.com')).toBe('goldenages')
-    expect(getAgencySubdomain('individualschoice.atriaxsolutions.com')).toBe('individualschoice')
-  })
-
-  it('returns null on the apex, www, and reserved subdomains', () => {
-    expect(getAgencySubdomain('atriaxsolutions.com')).toBeNull()
-    expect(getAgencySubdomain('www.atriaxsolutions.com')).toBeNull()
-    expect(getAgencySubdomain('platform.atriaxsolutions.com')).toBeNull()
-    expect(getAgencySubdomain('app.atriaxsolutions.com')).toBeNull()
-  })
-
-  it('returns null on non-production hosts (localhost, vercel previews)', () => {
-    expect(getAgencySubdomain('localhost')).toBeNull()
-    expect(getAgencySubdomain('127.0.0.1')).toBeNull()
-    expect(getAgencySubdomain('atria-x.vercel.app')).toBeNull()
-    expect(getAgencySubdomain('goldenages.example.com')).toBeNull()
-  })
-
-  it('returns null for empty or malformed hosts', () => {
-    expect(getAgencySubdomain('')).toBeNull()
-    expect(getAgencySubdomain('.atriaxsolutions.com')).toBeNull()
-    expect(getAgencySubdomain('a.b.atriaxsolutions.com')).toBeNull()
-  })
-})
-
-describe('findTenantForSubdomain', () => {
-  const goldenAges = {
-    clerkOrgId: 'org_ga',
-    tenantName: 'Golden Ages Home Care',
-    slug: 'golden-ages-home-care',
-    agencyAddress: null,
-    role: 'org:admin',
-  }
-  const individualsChoice = {
-    clerkOrgId: 'org_ic',
-    tenantName: 'Individuals Choice',
-    slug: 'individuals-choice-inc',
-    agencyAddress: null,
-    role: 'org:admin',
-  }
-
-  it('matches a tenant whose slug normalizes to the subdomain', () => {
-    expect(
-      findTenantForSubdomain([goldenAges, individualsChoice], 'goldenages')?.clerkOrgId,
-    ).toBe('org_ga')
-    expect(
-      findTenantForSubdomain([goldenAges, individualsChoice], 'individualschoice')?.clerkOrgId,
-    ).toBe('org_ic')
-  })
-
-  it('returns undefined when no membership matches the subdomain', () => {
-    expect(
-      findTenantForSubdomain([individualsChoice], 'goldenages'),
-    ).toBeUndefined()
-  })
-
-  it('returns undefined without tenants or a subdomain', () => {
-    expect(findTenantForSubdomain(undefined, 'goldenages')).toBeUndefined()
-    expect(findTenantForSubdomain([goldenAges], null)).toBeUndefined()
   })
 })

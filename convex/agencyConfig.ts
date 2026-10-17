@@ -475,30 +475,6 @@ export const getPublicAgencyInfo = query({
   },
 })
 
-// ═══════════════════════════════════════════════════════════════
-// Public agency lookup by host subdomain — for the wrong-workspace
-// notice. Tenant slugs don't map 1:1 onto DNS subdomains (e.g. slug
-// "golden-ages-home-care" is served at goldenages.atriaxsolutions.com),
-// so this mirrors the client-side normalized-prefix matching. Returns
-// only the name — enough to render "this link belongs to X".
-// ═══════════════════════════════════════════════════════════════
-
-export const getPublicAgencyBySubdomain = query({
-  args: { subdomain: v.string() },
-  handler: async (ctx, { subdomain }) => {
-    const needle = subdomain.toLowerCase().replace(/[^a-z0-9]+/g, '')
-    if (!needle) return null
-    const tenants = await ctx.db.query('tenants').collect()
-    const match = tenants.find((tenant) =>
-      (tenant.slug ?? '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '')
-        .includes(needle),
-    )
-    return match ? { name: match.name, slug: match.slug } : null
-  },
-})
-
 export const listBranchesInternal = internalQuery({
   args: { tenantId: v.id('tenants') },
   handler: async (ctx, { tenantId }) => {
