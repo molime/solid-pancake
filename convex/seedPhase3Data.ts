@@ -4,6 +4,7 @@
 import { internalMutation } from './_generated/server'
 import { v } from 'convex/values'
 import type { Id } from './_generated/dataModel'
+import { categoryForAction } from './_utils/auditCategories'
 
 function genEmbedding(text: string): number[] {
   const DIM = 32
@@ -344,7 +345,11 @@ export const seed = internalMutation({
         { actorId: adminId, actorRole: 'org:admin', action: 'agency_settings_updated', kind: 'settings', metadata: { field: 'shiftGeofence', value: 'enabled' }, createdAt: `${lastMonth}T11:00:00Z` },
       ]
       for (const a of auditEntries) {
-        await ctx.db.insert('auditEvents', { tenantId, ...a })
+        await ctx.db.insert('auditEvents', {
+          tenantId,
+          ...a,
+          category: categoryForAction(a.action),
+        })
       }
       results.push(`5 audit events created`)
     } else {

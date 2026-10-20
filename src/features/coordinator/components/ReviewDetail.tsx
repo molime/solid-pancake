@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '@/shared/ui/Dialog'
 import { Separator } from '@/shared/ui/Separator'
+import { useAuditFileDownload } from '@/shared/lib/auditDownload'
 import { Textarea } from '@/shared/ui/Textarea'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { ReviewHistory } from './ReviewHistory'
@@ -584,6 +585,7 @@ function TaskReviewItem({
     api.files.getDownloadUrl,
     task.proofUrl ? { clerkOrgId, storageId: task.proofUrl } : 'skip',
   )
+  const auditDownload = useAuditFileDownload()
 
   return (
     <div className="flex items-center justify-between rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface-2 p-3">
@@ -604,6 +606,14 @@ function TaskReviewItem({
             href={downloadUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() =>
+              auditDownload({
+                clerkOrgId,
+                fileName: task.proofName,
+                linkedType: 'shiftTask',
+                linkedId: task._id,
+              })
+            }
             className="inline-flex items-center gap-1 rounded-md bg-atria-accent/10 px-2 py-1 text-xs font-medium text-atria-accent hover:bg-atria-accent/20"
           >
             <Download className="h-3 w-3" />

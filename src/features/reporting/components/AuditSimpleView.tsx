@@ -617,6 +617,15 @@ export function AuditSimpleView() {
         endDate,
       })
       downloadCsv(`audit-packet-${startDate}-to-${endDate}.csv`, csv)
+      // Audit the export (fire-and-forget; never blocks the download).
+      void convex
+        .mutation(api.audit.recordExport, {
+          clerkOrgId,
+          exportType: 'audit_packet',
+          recordCount: csv.split('\n').filter(Boolean).length - 1,
+          metadata: { startDate, endDate },
+        })
+        .catch(() => {})
     } finally {
       setDownloadingPacket(false)
     }

@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   FileCheck2,
   GraduationCap,
+  Trash2,
   User,
 } from 'lucide-react'
 import { cn } from '@/shared/lib/cn'
@@ -73,6 +74,7 @@ const GROUP_BY_LABEL: Record<string, string> = {
   Training: 'learning',
   'Training Hub': 'learning',
   Admin: 'management',
+  'Data lifecycle': 'management',
   'Employee Performance': 'management',
   'Audit Ready Center': 'management',
   Billing: 'management',
@@ -100,6 +102,12 @@ const navItems: NavItem[] = [
     section: 'admin',
     path: '/admin',
     icon: <ShieldCheck className="h-4 w-4" />,
+    roles: ['org:admin'],
+  },
+  {
+    label: 'Data lifecycle',
+    path: '/data-lifecycle',
+    icon: <Trash2 className="h-4 w-4" />,
     roles: ['org:admin'],
   },
   {

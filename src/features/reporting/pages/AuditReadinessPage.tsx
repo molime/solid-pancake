@@ -272,6 +272,14 @@ function AuditFullView() {
       })
       const date = new Date().toISOString().slice(0, 10)
       downloadCsv(`audit-readiness-${date}.csv`, csv)
+      // Audit the export (fire-and-forget; never blocks the download).
+      void convex
+        .mutation(api.audit.recordExport, {
+          clerkOrgId,
+          exportType: 'audit_readiness',
+          recordCount: csv.split('\n').filter(Boolean).length - 1,
+        })
+        .catch(() => {})
     } finally {
       setDownloading(false)
     }
@@ -301,6 +309,15 @@ function AuditFullView() {
         endDate: packetEnd,
       })
       downloadCsv(`audit-packet-${packetStart}-to-${packetEnd}.csv`, csv)
+      // Audit the export (fire-and-forget; never blocks the download).
+      void convex
+        .mutation(api.audit.recordExport, {
+          clerkOrgId,
+          exportType: 'audit_packet',
+          recordCount: csv.split('\n').filter(Boolean).length - 1,
+          metadata: { startDate: packetStart, endDate: packetEnd },
+        })
+        .catch(() => {})
     } finally {
       setDownloadingPacket(false)
     }

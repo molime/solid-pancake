@@ -346,6 +346,7 @@ describe('reporting.listNotifications', () => {
         actorId: 'user_admin',
         actorRole: 'org:admin',
         action: 'shift_approved',
+        category: 'shifts',
         createdAt: '2026-01-01T00:00:00.000Z',
       })
     })
@@ -373,6 +374,7 @@ describe('reporting.listNotifications', () => {
         actorId: 'user_admin',
         actorRole: 'org:admin',
         action: 'shift_approved',
+        category: 'shifts',
         createdAt: '2026-01-01T00:00:00.000Z',
       })
     })

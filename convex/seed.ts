@@ -4,6 +4,7 @@ import { internal } from './_generated/api'
 import { requireTenantRole } from './authHelpers'
 import type { Id } from './_generated/dataModel'
 import { DEFAULT_SHIFT_GEOFENCE } from './tenantSettings'
+import { categoryForAction } from './_utils/auditCategories'
 
 // Fixed reference dates for deterministic, idempotent seeds across days
 const REF_TODAY = '2024-01-15'
@@ -1612,6 +1613,7 @@ export const createAgencyTenant = internalMutation({
       actorId: 'provision-script',
       actorRole: 'platform_admin',
       action: 'tenant_created',
+      category: categoryForAction('tenant_created'),
       kind: 'platform',
       metadata: {
         clerkOrgId: args.clerkOrgId,

@@ -76,6 +76,9 @@ function defaultUseQueryImplementation(query: unknown, _args?: unknown) {
 
 vi.mock('convex/react', () => ({
   useConvexAuth: () => ({ isLoading: false, isAuthenticated: true }),
+  // Stage 1 download auditing (useAuditFileDownload) needs useConvex; the
+  // audit mutation itself is fire-and-forget and mocked here.
+  useConvex: () => ({ mutation: vi.fn(() => Promise.resolve()) }),
   useQuery: vi.fn().mockImplementation(defaultUseQueryImplementation),
   useMutation: vi.fn().mockImplementation((mutation) => {
     const name = getFunctionName(mutation as Parameters<typeof getFunctionName>[0])
@@ -275,7 +278,10 @@ describe('ApplicationReviewPage', () => {
     await waitFor(() => {
       expect(screen.getByText('ITIN')).toBeInTheDocument()
     })
-    expect(screen.getByText('999-99-9999')).toBeInTheDocument()
+    // Stage 3: SSNs render masked by default; the full value requires the
+    // audited reveal (org:hr/org:admin only), which mocked viewers lack.
+    expect(screen.getByText('***-**-9999')).toBeInTheDocument()
+    expect(screen.queryByText('999-99-9999')).not.toBeInTheDocument()
   })
 
   it('renders combined approve and send offer button for applied status', async () => {

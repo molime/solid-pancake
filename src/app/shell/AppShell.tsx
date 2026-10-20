@@ -3,6 +3,7 @@ import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 import { BillingNoticeBanner } from './BillingNoticeBanner'
 import { TenantRouteGuard } from './RouteGuard'
+import { PolicyAcknowledgmentModal } from '@/shared/legal/PolicyAcknowledgmentModal'
 import { Component, useState, type PropsWithChildren } from 'react'
 import { cn } from '@/shared/lib/cn'
 
@@ -56,6 +57,15 @@ export function AppShell() {
             <Outlet />
           </main>
         </div>
+        {/* Blocking staff-policy acknowledgment (Stage 4). Hidden on the
+            onboarding/candidate routes (they have their own flow) and wrapped
+            in the same error boundary as the billing banner so a query edge
+            case can never take the whole shell down. */}
+        {!hideChrome && (
+          <BannerErrorBoundary>
+            <PolicyAcknowledgmentModal />
+          </BannerErrorBoundary>
+        )}
       </div>
     </TenantRouteGuard>
   )

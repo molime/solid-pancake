@@ -2,6 +2,7 @@ import { internalMutation } from './_generated/server'
 import { v } from 'convex/values'
 import type { Id } from './_generated/dataModel'
 import { DEFAULT_SHIFT_GEOFENCE } from './tenantSettings'
+import { categoryForAction } from './_utils/auditCategories'
 
 // Full audit fixture seed for ATRIA-X QA.
 // Run via:
@@ -1899,6 +1900,7 @@ export const seedFullAuditOrg = internalMutation({
           actorId: a.actorId,
           actorRole: a.actorRole,
           action: a.action,
+          category: categoryForAction(a.action),
           kind: a.kind,
           shiftId: (a as { shiftId?: Id<'shifts'> }).shiftId,
           previousStatus: (a as { previousStatus?: string }).previousStatus,

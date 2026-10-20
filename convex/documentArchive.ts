@@ -5,6 +5,7 @@ import type { Id } from './_generated/dataModel'
 import { requireTenantRole, assertTenantDoc } from './authHelpers'
 import { internal } from './_generated/api'
 import { getFileMetadata } from './files'
+import { assertValidUpload } from './_utils/uploadValidation'
 
 const ALLOWED_STATUSES = ['active', 'verified', 'rejected'] as const
 type DocumentStatus = (typeof ALLOWED_STATUSES)[number]
@@ -311,14 +312,6 @@ export const updateDocumentArchiveItem = mutation({
   },
 })
 
-const EMPLOYEE_CREDENTIAL_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'application/pdf',
-]
-const MAX_EMPLOYEE_CREDENTIAL_BYTES = 10 * 1024 * 1024
-
 /**
  * Staff-side credential upload for an employee (e.g. from the Audit Ready
  * Center's in-place fix dialog): admin/HR attaches the document straight to
@@ -350,14 +343,8 @@ export const addEmployeeCredentialDocument = mutation({
     if (!profile) throw new ConvexError('Employee not found.')
     assertTenantDoc(profile, tenantId)
 
-    if (args.contentType && !EMPLOYEE_CREDENTIAL_TYPES.includes(args.contentType)) {
-      throw new ConvexError(
-        'Invalid file type. Only JPG, PNG, WebP, and PDF are allowed.',
-      )
-    }
-    if (args.size && args.size > MAX_EMPLOYEE_CREDENTIAL_BYTES) {
-      throw new ConvexError('File exceeds 10 MB limit.')
-    }
+    // Stage 5: shared server-side guard re-validates client-sent type/size.
+    assertValidUpload(args.contentType, args.size)
 
     const now = new Date().toISOString()
     const fileId = await ctx.db.insert('files', {

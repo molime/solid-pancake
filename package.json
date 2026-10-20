@@ -14,7 +14,9 @@
     "e2e": "node scripts/run-playwright-with-env.js",
     "e2e:full": "node scripts/run-playwright-full.js",
     "e2e:local": "node --env-file=.env.local ./node_modules/@playwright/test/cli.js test --project=local-harness",
-    "preview": "vite preview --configLoader native"
+    "preview": "vite preview --configLoader native",
+    "audit:deps": "npm audit --audit-level=high",
+    "audit:secrets": "node scripts/scan-secrets.js"
   },
   "dependencies": {
     "@clerk/react": "^6.6.6",

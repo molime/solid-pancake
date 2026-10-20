@@ -14,12 +14,14 @@ import { candidateStatusPill, candidateStatusAccentClass } from '../lib/candidat
 import { getCarInsuranceStatus } from '../lib/carInsurance'
 import { formatDocumentCategoryLabel, formatDateUS } from '@/shared/format'
 import { uploadFileToConvex } from '@/shared/lib/upload'
+import { useAuditFileDownload } from '@/shared/lib/auditDownload'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { generatePrefilledPdf, saveAndDownload, saveAndUpload } from '@/features/onboarding/pdf/generatePrefilledPdf'
 import { getMapping, normalizeI9PdfData, normalizeW4PdfData } from '@/features/onboarding/pdf/mappings'
 import { buildLic501FinalData, buildSoc341aFinalData } from '@/features/onboarding/pdf/finalDocuments'
 import { isGoldenAgesAgency } from '@/features/onboarding/components/application/legalText'
 import { isNonEmptyString } from '@/features/onboarding/components/application/types'
+import { SsnField } from '@/shared/ui/SsnField'
 import { DynamicFormReview } from '@/features/forms/components/DynamicFormReview'
 import { ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, Download, RotateCcw, XCircle } from 'lucide-react'
 import { Component, useState, useMemo, useRef } from 'react'
@@ -200,6 +202,7 @@ function DownloadButtonInner({
     api.files.getDownloadUrl,
     storageId ? { clerkOrgId, storageId } : 'skip',
   )
+  const auditDownload = useAuditFileDownload()
 
   return (
     <a
@@ -210,7 +213,11 @@ function DownloadButtonInner({
       className="inline-flex h-8 items-center gap-1 rounded-md border border-atria-border bg-atria-surface px-2.5 text-xs font-medium text-atria-ink hover:bg-atria-surface-2 disabled:pointer-events-none disabled:opacity-50"
       aria-disabled={!url}
       onClick={(e) => {
-        if (!url) e.preventDefault()
+        if (!url) {
+          e.preventDefault()
+          return
+        }
+        auditDownload({ clerkOrgId, fileName, linkedType: 'file', linkedId: storageId })
       }}
     >
       <Download className="h-3.5 w-3.5" />
@@ -271,6 +278,7 @@ function PrefilledDocumentDownloadButtonInner({
     api.candidates.getPrefilledDocumentDownloadUrl,
     { clerkOrgId, documentId, variant },
   )
+  const auditDownload = useAuditFileDownload()
 
   return (
     <a
@@ -281,7 +289,17 @@ function PrefilledDocumentDownloadButtonInner({
       className="inline-flex h-8 items-center gap-1 rounded-md border border-atria-border bg-atria-surface px-2.5 text-xs font-medium text-atria-ink hover:bg-atria-surface-2 disabled:pointer-events-none disabled:opacity-50"
       aria-disabled={!url}
       onClick={(e) => {
-        if (!url) e.preventDefault()
+        if (!url) {
+          e.preventDefault()
+          return
+        }
+        auditDownload({
+          clerkOrgId,
+          fileName,
+          contentType: 'application/pdf',
+          linkedType: 'prefilledDocument',
+          linkedId: documentId,
+        })
       }}
     >
       <Download className="h-3.5 w-3.5" />
@@ -407,7 +425,8 @@ function CorrectionDialog({
 export function ApplicationReviewPage() {
   const { candidateId } = useParams<{ candidateId: string }>()
   const navigate = useNavigate()
-  const { clerkOrgId, tenantName } = useTenant()
+  const { clerkOrgId, tenantName, role } = useTenant()
+  const canRevealSsn = role === 'org:admin' || role === 'org:hr'
 
   const detail = useQuery(
     api.candidates.getCandidateDetail,
@@ -611,16 +630,20 @@ export function ApplicationReviewPage() {
     )
   }, [prefilledDocByType, employerName, ein, firstDateOfEmployment])
 
+  /* eslint-disable react-hooks/preserve-manual-memoization -- `fields` is a
+     render-local cast of query data (never mutated after render); the compiler
+     cannot prove the Record value is immutable, so the manual dep can't be preserved. */
+  const i9Section2Fields = fields.i9Section2 as Record<string, unknown> | undefined
   const i9Section2Complete = useMemo(() => {
-    const section = fields.i9Section2 as Record<string, unknown> | undefined
     return (
-      !!section &&
-      isNonEmptyString(section.documentTitle) &&
-      isNonEmptyString(section.documentNumber) &&
-      isNonEmptyString(section.employerSignature) &&
-      isNonEmptyString(section.date)
+      !!i9Section2Fields &&
+      isNonEmptyString(i9Section2Fields.documentTitle) &&
+      isNonEmptyString(i9Section2Fields.documentNumber) &&
+      isNonEmptyString(i9Section2Fields.employerSignature) &&
+      isNonEmptyString(i9Section2Fields.date)
     )
-  }, [fields.i9Section2])
+  }, [i9Section2Fields])
+  /* eslint-enable react-hooks/preserve-manual-memoization */
 
   const backgroundCheckResultComplete = useMemo(
     () => !!bgCheck?.officialResultStorageId,
@@ -1273,7 +1296,14 @@ export function ApplicationReviewPage() {
                 <ApplicationField label="FIRST NAME" value={String(i9.firstName ?? '')} />
                 <ApplicationField label="ADDRESS" value={`${i9.address ?? ''}, ${i9.city ?? ''}, ${i9.state ?? ''} ${i9.zip ?? ''}`.trim()} />
                 <ApplicationField label="DATE OF BIRTH" value={String(i9.dateOfBirth ?? '')} />
-                <ApplicationField label={String(personal.idType ?? 'ssn').toUpperCase()} value={String(i9.ssn ?? '')} />
+                <SsnField
+                  clerkOrgId={clerkOrgId as string}
+                  candidateId={candidateId as Id<'candidates'>}
+                  contextType="i9"
+                  label={String(personal.idType ?? 'ssn').toUpperCase()}
+                  value={String(i9.ssn ?? '')}
+                  canReveal={canRevealSsn}
+                />
                 <ApplicationField label="CITIZENSHIP STATUS" value={String(i9.citizenshipStatus ?? '').replace(/_/g, ' ')} />
                 <ApplicationField label="ALIEN NUMBER" value={String(i9.alienNumber ?? '')} />
               </div>
@@ -1350,7 +1380,14 @@ export function ApplicationReviewPage() {
             <SectionBlock title="W-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <ApplicationField label="NAME" value={`${w4.firstName ?? ''} ${w4.middleInitial ?? ''} ${w4.lastName ?? ''}`.trim()} />
-                <ApplicationField label="SSN" value={String(w4.ssn ?? '')} />
+                <SsnField
+                  clerkOrgId={clerkOrgId as string}
+                  candidateId={candidateId as Id<'candidates'>}
+                  contextType="w4"
+                  label="SSN"
+                  value={String(w4.ssn ?? '')}
+                  canReveal={canRevealSsn}
+                />
                 <ApplicationField label="FILING STATUS" value={String(w4.filingStatus ?? '').replace(/_/g, ' ')} />
                 <ApplicationField label="MULTIPLE JOBS" value={w4.multipleJobs ? 'Yes' : 'No'} />
                 <ApplicationField label="DEPENDENTS TOTAL" value={String(w4Dependents.total ?? '')} />

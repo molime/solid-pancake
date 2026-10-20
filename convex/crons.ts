@@ -69,11 +69,31 @@ crons.daily(
   internal.platform.checkLimitAlerts,
 )
 
+// Daily suspicious-activity scan: support-access events, override spikes
+// (>=3 in 24h), and export bursts (>=5 in 24h) -> one deduplicated
+// org:admin notification per tenant per day.
+crons.daily(
+  'runSecurityMonitoring',
+  { hourUTC: 6, minuteUTC: 30 },
+  internal.securityMonitoring.checkSuspiciousActivity,
+)
+
 // Daily 30-day training expiry alerts (per completion, sent once).
 crons.daily(
   'checkTrainingExpirations',
   { hourUTC: 6, minuteUTC: 45 },
   internal.training.checkTrainingExpirations,
+)
+
+// Daily data-retention sweep (compliance mini-phase Stage 2): purges
+// offboarded-employee data past the retention window and expired archive
+// documents, writes deletionEvents rows, and notifies each affected tenant's
+// org:admins with counts. Capped per run — schedules a continuation when more
+// subjects remain.
+crons.daily(
+  'runRetentionSweep',
+  { hourUTC: 6, minuteUTC: 45 },
+  internal.dataRetention.runRetentionSweep,
 )
 
 // Monthly billing-due reminder (2nd, after the recurring billing run on the 1st).
@@ -97,6 +117,15 @@ crons.daily(
   'suspendPastDueTenants',
   { hourUTC: 6, minuteUTC: 20 },
   internal.platformStripe.suspendPastDueTenants,
+)
+
+// Hourly support-access grant expiry (compliance mini-phase Stage 3):
+// grants whose durationMinutes elapsed since startedAt become 'expired' with
+// a support_access_expired audit event.
+crons.interval(
+  'expireSupportAccessGrants',
+  { hours: 1 },
+  internal.supportAccess.expireDueGrants,
 )
 
 export default crons

@@ -32,6 +32,7 @@ import {
 } from './_utils/invitationBypass'
 import { normalizeEmail } from './adpSync'
 import { requireEnv } from './_utils/env'
+import { assertValidUpload } from './_utils/uploadValidation'
 import type { Id } from './_generated/dataModel'
 
 declare const process: { env: Record<string, string | undefined> }
@@ -2620,14 +2621,6 @@ export const createSelfServiceCandidate = mutation({
   },
 })
 
-const CANDIDATE_DOCUMENT_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'application/pdf',
-]
-const MAX_CANDIDATE_DOCUMENT_BYTES = 10 * 1024 * 1024
-
 export const attachCandidateDocument = mutation({
   args: {
     clerkOrgId: v.string(),
@@ -2660,17 +2653,8 @@ export const attachCandidateDocument = mutation({
 
     await assertPrecedingTasksComplete(ctx, tenantId, candidateId, args.documentType)
 
-    if (
-      args.contentType &&
-      !CANDIDATE_DOCUMENT_TYPES.includes(args.contentType)
-    ) {
-      throw new ConvexError(
-        'Invalid file type. Only JPG, PNG, WebP, and PDF are allowed.',
-      )
-    }
-    if (args.size && args.size > MAX_CANDIDATE_DOCUMENT_BYTES) {
-      throw new ConvexError('File exceeds 10 MB limit.')
-    }
+    // Stage 5: shared server-side guard re-validates client-sent type/size.
+    assertValidUpload(args.contentType, args.size)
 
     // Scan the uploaded document (type/size validation now; Scanii virus
     // scan when DOCUMENT_SCAN_ENABLED=true). Runs async; a failed scan

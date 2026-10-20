@@ -3,7 +3,7 @@ import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import { useTenant } from '@/app/useTenant'
 import { isPlatformTrainingComplete } from '@/features/onboarding/model/trainingCompletion'
-import { areNewCoursesComplete } from '@/app/shell/RouteGuard'
+import { areNewCoursesComplete } from '@/app/shell/trainingUtils'
 import { AlertTriangle } from 'lucide-react'
 
 /**

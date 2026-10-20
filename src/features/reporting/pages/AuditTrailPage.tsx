@@ -1,10 +1,15 @@
 import { useTenant } from '@/app/useTenant'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
+import {
+  AUDIT_CATEGORIES,
+  type AuditCategory,
+} from '../../../../convex/_utils/auditCategories'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { FieldGroup } from '@/shared/ui/FieldGroup'
 import { Input } from '@/shared/ui/Input'
+import { Select } from '@/shared/ui/Select'
 import { USDateInput } from '@/shared/ui/USDateInput'
 import {
   Table,
@@ -25,7 +30,9 @@ export function AuditTrailPage() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [action, setAction] = useState('')
+  const [category, setCategory] = useState<AuditCategory | 'all'>('all')
   const [actorId, setActorId] = useState('')
+  const [actorName, setActorName] = useState('')
 
   return (
     <div className="space-y-8">
@@ -41,7 +48,7 @@ export function AuditTrailPage() {
           <CardTitle>Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <FieldGroup label="Start date" htmlFor="auditStart">
               <USDateInput
                 id="auditStart"
@@ -55,6 +62,22 @@ export function AuditTrailPage() {
                 value={endDate}
                 onChange={setEndDate}
               />
+            </FieldGroup>
+            <FieldGroup label="Category" htmlFor="auditCategory">
+              <Select
+                id="auditCategory"
+                value={category}
+                onChange={(event) =>
+                  setCategory(event.target.value as AuditCategory | 'all')
+                }
+              >
+                <option value="all">All categories</option>
+                {AUDIT_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {formatStatusLabel(c)}
+                  </option>
+                ))}
+              </Select>
             </FieldGroup>
             <FieldGroup
               label="Event type"
@@ -80,6 +103,18 @@ export function AuditTrailPage() {
                 placeholder="Any actor"
               />
             </FieldGroup>
+            <FieldGroup
+              label="Actor name"
+              htmlFor="auditActorName"
+              helperText="Matches the displayed name"
+            >
+              <Input
+                id="auditActorName"
+                value={actorName}
+                onChange={(event) => setActorName(event.target.value)}
+                placeholder="Any name"
+              />
+            </FieldGroup>
           </div>
         </CardContent>
       </Card>
@@ -88,9 +123,11 @@ export function AuditTrailPage() {
         <AuditEventsCard
           clerkOrgId={clerkOrgId}
           action={action}
+          category={category}
           startDate={startDate}
           endDate={endDate}
           actorId={actorId}
+          actorName={actorName}
         />
       </AuditEventsErrorBoundary>
     </div>
@@ -142,17 +179,21 @@ class AuditEventsErrorBoundary extends Component<
 interface AuditEventsCardProps {
   clerkOrgId: string | undefined
   action: string
+  category: AuditCategory | 'all'
   startDate: string
   endDate: string
   actorId: string
+  actorName: string
 }
 
 function AuditEventsCard({
   clerkOrgId,
   action,
+  category,
   startDate,
   endDate,
   actorId,
+  actorName,
 }: AuditEventsCardProps) {
   const events = useQuery(
     api.audit.list,
@@ -160,9 +201,11 @@ function AuditEventsCard({
       ? {
           clerkOrgId,
           action: action.trim() || undefined,
+          category: category === 'all' ? undefined : category,
           startDate: startDate || undefined,
           endDate: endDate || undefined,
           actorId: actorId.trim() || undefined,
+          actorName: actorName.trim() || undefined,
         }
       : 'skip',
   )
@@ -189,36 +232,50 @@ function AuditEventsCard({
               <TableRow>
                 <TableHeader>When</TableHeader>
                 <TableHeader>Action</TableHeader>
+                <TableHeader>Category</TableHeader>
                 <TableHeader>Actor</TableHeader>
                 <TableHeader>Role</TableHeader>
                 <TableHeader>Change</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
-              {events.map((event) => (
-                <TableRow key={event._id}>
-                  <TableCell className="whitespace-nowrap">
-                    {formatDateUS(event.createdAt)}{' '}
-                    {formatTime(event.createdAt)}
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {formatStatusLabel(event.action)}
-                  </TableCell>
-                  <TableCell>{event.actorName ?? event.actorId}</TableCell>
-                  <TableCell>
-                    {formatStatusLabel(
-                      event.actorRole.replace(/^org:/, ''),
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {event.previousStatus || event.nextStatus
-                      ? `${event.previousStatus ?? '-'} → ${
-                          event.nextStatus ?? '-'
-                        }`
-                      : '-'}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {events.map((event) => {
+                const sensitiveAction =
+                  event.action.includes('override') ||
+                  event.action.includes('support_access')
+                return (
+                  <TableRow
+                    key={event._id}
+                    className={
+                      sensitiveAction ? 'bg-amber-50 hover:bg-amber-100/60' : undefined
+                    }
+                  >
+                    <TableCell className="whitespace-nowrap">
+                      {formatDateUS(event.createdAt)}{' '}
+                      {formatTime(event.createdAt)}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {formatStatusLabel(event.action)}
+                    </TableCell>
+                    <TableCell>
+                      {formatStatusLabel(event.category)}
+                    </TableCell>
+                    <TableCell>{event.actorName ?? event.actorId}</TableCell>
+                    <TableCell>
+                      {formatStatusLabel(
+                        event.actorRole.replace(/^org:/, ''),
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {event.previousStatus || event.nextStatus
+                        ? `${event.previousStatus ?? '-'} → ${
+                            event.nextStatus ?? '-'
+                          }`
+                        : '-'}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         )}

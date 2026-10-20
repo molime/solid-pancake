@@ -135,7 +135,9 @@ describe('training.createCourse auto courseKey', () => {
     const clerkOrgId = 'org_auto_course_key'
     await seedTenant(t, clerkOrgId)
 
-    const { courseKey: _omit, ...rest } = SAMPLE_COURSE
+    // Omit courseKey so createCourse generates a unique one.
+    const { courseKey, ...rest } = SAMPLE_COURSE
+    void courseKey
     const firstId = await t
       .withIdentity({
         subject: 'user_admin',
@@ -178,7 +180,9 @@ describe('training.createCourse auto courseKey', () => {
     const clerkOrgId = 'org_auto_course_key_fallback'
     await seedTenant(t, clerkOrgId)
 
-    const { courseKey: _omit, ...rest } = SAMPLE_COURSE
+    // Omit courseKey so createCourse falls back to "course".
+    const { courseKey, ...rest } = SAMPLE_COURSE
+    void courseKey
     const courseId = await t
       .withIdentity({
         subject: 'user_admin',

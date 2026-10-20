@@ -127,6 +127,9 @@ export default defineSchema({
         liveScanMailCode: v.optional(v.string()),
       }),
     ),
+    // Optional per-tenant data-retention override (years after offboarding
+    // before an ex-employee's data is purged). Defaults to 5 (17 CCR §54326).
+    purgeRetentionYears: v.optional(v.number()),
   }).index('by_tenant', ['tenantId']),
 
   clients: defineTable({
@@ -305,6 +308,12 @@ export default defineSchema({
     adpWorkerId: v.optional(v.string()),
     adpSyncStatus: adpEmployeeSyncStatus,
     adpError: v.optional(v.string()),
+    // ISO timestamp set when the member is removed from the tenant — starts
+    // the 17 CCR §54326 retention clock for the data-lifecycle purge.
+    offboardedAt: v.optional(v.string()),
+    // ISO timestamp set by the retention purge once the ex-employee's data
+    // has been deleted/redacted — keeps the sweep from re-processing them.
+    purgedAt: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index('by_tenant', ['tenantId'])
@@ -447,10 +456,88 @@ export default defineSchema({
     previousStatus: v.optional(v.string()),
     nextStatus: v.optional(v.string()),
     action: v.string(),
+    // Optional because rows written before the compliance mini-phase (deployed
+    // 2026-10-20) predate the taxonomy; readers fall back to
+    // categoryForAction(action) when this is absent.
+    category: v.optional(v.string()),
     kind: v.optional(v.string()),
     metadata: v.optional(v.record(v.string(), v.any())),
     createdAt: v.string(),
+  })
+    .index('by_tenant_created_at', ['tenantId', 'createdAt'])
+    .index('by_tenant_category_created_at', ['tenantId', 'category', 'createdAt']),
+
+  // Visible track of every automated/manual data deletion (compliance
+  // mini-phase Stage 2): when data was deleted, on what legal basis, by whom
+  // ('system' for the daily retention sweep), and what was skipped because of
+  // a legal hold. One row per subject or per skipped item.
+  deletionEvents: defineTable({
+    tenantId: v.id('tenants'),
+    // clerkUserId of the actor, or 'system' for the cron sweep.
+    actorId: v.string(),
+    // e.g. 'offboarded_employee' | 'expired_document'
+    subjectType: v.string(),
+    subjectId: v.string(),
+    // e.g. '17 CCR 54326 five-year retention' | 'document retention schedule'
+    legalBasis: v.string(),
+    // 'scheduled' | 'executed' | 'skipped_legal_hold'
+    status: v.string(),
+    scheduledAt: v.optional(v.string()),
+    executedAt: v.optional(v.string()),
+    detail: v.optional(v.string()),
+    createdAt: v.string(),
   }).index('by_tenant_created_at', ['tenantId', 'createdAt']),
+
+  // Support access grants (compliance mini-phase, Stage 3): an
+  // owner-approved, expiring, fully audited authorization record for
+  // platform-admin support sessions. The grant is a traceability record only
+  // — actual dashboard access is the platform admin's existing platform role;
+  // nothing here gates permissions. Statuses: pending → active (on approval;
+  // approval activates immediately because there is no separate permission
+  // grant to flip) → ended | expired, or pending → rejected.
+  supportAccessGrants: defineTable({
+    tenantId: v.id('tenants'),
+    requestedBy: v.string(), // clerkUserId of the requesting platform admin
+    requesterName: v.string(),
+    reason: v.string(),
+    durationMinutes: v.number(),
+    status: v.union(
+      v.literal('pending'),
+      v.literal('approved'),
+      v.literal('active'),
+      v.literal('ended'),
+      v.literal('rejected'),
+      v.literal('expired'),
+    ),
+    approvedBy: v.optional(v.string()), // clerkUserId of the deciding org:admin
+    decidedAt: v.optional(v.string()),
+    startedAt: v.optional(v.string()),
+    endedAt: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index('by_tenant_created_at', ['tenantId', 'createdAt'])
+    .index('by_status', ['status']),
+
+  // Staff policy acknowledgments (compliance mini-phase, Stage 4). One row
+  // per (tenant, user, policyKey, policyVersion): the canonical policy text
+  // is versioned code constants (convex/_utils/staffPolicies.ts), so bumping
+  // a policy version re-surfaces it for every user via the unique index.
+  policyAcknowledgments: defineTable({
+    tenantId: v.id('tenants'),
+    // Clerk user id of the acknowledging user.
+    userId: v.string(),
+    policyKey: v.string(), // 'privacy_policy' | 'confidentiality_hipaa' | 'acceptable_use'
+    policyVersion: v.number(),
+    acknowledgedAt: v.string(), // ISO timestamp
+    createdAt: v.string(),
+  })
+    .index('by_tenant_user_policy', [
+      'tenantId',
+      'userId',
+      'policyKey',
+      'policyVersion',
+    ])
+    .index('by_tenant_created_at', ['tenantId', 'createdAt']),
 
   files: defineTable({
     tenantId: v.id('tenants'),
@@ -773,7 +860,9 @@ export default defineSchema({
     officialResultStorageId: v.optional(v.string()),
     officialResultUploadedAt: v.optional(v.string()),
     officialResultUploadedBy: v.optional(v.string()),
-  }).index('by_tenant_candidate', ['tenantId', 'candidateId']),
+  })
+    .index('by_tenant_candidate', ['tenantId', 'candidateId'])
+    .index('by_tenant_result_storage', ['tenantId', 'officialResultStorageId']),
 
   // Prefilled PDFs generated for candidate onboarding forms
   prefilledDocuments: defineTable({

@@ -8,6 +8,7 @@ import {
   type AuthContext,
 } from './authHelpers'
 import type { Id } from './_generated/dataModel'
+import { assertValidUpload } from './_utils/uploadValidation'
 
 export function assertCanEditProof(opts: {
   role: TenantRole
@@ -84,6 +85,9 @@ export const attachProof = mutation({
       identitySubject: identity.subject,
       shift,
     })
+
+    // Stage 5: re-validate client-supplied type/size server-side.
+    assertValidUpload(args.contentType, args.size)
 
     await ctx.db.patch(args.shiftTaskId, {
       proofUrl: args.storageId,
@@ -206,9 +210,38 @@ export const getDownloadUrl = query({
 export const getStorageUrl = query({
   args: { clerkOrgId: v.string(), storageId: v.string() },
   handler: async (ctx, args) => {
-    await requireTenantRole(ctx, args.clerkOrgId, [
+    const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
       'org:admin', 'org:coordinator', 'org:caregiver', 'org:hr',
     ])
+
+    // Stage 6: a tenant role alone is not enough — the storageId must belong
+    // to a record of the caller's tenant (same ownership check as
+    // getDownloadUrl). Nearly every upload has a files row; the one exception
+    // is the official background-check result, so legacy rows without a
+    // files record are verified against backgroundChecks instead. Anything
+    // not claimed by the caller's tenant is indistinguishable from a
+    // nonexistent file.
+    const file = await ctx.db
+      .query('files')
+      .withIndex('by_tenant_storage', (q) =>
+        q.eq('tenantId', tenantId).eq('storageId', args.storageId),
+      )
+      .unique()
+
+    if (!file) {
+      const bgResult = await ctx.db
+        .query('backgroundChecks')
+        .withIndex('by_tenant_result_storage', (q) =>
+          q
+            .eq('tenantId', tenantId)
+            .eq('officialResultStorageId', args.storageId),
+        )
+        .first()
+      if (!bgResult) {
+        throw new ConvexError('File not found.')
+      }
+    }
+
     const url = await ctx.storage.getUrl(
       args.storageId as import('./_generated/dataModel').Id<'_storage'>,
     )

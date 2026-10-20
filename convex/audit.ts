@@ -1,13 +1,16 @@
 import { v } from 'convex/values'
-import { internalMutation, query } from './_generated/server'
+import { internalMutation, mutation, query } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { requireTenantRole, assertTenantDoc } from './authHelpers'
+import { categoryForAction } from './_utils/auditCategories'
+import { checkRateLimit } from './_utils/rateLimit'
 
 export const record = internalMutation({
   args: {
     clerkOrgId: v.string(),
     action: v.string(),
     kind: v.optional(v.string()),
+    category: v.optional(v.string()),
     shiftId: v.optional(v.id('shifts')),
     previousStatus: v.optional(v.string()),
     nextStatus: v.optional(v.string()),
@@ -31,6 +34,7 @@ export const record = internalMutation({
       actorId: identity.subject,
       actorRole: role,
       action: args.action,
+      category: args.category ?? categoryForAction(args.action),
       kind: args.kind,
       shiftId: args.shiftId,
       previousStatus: args.previousStatus,
@@ -41,13 +45,96 @@ export const record = internalMutation({
   },
 })
 
+/**
+ * Audits a CSV/data export. Invoked from the frontend export button handlers
+ * right before the download — the export queries themselves are read-only
+ * and cannot write audit rows (Convex queries never mutate). `metadata`
+ * should hold only a plain filter summary, never exported content.
+ */
+export const recordExport = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    exportType: v.string(),
+    recordCount: v.optional(v.number()),
+    metadata: v.optional(v.record(v.string(), v.any())),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity, role } = await requireTenantRole(
+      ctx,
+      args.clerkOrgId,
+      ['org:admin', 'org:hr'],
+    )
+    // Stage 5 (rate limiting): at most 30 export audits per minute per user.
+    if (!checkRateLimit(`export:${identity.subject}`, 30, 60_000).allowed) {
+      throw new Error('Rate limit exceeded. Try again later.')
+    }
+    return ctx.db.insert('auditEvents', {
+      tenantId,
+      actorId: identity.subject,
+      actorRole: role,
+      action: 'data.exported',
+      category: 'exports',
+      kind: 'tenant',
+      metadata: {
+        exportType: args.exportType,
+        recordCount: args.recordCount,
+        ...args.metadata,
+      },
+      createdAt: new Date().toISOString(),
+    })
+  },
+})
+
+/**
+ * Audits a file/document download. The download-URL generators
+ * (files.getDownloadUrl, documentArchive.getItemDownloadUrl,
+ * candidates.getPrefilledDocumentDownloadUrl) are queries and therefore
+ * cannot write audit rows — Convex queries never mutate. The frontend calls
+ * this from the download click handlers right before opening the URL, the
+ * same trigger the design doc documents for data exports. Metadata is
+ * limited to identifying fields, never file content.
+ */
+export const recordFileDownload = mutation({
+  args: {
+    clerkOrgId: v.string(),
+    fileName: v.optional(v.string()),
+    contentType: v.optional(v.string()),
+    linkedType: v.optional(v.string()),
+    linkedId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { tenantId, identity, role } = await requireTenantRole(
+      ctx,
+      args.clerkOrgId,
+      ['org:admin', 'org:coordinator', 'org:caregiver', 'org:hr', 'org:candidate'],
+    )
+    return ctx.db.insert('auditEvents', {
+      tenantId,
+      actorId: identity.subject,
+      actorRole: role,
+      action: 'file.downloaded',
+      category: 'files',
+      kind: 'tenant',
+      metadata: {
+        fileName: args.fileName,
+        contentType: args.contentType,
+        linkedType: args.linkedType,
+        linkedId: args.linkedId,
+      },
+      createdAt: new Date().toISOString(),
+    })
+  },
+})
+
 export const list = query({
   args: {
     clerkOrgId: v.string(),
     action: v.optional(v.string()),
+    category: v.optional(v.string()),
     startDate: v.optional(v.string()),
     endDate: v.optional(v.string()),
     actorId: v.optional(v.string()),
+    actorName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { tenantId } = await requireTenantRole(ctx, args.clerkOrgId, [
@@ -93,6 +180,8 @@ export const list = query({
         if (seen.has(event._id)) continue
         seen.add(event._id)
         if (args.action && event.action !== args.action) continue
+        const effectiveCategory = event.category ?? categoryForAction(event.action)
+        if (args.category && effectiveCategory !== args.category) continue
         if (args.actorId && event.actorId !== args.actorId) continue
         events.push(event)
         if (events.length === 200) break
@@ -143,9 +232,21 @@ export const list = query({
       }
     }
 
-    return events.map((event) => ({
+    // actorName filters on the resolved display name, so it is applied after
+    // resolution (unlike the indexed action/category/actorId filters above).
+    const nameQuery = args.actorName?.trim().toLowerCase()
+    const filtered = nameQuery
+      ? events.filter((event) =>
+          (names.get(event.actorId) ?? 'Unknown user')
+            .toLowerCase()
+            .includes(nameQuery),
+        )
+      : events
+
+    return filtered.map((event) => ({
       ...event,
       actorName: names.get(event.actorId) ?? 'Unknown user',
+      category: event.category ?? categoryForAction(event.action),
     }))
   },
 })

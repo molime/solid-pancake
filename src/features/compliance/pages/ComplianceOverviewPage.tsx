@@ -3,6 +3,7 @@ import { useMutation, useQuery } from 'convex/react'
 import { useRef, useState } from 'react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
+import { useAuditFileDownload } from '@/shared/lib/auditDownload'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { KpiCard } from '@/shared/ui/KpiCard'
 import { StatusBadge, type StatusBadgeVariant } from '@/shared/ui/StatusBadge'
@@ -101,6 +102,7 @@ function ViewDocumentLink({
     clerkOrgId,
     itemId,
   })
+  const auditDownload = useAuditFileDownload()
 
   return (
     <a
@@ -109,7 +111,15 @@ function ViewDocumentLink({
       rel="noopener noreferrer"
       aria-disabled={!url}
       onClick={(event) => {
-        if (!url) event.preventDefault()
+        if (!url) {
+          event.preventDefault()
+          return
+        }
+        auditDownload({
+          clerkOrgId,
+          linkedType: 'documentArchiveItem',
+          linkedId: itemId,
+        })
       }}
       className="inline-flex h-8 items-center gap-1 rounded-md border border-atria-border bg-atria-surface px-2.5 text-xs font-medium text-atria-ink hover:bg-atria-surface-2"
     >
@@ -313,6 +323,14 @@ export function ComplianceOverviewPage() {
   const addObligation = useMutation(api.agencyObligations.addObligation)
   const deleteObligation = useMutation(api.agencyObligations.deleteObligation)
   const updateDueDate = useMutation(api.agencyObligations.updateDueDate)
+  // Stage 4 — staff policy acknowledgment roster (admin/HR only; the query
+  // itself re-checks the role, and is skipped for everyone else below).
+  const policyAckStatus = useQuery(
+    api.policies.listAcknowledgmentStatus,
+    clerkOrgId && (member?.role === 'org:admin' || member?.role === 'org:hr')
+      ? { clerkOrgId }
+      : 'skip',
+  )
 
   const isAdmin = member?.role === 'org:admin'
   const canManageObligations = isAdmin || member?.role === 'org:hr'
@@ -1141,6 +1159,94 @@ export function ComplianceOverviewPage() {
           </div>
         </CardContent>
       </Card>
+
+      {canManageObligations && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Policy acknowledgments</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {policyAckStatus === undefined ? (
+              <p className="py-8 text-center text-sm text-atria-text-secondary">
+                Loading policy acknowledgments…
+              </p>
+            ) : (
+              <div className="space-y-6">
+                <p className="text-sm text-atria-text-secondary">
+                  Which staff members have acknowledged the current version of
+                  each in-app policy (privacy, HIPAA confidentiality, and
+                  acceptable use). Policies are re-acknowledged automatically
+                  whenever their version changes.
+                </p>
+                {policyAckStatus.map((policy) => {
+                  const pendingCount = policy.members.filter(
+                    (m) => m.status === 'pending',
+                  ).length
+                  return (
+                    <div
+                      key={policy.key}
+                      className="rounded-[var(--radius-atria-md)] border border-atria-border"
+                    >
+                      <div className="flex items-center justify-between gap-3 p-3">
+                        <span className="text-sm font-medium text-atria-ink">
+                          {policy.title}
+                          <span className="ml-2 text-xs font-normal text-atria-text-muted">
+                            v{policy.version} · effective{' '}
+                            {formatDateUS(policy.effectiveDate)}
+                          </span>
+                        </span>
+                        <span className="text-sm text-atria-text-secondary">
+                          {pendingCount === 0
+                            ? 'Everyone acknowledged'
+                            : `${pendingCount} pending`}
+                        </span>
+                      </div>
+                      <Table>
+                        <TableHead>
+                          <TableRow>
+                            <TableHeader>Member</TableHeader>
+                            <TableHeader>Role</TableHeader>
+                            <TableHeader>Acknowledged version</TableHeader>
+                            <TableHeader>Date</TableHeader>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {policy.members.map((memberRow) => (
+                            <TableRow key={memberRow.clerkUserId}>
+                              <TableCell className="font-medium">
+                                {memberRow.displayName}
+                              </TableCell>
+                              <TableCell>
+                                {memberRow.role.replace('org:', '')}
+                              </TableCell>
+                              <TableCell>
+                                {memberRow.status === 'current' ? (
+                                  <StatusBadge variant="success">
+                                    v{memberRow.acknowledgedVersion}
+                                  </StatusBadge>
+                                ) : (
+                                  <StatusBadge variant="warning">
+                                    Pending
+                                  </StatusBadge>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {memberRow.acknowledgedAt
+                                  ? formatDateUS(memberRow.acknowledgedAt)
+                                  : '—'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog
         open={completeTarget !== null}

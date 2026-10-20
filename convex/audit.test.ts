@@ -66,6 +66,7 @@ describe('audit.list', () => {
         actorId: ACTOR_ID,
         actorRole: 'org:caregiver',
         action: 'shift_submitted',
+        category: 'shifts',
         createdAt: new Date().toISOString(),
       })
     })

@@ -1,6 +1,7 @@
 import { httpRouter } from 'convex/server'
 import { httpAction } from './_generated/server'
 import { internal } from './_generated/api'
+import { checkRateLimit } from './_utils/rateLimit'
 
 const http = httpRouter()
 
@@ -94,6 +95,22 @@ http.route({
     const secret = process.env.STRIPE_WEBHOOK_SECRET
     if (!secret) {
       return new Response('Webhook secret not configured', { status: 400 })
+    }
+
+    // Stage 5 (rate limiting): bound webhook volume BEFORE signature
+    // verification so unauthenticated abuse cannot burn HMAC work. Convex
+    // httpActions do not expose a direct client IP; key on the first
+    // x-forwarded-for entry when present and otherwise on a shared bucket
+    // ('unknown') so the limit still caps total request volume (documented
+    // limitation — see _utils/rateLimit).
+    const forwardedFor = request.headers.get('x-forwarded-for')
+    const sourceIp = forwardedFor ? forwardedFor.split(',')[0]!.trim() : 'unknown'
+    const rate = checkRateLimit(`stripeWebhook:${sourceIp}`, 120, 60_000)
+    if (!rate.allowed) {
+      return new Response('Rate limit exceeded', {
+        status: 429,
+        headers: { 'Retry-After': String(Math.ceil(rate.retryAfterMs / 1000)) },
+      })
     }
 
     const signatureHeader = request.headers.get('Stripe-Signature')

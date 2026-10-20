@@ -218,6 +218,7 @@ async function seedAgency(t: TestConvex, tenantId: Id<'tenants'>) {
       actorId: ADMIN_ID,
       actorRole: 'org:admin',
       action: 'shift_approved',
+      category: 'shifts',
       createdAt: '2026-08-06T01:00:00.000Z',
     })
     await ctx.db.insert('auditEvents', {
@@ -225,6 +226,7 @@ async function seedAgency(t: TestConvex, tenantId: Id<'tenants'>) {
       actorId: ADMIN_ID,
       actorRole: 'org:admin',
       action: 'shift_approved',
+      category: 'shifts',
       createdAt: '2026-08-07T01:00:00.000Z',
     })
 

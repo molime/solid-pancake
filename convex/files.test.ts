@@ -3,6 +3,7 @@ import { convexTest } from 'convex-test'
 import schema from './schema'
 import { api } from './_generated/api'
 import { assertCanEditProof } from './files'
+import type { Id } from './_generated/dataModel'
 
 const modules = import.meta.glob('./**/*.*s')
 
@@ -185,5 +186,121 @@ describe('generateUploadUrl', () => {
         { clerkOrgId: orgA },
       ),
     ).rejects.toThrow()
+  })
+})
+
+describe('attachProof server-side upload validation (Stage 5)', () => {
+  async function seedShiftTask(
+    t: ReturnType<typeof createTestConvex>,
+    clerkOrgId: string,
+  ) {
+    return t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      const clientId = await ctx.db.insert('clients', {
+        tenantId: tenant._id,
+        displayName: 'Client One',
+        serviceType: 'SLS',
+        authorizationHours: 100,
+        riskFlags: [],
+      })
+      const shiftId = await ctx.db.insert('shifts', {
+        tenantId: tenant._id,
+        clientId,
+        caregiverId: 'caregiver_1',
+        scheduledStart: '2026-10-01T08:00:00Z',
+        scheduledEnd: '2026-10-01T16:00:00Z',
+        status: 'in_progress',
+        serviceType: 'SLS',
+        rate: 25,
+      })
+      const shiftTaskId = await ctx.db.insert('shiftTasks', {
+        tenantId: tenant._id,
+        shiftId,
+        title: 'Morning routine',
+        requiredProof: true,
+        status: 'pending',
+      })
+      return shiftTaskId as Id<'shiftTasks'>
+    })
+  }
+
+  it('accepts an allowed type/size', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_proof_valid'
+    const adminId = 'user_admin_proof_valid'
+    await seedTenant(t, clerkOrgId, adminId)
+    const shiftTaskId = await seedShiftTask(t, clerkOrgId)
+
+    const result = await t
+      .withIdentity({ subject: adminId, org_id: clerkOrgId, org_role: 'org:admin' })
+      .mutation(api.files.attachProof, {
+        clerkOrgId,
+        shiftTaskId,
+        storageId: 'storage_proof_valid',
+        fileName: 'proof.png',
+        contentType: 'image/png',
+        size: 2048,
+      })
+    expect(result.success).toBe(true)
+
+    const file = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      return ctx.db
+        .query('files')
+        .withIndex('by_tenant_storage', (q) =>
+          q.eq('tenantId', tenant!._id).eq('storageId', 'storage_proof_valid'),
+        )
+        .unique()
+    })
+    expect(file?.contentType).toBe('image/png')
+  })
+
+  it('rejects a disallowed contentType from the client', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_proof_type'
+    const adminId = 'user_admin_proof_type'
+    await seedTenant(t, clerkOrgId, adminId)
+    const shiftTaskId = await seedShiftTask(t, clerkOrgId)
+
+    await expect(
+      t
+        .withIdentity({ subject: adminId, org_id: clerkOrgId, org_role: 'org:admin' })
+        .mutation(api.files.attachProof, {
+          clerkOrgId,
+          shiftTaskId,
+          storageId: 'storage_proof_type',
+          fileName: 'evil.exe',
+          contentType: 'application/x-msdownload',
+          size: 1024,
+        }),
+    ).rejects.toThrow(/Invalid file type/)
+  })
+
+  it('rejects a size over 10 MB from the client', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_proof_size'
+    const adminId = 'user_admin_proof_size'
+    await seedTenant(t, clerkOrgId, adminId)
+    const shiftTaskId = await seedShiftTask(t, clerkOrgId)
+
+    await expect(
+      t
+        .withIdentity({ subject: adminId, org_id: clerkOrgId, org_role: 'org:admin' })
+        .mutation(api.files.attachProof, {
+          clerkOrgId,
+          shiftTaskId,
+          storageId: 'storage_proof_size',
+          fileName: 'big.png',
+          contentType: 'image/png',
+          size: 10 * 1024 * 1024 + 1,
+        }),
+    ).rejects.toThrow(/File exceeds 10 MB limit/)
   })
 })

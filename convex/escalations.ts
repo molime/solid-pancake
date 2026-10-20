@@ -5,6 +5,7 @@ import { ConvexError } from 'convex/values'
 import { requireTenantRole, assertTenantDoc } from './authHelpers'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
+import { categoryForAction } from './_utils/auditCategories'
 
 const MANAGER_ROLES: Array<'org:admin' | 'org:coordinator' | 'org:hr'> = [
   'org:admin',
@@ -211,6 +212,7 @@ export const checkEscalations = internalMutation({
           actorId: 'system',
           actorRole: 'system',
           action: 'escalation_created',
+          category: categoryForAction('escalation_created'),
           metadata: {
             escalationId: escalationId as string,
             hrCaseId: hrCase._id as string,

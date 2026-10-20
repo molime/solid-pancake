@@ -314,6 +314,16 @@ export const updateRole = mutation({
 
     await ctx.db.patch(existing._id, { role: args.role })
 
+    await ctx.runMutation(internal.audit.record, {
+      clerkOrgId: args.clerkOrgId,
+      action: 'member.role_changed',
+      metadata: {
+        memberId: args.clerkUserId,
+        oldRole: existing.role,
+        newRole: args.role,
+      },
+    })
+
     if (args.role === 'org:caregiver') {
       const updatedMember = { ...existing, role: args.role }
       const employeeProfileId = await ensureCaregiverEmployeeProfile(
@@ -400,6 +410,39 @@ export const remove = mutation({
 
     if (existing) {
       await ctx.db.delete(existing._id)
+      await ctx.runMutation(internal.audit.record, {
+        clerkOrgId: args.clerkOrgId,
+        action: 'member.removed',
+        metadata: {
+          memberId: args.clerkUserId,
+          email: existing.email,
+          role: existing.role,
+        },
+      })
+
+      // Start the retention clock on the linked employee profile (data
+      // lifecycle Stage 2): the daily sweep purges the ex-employee's data
+      // once offboardedAt is older than the retention window.
+      const now = new Date().toISOString()
+      const profileByMember = await ctx.db
+        .query('employeeProfiles')
+        .withIndex('by_tenant_member', (q) =>
+          q.eq('tenantId', tenantId).eq('tenantMemberId', existing._id),
+        )
+        .unique()
+      if (profileByMember) {
+        await ctx.db.patch(profileByMember._id, { offboardedAt: now })
+      } else if (existing.clerkUserId) {
+        const profileByClerkUser = await ctx.db
+          .query('employeeProfiles')
+          .withIndex('by_tenant_clerk_user', (q) =>
+            q.eq('tenantId', tenantId).eq('clerkUserId', existing.clerkUserId),
+          )
+          .unique()
+        if (profileByClerkUser) {
+          await ctx.db.patch(profileByClerkUser._id, { offboardedAt: now })
+        }
+      }
     }
   },
 })

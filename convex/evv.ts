@@ -5,6 +5,7 @@ import type { Doc, Id } from './_generated/dataModel'
 import { requireTenantRole, assertTenantDoc } from './authHelpers'
 import { internal } from './_generated/api'
 import { computeRetentionUntil } from './documentArchive'
+import { assertValidUpload } from './_utils/uploadValidation'
 
 // EVV export aid (21st Century Cures Act §12006; docs/07 §3.5, gap row B8).
 // SLS (service code 896) visits require six data elements per visit — service
@@ -400,6 +401,9 @@ export const recordLiveInAttestation = mutation({
     ) {
       throw new ConvexError('Expiration date must be a valid date.')
     }
+
+    // Stage 5: re-validate client-supplied type/size server-side.
+    assertValidUpload(args.contentType, args.size)
 
     const now = new Date().toISOString()
     const fileId = await ctx.db.insert('files', {

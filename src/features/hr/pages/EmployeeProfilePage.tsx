@@ -10,6 +10,7 @@ import { Select } from '@/shared/ui/Select'
 import { USDateInput } from '@/shared/ui/USDateInput'
 import { Textarea } from '@/shared/ui/Textarea'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
+import { useAuditFileDownload } from '@/shared/lib/auditDownload'
 import {
   Table,
   TableBody,
@@ -292,6 +293,8 @@ function DocumentsTab({
   clerkOrgId: string
   clerkUserId?: string
 }) {
+  // Snapshot "now" once per mount so the archive split is stable across renders.
+  const [now] = useState(() => Date.now())
   const documents = useQuery(
     api.documentArchive.listDocumentArchive,
     clerkOrgId
@@ -349,7 +352,6 @@ function DocumentsTab({
   // Documents split by currency: expired (or rejected) items sort below the
   // current ones inside the merged table — hiring uploads live in their own
   // section above. Status badges keep archived entries distinguishable.
-  const now = Date.now()
   const isArchivedDoc = (doc: { status: string; expiresAt?: string | null }) =>
     doc.status === 'rejected' ||
     (doc.expiresAt !== undefined &&
@@ -488,12 +490,21 @@ function PrefilledDocDownloadLink({
     documentId,
     variant: 'prefilled',
   })
+  const auditDownload = useAuditFileDownload()
   if (!url) return null
   return (
     <a
       href={url}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={() =>
+        auditDownload({
+          clerkOrgId,
+          contentType: 'application/pdf',
+          linkedType: 'prefilledDocument',
+          linkedId: documentId,
+        })
+      }
       className="text-xs font-medium text-atria-accent hover:underline"
     >
       Download

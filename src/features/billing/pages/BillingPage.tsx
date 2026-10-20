@@ -194,6 +194,18 @@ export function BillingPage() {
       })
       const date = new Date().toISOString().slice(0, 10)
       downloadCsv(`evidence-lineage-${date}.csv`, csv)
+      // Audit the export (fire-and-forget; never blocks the download).
+      void convex
+        .mutation(api.audit.recordExport, {
+          clerkOrgId,
+          exportType: 'evidence_lineage',
+          recordCount: csv.split('\n').filter(Boolean).length - 1,
+          metadata: {
+            ...(evidenceStart ? { startDate: evidenceStart } : {}),
+            ...(evidenceEnd ? { endDate: evidenceEnd } : {}),
+          },
+        })
+        .catch(() => {})
     } catch (err) {
       setError(
         err instanceof Error

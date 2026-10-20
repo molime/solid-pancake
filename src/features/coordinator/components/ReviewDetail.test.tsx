@@ -28,6 +28,7 @@ vi.mock('convex/react', async () => {
   return {
     ...actual,
     useConvexAuth: () => ({ isLoading: false, isAuthenticated: true }),
+    useConvex: () => ({ mutation: vi.fn(() => Promise.resolve()) }),
     useQuery: vi.fn(),
     useMutation: vi.fn(),
   }

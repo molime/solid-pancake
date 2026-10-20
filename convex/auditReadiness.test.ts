@@ -227,6 +227,7 @@ async function seedFullAgency(t: TestConvex, tenantId: Id<'tenants'>) {
       actorId: ADMIN_ID,
       actorRole: 'org:admin',
       action: 'shift_approved',
+      category: 'shifts',
       createdAt: new Date(Date.now() - 29 * DAY_MS).toISOString(),
     })
     await ctx.db.insert('auditEvents', {
@@ -234,6 +235,7 @@ async function seedFullAgency(t: TestConvex, tenantId: Id<'tenants'>) {
       actorId: ADMIN_ID,
       actorRole: 'org:admin',
       action: 'shift_approved',
+      category: 'shifts',
       createdAt: new Date(Date.now() - 31 * DAY_MS).toISOString(),
     })
 
@@ -464,6 +466,7 @@ describe('auditReadiness.getReport', () => {
         actorId: 'user_b',
         actorRole: 'org:admin',
         action: 'org_b_action',
+        category: 'other',
         createdAt: new Date().toISOString(),
       })
       return tenantId

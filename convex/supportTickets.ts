@@ -5,6 +5,7 @@ import type { Id } from './_generated/dataModel'
 import type { UserIdentity } from 'convex/server'
 import { internal } from './_generated/api'
 import { requireIdentity, requireTenantRole } from './authHelpers'
+import { categoryForAction } from './_utils/auditCategories'
 
 const ticketCategory = v.union(
   v.literal('billing'),
@@ -114,6 +115,7 @@ async function recordPlatformAudit(
     actorId: identity.subject,
     actorRole: 'platform_admin',
     action,
+    category: categoryForAction(action),
     kind: 'platform',
     metadata,
     createdAt: new Date().toISOString(),
@@ -168,6 +170,7 @@ export const create = mutation({
       actorId: identity.subject,
       actorRole: member.role,
       action: 'support_ticket_created',
+      category: categoryForAction('support_ticket_created'),
       kind: 'tenant',
       metadata: { ticketId: ticketId as string },
       createdAt: now,

@@ -55,8 +55,11 @@ export function QuizPlayer({
   // Dev speed-run: instantly mark the quiz as passed without forcing answers.
   useEffect(() => {
     if (!speedrun) return
+    /* eslint-disable react-hooks/set-state-in-effect -- dev-only ?speedrun=1 shortcut:
+       intentionally sets result state once when the flag is present. */
     setResult({ score: 100, passed: true })
     setShowConfetti(true)
+    /* eslint-enable react-hooks/set-state-in-effect */
     onComplete()
   }, [speedrun, onComplete])
 

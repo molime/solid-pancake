@@ -151,7 +151,7 @@ describe('migrations.cleanupTenantPeople', () => {
 
     // A second (kept) candidate-less member is already TO_USER from seed;
     // seed a third, removed member + candidate with cascade rows.
-    const { removedCandidateId, removedMemberId } = await t.run(async (ctx) => {
+    await t.run(async (ctx) => {
       const removedCandidateId = await ctx.db.insert('candidates', {
         tenantId,
         clerkUserId: 'user_remove',

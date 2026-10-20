@@ -735,6 +735,8 @@ export function DocumentUploadPage() {
             <div className='mb-6 rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-surface-2 p-4'>
               <p className='mb-2 text-sm font-semibold text-atria-ink'>Uploaded versions</p>
               <div className='space-y-2'>
+                {/* `versions` is a useQuery result, not a ref — the compiler misattributes the render-time hasMountedRef gate above to this map. */}
+                {/* eslint-disable-next-line react-hooks/refs */}
                 {versions.map((v, i) => (
                   <div key={v._id} className='flex items-center justify-between gap-3 text-sm'>
                     <span className='text-atria-text-secondary'>

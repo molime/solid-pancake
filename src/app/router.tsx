@@ -103,6 +103,11 @@ const AuditTrailPage = lazy(() =>
     default: module.AuditTrailPage,
   })),
 )
+const DataLifecyclePage = lazy(() =>
+  import('@/features/reporting/pages/DataLifecyclePage').then((module) => ({
+    default: module.DataLifecyclePage,
+  })),
+)
 const AuditReadinessPage = lazy(() =>
   import('@/features/reporting/pages/AuditReadinessPage').then((module) => ({
     default: module.AuditReadinessPage,
@@ -766,6 +771,16 @@ export function AppRouter() {
             <TenantRoleRouteGuard allowedRoles={['org:admin']}>
               <RouteSuspense>
                 <AuditTrailPage />
+              </RouteSuspense>
+            </TenantRoleRouteGuard>
+          }
+        />
+        <Route
+          path="data-lifecycle"
+          element={
+            <TenantRoleRouteGuard allowedRoles={['org:admin']}>
+              <RouteSuspense>
+                <DataLifecyclePage />
               </RouteSuspense>
             </TenantRoleRouteGuard>
           }

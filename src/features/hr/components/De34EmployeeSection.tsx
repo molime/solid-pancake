@@ -4,6 +4,7 @@ import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { Button } from '@/shared/ui/Button'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
+import { useAuditFileDownload } from '@/shared/lib/auditDownload'
 import { uploadFileToConvex } from '@/shared/lib/upload'
 import { formatDateUS } from '@/shared/format'
 import { Download, FileText, Upload } from 'lucide-react'
@@ -28,6 +29,7 @@ function DownloadLink({
     documentId,
     variant,
   })
+  const auditDownload = useAuditFileDownload()
   return (
     <a
       href={url ?? '#'}
@@ -36,7 +38,17 @@ function DownloadLink({
       rel="noopener noreferrer"
       aria-disabled={!url}
       onClick={(e) => {
-        if (!url) e.preventDefault()
+        if (!url) {
+          e.preventDefault()
+          return
+        }
+        auditDownload({
+          clerkOrgId,
+          fileName,
+          contentType: 'application/pdf',
+          linkedType: 'prefilledDocument',
+          linkedId: documentId,
+        })
       }}
       className="inline-flex h-8 items-center gap-1 rounded-md border border-atria-border bg-atria-surface px-2.5 text-xs font-medium text-atria-ink hover:bg-atria-surface-2 disabled:pointer-events-none disabled:opacity-50"
     >

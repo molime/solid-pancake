@@ -12,6 +12,7 @@ import type { Id } from './_generated/dataModel'
 import { toStripeInvoiceItems } from './platformBilling'
 import { buildInvoiceEmailHtml, buildInvoicePdf } from './platform'
 import { requireEnv } from './_utils/env'
+import { categoryForAction } from './_utils/auditCategories'
 
 // Grace window between a missed subscription payment and service suspension
 // (Maria, 2026-10-04 review: 5 days, default for every agency).
@@ -149,6 +150,7 @@ export const recordStripeAudit = internalMutation({
       actorId: args.actorId,
       actorRole: 'platform_admin',
       action: args.action,
+      category: categoryForAction(args.action),
       kind: 'platform',
       metadata: args.metadata,
       createdAt: new Date().toISOString(),
@@ -250,6 +252,7 @@ export const applyStripeInvoicePaid = internalMutation({
       actorId: 'stripe_webhook',
       actorRole: 'platform_admin',
       action: 'invoice_paid',
+      category: categoryForAction('invoice_paid'),
       kind: 'platform',
       metadata: {
         invoiceId: invoice._id as string,
@@ -382,6 +385,7 @@ export const applyStripeInvoiceFailed = internalMutation({
       actorId: 'stripe_webhook',
       actorRole: 'platform_admin',
       action: 'invoice_payment_failed',
+      category: categoryForAction('invoice_payment_failed'),
       kind: 'platform',
       metadata: {
         invoiceId: invoice._id as string,
@@ -505,6 +509,7 @@ export const checkOverdueSubscriptionInvoices = internalMutation({
         actorId: 'cron',
         actorRole: 'platform_admin',
         action: 'invoice_overdue',
+        category: categoryForAction('invoice_overdue'),
         kind: 'platform',
         metadata: {
           invoiceId: invoice._id as string,
@@ -563,6 +568,7 @@ export const suspendPastDueTenants = internalMutation({
         actorId: 'cron',
         actorRole: 'platform_admin',
         action: 'tenant_suspended',
+        category: categoryForAction('tenant_suspended'),
         kind: 'platform',
         metadata: {
           subscriptionId: subscription._id as string,
@@ -715,6 +721,7 @@ export const saveStripeDefaultPaymentMethod = internalMutation({
       actorId: 'stripe_webhook',
       actorRole: 'platform_admin',
       action: 'payment_method_attached',
+      category: categoryForAction('payment_method_attached'),
       kind: 'platform',
       metadata: {
         stripeCustomerId: args.stripeCustomerId,

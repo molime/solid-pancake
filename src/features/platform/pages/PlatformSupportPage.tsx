@@ -33,6 +33,7 @@ export function PlatformSupportPage() {
     isAdmin ? {} : 'skip',
   )
   const events = useQuery(api.platform.listAuditEvents, isAdmin ? {} : 'skip')
+  const grants = useQuery(api.supportAccess.listForPlatform, isAdmin ? {} : 'skip')
   const requestSupportAccess = useMutation(api.platform.requestSupportAccess)
 
   const [tenantId, setTenantId] = useState('')
@@ -68,6 +69,10 @@ export function PlatformSupportPage() {
   const accessLog = (events ?? []).filter(
     (event) =>
       event.kind === 'platform' && event.action.startsWith('support_access'),
+  )
+
+  const tenantNameById = new Map(
+    (tenants ?? []).map((tenant) => [tenant._id, tenant.name]),
   )
 
   const handleSubmit = async () => {
@@ -192,7 +197,7 @@ export function PlatformSupportPage() {
             {error && <p className="text-sm text-[#ef4444]">{error}</p>}
             {submitted && (
               <p className="text-sm text-[#22c55e]">
-                Support access request recorded.
+                Support access request recorded — pending agency owner approval.
               </p>
             )}
             <button
@@ -280,6 +285,63 @@ export function PlatformSupportPage() {
         </div>
 
         <div>
+          <h2 className="mb-3 text-lg font-bold text-[#f5f7f6]">
+            Support access grants
+          </h2>
+          {!grants ? (
+            <p className="py-12 text-center text-sm text-[#9aa6a8]">
+              Loading grants…
+            </p>
+          ) : grants.length === 0 ? (
+            <p className="rounded-2xl border border-[#2a3437] bg-[#151b1d] py-12 text-center text-sm text-[#9aa6a8]">
+              No support access requests yet.
+            </p>
+          ) : (
+            <PlatformTable>
+              <PlatformTableHead>
+                <PlatformTableHeader>Agency</PlatformTableHeader>
+                <PlatformTableHeader>Status</PlatformTableHeader>
+                <PlatformTableHeader>Reason</PlatformTableHeader>
+                <PlatformTableHeader>Duration</PlatformTableHeader>
+                <PlatformTableHeader>Requested by</PlatformTableHeader>
+                <PlatformTableHeader>Requested</PlatformTableHeader>
+                <PlatformTableHeader>Decided</PlatformTableHeader>
+              </PlatformTableHead>
+              <PlatformTableBody>
+                {grants.map((grant) => (
+                  <PlatformTableRow key={grant._id}>
+                    <PlatformTableCell className="font-medium">
+                      {tenantNameById.get(grant.tenantId) ?? '—'}
+                    </PlatformTableCell>
+                    <PlatformTableCell>
+                      <PlatformStatusPill status={grant.status} />
+                    </PlatformTableCell>
+                    <PlatformTableCell className="max-w-[240px] truncate text-[#9aa6a8]">
+                      {grant.reason}
+                    </PlatformTableCell>
+                    <PlatformTableCell className="text-[#9aa6a8]">
+                      {grant.durationMinutes} min
+                    </PlatformTableCell>
+                    <PlatformTableCell className="max-w-[180px] truncate text-[#9aa6a8]">
+                      {grant.requesterName}
+                    </PlatformTableCell>
+                    <PlatformTableCell className="whitespace-nowrap text-[#9aa6a8]">
+                      {formatDateUS(grant.createdAt)}{' '}
+                      {formatTime(grant.createdAt)}
+                    </PlatformTableCell>
+                    <PlatformTableCell className="whitespace-nowrap text-[#9aa6a8]">
+                      {grant.decidedAt
+                        ? `${formatDateUS(grant.decidedAt)} ${formatTime(grant.decidedAt)}`
+                        : '—'}
+                    </PlatformTableCell>
+                  </PlatformTableRow>
+                ))}
+              </PlatformTableBody>
+            </PlatformTable>
+          )}
+        </div>
+
+        <div>
           <h2 className="mb-3 text-lg font-bold text-[#f5f7f6]">Access log</h2>
           {!events ? (
             <p className="py-12 text-center text-sm text-[#9aa6a8]">
@@ -306,9 +368,9 @@ export function PlatformSupportPage() {
                       {event.tenantName}
                     </PlatformTableCell>
                     <PlatformTableCell className="text-[#9aa6a8]">
-                      {event.action === 'support_access_ended'
-                        ? 'Ended'
-                        : 'Requested'}
+                      {formatStatusLabel(
+                        event.action.replace('support_access_', ''),
+                      )}
                     </PlatformTableCell>
                     <PlatformTableCell className="max-w-[240px] truncate text-[#9aa6a8]">
                       {typeof event.metadata?.reason === 'string'

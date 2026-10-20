@@ -15,6 +15,7 @@ import {
   XCircle,
   Hourglass,
   ChevronDown,
+  LifeBuoy,
 } from 'lucide-react'
 import { formatCurrency, formatDateUS } from '@/shared/format'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
@@ -22,11 +23,21 @@ import { Link } from 'react-router-dom'
 import { CaseDetailModal } from '@/features/hr/components/CaseDetailModal'
 
 export function AgencyAdminDashboardPage() {
-  const { clerkOrgId, tenantName } = useTenant()
+  const { clerkOrgId, tenantName, role } = useTenant()
   const summary = useQuery(
     api.reporting.getAdminDashboardSummary,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
+  const isOrgAdmin = role === 'org:admin'
+  const supportGrants = useQuery(
+    api.supportAccess.listForTenant,
+    clerkOrgId && isOrgAdmin ? { clerkOrgId } : 'skip',
+  )
+  const approveSupportAccess = useMutation(api.supportAccess.approve)
+  const rejectSupportAccess = useMutation(api.supportAccess.reject)
+  const [grantError, setGrantError] = useState<string | null>(null)
+  const [grantBusyId, setGrantBusyId] =
+    useState<Id<'supportAccessGrants'> | null>(null)
   const escalations = useQuery(
     api.escalations.listEscalations,
     clerkOrgId ? { clerkOrgId } : 'skip',
@@ -36,6 +47,30 @@ export function AgencyAdminDashboardPage() {
   const [expandedEscalationId, setExpandedEscalationId] =
     useState<Id<'escalations'> | null>(null)
   const [openCaseId, setOpenCaseId] = useState<Id<'hrCases'> | null>(null)
+
+  const handleGrantDecision = async (
+    grantId: Id<'supportAccessGrants'>,
+    decision: 'approve' | 'reject',
+  ) => {
+    if (!clerkOrgId || grantBusyId) return
+    setGrantError(null)
+    setGrantBusyId(grantId)
+    try {
+      if (decision === 'approve') {
+        await approveSupportAccess({ clerkOrgId, grantId })
+      } else {
+        await rejectSupportAccess({ clerkOrgId, grantId })
+      }
+    } catch (err) {
+      setGrantError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : `Failed to ${decision} support access.`,
+      )
+    } finally {
+      setGrantBusyId(null)
+    }
+  }
 
   const handleResolve = async (escalationId: Id<'escalations'>) => {
     if (!clerkOrgId) return
@@ -224,6 +259,88 @@ export function AgencyAdminDashboardPage() {
           </Card>
         </Link>
       </div>
+
+      {isOrgAdmin && clerkOrgId && (
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle>Support access</CardTitle>
+            <span className="text-lg font-semibold text-atria-ink">
+              {supportGrants?.filter((g) => g.status === 'pending').length ?? 0}{' '}
+              pending
+            </span>
+          </CardHeader>
+          <CardContent>
+            {supportGrants === undefined ? (
+              <p className="py-8 text-center text-sm text-atria-text-secondary">
+                Loading support access requests…
+              </p>
+            ) : supportGrants.length === 0 ? (
+              <div className="rounded-[var(--radius-atria-md)] border border-dashed border-atria-border p-6 text-center">
+                <p className="text-sm text-atria-text-secondary">
+                  No support access requests
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {grantError && (
+                  <p className="text-sm text-atria-danger">{grantError}</p>
+                )}
+                {supportGrants.map((grant) => (
+                  <div
+                    key={grant._id}
+                    className="rounded-[var(--radius-atria-md)] border border-atria-border bg-atria-bg p-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-atria-info-bg text-atria-info">
+                          <LifeBuoy className="h-4 w-4" />
+                        </span>
+                        <div>
+                          <p className="text-sm font-medium text-atria-ink">
+                            {grant.requesterName} — {grant.reason}
+                          </p>
+                          <p className="text-xs text-atria-text-secondary">
+                            {grant.durationMinutes} min · requested{' '}
+                            {formatDateUS(grant.createdAt)} ·{' '}
+                            <span className="font-medium">
+                              {grant.status.replace('_', ' ')}
+                            </span>
+                            {grant.decidedAt &&
+                              ` on ${formatDateUS(grant.decidedAt)}`}
+                          </p>
+                        </div>
+                      </div>
+                      {grant.status === 'pending' && (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              handleGrantDecision(grant._id, 'approve')
+                            }
+                            disabled={grantBusyId !== null}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() =>
+                              handleGrantDecision(grant._id, 'reject')
+                            }
+                            disabled={grantBusyId !== null}
+                          >
+                            Reject
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="flex-row items-center justify-between">

@@ -2,6 +2,9 @@ import { useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { EmptyState } from '@/shared/ui/EmptyState'
+import { useAuditFileDownload } from '@/shared/lib/auditDownload'
+import { SsnField } from '@/shared/ui/SsnField'
+import { useTenant } from '@/app/useTenant'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { Badge } from '@/shared/ui/Badge'
 import { UserCheck, Download, FileText } from 'lucide-react'
@@ -45,12 +48,14 @@ function Field({ label, value }: { label: string; value: FieldValue }) {
 function Section({
   title,
   rows,
+  children,
 }: {
   title: string
   rows: Array<[string, FieldValue]>
+  children?: React.ReactNode
 }) {
   const visible = rows.filter(([, v]) => display(v) !== '—')
-  if (visible.length === 0) return null
+  if (visible.length === 0 && !children) return null
   return (
     <section>
       <h3 className="mb-2 text-base font-semibold text-atria-ink">{title}</h3>
@@ -58,6 +63,7 @@ function Section({
         {visible.map(([label, value]) => (
           <Field key={label} label={label} value={value} />
         ))}
+        {children}
       </div>
     </section>
   )
@@ -107,6 +113,7 @@ function PrefilledDocDownload({
     documentId,
     variant,
   })
+  const auditDownload = useAuditFileDownload()
   return (
     <a
       href={url ?? '#'}
@@ -115,7 +122,17 @@ function PrefilledDocDownload({
       rel="noopener noreferrer"
       aria-disabled={!url}
       onClick={(e) => {
-        if (!url) e.preventDefault()
+        if (!url) {
+          e.preventDefault()
+          return
+        }
+        auditDownload({
+          clerkOrgId,
+          fileName,
+          contentType: 'application/pdf',
+          linkedType: 'prefilledDocument',
+          linkedId: documentId,
+        })
       }}
       className="inline-flex items-center gap-1 text-xs font-medium text-atria-accent hover:underline"
     >
@@ -164,6 +181,9 @@ export function HiringTab({
     api.candidates.getPrefilledDocuments,
     clerkOrgId && candidateId ? { clerkOrgId, candidateId } : 'skip',
   )
+
+  const { role } = useTenant()
+  const canRevealSsn = role === 'org:admin' || role === 'org:hr'
 
   if (candidate === null) {
     return (
@@ -221,13 +241,21 @@ export function HiringTab({
           ['Date of birth', personal.dateOfBirth],
           ['Gender', personal.gender],
           ['Address', address],
-          ['SSN / ITIN', personal.ssn],
           ['Position applied for', personal.positionApplyingFor],
           ['Availability', personal.availability],
           ['Shift', personal.shift],
           ['Days of week', personal.daysOfWeek],
         ]}
-      />
+      >
+        <SsnField
+          clerkOrgId={clerkOrgId}
+          candidateId={candidateId as Id<'candidates'>}
+          contextType="application"
+          label="SSN / ITIN"
+          value={String(personal.ssn ?? '')}
+          canReveal={canRevealSsn}
+        />
+      </Section>
 
       {employment.length > 0 && (
         <section>
@@ -299,7 +327,6 @@ export function HiringTab({
           ['State', i9.state],
           ['ZIP', i9.zip],
           ['Date of birth', i9.dateOfBirth],
-          ['SSN', i9.ssn],
           ['Email', i9.email],
           ['Phone', i9.phone],
           ['Citizenship status', i9.citizenshipStatus],
@@ -307,7 +334,16 @@ export function HiringTab({
           ['Signature', i9.signature],
           ['Date signed', i9.date],
         ]}
-      />
+      >
+        <SsnField
+          clerkOrgId={clerkOrgId}
+          candidateId={candidateId as Id<'candidates'>}
+          contextType="i9"
+          label="SSN"
+          value={String(i9.ssn ?? '')}
+          canReveal={canRevealSsn}
+        />
+      </Section>
 
       <Section
         title="W-4"
@@ -315,7 +351,6 @@ export function HiringTab({
           ['First name', w4.firstName],
           ['Last name', w4.lastName],
           ['Middle initial', w4.middleInitial],
-          ['SSN', w4.ssn],
           ['Address', w4.address],
           ['City / state / ZIP', w4.cityStateZip],
           ['Filing status', w4.filingStatus],
@@ -323,7 +358,16 @@ export function HiringTab({
           ['Signature', w4.signature],
           ['Date signed', w4.date],
         ]}
-      />
+      >
+        <SsnField
+          clerkOrgId={clerkOrgId}
+          candidateId={candidateId as Id<'candidates'>}
+          contextType="w4"
+          label="SSN"
+          value={String(w4.ssn ?? '')}
+          canReveal={canRevealSsn}
+        />
+      </Section>
 
       <Section
         title="Disbursement (banking)"

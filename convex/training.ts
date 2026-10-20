@@ -5,6 +5,7 @@ import { requireTenantRole, assertTenantDoc } from './authHelpers'
 import { internal } from './_generated/api'
 import { ensureCaregiverEmployeeProfile } from './employeeProfiles'
 import { computeRetentionUntil } from './documentArchive'
+import { assertValidUpload } from './_utils/uploadValidation'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
 
@@ -1284,6 +1285,9 @@ export const uploadExternalTraining = mutation({
       )
     }
 
+    // Stage 5: re-validate client-supplied type/size server-side.
+    assertValidUpload(args.contentType, args.size)
+
     const now = new Date().toISOString()
     const fileId = await ctx.db.insert('files', {
       tenantId,
@@ -1501,6 +1505,9 @@ export const submitExternalTraining = mutation({
     if (!profile) {
       throw new ConvexError('No employee profile found for your account.')
     }
+
+    // Stage 5: re-validate client-supplied type/size server-side.
+    assertValidUpload(args.contentType, args.size)
 
     const now = new Date().toISOString()
     const fileId = await ctx.db.insert('files', {

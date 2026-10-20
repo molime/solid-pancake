@@ -10,6 +10,7 @@ import type { ActionCtx, MutationCtx, QueryCtx } from './_generated/server'
 import { v, ConvexError } from 'convex/values'
 import type { Doc, Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
+import { createSupportAccessRequest, endLatestActiveGrant } from './supportAccess'
 import { requireIdentity } from './authHelpers'
 import type { UserIdentity } from 'convex/server'
 import {
@@ -18,6 +19,7 @@ import {
   createClerkUserAndJoinOrg,
 } from './_utils/invitationBypass'
 import { requireEnv } from './_utils/env'
+import { categoryForAction } from './_utils/auditCategories'
 import {
   computeInvoiceLineItems,
   computeTenantLimitAlerts,
@@ -76,6 +78,7 @@ async function recordPlatformAudit(
     actorId: identity.subject,
     actorRole: 'platform_admin',
     action,
+    category: categoryForAction(action),
     kind: 'platform',
     metadata,
     createdAt: new Date().toISOString(),
@@ -1515,6 +1518,7 @@ async function createPlatformInvoiceDoc(
     actorId: args.actorId,
     actorRole: 'platform_admin',
     action: 'invoice_created',
+    category: categoryForAction('invoice_created'),
     kind: 'platform',
     metadata: {
       invoiceId: invoiceId as string,
@@ -1939,37 +1943,24 @@ export const requestSupportAccess = mutation({
     durationMinutes: v.number(),
   },
   handler: async (ctx, args) => {
+    // Delegates to the Stage 3 approval flow (supportAccess module): creates
+    // a pending grant, keeps the support_access_requested audit event, and
+    // notifies the tenant's org:admins. This wrapper keeps the public api
+    // path stable for the existing platform UI. Plain function import rather
+    // than ctx.runMutation(api...) to avoid a circular api type reference.
     const identity = await requirePlatformAdmin(ctx)
-    const tenant = await ctx.db.get(args.tenantId)
-    if (!tenant) {
-      throw new ConvexError('Tenant not found.')
-    }
-    await recordPlatformAudit(
-      ctx,
-      identity,
-      args.tenantId,
-      'support_access_requested',
-      { reason: args.reason, durationMinutes: args.durationMinutes },
-    )
-    return args.tenantId
+    return createSupportAccessRequest(ctx, identity, args)
   },
 })
 
 export const endSupportAccess = mutation({
   args: { tenantId: v.id('tenants') },
   handler: async (ctx, args) => {
+    // Delegates to the Stage 3 approval flow (supportAccess module): ends the
+    // tenant's most recent active grant with a support_access_ended audit
+    // event. Throws when there is no active grant.
     const identity = await requirePlatformAdmin(ctx)
-    const tenant = await ctx.db.get(args.tenantId)
-    if (!tenant) {
-      throw new ConvexError('Tenant not found.')
-    }
-    await recordPlatformAudit(
-      ctx,
-      identity,
-      args.tenantId,
-      'support_access_ended',
-    )
-    return args.tenantId
+    return endLatestActiveGrant(ctx, identity, args.tenantId)
   },
 })
 
@@ -2014,6 +2005,7 @@ export const recordPlatformAuditInternal = internalMutation({
       actorId: args.actorId,
       actorRole: 'platform_admin',
       action: args.action,
+      category: categoryForAction(args.action),
       kind: 'platform',
       metadata: args.metadata,
       createdAt: new Date().toISOString(),
@@ -2089,6 +2081,7 @@ export const createTenantInternal = internalMutation({
       actorId: args.actorId,
       actorRole: 'platform_admin',
       action: 'tenant_created',
+      category: categoryForAction('tenant_created'),
       kind: 'platform',
       metadata: {
         clerkOrgId: args.clerkOrgId,
@@ -2128,6 +2121,7 @@ export const removeTenantMemberInternal = internalMutation({
       actorId: args.actorId,
       actorRole: 'platform_admin',
       action: 'tenant_user_removed',
+      category: categoryForAction('tenant_user_removed'),
       kind: 'platform',
       metadata: { clerkUserId: args.clerkUserId },
       createdAt: new Date().toISOString(),
