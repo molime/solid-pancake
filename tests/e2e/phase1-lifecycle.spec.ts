@@ -12,6 +12,7 @@ import {
   signInWithClerk,
   signOut,
 } from './helpers/auth'
+import { minimalPdfBuffer } from './helpers/upload'
 
 const CLIENT_NAME = 'Sam Lee'
 
@@ -80,14 +81,15 @@ test.describe('phase1 lifecycle', { tag: '@auth' }, () => {
     await page.locator('[data-testid="issue-choice-no"]').click()
     const taskCheckbox = page.locator('[data-testid^="task-complete-checkbox-"]').first()
     await taskCheckbox.check()
-    // Upload a tiny proof file
+    // Upload a tiny proof file (JPG/PNG/WebP/PDF only — server-side upload
+    // allowlist from the compliance hardening).
     const proofInput = page.locator('[data-testid^="task-proof-input-"]').first()
     await proofInput.setInputFiles({
-      name: 'proof.txt',
-      mimeType: 'text/plain',
-      buffer: Buffer.from('shift proof'),
+      name: 'proof.pdf',
+      mimeType: 'application/pdf',
+      buffer: minimalPdfBuffer(),
     })
-    await expect(page.locator('text=proof.txt')).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('text=proof.pdf')).toBeVisible({ timeout: 10000 })
     await page.locator('[data-testid="wizard-next-button"]:visible').click()
     await expect(page.locator('[data-testid="step-content-done"]')).toBeAttached()
 

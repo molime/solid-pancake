@@ -34,8 +34,17 @@ export function ShiftTaskList<TaskId extends string>({
   const removeProof = useMutation(api.files.removeProof)
   const [uploadingTaskId, setUploadingTaskId] = useState<TaskId | null>(null)
 
+  // Mirror of the server-side guard in convex/_utils/uploadValidation.ts so
+  // disallowed files are rejected at pick time instead of failing after upload.
+  const ALLOWED_PROOF_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+  const MAX_PROOF_BYTES = 10 * 1024 * 1024
+
   const handleFileSelect = async (taskId: TaskId, file: File) => {
     if (!file) return
+    if (!ALLOWED_PROOF_TYPES.includes(file.type) || file.size > MAX_PROOF_BYTES) {
+      alert('Only JPG, PNG, WebP, or PDF files up to 10 MB can be uploaded as proof.')
+      return
+    }
     setUploadingTaskId(taskId)
 
     try {
@@ -155,6 +164,7 @@ export function ShiftTaskList<TaskId extends string>({
                       <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-[var(--radius-atria-md)] border border-dashed border-atria-border px-3 py-2 text-base text-atria-text-secondary transition-colors hover:border-atria-accent hover:text-atria-ink">
                         <Input
                           type="file"
+                          accept="image/jpeg,image/png,image/webp,application/pdf"
                           className="hidden"
                           onChange={(e) => {
                             const file = e.target.files?.[0]

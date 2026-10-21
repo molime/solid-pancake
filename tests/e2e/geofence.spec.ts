@@ -10,6 +10,7 @@ import {
   signInWithClerk,
   signOut,
 } from './helpers/auth'
+import { minimalPdfBuffer } from './helpers/upload'
 
 const GEOFENCE_CLIENT = 'Maya Torres'
 const INSIDE_COORDS = { latitude: 44.9779, longitude: -93.2649, accuracy: 20 }
@@ -124,9 +125,9 @@ test.describe('geofence scenarios', { tag: '@auth' }, () => {
     await page.locator('[data-testid="issue-choice-no"]').click()
     await page.locator('[data-testid^="task-complete-checkbox-"]').first().check()
     await page.locator('[data-testid^="task-proof-input-"]').first().setInputFiles({
-      name: 'geo-proof.txt',
-      mimeType: 'text/plain',
-      buffer: Buffer.from('geofence proof'),
+      name: 'geo-proof.pdf',
+      mimeType: 'application/pdf',
+      buffer: minimalPdfBuffer(),
     })
     await page.locator('[data-testid="wizard-next-button"]:visible').click()
     await page.locator('[data-testid="confirm-checkbox"]').check()

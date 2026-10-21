@@ -155,6 +155,14 @@ test.describe('onboarding candidate-to-caregiver', { tag: '@auth' }, () => {
     fixtureIds = await resetE2ECandidate(page)
   })
 
+  test.afterEach(async ({ page }) => {
+    // This describe promotes the shared fixture candidate to a caregiver
+    // (hireCandidate + role sync). Restore the candidate fixture afterwards
+    // so specs that run later in the same suite (alphabetical order, e.g.
+    // qa-hr-portal item 7) still land the fixture on /onboarding.
+    await resetE2ECandidate(page)
+  })
+
   test('full lifecycle from submitted application to caregiver today', async ({
     page,
   }) => {

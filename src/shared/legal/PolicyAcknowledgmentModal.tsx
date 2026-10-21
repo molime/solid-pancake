@@ -30,14 +30,33 @@ export function PolicyAcknowledgmentModal() {
   const acknowledge = useMutation(api.policies.acknowledge)
   const { signOut } = useClerk()
 
-  const [index, setIndex] = useState(0)
   const [scrolledToBottom, setScrolledToBottom] = useState(false)
   const [agreed, setAgreed] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  const current = pending?.[index]
+  // Snapshot the pending list the first time it is non-empty and drain the
+  // snapshot one by one. Indexing the live query result instead would skip
+  // policies: each acknowledgment shrinks `pending` while the index keeps
+  // advancing (found in E2E QA, 2026-10-20).
+  const [snapshot, setSnapshot] = useState<{
+    items: NonNullable<typeof pending>
+    total: number
+  } | null>(null)
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- one-time snapshot of the
+       pending list; without it the shrinking query result desyncs from the index. */
+    if (snapshot === null && pending && pending.length > 0) {
+      setSnapshot({ items: pending, total: pending.length })
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [snapshot, pending])
+
+  const queue = snapshot?.items
+  const current = queue?.[0]
+  const total = snapshot?.total ?? 0
+  const position = total - (queue?.length ?? 0) + 1
 
   // Reset the scroll gate / checkbox when moving to the next policy.
   useEffect(() => {
@@ -48,7 +67,7 @@ export function PolicyAcknowledgmentModal() {
     setError(null)
     /* eslint-enable react-hooks/set-state-in-effect */
     scrollRef.current?.scrollTo({ top: 0 })
-  }, [index])
+  }, [current?.key])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -62,12 +81,12 @@ export function PolicyAcknowledgmentModal() {
     return () => el.removeEventListener('scroll', onScroll)
   }, [current?.key])
 
-  if (isLoading || !clerkOrgId || !pending || pending.length === 0 || !current) {
+  if (isLoading || !clerkOrgId || !current) {
     return null
   }
 
   const policy = policyByKey(current.key)
-  const isLast = index === pending.length - 1
+  const isLast = (queue?.length ?? 0) <= 1
 
   const handleAgree = async () => {
     if (!clerkOrgId) return
@@ -79,12 +98,9 @@ export function PolicyAcknowledgmentModal() {
         policyKey: current.key,
         policyVersion: current.version,
       })
-      if (isLast) {
-        // The pending query will refetch to an empty list and unmount this
-        // modal; nothing else to do.
-      } else {
-        setIndex((i) => i + 1)
-      }
+      // Drain the snapshot. When the last item is removed, `current`
+      // becomes undefined and the modal unmounts.
+      setSnapshot((s) => (s ? { ...s, items: s.items.slice(1) } : s))
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Could not record your acknowledgment.',
@@ -113,7 +129,7 @@ export function PolicyAcknowledgmentModal() {
               Policy update — please review
             </h1>
             <p className="text-sm text-atria-text-secondary">
-              Policy {index + 1} of {pending.length}
+              Policy {position} of {total}
               {policy ? ` · Effective ${policy.effectiveDate}` : ''}
             </p>
           </div>

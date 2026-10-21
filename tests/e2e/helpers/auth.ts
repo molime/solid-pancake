@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test'
 import { e2eCredentialsAvailable, mockE2EEnabled } from './env'
+import { acknowledgePoliciesIfPresent } from './policyModal'
 
 export const E2E_ORG_ID = process.env.E2E_CLERK_ORG_ID ?? ''
 export const E2E_ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? ''
@@ -299,6 +300,11 @@ export async function signInWithClerk(
     await page.waitForLoadState('networkidle')
     await selectOrgIfAsked(page, orgId, role)
     await waitForWorkspaceReady(page)
+    // The blocking staff-policy acknowledgment modal overlays the app for every
+    // staff role until all pending policies are acknowledged; clear it so spec
+    // assertions are not intercepted. No-op for candidates/public/platform
+    // routes and for users with nothing pending.
+    await acknowledgePoliciesIfPresent(page)
     return
   }
 
@@ -330,6 +336,8 @@ export async function signInWithClerk(
 
   await selectOrgIfAsked(page, orgId, role)
   await waitForWorkspaceReady(page)
+  // Same staff-policy acknowledgment clear as the ticket path above.
+  await acknowledgePoliciesIfPresent(page)
 }
 
 export async function signInAsHR(page: Page) {
