@@ -1,0 +1,40 @@
+# Deploys the production frontend (Vercel project solid-pancake-oyqu) on every
+# push to the `prod` branch.
+#
+# Why this exists: the Vercel project's Git integration has `main` configured
+# as its production branch, and the `main` and `prod` branches have diverged
+# histories. Pushes to `prod` therefore never reach production on their own.
+# This workflow calls the Vercel Deployments API directly and promotes a
+# production build from the `prod` ref. The project's "Ignored Build Step"
+# is configured to build only the `prod` ref (exit 1 = build).
+name: deploy-prod-frontend
+
+on:
+  push:
+    branches: [prod]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger production deployment from the prod branch
+        run: |
+          set -e
+          RESP=$(curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.VERCEL_PROD_DEPLOY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            "https://api.vercel.com/v13/deployments?teamId=team_rQHU0xS1YAr5XVTpU4CmD1lS" \
+            -d '{"name":"solid-pancake-oyqu","target":"production","gitSource":{"type":"github","org":"molime","repo":"solid-pancake","repoId":1244072425,"ref":"prod"}}')
+          echo "$RESP" | head -c 500
+          DPL=$(echo "$RESP" | jq -r '.id // empty')
+          if [ -z "$DPL" ]; then echo "no deployment id returned"; exit 1; fi
+          for i in $(seq 1 60); do
+            STATE=$(curl -s -H "Authorization: Bearer ${{ secrets.VERCEL_PROD_DEPLOY_TOKEN }}" \
+              "https://api.vercel.com/v13/deployments/$DPL?teamId=team_rQHU0xS1YAr5XVTpU4CmD1lS" | jq -r '.status // .readyState')
+            echo "deployment $DPL: $STATE"
+            if [ "$STATE" = "READY" ]; then exit 0; fi
+            if [ "$STATE" = "ERROR" ] || [ "$STATE" = "CANCELED" ]; then exit 1; fi
+            sleep 15
+          done
+          echo "timed out waiting for deployment"
+          exit 1
