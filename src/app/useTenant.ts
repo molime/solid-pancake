@@ -104,6 +104,16 @@ export function useTenant() {
     isLoaded && !orgClerkOrgId ? {} : 'skip',
   )
 
+  // Clerk org members (admin/coordinator/HR) never run getMyTenant, so their
+  // role only comes from the tenantMembers row — without this, useTenant().role
+  // is undefined for every org member, which hid role-gated UI (SSN reveal,
+  // support-access approval card). members.me is the same source the route
+  // guards use.
+  const member = useQuery(
+    api.members.me,
+    isLoaded && orgClerkOrgId ? { clerkOrgId: orgClerkOrgId } : 'skip',
+  )
+
   const storedClerkOrgId = getStoredClerkOrgId()
   const dbTenant = pickPreferredDbTenant(dbTenants, storedClerkOrgId)
 
@@ -138,7 +148,7 @@ export function useTenant() {
     clerkOrgId,
     tenantName: organization?.name ?? dbTenant?.tenantName,
     agencyAddress: dbTenant?.agencyAddress ?? null,
-    role: dbTenant?.role,
+    role: dbTenant?.role ?? member?.role,
     isLoading,
   }
 }
