@@ -1,7 +1,8 @@
 // QA verification spec for the audit area:
 //   1. Dashboard no longer renders a "Quick Actions" button.
-//   2. The "Logs" sidebar nav item is hidden for every role (the platform
-//      movement log is admin-route-only); /logs redirects non-admins.
+//   2. The "Logs" sidebar nav item is admin-only (org:admin) — it was nav-less
+//      for everyone before the compliance mini-phase; now admins get the
+//      direct link, non-admins still don't; /logs redirects non-admins.
 //   3. /audit renders the Audit Ready Center (simple + full views).
 //   4. /logs still renders the event log table for admins.
 //   5. "Download Audit Report" produces a CSV download.
@@ -84,8 +85,8 @@ test.describe('QA Logs access restriction', { tag: '@auth' }, () => {
     await page.waitForLoadState('networkidle')
     await expect(page.getByText('Quick Actions')).toHaveCount(0)
 
-    // --- Item 2 (admin): Logs nav item is hidden for everyone ------------
-    await expect(sidebarLink(page, 'Logs')).toHaveCount(0)
+    // --- Item 2 (admin): Logs nav item is admin-only ----------------------
+    await expect(sidebarLink(page, 'Logs')).toHaveAttribute('href', '/logs')
     // The Audit Ready Center keeps its /audit link.
     await expect(
       sidebarLink(page, 'Audit Ready Center'),

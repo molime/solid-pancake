@@ -75,6 +75,7 @@ const GROUP_BY_LABEL: Record<string, string> = {
   'Training Hub': 'learning',
   Admin: 'management',
   'Data lifecycle': 'management',
+  Logs: 'management',
   'Employee Performance': 'management',
   'Audit Ready Center': 'management',
   Billing: 'management',
@@ -143,6 +144,18 @@ const navItems: NavItem[] = [
     path: '/audit',
     icon: <ShieldCheck className="h-4 w-4" />,
     roles: ['org:admin', 'org:hr'],
+  },
+  {
+    // Compliance mini-phase: the event log became a first-class control
+    // surface (categories, download/export events, support-access trail), so
+    // admins get a direct nav item again (it was nav-less by an earlier
+    // product decision). Gated per tenant via the existing 'logs' section
+    // key; still admin-only.
+    label: 'Logs',
+    section: 'logs',
+    path: '/logs',
+    icon: <FileText className="h-4 w-4" />,
+    roles: ['org:admin'],
   },
   {
     label: 'Notifications',
