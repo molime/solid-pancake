@@ -197,6 +197,12 @@ export const list = query({
     const actorIds = new Set(events.map((e) => e.actorId))
     const names = new Map<string, string>()
     for (const actorId of actorIds) {
+      // System/cron actors (purge sweeps, grant expiry, suspension crons) have
+      // no user row — label them instead of falling through to "Unknown user".
+      if (actorId === 'system' || actorId === 'cron') {
+        names.set(actorId, 'System (automated)')
+        continue
+      }
       // 1. Check tenantMembers — scoped to THIS tenant: a user can belong to
       // several tenants (qa/admin accounts especially), so an unscoped
       // by_clerk_user_id unique() crashes with "more than one result".
