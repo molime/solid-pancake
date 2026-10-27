@@ -128,9 +128,45 @@ export const STAFF_POLICIES: StaffPolicy[] = [
       },
     ],
   },
+  {
+    // Fourth staff policy (added 2026-10-27): closes HIPAA Security Awareness
+    // (45 CFR 164.308(a)(5)) as an operating program. Delivery mechanism is
+    // the same blocking acknowledgment modal as the other staff policies;
+    // reviewed annually alongside the policy re-acknowledgment cycle.
+    key: 'security_awareness',
+    version: 1,
+    title: 'Security Awareness Policy',
+    effectiveDate: '2026-10-27',
+    sections: [
+      {
+        heading: '1. Why awareness matters',
+        body: 'Most security incidents in healthcare start with a person, not a machine: a convincing fake email, a shared password, an unattended screen. This policy is your short, practical guide to recognizing and reporting security threats. It is part of your onboarding and is re-acknowledged annually.',
+      },
+      {
+        heading: '2. Phishing and suspicious messages',
+        body: 'Be skeptical of any message asking for passwords, verification codes, payment changes, or urgent gift cards — even if it appears to come from a manager, ATRIA, or a vendor. Check the sender address carefully. ATRIA will never ask for your password by email or text. Do not open unexpected attachments or links; report the message instead.',
+      },
+      {
+        heading: '3. Passwords and sign-in codes',
+        body: 'Use a strong, unique password for ATRIA and never reuse it elsewhere. Never share a password or a one-time sign-in code with anyone, including someone claiming to be IT or ATRIA support. If your agency enables MFA, complete the setup and keep your authenticator device secure.',
+      },
+      {
+        heading: '4. Devices and physical security',
+        body: 'Lock your screen whenever you step away. Do not view client information where others can see your screen (public transit, waiting rooms). Keep your phone and computer updated. Never install software or browser extensions you were not asked to install for work.',
+      },
+      {
+        heading: '5. What to report, and how fast',
+        body: 'Report within 24 hours to your supervisor or agency administrator: a lost or stolen device, a suspicious email or call, an unfamiliar sign-in or notification, a file sent to the wrong person, or a colleague accessing records they should not. Fast reporting is what turns an incident into a non-event; hiding one turns it into a breach.',
+      },
+      {
+        heading: '6. Your acknowledgment',
+        body: 'By acknowledging this policy you confirm that you understand how to recognize phishing, protect your sign-in and devices, and report suspected security issues within 24 hours. This acknowledgment is recorded and refreshed annually.',
+      },
+    ],
+  },
 ]
 
-/** The three policy keys, for validation and iteration. */
+/** The staff policy keys, for validation and iteration. */
 export const STAFF_POLICY_KEYS = STAFF_POLICIES.map((p) => p.key)
 
 /** key -> current version, used by the backend to validate acknowledgments. */

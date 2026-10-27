@@ -43,6 +43,7 @@ import type * as dataRetention from "../dataRetention.js";
 import type * as disableUserMfa from "../disableUserMfa.js";
 import type * as documentArchive from "../documentArchive.js";
 import type * as drafts from "../drafts.js";
+import type * as emailChanges from "../emailChanges.js";
 import type * as embedding from "../embedding.js";
 import type * as employeeProfiles from "../employeeProfiles.js";
 import type * as escalations from "../escalations.js";
@@ -136,6 +137,7 @@ declare const fullApi: ApiFromModules<{
   disableUserMfa: typeof disableUserMfa;
   documentArchive: typeof documentArchive;
   drafts: typeof drafts;
+  emailChanges: typeof emailChanges;
   embedding: typeof embedding;
   employeeProfiles: typeof employeeProfiles;
   escalations: typeof escalations;

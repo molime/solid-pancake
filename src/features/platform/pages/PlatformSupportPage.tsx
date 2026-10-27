@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation, useQuery } from 'convex/react'
+import { useAction, useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { formatDateUS, formatStatusLabel, formatTime } from '@/shared/format'
@@ -35,6 +35,21 @@ export function PlatformSupportPage() {
   const events = useQuery(api.platform.listAuditEvents, isAdmin ? {} : 'skip')
   const grants = useQuery(api.supportAccess.listForPlatform, isAdmin ? {} : 'skip')
   const requestSupportAccess = useMutation(api.platform.requestSupportAccess)
+  const executeEmailChange = useAction(api.emailChanges.execute)
+  const rejectEmailChange = useMutation(api.emailChanges.reject)
+  // execute is an ACTION (it calls the Clerk API), so it does not invalidate
+  // queries the way mutations do — bumping refreshKey re-runs the query.
+  const [emailRefreshKey, setEmailRefreshKey] = useState(0)
+  const emailChangeRequests = useQuery(
+    api.emailChanges.listPending,
+    isAdmin ? { refreshKey: emailRefreshKey } : 'skip',
+  )
+  const [confirmExecuteId, setConfirmExecuteId] = useState<
+    Id<'emailChangeRequests'> | null
+  >(null)
+  const [emailActionBusy, setEmailActionBusy] = useState(false)
+  const [emailActionError, setEmailActionError] = useState('')
+  const [emailActionDone, setEmailActionDone] = useState('')
 
   const [tenantId, setTenantId] = useState('')
   const [reason, setReason] = useState('')
@@ -139,6 +154,50 @@ export function PlatformSupportPage() {
     }
   }
 
+  const handleExecuteEmailChange = async () => {
+    if (!confirmExecuteId || emailActionBusy) return
+    setEmailActionBusy(true)
+    setEmailActionError('')
+    setEmailActionDone('')
+    try {
+      await executeEmailChange({ requestId: confirmExecuteId })
+      setConfirmExecuteId(null)
+      setEmailActionDone('Email change executed — the member signs in with their new email.')
+      setEmailRefreshKey((key) => key + 1)
+    } catch (err) {
+      setEmailActionError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Failed to execute the email change.',
+      )
+    } finally {
+      setEmailActionBusy(false)
+    }
+  }
+
+  const handleRejectEmailChange = async (requestId: Id<'emailChangeRequests'>) => {
+    if (emailActionBusy) return
+    setEmailActionBusy(true)
+    setEmailActionError('')
+    setEmailActionDone('')
+    try {
+      await rejectEmailChange({ requestId })
+      setEmailActionDone('Email change request rejected.')
+    } catch (err) {
+      setEmailActionError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Failed to reject the email change request.',
+      )
+    } finally {
+      setEmailActionBusy(false)
+    }
+  }
+
+  const confirmExecuteRequest = (emailChangeRequests ?? []).find(
+    (request) => request._id === confirmExecuteId,
+  )
+
   return (
     <PlatformGate>
       <div className="space-y-6">
@@ -208,6 +267,88 @@ export function PlatformSupportPage() {
               {busy ? 'Submitting…' : 'Request access'}
             </button>
           </div>
+        </div>
+
+        <div>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-[#f5f7f6]">
+              Email change requests
+            </h2>
+          </div>
+          {emailActionError && (
+            <p className="mb-3 text-sm text-[#ef4444]">{emailActionError}</p>
+          )}
+          {emailActionDone && !emailActionError && (
+            <p className="mb-3 text-sm text-[#22c55e]">{emailActionDone}</p>
+          )}
+          {!emailChangeRequests ? (
+            <p className="py-12 text-center text-sm text-[#9aa6a8]">
+              Loading email change requests…
+            </p>
+          ) : emailChangeRequests.length === 0 ? (
+            <p className="rounded-2xl border border-[#2a3437] bg-[#151b1d] py-12 text-center text-sm text-[#9aa6a8]">
+              No pending email change requests.
+            </p>
+          ) : (
+            <PlatformTable>
+              <PlatformTableHead>
+                <PlatformTableHeader>Agency</PlatformTableHeader>
+                <PlatformTableHeader>Member</PlatformTableHeader>
+                <PlatformTableHeader>Old → New email</PlatformTableHeader>
+                <PlatformTableHeader>Reason</PlatformTableHeader>
+                <PlatformTableHeader>Requested by</PlatformTableHeader>
+                <PlatformTableHeader>Requested</PlatformTableHeader>
+                <PlatformTableHeader>Actions</PlatformTableHeader>
+              </PlatformTableHead>
+              <PlatformTableBody>
+                {emailChangeRequests.map((request) => (
+                  <PlatformTableRow key={request._id}>
+                    <PlatformTableCell className="font-medium">
+                      {request.tenantName}
+                    </PlatformTableCell>
+                    <PlatformTableCell>
+                      {request.memberName}
+                    </PlatformTableCell>
+                    <PlatformTableCell className="text-[#9aa6a8]">
+                      {request.oldEmail} → {request.newEmail}
+                    </PlatformTableCell>
+                    <PlatformTableCell className="max-w-[220px] truncate text-[#9aa6a8]">
+                      {request.reason}
+                    </PlatformTableCell>
+                    <PlatformTableCell className="max-w-[160px] truncate text-[#9aa6a8]">
+                      {request.requesterName}
+                    </PlatformTableCell>
+                    <PlatformTableCell className="whitespace-nowrap text-[#9aa6a8]">
+                      {formatDateUS(request.createdAt)}{' '}
+                      {formatTime(request.createdAt)}
+                    </PlatformTableCell>
+                    <PlatformTableCell>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setConfirmExecuteId(request._id)
+                            setEmailActionError('')
+                            setEmailActionDone('')
+                          }}
+                          disabled={emailActionBusy}
+                          className="rounded-lg bg-[#22c55e] px-3 py-1.5 text-xs font-semibold text-[#0b0f10] transition-opacity hover:opacity-90 disabled:opacity-50"
+                        >
+                          Execute
+                        </button>
+                        <button
+                          onClick={() => handleRejectEmailChange(request._id)}
+                          disabled={emailActionBusy}
+                          className="rounded-lg border border-[#2a3437] px-3 py-1.5 text-xs font-medium text-[#9aa6a8] transition-colors hover:text-[#ef4444] disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </PlatformTableCell>
+                  </PlatformTableRow>
+                ))}
+              </PlatformTableBody>
+            </PlatformTable>
+          )}
         </div>
 
         <div>
@@ -395,6 +536,81 @@ export function PlatformSupportPage() {
             </PlatformTable>
           )}
         </div>
+
+        <Dialog
+          open={confirmExecuteId !== null}
+          onClose={() => setConfirmExecuteId(null)}
+          className="border-[#2a3437] bg-[#151b1d]"
+        >
+          <div className="border-b border-[#2a3437] px-6 py-5">
+            <h3 className="text-lg font-bold text-[#f5f7f6]">
+              Execute email change
+            </h3>
+            {confirmExecuteRequest && (
+              <p className="mt-1 text-sm text-[#687173]">
+                {confirmExecuteRequest.tenantName} ·{' '}
+                {confirmExecuteRequest.memberName} · requested by{' '}
+                {confirmExecuteRequest.requesterName}
+              </p>
+            )}
+          </div>
+          <div className="space-y-4 p-6">
+            {!confirmExecuteRequest ? (
+              <p className="py-8 text-center text-sm text-[#9aa6a8]">
+                Loading request…
+              </p>
+            ) : (
+              <>
+                <div>
+                  <p className="mb-1.5 text-sm font-medium text-[#9aa6a8]">
+                    Login email change
+                  </p>
+                  <p className="text-[15px] text-[#f5f7f6]">
+                    <span className="text-[#ef4444]">
+                      {confirmExecuteRequest.oldEmail}
+                    </span>
+                    {' → '}
+                    <span className="text-[#22c55e]">
+                      {confirmExecuteRequest.newEmail}
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-1.5 text-sm font-medium text-[#9aa6a8]">
+                    Reason
+                  </p>
+                  <p className="whitespace-pre-line text-[15px] text-[#f5f7f6]">
+                    {confirmExecuteRequest.reason}
+                  </p>
+                </div>
+                <p className="text-sm text-[#9aa6a8]">
+                  This is the only way a login email changes: the new address
+                  is created verified in Clerk, set as primary, and the old
+                  address is removed. The swap is audited and the agency is
+                  notified.
+                </p>
+                {emailActionError && (
+                  <p className="text-sm text-[#ef4444]">{emailActionError}</p>
+                )}
+              </>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 border-t border-[#2a3437] px-6 py-5">
+            <button
+              onClick={() => setConfirmExecuteId(null)}
+              className="rounded-lg border border-[#2a3437] px-4 py-2 text-sm font-medium text-[#9aa6a8] transition-colors hover:text-[#f5f7f6]"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleExecuteEmailChange}
+              disabled={emailActionBusy || !confirmExecuteRequest}
+              className="rounded-lg bg-[#22c55e] px-4 py-2 text-sm font-semibold text-[#0b0f10] transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {emailActionBusy ? 'Executing…' : 'Execute change'}
+            </button>
+          </div>
+        </Dialog>
 
         <Dialog
           open={selectedTicketId !== null}

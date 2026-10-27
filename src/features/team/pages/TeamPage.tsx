@@ -25,8 +25,9 @@ import {
 import { Textarea } from '@/shared/ui/Textarea'
 import { Select } from '@/shared/ui/Select'
 import { isValidEmail } from '@/shared/validation'
+import { formatDateUS, formatTime } from '@/shared/format'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
-import { Building2, Mail, RefreshCw, UserPlus, X } from 'lucide-react'
+import { AtSign, Building2, Mail, RefreshCw, UserPlus, X } from 'lucide-react'
 import { useState, useCallback, useEffect } from 'react'
 
 const roleOptions = [
@@ -77,6 +78,17 @@ function adpStatusPill(status: string) {
       return { label: 'Error', variant: 'danger' as const }
     default:
       return { label: status, variant: 'default' as const }
+  }
+}
+
+function emailRequestStatusPill(status: string) {
+  switch (status) {
+    case 'executed':
+      return { label: 'Executed', variant: 'success' as const }
+    case 'rejected':
+      return { label: 'Rejected', variant: 'danger' as const }
+    default:
+      return { label: 'Pending', variant: 'warning' as const }
   }
 }
 
@@ -162,6 +174,7 @@ export function TeamPage() {
   )
   const updateRole = useMutation(api.members.updateRole)
   const sendMemberMessage = useMutation(api.notifications.sendReminderToMember)
+  const requestEmailChange = useMutation(api.emailChanges.request)
   const [messageFor, setMessageFor] = useState<{
     clerkUserId: string
     name: string
@@ -169,6 +182,70 @@ export function TeamPage() {
   const [messageText, setMessageText] = useState('')
   const [sendingMessage, setSendingMessage] = useState(false)
   const [messageError, setMessageError] = useState('')
+
+  // Email reassignment requests (admin/HR files; ATRIA platform executes).
+  const [emailChangeFor, setEmailChangeFor] = useState<{
+    clerkUserId: string
+    name: string
+    email: string
+  } | null>(null)
+  const [emailChangeNewEmail, setEmailChangeNewEmail] = useState('')
+  const [emailChangeReason, setEmailChangeReason] = useState('')
+  const [isSubmittingEmailChange, setIsSubmittingEmailChange] = useState(false)
+  const [emailChangeError, setEmailChangeError] = useState('')
+  // The query is skipped until members load so the caller's role is known.
+  const canRequestEmailChange =
+    (members ?? []).find(
+      (m: Doc<'tenantMembers'>) => m.clerkUserId === user?.id,
+    )?.role === 'org:admin' ||
+    (members ?? []).find(
+      (m: Doc<'tenantMembers'>) => m.clerkUserId === user?.id,
+    )?.role === 'org:hr'
+  const emailChangeRequests = useQuery(
+    api.emailChanges.listForTenant,
+    clerkOrgId && canRequestEmailChange ? { clerkOrgId } : 'skip',
+  )
+
+  const handleRequestEmailChange = useCallback(async () => {
+    if (
+      !clerkOrgId ||
+      !emailChangeFor ||
+      !emailChangeNewEmail.trim() ||
+      !emailChangeReason.trim()
+    )
+      return
+    if (!isValidEmail(emailChangeNewEmail)) {
+      setEmailChangeError('Please enter a valid email address.')
+      return
+    }
+    setIsSubmittingEmailChange(true)
+    setEmailChangeError('')
+    try {
+      await requestEmailChange({
+        clerkOrgId,
+        memberClerkUserId: emailChangeFor.clerkUserId,
+        newEmail: emailChangeNewEmail.trim(),
+        reason: emailChangeReason.trim(),
+      })
+      setEmailChangeFor(null)
+      setEmailChangeNewEmail('')
+      setEmailChangeReason('')
+    } catch (err) {
+      setEmailChangeError(
+        err instanceof Error
+          ? sanitizeConvexError(err.message)
+          : 'Could not submit the email change request.',
+      )
+    } finally {
+      setIsSubmittingEmailChange(false)
+    }
+  }, [
+    clerkOrgId,
+    emailChangeFor,
+    emailChangeNewEmail,
+    emailChangeReason,
+    requestEmailChange,
+  ])
 
   // Admin-created alert/message to a member (in-app notification + email).
   const handleSendMessage = async () => {
@@ -836,7 +913,9 @@ export function TeamPage() {
                   <TableHeader>Name</TableHeader>
                   <TableHeader>Email</TableHeader>
                   <TableHeader>Role</TableHeader>
-                  {isAdmin && <TableHeader className="w-28">Actions</TableHeader>}
+                  {(isAdmin || canRequestEmailChange) && (
+                    <TableHeader className="w-44">Actions</TableHeader>
+                  )}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -896,26 +975,49 @@ export function TeamPage() {
                           </Badge>
                         )}
                       </TableCell>
-                      {isAdmin && (
+                      {isAdmin || canRequestEmailChange ? (
                         <TableCell>
                           {!isSelf && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setMessageFor({
-                                  clerkUserId: member.clerkUserId,
-                                  name: member.displayName,
-                                })
-                                setMessageText('')
-                                setMessageError('')
-                              }}
-                            >
-                              Message
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              {isAdmin && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setMessageFor({
+                                      clerkUserId: member.clerkUserId,
+                                      name: member.displayName,
+                                    })
+                                    setMessageText('')
+                                    setMessageError('')
+                                  }}
+                                >
+                                  Message
+                                </Button>
+                              )}
+                              {canRequestEmailChange && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEmailChangeFor({
+                                      clerkUserId: member.clerkUserId,
+                                      name: member.displayName,
+                                      email: member.email,
+                                    })
+                                    setEmailChangeNewEmail('')
+                                    setEmailChangeReason('')
+                                    setEmailChangeError('')
+                                  }}
+                                >
+                                  <AtSign className="h-4 w-4" />
+                                  Email change
+                                </Button>
+                              )}
+                            </div>
                           )}
                         </TableCell>
-                      )}
+                      ) : null}
                     </TableRow>
                   )
                 })}
@@ -962,8 +1064,148 @@ export function TeamPage() {
               </DialogFooter>
             </Dialog>
           )}
+          {canRequestEmailChange && emailChangeFor && (
+            <Dialog open onClose={() => setEmailChangeFor(null)}>
+              <DialogHeader>
+                <DialogTitle>
+                  Email change for {emailChangeFor.name}
+                </DialogTitle>
+              </DialogHeader>
+              <DialogContent className="space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                    Current email
+                  </label>
+                  <Input value={emailChangeFor.email} readOnly className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                    New email
+                  </label>
+                  <Input
+                    type="email"
+                    value={emailChangeNewEmail}
+                    onChange={(e) => setEmailChangeNewEmail(e.target.value)}
+                    placeholder="new-email@example.com"
+                    className="mt-1"
+                    hasError={
+                      !!emailChangeNewEmail.trim() &&
+                      !isValidEmail(emailChangeNewEmail)
+                    }
+                  />
+                  {emailChangeNewEmail.trim() &&
+                    !isValidEmail(emailChangeNewEmail) && (
+                      <p className="mt-1 text-sm text-atria-danger">
+                        Please enter a valid email address.
+                      </p>
+                    )}
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-atria-muted uppercase tracking-wider">
+                    Reason
+                  </label>
+                  <Textarea
+                    value={emailChangeReason}
+                    onChange={(e) => setEmailChangeReason(e.target.value)}
+                    placeholder="e.g. The employee no longer has access to their old email account."
+                    rows={3}
+                  />
+                </div>
+                <p className="text-xs text-atria-muted">
+                  ATRIA support reviews each request and executes the change.
+                  The member signs in with the new email once it is complete.
+                </p>
+                {emailChangeError && (
+                  <p className="text-sm text-atria-danger">{emailChangeError}</p>
+                )}
+              </DialogContent>
+              <DialogFooter>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setEmailChangeFor(null)
+                    setEmailChangeNewEmail('')
+                    setEmailChangeReason('')
+                    setEmailChangeError('')
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleRequestEmailChange}
+                  disabled={
+                    isSubmittingEmailChange ||
+                    !emailChangeNewEmail.trim() ||
+                    !emailChangeReason.trim()
+                  }
+                >
+                  {isSubmittingEmailChange ? 'Submitting…' : 'Submit request'}
+                </Button>
+              </DialogFooter>
+            </Dialog>
+          )}
         </CardContent>
       </Card>
+
+      {canRequestEmailChange && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AtSign className="h-4 w-4 text-atria-accent" />
+              Email change requests
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {!emailChangeRequests ? (
+              <div className="px-4 py-6 text-sm text-atria-muted">
+                Loading email change requests…
+              </div>
+            ) : emailChangeRequests.length === 0 ? (
+              <div className="px-4 py-6 text-sm text-atria-muted">
+                No email change requests yet.
+              </div>
+            ) : (
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Member</TableHeader>
+                    <TableHeader>Change</TableHeader>
+                    <TableHeader>Reason</TableHeader>
+                    <TableHeader>Status</TableHeader>
+                    <TableHeader>Requested</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {emailChangeRequests.map((request) => {
+                    const pill = emailRequestStatusPill(request.status)
+                    return (
+                      <TableRow key={request._id}>
+                        <TableCell className="font-medium">
+                          {request.memberName}
+                        </TableCell>
+                        <TableCell>
+                          {request.oldEmail} → {request.newEmail}
+                        </TableCell>
+                        <TableCell className="max-w-[220px] truncate">
+                          {request.reason}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={pill.variant}>{pill.label}</Badge>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-atria-muted">
+                          {formatDateUS(request.createdAt)}{' '}
+                          {formatTime(request.createdAt)}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

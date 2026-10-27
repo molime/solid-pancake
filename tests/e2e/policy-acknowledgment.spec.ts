@@ -19,7 +19,7 @@ import {
  * dev Convex deployment, and every other @auth spec acknowledges the fixture
  * staff users before this file runs (alphabetical order, workers: 1). To keep
  * "the modal appears" deterministic, this spec logs in as a FRESH Clerk admin
- * user (guaranteed to have all 3 policies pending), provisions its tenant
+ * user (guaranteed to have all 4 policies pending), provisions its tenant
  * membership through the app's own public `members:sync` mutation, and cleans
  * the Clerk user up afterwards.
  */
@@ -201,7 +201,7 @@ test.describe('staff policy acknowledgment modal', { tag: '@auth' }, () => {
       'policies:getPendingAcknowledgments',
       { clerkOrgId: E2E_ORG_ID },
     )) as Array<{ key: string }>
-    expect(pendingBefore).toHaveLength(3)
+    expect(pendingBefore).toHaveLength(4)
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
@@ -212,13 +212,13 @@ test.describe('staff policy acknowledgment modal', { tag: '@auth' }, () => {
     await expect(
       dialog.getByRole('heading', { name: 'Policy update — please review' }),
     ).toBeVisible()
-    await expect(dialog.getByText('Policy 1 of 3')).toBeVisible()
+    await expect(dialog.getByText('Policy 1 of 4')).toBeVisible()
     await expect(dialog.getByRole('checkbox')).toBeVisible()
     await expect(
       dialog.getByRole('button', { name: /I have read and agree/ }),
     ).toBeVisible()
 
-    // Acknowledge all three policies through the gated flow.
+    // Acknowledge all four policies through the gated flow.
     await acknowledgePoliciesIfPresent(page)
 
     // Modal is gone and the dashboard is usable.

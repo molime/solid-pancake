@@ -518,6 +518,33 @@ export default defineSchema({
     .index('by_tenant_created_at', ['tenantId', 'createdAt'])
     .index('by_status', ['status']),
 
+  // Email reassignment requests: an agency admin/HR files a request when an
+  // employee no longer controls their login email (agency admins can manage
+  // org membership but not Clerk user credentials). An ATRIA platform admin
+  // reviews and executes the Clerk-side swap via emailChanges.execute — the
+  // ONLY code path that changes a user's login email. Every step is audited
+  // into the tenant's audit trail.
+  emailChangeRequests: defineTable({
+    tenantId: v.id('tenants'),
+    memberClerkUserId: v.string(),
+    memberName: v.string(),
+    oldEmail: v.string(),
+    newEmail: v.string(),
+    reason: v.string(),
+    status: v.union(
+      v.literal('pending'),
+      v.literal('executed'),
+      v.literal('rejected'),
+    ),
+    requestedBy: v.string(), // clerkUserId of the requesting admin/HR
+    requesterName: v.string(),
+    executedBy: v.optional(v.string()), // clerkUserId of the platform admin
+    executedAt: v.optional(v.string()), // ISO
+    createdAt: v.string(), // ISO
+  })
+    .index('by_tenant_created_at', ['tenantId', 'createdAt'])
+    .index('by_status', ['status']),
+
   // Staff policy acknowledgments (compliance mini-phase, Stage 4). One row
   // per (tenant, user, policyKey, policyVersion): the canonical policy text
   // is versioned code constants (convex/_utils/staffPolicies.ts), so bumping

@@ -899,7 +899,7 @@ export function AppRouter() {
         <Route
           path="team"
           element={
-            <TenantRoleRouteGuard allowedRoles={['org:admin']}>
+            <TenantRoleRouteGuard allowedRoles={['org:admin', 'org:hr']}>
               <RouteSuspense>
                 <TeamPage />
               </RouteSuspense>
