@@ -304,10 +304,11 @@ export const getRequestInternal = internalQuery({
  *
  *   1. GET    /v1/users/{id}                     — capture the current
  *      primary email address id (must happen BEFORE the primary is switched)
- *   2. POST   /v1/users/{id}/email_addresses     — create the new email,
- *      pre-verified (the agency vouches for the employee). 422 = email taken.
+ *   2. POST   /v1/email_addresses              — create the new email
+ *      (user_id in body), pre-verified (the agency vouches for the
+ *      employee). 422 = email taken.
  *   3. PATCH  /v1/users/{id}                     — set the new email primary
- *   4. DELETE /v1/users/{id}/email_addresses/{old} — best effort; a failure
+ *   4. DELETE /v1/email_addresses/{old}          — best effort; a failure
  *      here only warns (the old address stays on the account, unlinked)
  */
 export const execute = action({
@@ -358,17 +359,18 @@ export const execute = action({
       null
 
     // 2. Create the new (verified) email address. 422 = already taken.
-    const createResponse = await fetch(
-      `${baseUrl}/users/${request.memberClerkUserId}/email_addresses`,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          email_address: request.newEmail,
-          verified: true,
-        }),
-      },
-    )
+    // Clerk's create endpoint is /v1/email_addresses with user_id in the
+    // body (the nested /users/{id}/email_addresses route is not a collection
+    // endpoint and returns 404 on POST).
+    const createResponse = await fetch(`${baseUrl}/email_addresses`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        user_id: request.memberClerkUserId,
+        email_address: request.newEmail,
+        verified: true,
+      }),
+    })
     if (createResponse.status === 422) {
       const payload = await createResponse.json()
       throw new ConvexError(
@@ -403,7 +405,7 @@ export const execute = action({
     // so a failure here must not roll anything back — only warn.
     if (oldEmailId && oldEmailId !== createdEmail.id) {
       const deleteResponse = await fetch(
-        `${baseUrl}/users/${request.memberClerkUserId}/email_addresses/${oldEmailId}`,
+        `${baseUrl}/email_addresses/${oldEmailId}`,
         { method: 'DELETE', headers },
       )
       if (!deleteResponse.ok) {

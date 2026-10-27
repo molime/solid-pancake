@@ -165,13 +165,13 @@ function stubClerkEmailSwap(employeeId = EMPLOYEE_ID) {
             })
           : respond(200, { id: employeeId })
       }
-      if (url.endsWith(`/v1/users/${employeeId}/email_addresses/email_old_id`)) {
-        return respond(200, { id: 'email_old_id' })
-      }
-      if (url.endsWith(`/v1/users/${employeeId}/email_addresses`)) {
+      if (url === 'https://api.clerk.com/v1/email_addresses') {
         return method === 'POST'
           ? respond(200, { id: 'email_new_id', email_address: 'new@example.com' })
-          : respond(200, { id: 'email_old_id' })
+          : respond(404, {})
+      }
+      if (url.endsWith('/v1/email_addresses/email_old_id')) {
+        return respond(200, { id: 'email_old_id' })
       }
       return respond(404, {})
     },
@@ -380,6 +380,7 @@ describe('emailChanges.execute', () => {
         String(url).endsWith('/email_addresses') && init?.method === 'POST',
     )
     expect(JSON.parse((postCall?.[1]?.body as string) ?? '{}')).toEqual({
+      user_id: EMPLOYEE_ID,
       email_address: 'new@example.com',
       verified: true,
     })
