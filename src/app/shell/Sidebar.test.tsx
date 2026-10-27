@@ -414,7 +414,7 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Team')).not.toBeInTheDocument()
   })
 
-  it('does not show the Logs nav item (hidden for all roles)', () => {
+  it('shows the Logs nav item to org:admin (admin-only since the compliance mini-phase)', () => {
     mockSidebarState({
       orgId: 'org_123',
       user: { fullName: 'Admin User', firstName: 'A' },
@@ -427,7 +427,10 @@ describe('Sidebar', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.queryByRole('link', { name: 'Logs' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Logs' })).toHaveAttribute(
+      'href',
+      '/logs',
+    )
     expect(
       screen.getByRole('link', { name: 'Audit Ready Center' }),
     ).toHaveAttribute('href', '/audit')

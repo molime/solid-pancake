@@ -6,6 +6,7 @@ import { PlatformSupportPage } from './PlatformSupportPage'
 const setStatusMock = vi.fn(() => Promise.resolve('ticket_1'))
 const addNoteMock = vi.fn(() => Promise.resolve('ticket_1'))
 const requestAccessMock = vi.fn(() => Promise.resolve(null))
+const executeEmailChangeMock = vi.fn(() => Promise.resolve(null))
 
 vi.mock('convex/react', async () => {
   const actual =
@@ -13,6 +14,7 @@ vi.mock('convex/react', async () => {
   return {
     ...actual,
     useQuery: vi.fn(),
+    useAction: vi.fn(() => executeEmailChangeMock),
     useMutation: vi.fn((fn: unknown) => {
       const name = getFunctionName(fn as Parameters<typeof getFunctionName>[0])
       if (name === 'supportTickets:setStatus') return setStatusMock
@@ -55,6 +57,8 @@ function mockQueries() {
       case 'platform:listTenantsWithUsage':
         return []
       case 'platform:listAuditEvents':
+        return []
+      case 'emailChanges:listPending':
         return []
       case 'supportTickets:listAll':
         return [openTicket]
