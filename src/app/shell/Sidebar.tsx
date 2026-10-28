@@ -237,7 +237,10 @@ const navItems: NavItem[] = [
     label: 'Team',
     path: '/team',
     icon: <Building2 className="h-4 w-4" />,
-    roles: ['org:admin'],
+    // org:hr included so HR can reach the email-change request flow added in
+    // the compliance mini-phase follow-up; sensitive actions on the page
+    // (role changes, removals) remain admin-gated in both UI and backend.
+    roles: ['org:admin', 'org:hr'],
   },
   {
     label: 'Candidates',
