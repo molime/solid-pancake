@@ -22,6 +22,9 @@ test.describe('phase1 lifecycle', { tag: '@auth' }, () => {
   test.beforeAll(assertE2ECredentialsConfigured)
 
   test('full caregiver-to-billing lifecycle with geofence disabled', async ({ page, context }) => {
+    // Serial multi-role lifecycle (caregiver -> coordinator -> admin); 120s is
+    // tight even on healthy machines and fails on loaded/throttled ones.
+    test.setTimeout(300_000)
     // Reset fixtures to a clean scheduled state with geofence disabled.
     await context.clearPermissions()
     await resetE2EShifts(page)

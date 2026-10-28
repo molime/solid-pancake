@@ -295,7 +295,14 @@ export async function signInWithClerk(
 
   const ticket = await createSignInTicket(email)
   if (ticket) {
-    await page.goto(`/sign-in?__clerk_ticket=${encodeURIComponent(ticket)}`)
+    // 'load' can exceed 30s on a cold vite dev server under machine load
+    // (travel laptop, throttled CPU); DOMContentLoaded is enough here because
+    // the assertions below already wait for the app to leave /sign-in and
+    // for the workspace to become ready.
+    await page.goto(`/sign-in?__clerk_ticket=${encodeURIComponent(ticket)}`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 60000,
+    })
     await expect(page).not.toHaveURL(/sign-in/, { timeout: 20000 })
     await page.waitForLoadState('networkidle')
     await selectOrgIfAsked(page, orgId, role)
