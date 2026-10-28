@@ -172,9 +172,11 @@ describe('Sidebar', () => {
     expect(screen.getByText('Cases')).toBeInTheDocument()
     expect(screen.getByText('Compliance')).toBeInTheDocument()
     expect(screen.getByText('Notifications')).toBeInTheDocument()
+    // HR reaches /team for the email-change request flow (route guard allows
+    // it; role changes and removals on the page stay admin-gated).
+    expect(screen.getByText('Team')).toBeInTheDocument()
 
     expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
-    expect(screen.queryByText('Team')).not.toBeInTheDocument()
     expect(screen.queryByText('Review')).not.toBeInTheDocument()
     expect(screen.queryByText('Billing')).not.toBeInTheDocument()
     expect(screen.queryByText('Admin')).not.toBeInTheDocument()
