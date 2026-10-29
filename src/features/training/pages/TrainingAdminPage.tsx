@@ -12,6 +12,7 @@ import { Input } from '@/shared/ui/Input'
 import { Select } from '@/shared/ui/Select'
 import { sanitizeConvexError } from '@/shared/lib/sanitizeConvexError'
 import { cn } from '@/shared/lib/cn'
+import { formatDateUS } from '@/shared/format'
 import { ExternalTrainingAdminCard } from '../components/ExternalTrainingAdminCard'
 import type { TrainingStep } from '../model/courseTypes'
 import {
@@ -45,6 +46,13 @@ export function TrainingAdminPage() {
     api.training.listAllCourses,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
+  const completions = useQuery(
+    api.training.listCompletions,
+    clerkOrgId ? { clerkOrgId } : 'skip',
+  )
+  // Fetched once here and passed down so AssignPanel/CompletionsPanel don't
+  // each issue their own members query.
+  const members = useQuery(api.members.list, clerkOrgId ? { clerkOrgId } : 'skip')
   const createCourse = useMutation(api.training.createCourse)
   const toggleCourse = useMutation(api.training.toggleCourse)
   const deleteCourse = useMutation(api.training.deleteCourse)
@@ -90,6 +98,19 @@ export function TrainingAdminPage() {
     | 'safety'
     | 'skills'
     | 'other'
+
+  // courseId -> (clerkUserId -> completion) for the completions roster.
+  const completionLookup = new Map<
+    string,
+    Map<string, { completedAt: string; status: string }>
+  >()
+  for (const course of completions ?? []) {
+    const byUser = new Map<string, { completedAt: string; status: string }>()
+    for (const c of course.completions) {
+      byUser.set(c.clerkUserId, { completedAt: c.completedAt, status: c.status })
+    }
+    completionLookup.set(course.courseId, byUser)
+  }
 
   if (!clerkOrgId || courses === undefined) {
     return <AppLoader fullScreen label="Loading admin..." />
@@ -464,8 +485,16 @@ export function TrainingAdminPage() {
                 </Button>
               </div>
             </CardContent>
+            <CompletionsPanel
+              members={members}
+              completionsByUser={completionLookup.get(course._id)}
+            />
             {assigningFor === course._id && clerkOrgId && (
-              <AssignPanel clerkOrgId={clerkOrgId} courseId={course._id} />
+              <AssignPanel
+                clerkOrgId={clerkOrgId}
+                courseId={course._id}
+                members={members}
+              />
             )}
           </Card>
         ))}
@@ -478,11 +507,12 @@ export function TrainingAdminPage() {
 function AssignPanel({
   clerkOrgId,
   courseId,
+  members,
 }: {
   clerkOrgId: string
   courseId: Id<'trainingCourses'>
+  members: MemberLite[] | undefined
 }) {
-  const members = useQuery(api.members.list, { clerkOrgId })
   const assignments = useQuery(api.training.listCourseAssignments, {
     clerkOrgId,
     courseId,
@@ -660,6 +690,155 @@ function AssignPanel({
         Assigned members get a notification and see the course in their hub even
         if their role doesn&apos;t include it.
       </p>
+    </div>
+  )
+}
+
+type MemberLite = {
+  clerkUserId: string
+  displayName: string
+  email: string
+  role: string
+}
+
+const COMPLETIONS_ROW_CAP = 50
+
+const PILL_BASE =
+  'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide'
+
+/** Who completed a course: one row per tenant member, with a status pill. */
+function CompletionsPanel({
+  members,
+  completionsByUser,
+}: {
+  members: MemberLite[] | undefined
+  completionsByUser:
+    | Map<string, { completedAt: string; status: string }>
+    | undefined
+}) {
+  const [search, setSearch] = useState('')
+  const [showAll, setShowAll] = useState(false)
+
+  const completedCount = (members ?? []).filter(
+    (m) => completionsByUser?.get(m.clerkUserId)?.status === 'completed',
+  ).length
+
+  const term = search.trim().toLowerCase()
+  const rows = (members ?? [])
+    .map((member) => ({
+      member,
+      completion: completionsByUser?.get(member.clerkUserId),
+    }))
+    .filter(
+      ({ member }) =>
+        !term ||
+        member.displayName.toLowerCase().includes(term) ||
+        member.email.toLowerCase().includes(term),
+    )
+    .sort((a, b) => {
+      const byDateDesc = () =>
+        new Date(b.completion!.completedAt).getTime() -
+        new Date(a.completion!.completedAt).getTime()
+      const aCompleted = a.completion?.status === 'completed'
+      const bCompleted = b.completion?.status === 'completed'
+      if (aCompleted !== bCompleted) return aCompleted ? -1 : 1
+      if (aCompleted) return byDateDesc()
+      const aExpired = a.completion?.status === 'expired'
+      const bExpired = b.completion?.status === 'expired'
+      if (aExpired !== bExpired) return aExpired ? -1 : 1
+      if (aExpired) return byDateDesc()
+      return a.member.displayName.localeCompare(b.member.displayName)
+    })
+
+  const visibleRows = showAll ? rows : rows.slice(0, COMPLETIONS_ROW_CAP)
+
+  const renderPill = (
+    completion: { completedAt: string; status: string } | undefined,
+  ) => {
+    if (!completion) {
+      return (
+        <span className={cn(PILL_BASE, 'bg-atria-neutral-bg text-atria-neutral')}>
+          Not started
+        </span>
+      )
+    }
+    if (completion.status === 'completed') {
+      return (
+        <span className={cn(PILL_BASE, 'bg-atria-success-bg text-atria-success')}>
+          Completed · {formatDateUS(completion.completedAt)}
+        </span>
+      )
+    }
+    if (completion.status === 'expired') {
+      return (
+        <span className={cn(PILL_BASE, 'bg-atria-warning-bg text-atria-warning')}>
+          Expired · {formatDateUS(completion.completedAt)}
+        </span>
+      )
+    }
+    return (
+      <span className={cn(PILL_BASE, 'bg-atria-neutral-bg text-atria-neutral')}>
+        {completion.status}
+      </span>
+    )
+  }
+
+  return (
+    <div className="space-y-3 border-t border-atria-border px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="space-y-0.5">
+          <h4 className="text-xs font-medium uppercase tracking-wider text-atria-text-muted">
+            Completions
+          </h4>
+          <p className="text-xs text-atria-text-muted">
+            {completedCount} of {members?.length ?? 0} members completed
+          </p>
+        </div>
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name or email…"
+          className="h-8 w-64 text-sm"
+        />
+      </div>
+      {members === undefined ? (
+        <p className="text-xs text-atria-text-muted">Loading completions…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-xs text-atria-text-muted">No members match.</p>
+      ) : (
+        <ul className="space-y-1">
+          {visibleRows.map(({ member, completion }) => (
+            <li
+              key={member.clerkUserId}
+              className="flex items-center justify-between gap-2 text-sm"
+            >
+              <span className="flex min-w-0 items-center gap-2 text-atria-text-secondary">
+                <span className="truncate">{member.displayName}</span>
+                {member.role === 'org:candidate' && (
+                  <span
+                    className={cn(
+                      PILL_BASE,
+                      'bg-atria-neutral-bg text-atria-neutral',
+                    )}
+                  >
+                    Candidate
+                  </span>
+                )}
+              </span>
+              {renderPill(completion)}
+            </li>
+          ))}
+        </ul>
+      )}
+      {rows.length > COMPLETIONS_ROW_CAP && (
+        <button
+          type="button"
+          className="text-xs font-medium text-atria-accent hover:underline"
+          onClick={() => setShowAll((s) => !s)}
+        >
+          {showAll ? 'Show fewer' : `Show all ${rows.length}`}
+        </button>
+      )}
     </div>
   )
 }

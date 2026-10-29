@@ -763,3 +763,119 @@ describe('external training assignments', () => {
     expect(resubmitted?.status).toBe('submitted')
   })
 })
+
+describe('training.listCompletions', () => {
+  async function seedCompletionsRoster(t: ReturnType<typeof createTestConvex>) {
+    const clerkOrgId = 'org_list_completions'
+    const tenantId = await seedTenant(t, clerkOrgId)
+    await t.run(async (ctx) => {
+      await ctx.db.insert('trainingCourses', {
+        ...SAMPLE_COURSE,
+        tenantId,
+        active: true,
+        isDefault: false,
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('platformTrainingCompletions', {
+        tenantId,
+        clerkUserId: 'user_cg',
+        trainingId: 'test_course',
+        completedAt: '2026-09-01T12:00:00.000Z',
+        status: 'completed',
+        expiresAt: '2027-09-01T12:00:00.000Z',
+      })
+    })
+    return { clerkOrgId, tenantId }
+  }
+
+  it('returns per-course rosters with clerkUserId, completedAt, and status for org:admin', async () => {
+    const t = createTestConvex()
+    const { clerkOrgId } = await seedCompletionsRoster(t)
+
+    const result = await t
+      .withIdentity({
+        subject: 'user_admin',
+        org_id: clerkOrgId,
+        org_role: 'org:admin',
+      })
+      .query(api.training.listCompletions, { clerkOrgId })
+
+    expect(result).toHaveLength(1)
+    expect(result[0].courseKey).toBe('test_course')
+    expect(result[0].title).toBe('Test Course')
+    expect(result[0].completions).toHaveLength(1)
+    expect(result[0].completions[0]).toEqual({
+      clerkUserId: 'user_cg',
+      completedAt: '2026-09-01T12:00:00.000Z',
+      status: 'completed',
+    })
+  })
+
+  it('denies org:coordinator', async () => {
+    const t = createTestConvex()
+    const { clerkOrgId, tenantId } = await seedCompletionsRoster(t)
+    await t.run(async (ctx) => {
+      await ctx.db.insert('tenantMembers', {
+        tenantId,
+        clerkUserId: 'user_coord',
+        role: 'org:coordinator',
+        displayName: 'Coordinator',
+        email: 'coord@example.com',
+      })
+    })
+
+    await expect(
+      t
+        .withIdentity({
+          subject: 'user_coord',
+          org_id: clerkOrgId,
+          org_role: 'org:coordinator',
+        })
+        .query(api.training.listCompletions, { clerkOrgId }),
+    ).rejects.toThrow(/Forbidden/)
+  })
+
+  it('returns no tenant A data to a tenant B admin', async () => {
+    const t = createTestConvex()
+    const { clerkOrgId: orgA } = await seedCompletionsRoster(t)
+
+    // Tenant B with its own admin.
+    const orgB = 'org_list_completions_b'
+    await t.run(async (ctx) => {
+      const tenantB = await ctx.db.insert('tenants', {
+        clerkOrgId: orgB,
+        name: 'Other Agency',
+        slug: 'other-agency',
+        createdAt: new Date().toISOString(),
+      })
+      await ctx.db.insert('tenantMembers', {
+        tenantId: tenantB,
+        clerkUserId: 'user_b_admin',
+        role: 'org:admin',
+        displayName: 'B Admin',
+        email: 'b-admin@example.com',
+      })
+    })
+
+    // B admin cannot read A's roster at all.
+    await expect(
+      t
+        .withIdentity({
+          subject: 'user_b_admin',
+          org_id: orgB,
+          org_role: 'org:admin',
+        })
+        .query(api.training.listCompletions, { clerkOrgId: orgA }),
+    ).rejects.toThrow(/Forbidden/)
+
+    // B admin reading its own (empty) tenant sees nothing of A's completions.
+    const own = await t
+      .withIdentity({
+        subject: 'user_b_admin',
+        org_id: orgB,
+        org_role: 'org:admin',
+      })
+      .query(api.training.listCompletions, { clerkOrgId: orgB })
+    expect(own).toEqual([])
+  })
+})
