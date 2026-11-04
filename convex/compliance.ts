@@ -127,8 +127,14 @@ export const listComplianceItems = query({
     ).toISOString()
 
     return items.map((item) => {
-      let computedStatus: 'compliant' | 'expiring' | 'expired' = 'compliant'
-      if (item.expiresAt && item.expiresAt < nowIso) {
+      let computedStatus:
+        | 'compliant'
+        | 'expiring'
+        | 'expired'
+        | 'overridden' = 'compliant'
+      if (item.overrideStatus === 'overridden') {
+        computedStatus = 'overridden'
+      } else if (item.expiresAt && item.expiresAt < nowIso) {
         computedStatus = 'expired'
       } else if (item.expiresAt && item.expiresAt <= expiringCutoff) {
         computedStatus = 'expiring'
@@ -141,6 +147,7 @@ export const listComplianceItems = query({
         status: item.status,
         expiresAt: item.expiresAt,
         computedStatus,
+        overrideStatus: item.overrideStatus ?? null,
         employeeProfileId: profileIdBySubject.get(item.subjectId) ?? null,
       }
     })
@@ -195,7 +202,26 @@ export async function checkComplianceBlocked(
 
   const nowIso = new Date().toISOString()
 
+  // Supersede rule: only the LATEST item per category counts. A renewal
+  // upload (newer createdAt, future expiresAt) or a later upload replacing a
+  // rejected one supersedes older versions of the same credential; a stale
+  // expired/rejected row must not block billing forever.
+  const latestByCategory = new Map<string, (typeof items)[number]>()
   for (const item of items) {
+    const existing = latestByCategory.get(item.category)
+    if (
+      !existing ||
+      item.createdAt > existing.createdAt ||
+      (item.createdAt === existing.createdAt &&
+        (item._creationTime > existing._creationTime ||
+          (item._creationTime === existing._creationTime &&
+            (item._id as string) > (existing._id as string))))
+    ) {
+      latestByCategory.set(item.category, item)
+    }
+  }
+
+  for (const item of latestByCategory.values()) {
     if (item.overrideStatus === 'overridden') continue
     if (item.status === 'rejected') {
       return { blocked: true, reason: `Rejected credential: ${item.category}` }
@@ -248,12 +274,19 @@ export const overrideComplianceBlock = mutation({
     }
 
     const now = new Date().toISOString()
+    // Normalize a date-only newExpiry to the same ISO format upload renewals
+    // write (documentArchive.addEmployeeCredentialDocument), so the row's
+    // computedStatus no longer stays 'expired' after an override.
+    const normalizedExpiry =
+      args.newExpiry && /^\d{4}-\d{2}-\d{2}$/.test(args.newExpiry)
+        ? `${args.newExpiry}T00:00:00.000Z`
+        : args.newExpiry
     await ctx.db.patch(args.documentArchiveItemId, {
       overrideStatus: 'overridden',
       overrideReason: args.reason,
       overrideBy: identity.subject,
       overrideAt: now,
-      ...(args.newExpiry ? { expiresAt: args.newExpiry } : {}),
+      ...(normalizedExpiry ? { expiresAt: normalizedExpiry } : {}),
     })
 
     await ctx.runMutation(internal.audit.record, {
@@ -342,7 +375,23 @@ export async function computeComplianceGaps(
     )
     const missing = missingRequirements.map((r) => r.label)
     const missingCategories = missingRequirements.map((r) => r.category)
-    const expiredItems = allItems.filter(
+    // Same supersede rule as checkComplianceBlocked: only the latest item per
+    // category is evaluated for expiry — a renewal supersedes the stale row.
+    const latestByCategory = new Map<string, (typeof allItems)[number]>()
+    for (const item of allItems) {
+      const existing = latestByCategory.get(item.category)
+      if (
+        !existing ||
+        item.createdAt > existing.createdAt ||
+        (item.createdAt === existing.createdAt &&
+          (item._creationTime > existing._creationTime ||
+            (item._creationTime === existing._creationTime &&
+              (item._id as string) > (existing._id as string))))
+      ) {
+        latestByCategory.set(item.category, item)
+      }
+    }
+    const expiredItems = [...latestByCategory.values()].filter(
       (item) =>
         item.overrideStatus !== 'overridden' &&
         item.expiresAt &&

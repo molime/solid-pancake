@@ -4261,3 +4261,129 @@ describe('DE 34 new hire report — employee profile flows', () => {
     expect(doc?.uploadedSignedStorageId).toBe('storage-de34-completed-only')
   })
 })
+
+describe('download URLs tolerate rows without storageId', () => {
+  async function seedHrWithCandidate(
+    t: ReturnType<typeof createTestConvex>,
+    clerkOrgId: string,
+    hrId: string,
+    candidateUserId: string,
+  ) {
+    await seedTenant(t, clerkOrgId, `admin_${clerkOrgId}`)
+    await seedHR(t, clerkOrgId, hrId)
+    return t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', clerkOrgId))
+        .unique()
+      if (!tenant) throw new Error('Tenant not found.')
+      const candidateId = await ctx.db.insert('candidates', {
+        tenantId: tenant._id,
+        clerkUserId: candidateUserId,
+        email: `${candidateUserId}@example.com`,
+        displayName: 'Download Candidate',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+      })
+      return { tenantId: tenant._id, candidateId }
+    })
+  }
+
+  it('getPrefilledDocumentDownloadUrl returns null when the file was never generated', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_dl_null_prefilled'
+    const hrId = 'user_hr_dl_null_prefilled'
+    const candidateUserId = 'user_cand_dl_null_prefilled'
+    const { tenantId, candidateId } = await seedHrWithCandidate(
+      t,
+      clerkOrgId,
+      hrId,
+      candidateUserId,
+    )
+
+    const documentId = await t.run(async (ctx) =>
+      ctx.db.insert('prefilledDocuments', {
+        tenantId,
+        candidateId,
+        documentType: 'i9_form',
+        generatedAt: new Date().toISOString(),
+        generatedBy: 'system',
+        // storageId intentionally absent — the historical broken row.
+      }),
+    )
+
+    const url = await asHR(t, hrId, clerkOrgId).query(
+      api.candidates.getPrefilledDocumentDownloadUrl,
+      { clerkOrgId, documentId: documentId as Id<'prefilledDocuments'> },
+    )
+    expect(url).toBeNull()
+  })
+
+  it('getPrefilledDocumentDownloadUrl still returns a URL when storageId exists', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_dl_ok_prefilled'
+    const hrId = 'user_hr_dl_ok_prefilled'
+    const candidateUserId = 'user_cand_dl_ok_prefilled'
+    const { tenantId, candidateId } = await seedHrWithCandidate(
+      t,
+      clerkOrgId,
+      hrId,
+      candidateUserId,
+    )
+
+    const storageId = await t.run(async (ctx) =>
+      ctx.storage.store(new Blob(['fake-pdf-bytes'], { type: 'application/pdf' })),
+    )
+    const documentId = await t.run(async (ctx) =>
+      ctx.db.insert('prefilledDocuments', {
+        tenantId,
+        candidateId,
+        documentType: 'i9_form',
+        storageId,
+        generatedAt: new Date().toISOString(),
+        generatedBy: 'system',
+      }),
+    )
+
+    const url = await asHR(t, hrId, clerkOrgId).query(
+      api.candidates.getPrefilledDocumentDownloadUrl,
+      { clerkOrgId, documentId: documentId as Id<'prefilledDocuments'> },
+    )
+    expect(typeof url).toBe('string')
+  })
+
+  it('getDocumentVersionDownloadUrl returns null url when the version storageId is invalid', async () => {
+    const t = createTestConvex()
+    const clerkOrgId = 'org_dl_null_version'
+    const hrId = 'user_hr_dl_null_version'
+    const candidateUserId = 'user_cand_dl_null_version'
+    const { tenantId, candidateId } = await seedHrWithCandidate(
+      t,
+      clerkOrgId,
+      hrId,
+      candidateUserId,
+    )
+
+    // The schema requires storageId, so a broken version row is one whose
+    // storageId no longer resolves — the query must return null, not throw.
+    const versionId = await t.run(async (ctx) =>
+      ctx.db.insert('prefilledDocumentVersions', {
+        tenantId,
+        candidateId,
+        documentType: 'i9_form',
+        storageId: 'storage_missing',
+        fileName: 'i9.pdf',
+        uploadedBy: 'candidate',
+        createdAt: new Date().toISOString(),
+      }),
+    )
+
+    const result = await asHR(t, hrId, clerkOrgId).query(
+      api.candidates.getDocumentVersionDownloadUrl,
+      { clerkOrgId, versionId: versionId as Id<'prefilledDocumentVersions'> },
+    )
+    expect(result).not.toBeNull()
+    expect(result!.url).toBeNull()
+    expect(result!.fileName).toBe('i9.pdf')
+  })
+})

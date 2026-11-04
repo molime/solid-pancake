@@ -2401,11 +2401,17 @@ export const getPrefilledDocumentDownloadUrl = query({
 
     const variant = args.variant ?? 'prefilled'
     const storageId = variant === 'signed' ? doc.uploadedSignedStorageId : doc.storageId
-    if (!storageId) {
-      throw new ConvexError(variant === 'signed' ? 'Signed document has not been uploaded yet.' : 'Document has not been generated yet.')
-    }
+    // Historical rows may have no generated file (storageId undefined) — the
+    // client link renders nothing on null instead of crashing the tab via the
+    // React error boundary.
+    if (!storageId) return null
 
-    return await ctx.storage.getUrl(storageId)
+    try {
+      return await ctx.storage.getUrl(storageId)
+    } catch {
+      // Invalid/missing storage id — same contract as above.
+      return null
+    }
   },
 })
 
@@ -3248,7 +3254,10 @@ export const getDocumentVersionDownloadUrl = query({
       throw new ConvexError('Document version not found.')
     }
 
-    const url = await ctx.storage.getUrl(version.storageId)
+    if (!version.storageId) return null
+    // Invalid/missing storage id must not throw into the client's error
+    // boundary — the link renders nothing on a null url.
+    const url = await ctx.storage.getUrl(version.storageId).catch(() => null)
     return {
       url,
       fileName: version.fileName,

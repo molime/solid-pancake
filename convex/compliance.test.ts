@@ -76,7 +76,13 @@ async function seedTenant(t: TestConvex) {
 async function seedArchiveItem(
   t: TestConvex,
   seed: { tenantId: Id<'tenants'>; employeeProfileId: Id<'employeeProfiles'>; fileId: Id<'files'> },
-  overrides: { status?: string; category?: string; expiresAt?: string; overrideStatus?: string },
+  overrides: {
+    status?: string
+    category?: string
+    expiresAt?: string
+    overrideStatus?: string
+    createdAt?: string
+  },
 ) {
   return t.run(async (ctx) =>
     ctx.db.insert('documentArchiveItems', {
@@ -88,7 +94,7 @@ async function seedArchiveItem(
       status: overrides.status ?? 'verified',
       expiresAt: overrides.expiresAt,
       overrideStatus: overrides.overrideStatus,
-      createdAt: new Date().toISOString(),
+      createdAt: overrides.createdAt ?? new Date().toISOString(),
     }),
   )
 }
@@ -250,6 +256,213 @@ describe('checkComplianceBlocked', () => {
   })
 })
 
+describe('checkComplianceBlocked — latest-per-category supersede', () => {
+  it('a renewal (newer item, future expiry) supersedes an old expired row', async () => {
+    const t = createTestConvex()
+    const seed = await seedTenant(t)
+    await seedArchiveItem(t, seed, {
+      category: 'car_insurance',
+      expiresAt: '2020-01-01T00:00:00.000Z',
+      createdAt: '2025-01-01T00:00:00.000Z',
+    })
+    await seedArchiveItem(t, seed, {
+      category: 'car_insurance',
+      expiresAt: '2027-06-01T00:00:00.000Z',
+      createdAt: '2026-06-01T00:00:00.000Z',
+    })
+
+    const result = await t.run(async (ctx) =>
+      checkComplianceBlocked(ctx, seed.tenantId, CAREGIVER_ID),
+    )
+
+    expect(result.blocked).toBe(false)
+  })
+
+  it('a newer verified item supersedes an old rejected row in the same category', async () => {
+    const t = createTestConvex()
+    const seed = await seedTenant(t)
+    await seedArchiveItem(t, seed, {
+      status: 'rejected',
+      category: 'license',
+      createdAt: '2025-01-01T00:00:00.000Z',
+    })
+    await seedArchiveItem(t, seed, {
+      status: 'verified',
+      category: 'license',
+      createdAt: '2026-06-01T00:00:00.000Z',
+    })
+
+    const result = await t.run(async (ctx) =>
+      checkComplianceBlocked(ctx, seed.tenantId, CAREGIVER_ID),
+    )
+
+    expect(result.blocked).toBe(false)
+  })
+
+  it('an expired latest item in one category does not implicate other categories', async () => {
+    const t = createTestConvex()
+    const seed = await seedTenant(t)
+    // Stale expired car_insurance superseded by a renewal; cpr's latest row
+    // is genuinely expired and is the blocker.
+    await seedArchiveItem(t, seed, {
+      category: 'car_insurance',
+      expiresAt: '2020-01-01T00:00:00.000Z',
+      createdAt: '2025-01-01T00:00:00.000Z',
+    })
+    await seedArchiveItem(t, seed, {
+      category: 'car_insurance',
+      expiresAt: '2027-06-01T00:00:00.000Z',
+      createdAt: '2026-06-01T00:00:00.000Z',
+    })
+    await seedArchiveItem(t, seed, {
+      category: 'cpr',
+      expiresAt: '2020-01-01T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+
+    const result = await t.run(async (ctx) =>
+      checkComplianceBlocked(ctx, seed.tenantId, CAREGIVER_ID),
+    )
+
+    expect(result.blocked).toBe(true)
+    expect(result.reason).toContain('cpr')
+    expect(result.reason).not.toContain('car_insurance')
+  })
+
+  it('an overridden latest item does not block even when older rows are bad', async () => {
+    const t = createTestConvex()
+    const seed = await seedTenant(t)
+    await seedArchiveItem(t, seed, {
+      status: 'rejected',
+      category: 'license',
+      createdAt: '2025-01-01T00:00:00.000Z',
+    })
+    await seedArchiveItem(t, seed, {
+      status: 'verified',
+      expiresAt: '2020-01-01T00:00:00.000Z',
+      overrideStatus: 'overridden',
+      createdAt: '2026-06-01T00:00:00.000Z',
+    })
+
+    const result = await t.run(async (ctx) =>
+      checkComplianceBlocked(ctx, seed.tenantId, CAREGIVER_ID),
+    )
+
+    expect(result.blocked).toBe(false)
+  })
+
+  it('still blocks on a missing required credential with no items at all', async () => {
+    const t = createTestConvex()
+    const seed = await seedTenant(t)
+    await seedRequirement(t, seed.tenantId, {
+      category: 'tb_test',
+      label: 'TB Test',
+      isRequired: true,
+    })
+
+    const result = await t.run(async (ctx) =>
+      checkComplianceBlocked(ctx, seed.tenantId, CAREGIVER_ID),
+    )
+
+    expect(result.blocked).toBe(true)
+    expect(result.reason).toContain('TB Test')
+  })
+})
+
+describe('computeComplianceGaps — latest-per-category supersede', () => {
+  it('a renewal clears the stale expired row from expired/expiredCategories', async () => {
+    const t = createTestConvex()
+    const seed = await seedTenant(t)
+    await seedRequirement(t, seed.tenantId, {
+      category: 'car_insurance',
+      label: 'Car Insurance',
+      isRequired: true,
+    })
+    await seedArchiveItem(t, seed, {
+      category: 'car_insurance',
+      expiresAt: '2020-01-01T00:00:00.000Z',
+      createdAt: '2025-01-01T00:00:00.000Z',
+    })
+    await seedArchiveItem(t, seed, {
+      category: 'car_insurance',
+      expiresAt: '2027-06-01T00:00:00.000Z',
+      createdAt: '2026-06-01T00:00:00.000Z',
+    })
+
+    const gaps = await asAdmin(t).query(api.compliance.complianceGaps, {
+      clerkOrgId: CLERK_ORG_ID,
+    })
+
+    expect(gaps).toHaveLength(1)
+    expect(gaps[0]!.expired).toEqual([])
+    expect(gaps[0]!.expiredCategories).toEqual([])
+  })
+
+  it('expired latest item in one category does not mark another category expired', async () => {
+    const t = createTestConvex()
+    const seed = await seedTenant(t)
+    await seedRequirement(t, seed.tenantId, {
+      category: 'car_insurance',
+      label: 'Car Insurance',
+      isRequired: true,
+    })
+    await seedRequirement(t, seed.tenantId, {
+      category: 'cpr',
+      label: 'CPR Certification',
+      isRequired: true,
+    })
+    await seedArchiveItem(t, seed, {
+      category: 'car_insurance',
+      expiresAt: '2027-06-01T00:00:00.000Z',
+      createdAt: '2026-06-01T00:00:00.000Z',
+    })
+    await seedArchiveItem(t, seed, {
+      category: 'cpr',
+      expiresAt: '2020-01-01T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+
+    const gaps = await asAdmin(t).query(api.compliance.complianceGaps, {
+      clerkOrgId: CLERK_ORG_ID,
+    })
+
+    expect(gaps).toHaveLength(1)
+    expect(gaps[0]!.expired).toEqual(['CPR Certification'])
+    expect(gaps[0]!.expiredCategories).toEqual(['cpr'])
+  })
+
+  it('overridden items keep listing in overridden/overriddenCategories regardless of recency', async () => {
+    const t = createTestConvex()
+    const seed = await seedTenant(t)
+    await seedRequirement(t, seed.tenantId, {
+      category: 'car_insurance',
+      label: 'Car Insurance',
+      isRequired: true,
+    })
+    // Older overridden row stays listed even though a newer renewal exists.
+    await seedArchiveItem(t, seed, {
+      category: 'car_insurance',
+      expiresAt: '2020-01-01T00:00:00.000Z',
+      overrideStatus: 'overridden',
+      createdAt: '2025-01-01T00:00:00.000Z',
+    })
+    await seedArchiveItem(t, seed, {
+      category: 'car_insurance',
+      expiresAt: '2027-06-01T00:00:00.000Z',
+      createdAt: '2026-06-01T00:00:00.000Z',
+    })
+
+    const gaps = await asAdmin(t).query(api.compliance.complianceGaps, {
+      clerkOrgId: CLERK_ORG_ID,
+    })
+
+    expect(gaps).toHaveLength(1)
+    expect(gaps[0]!.overridden).toEqual(['Car Insurance'])
+    expect(gaps[0]!.overriddenCategories).toEqual(['car_insurance'])
+    expect(gaps[0]!.expired).toEqual([])
+  })
+})
+
 describe('listComplianceItems', () => {
   it('returns the resolved subject name and employeeProfileId per item', async () => {
     const t = createTestConvex()
@@ -264,6 +477,57 @@ describe('listComplianceItems', () => {
     expect(items[0]!.subjectName).toBe('Caregiver One')
     expect(items[0]!.computedStatus).toBe('compliant')
     expect(items[0]!.employeeProfileId).toBe(seed.employeeProfileId)
+  })
+
+  it('surfaces overrideStatus and computedStatus overridden on overridden rows', async () => {
+    const t = createTestConvex()
+    const seed = await seedTenant(t)
+    await seedArchiveItem(t, seed, {
+      expiresAt: '2020-01-01T00:00:00.000Z',
+      overrideStatus: 'overridden',
+    })
+
+    const items = await asAdmin(t).query(api.compliance.listComplianceItems, {
+      clerkOrgId: CLERK_ORG_ID,
+    })
+
+    expect(items).toHaveLength(1)
+    expect(items[0]!.overrideStatus).toBe('overridden')
+    expect(items[0]!.computedStatus).toBe('overridden')
+  })
+
+  it('returns overrideStatus null on non-overridden rows', async () => {
+    const t = createTestConvex()
+    const seed = await seedTenant(t)
+    await seedArchiveItem(t, seed, {})
+
+    const items = await asAdmin(t).query(api.compliance.listComplianceItems, {
+      clerkOrgId: CLERK_ORG_ID,
+    })
+
+    expect(items[0]!.overrideStatus).toBeNull()
+    expect(items[0]!.computedStatus).toBe('compliant')
+  })
+})
+
+describe('overrideComplianceBlock', () => {
+  it('normalizes a date-only newExpiry to the ISO format uploads write', async () => {
+    const t = createTestConvex()
+    const seed = await seedTenant(t)
+    const itemId = await seedArchiveItem(t, seed, {
+      expiresAt: '2020-01-01T00:00:00.000Z',
+    })
+
+    await asAdmin(t).mutation(api.compliance.overrideComplianceBlock, {
+      clerkOrgId: CLERK_ORG_ID,
+      documentArchiveItemId: itemId as Id<'documentArchiveItems'>,
+      reason: 'Renewal received by email',
+      newExpiry: '2027-03-01',
+    })
+
+    const item = await t.run(async (ctx) => ctx.db.get(itemId))
+    expect(item?.overrideStatus).toBe('overridden')
+    expect(item?.expiresAt).toBe('2027-03-01T00:00:00.000Z')
   })
 })
 

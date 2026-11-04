@@ -439,6 +439,7 @@ function DocumentsTab({
                     <PrefilledDocDownloadLink
                       clerkOrgId={clerkOrgId}
                       documentId={doc._id}
+                      storageId={doc.storageId ?? null}
                     />
                   </TableCell>
                 </TableRow>
@@ -458,6 +459,7 @@ function DocumentsTab({
                     <DocumentVersionDownloadLink
                       clerkOrgId={clerkOrgId}
                       versionId={version._id}
+                      storageId={version.storageId ?? null}
                     />
                   </TableCell>
                 </TableRow>
@@ -481,15 +483,24 @@ function DocumentsTab({
 function PrefilledDocDownloadLink({
   clerkOrgId,
   documentId,
+  storageId,
 }: {
   clerkOrgId: string
   documentId: Id<'prefilledDocuments'>
+  storageId: string | null
 }) {
-  const url = useQuery(api.candidates.getPrefilledDocumentDownloadUrl, {
-    clerkOrgId,
-    documentId,
-    variant: 'prefilled',
-  })
+  // Historical rows may have no generated file — skip the query entirely so a
+  // missing storageId can never throw into the tab's error boundary.
+  const url = useQuery(
+    api.candidates.getPrefilledDocumentDownloadUrl,
+    storageId
+      ? {
+          clerkOrgId,
+          documentId,
+          variant: 'prefilled',
+        }
+      : 'skip',
+  )
   const auditDownload = useAuditFileDownload()
   if (!url) return null
   return (
@@ -515,14 +526,16 @@ function PrefilledDocDownloadLink({
 function DocumentVersionDownloadLink({
   clerkOrgId,
   versionId,
+  storageId,
 }: {
   clerkOrgId: string
   versionId: Id<'prefilledDocumentVersions'>
+  storageId: string | null
 }) {
-  const result = useQuery(api.candidates.getDocumentVersionDownloadUrl, {
-    clerkOrgId,
-    versionId,
-  })
+  const result = useQuery(
+    api.candidates.getDocumentVersionDownloadUrl,
+    storageId ? { clerkOrgId, versionId } : 'skip',
+  )
   if (!result?.url) return null
   return (
     <a

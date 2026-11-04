@@ -597,8 +597,8 @@ describe('candidates.getDocumentVersionDownloadUrl', () => {
       api.candidates.getDocumentVersionDownloadUrl,
       { clerkOrgId: orgA, versionId },
     )
-    expect(result.url).toBeTruthy()
-    expect(result.fileName).toBe('w4-v1.pdf')
+    expect(result!.url).toBeTruthy()
+    expect(result!.fileName).toBe('w4-v1.pdf')
   })
 
   it('denies org:hr of tenant B a tenant A version', async () => {

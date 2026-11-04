@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { KpiCard } from '@/shared/ui/KpiCard'
 import { StatusBadge, type StatusBadgeVariant } from '@/shared/ui/StatusBadge'
 import { EmptyState } from '@/shared/ui/EmptyState'
-import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import {
   Dialog,
@@ -74,8 +73,9 @@ const obligationStatusLabel: Record<ObligationStatus, string> = {
 }
 
 // Collapsed per-employee summary dot: red wins over amber, amber over green.
-// listComplianceItems computedStatus is 'compliant' | 'expiring' | 'expired';
-// the raw status adds 'rejected' (there is no per-item 'missing' state).
+// listComplianceItems computedStatus is 'compliant' | 'expiring' | 'expired'
+// | 'overridden'; the raw status adds 'rejected' (there is no per-item
+// 'missing' state).
 type EmployeeDotStatus = 'attention' | 'expiring' | 'compliant'
 
 const employeeDotClass: Record<EmployeeDotStatus, string> = {
@@ -290,8 +290,9 @@ export function ComplianceOverviewPage() {
     api.training.getTrainingCompliance,
     clerkOrgId ? { clerkOrgId } : 'skip',
   )
-  // Still used to mark overridden rows in the compliance items table
-  // (listComplianceItems does not return overrideStatus per item).
+  // Still used to mark overridden rows in the compliance items table that
+  // predate per-row overrideStatus (rows now also carry overrideStatus from
+  // listComplianceItems — isOverridden below unions both signals).
   const credentialGaps = useQuery(
     api.compliance.complianceGaps,
     clerkOrgId ? { clerkOrgId } : 'skip',
@@ -385,10 +386,10 @@ export function ComplianceOverviewPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // listComplianceItems does not return overrideStatus per item, so
-  // overridden rows are identified via the gaps query (displayName + raw
-  // credential category — labels are requirement-defined and cannot be
-  // reconstructed here).
+  // listComplianceItems returns overrideStatus per row; older rows and any
+  // name-resolution mismatch are still covered by the gaps query
+  // (displayName + raw credential category — labels are requirement-defined
+  // and cannot be reconstructed here), so both signals are unioned.
   const overriddenKeys = new Set(
     (credentialGaps ?? []).flatMap((gap) =>
       (gap.overriddenCategories ?? []).map(
@@ -396,7 +397,14 @@ export function ComplianceOverviewPage() {
       ),
     ),
   )
-  const isOverridden = (item: { subjectName: string; category: string }) =>
+  const isOverridden = (item: {
+    subjectName: string
+    category: string
+    overrideStatus?: string | null
+    computedStatus?: string
+  }) =>
+    item.overrideStatus === 'overridden' ||
+    item.computedStatus === 'overridden' ||
     overriddenKeys.has(`${item.subjectName}::${item.category}`)
 
   // getTrainingCompliance only returns employees with issues.
@@ -805,16 +813,19 @@ export function ComplianceOverviewPage() {
                                   <span className="inline-flex items-center gap-2">
                                     <StatusBadge
                                       variant={
-                                        computedStatusVariant[item.computedStatus] ??
-                                        'neutral'
+                                        isOverridden(item)
+                                          ? 'warning'
+                                          : (computedStatusVariant[
+                                              item.computedStatus
+                                            ] ?? 'neutral')
                                       }
                                     >
-                                      {computedStatusLabel[item.computedStatus] ??
-                                        item.computedStatus}
+                                      {isOverridden(item)
+                                        ? 'Overridden'
+                                        : (computedStatusLabel[
+                                            item.computedStatus
+                                          ] ?? item.computedStatus)}
                                     </StatusBadge>
-                                    {isOverridden(item) && (
-                                      <Badge variant="info">Overridden</Badge>
-                                    )}
                                   </span>
                                 </TableCell>
                                 <TableCell>

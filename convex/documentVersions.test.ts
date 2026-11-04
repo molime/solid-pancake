@@ -171,9 +171,9 @@ describe('document versions', () => {
       api.candidates.getDocumentVersionDownloadUrl,
       { clerkOrgId: ORG, versionId: versionId as Id<'prefilledDocumentVersions'> },
     )
-    expect(result.fileName).toBe('i9.pdf')
-    expect(result.uploadedBy).toBe('candidate')
-    expect(typeof result.url).toBe('string')
+    expect(result!.fileName).toBe('i9.pdf')
+    expect(result!.uploadedBy).toBe('candidate')
+    expect(typeof result!.url).toBe('string')
 
     await expect(
       t.withIdentity(OUTSIDER).query(api.candidates.getDocumentVersionDownloadUrl, {
