@@ -87,6 +87,40 @@ export const getTenantBillingInternal = internalQuery({
   },
 })
 
+/**
+ * Resolve a tenant by its Stripe customer id. tenantSubscriptions has no
+ * stripeCustomerId index; the scan mirrors saveStripeDefaultPaymentMethod
+ * (one subscription per tenant, small table).
+ */
+export const getTenantIdByStripeCustomerInternal = internalQuery({
+  args: { stripeCustomerId: v.string() },
+  handler: async (ctx, args) => {
+    const subscriptions = await ctx.db.query('tenantSubscriptions').collect()
+    const subscription = subscriptions.find(
+      (sub) => sub.stripeCustomerId === args.stripeCustomerId,
+    )
+    return subscription ? { tenantId: subscription.tenantId } : null
+  },
+})
+
+/**
+ * Draft platform invoices that were never mirrored to Stripe (no
+ * stripeInvoiceId) and carry a positive total — the ones a freshly attached
+ * default payment method should auto-charge.
+ */
+export const listUnmirroredDraftsInternal = internalQuery({
+  args: { tenantId: v.id('tenants') },
+  handler: async (ctx, args) => {
+    const drafts = await ctx.db
+      .query('platformInvoices')
+      .withIndex('by_tenant_status', (q) =>
+        q.eq('tenantId', args.tenantId).eq('status', 'draft'),
+      )
+      .collect()
+    return drafts.filter((invoice) => !invoice.stripeInvoiceId && invoice.total > 0)
+  },
+})
+
 export const getInvoiceByStripeIdInternal = internalQuery({
   args: { stripeInvoiceId: v.string() },
   handler: async (ctx, args) => {
@@ -761,6 +795,23 @@ export const saveHostedInvoiceUrlByStripeId = internalMutation({
 type CreateAndSendResult = { skipped: boolean; stripeInvoiceId?: string }
 
 /**
+ * Zero-total invoices (e.g. the free internal-test plan): nothing to charge,
+ * so the platform invoice settles immediately without touching Stripe
+ * (Stripe rejects zero-amount invoices).
+ */
+export const markZeroTotalInvoicePaidInternal = internalMutation({
+  args: { invoiceId: v.id('platformInvoices') },
+  handler: async (ctx, args) => {
+    const now = new Date().toISOString()
+    await ctx.db.patch(args.invoiceId, {
+      status: 'paid',
+      paidAt: now,
+      updatedAt: now,
+    })
+  },
+})
+
+/**
  * Core Stripe mirroring: ensure the tenant has a Stripe customer, then
  * create + finalize + send a Stripe invoice matching the platform invoice.
  * Scheduled (fire-and-forget) by createPlatformInvoice/sendPlatformInvoice
@@ -782,6 +833,26 @@ export const createAndSendStripeInvoice = internalAction({
         `Invoice ${invoice.invoiceNumber} already linked to Stripe (${invoice.stripeInvoiceId}); skipping.`,
       )
       return { skipped: true, stripeInvoiceId: invoice.stripeInvoiceId }
+    }
+
+    // Zero-total invoices have nothing to collect and Stripe rejects
+    // zero-amount invoices — settle the platform invoice immediately
+    // (single choke point: covers the monthly cron and manual sends).
+    if (invoice.total <= 0) {
+      await ctx.runMutation(
+        internal.platformStripe.markZeroTotalInvoicePaidInternal,
+        { invoiceId: args.invoiceId },
+      )
+      await ctx.runMutation(internal.platformStripe.recordStripeAudit, {
+        tenantId: invoice.tenantId,
+        actorId: 'system',
+        action: 'stripe_invoice_zero_auto_settled',
+        metadata: {
+          invoiceId: args.invoiceId as string,
+          invoiceNumber: invoice.invoiceNumber,
+        },
+      })
+      return { skipped: true, stripeInvoiceId: '' }
     }
 
     const billing = await ctx.runQuery(
@@ -863,6 +934,60 @@ export const createAndSendStripeInvoice = internalAction({
       })
       throw err
     }
+  },
+})
+
+/**
+ * checkout.session.completed (setup) follow-up: the tenant just attached a
+ * default payment method, so mirror every un-mirrored positive draft to
+ * Stripe via createAndSendStripeInvoice — with a default PM on file the
+ * mirrored invoice auto-charges on finalize. Per-invoice failures are
+ * warn-logged and never abort the remaining drafts. Unknown customers
+ * no-op (nothing is linked to them yet).
+ */
+export const chargeUnmirroredDraftsForCustomer = internalAction({
+  args: { stripeCustomerId: v.string() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ charged: number; skipped: number; failed: number }> => {
+    const tenant = await ctx.runQuery(
+      internal.platformStripe.getTenantIdByStripeCustomerInternal,
+      { stripeCustomerId: args.stripeCustomerId },
+    )
+    if (!tenant) {
+      console.warn(
+        `No tenant found for Stripe customer ${args.stripeCustomerId}; nothing to charge.`,
+      )
+      return { charged: 0, skipped: 0, failed: 0 }
+    }
+    const drafts = await ctx.runQuery(
+      internal.platformStripe.listUnmirroredDraftsInternal,
+      { tenantId: tenant.tenantId },
+    )
+    let charged = 0
+    let skipped = 0
+    let failed = 0
+    for (const draft of drafts) {
+      try {
+        const result: CreateAndSendResult = await ctx.runAction(
+          internal.platformStripe.createAndSendStripeInvoice,
+          { invoiceId: draft._id },
+        )
+        if (result.skipped) {
+          skipped += 1
+        } else {
+          charged += 1
+        }
+      } catch (err) {
+        console.warn(
+          `Failed to mirror draft invoice ${draft.invoiceNumber} (${draft._id}):`,
+          err,
+        )
+        failed += 1
+      }
+    }
+    return { charged, skipped, failed }
   },
 })
 

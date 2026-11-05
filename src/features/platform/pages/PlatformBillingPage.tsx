@@ -15,13 +15,7 @@ import {
   PlatformTableHeader,
   PlatformTableRow,
 } from '../components/PlatformTable'
-
-function currentMonthRange() {
-  const now = new Date()
-  const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString()
-  return { start, end }
-}
+import { computeBillingKpis } from './platformBillingKpis'
 
 export function PlatformBillingPage() {
   const isAdmin = usePlatformAdmin()
@@ -31,35 +25,8 @@ export function PlatformBillingPage() {
     isAdmin ? {} : 'skip',
   )
 
-  let outstanding = 0
-  let paidThisMonth = 0
-  let overdueCount = 0
-  let overdueAmount = 0
-  let totalBilled = 0
-
-  if (invoices) {
-    const { start, end } = currentMonthRange()
-    for (const invoice of invoices) {
-      if (invoice.status === 'sent' || invoice.status === 'overdue') {
-        outstanding += invoice.total
-      }
-      if (
-        invoice.status === 'paid' &&
-        invoice.paidAt &&
-        invoice.paidAt >= start &&
-        invoice.paidAt < end
-      ) {
-        paidThisMonth += invoice.total
-      }
-      if (invoice.status === 'overdue') {
-        overdueCount += 1
-        overdueAmount += invoice.total
-      }
-      if (invoice.status !== 'void') {
-        totalBilled += invoice.total
-      }
-    }
-  }
+  const { outstanding, paidThisMonth, overdueCount, overdueAmount, totalBilled } =
+    computeBillingKpis(invoices ?? [])
 
   return (
     <PlatformGate>

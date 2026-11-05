@@ -1134,3 +1134,393 @@ describe('sendPaymentSetupEmail', () => {
     expect(audit).not.toBeNull()
   })
 })
+
+/**
+ * Let queued runAfter(0, ...) callbacks fire (real setTimeout) and drain the
+ * scheduled functions they registered, across a few iterations so nested
+ * schedules are picked up too.
+ */
+async function drainScheduled(t: ReturnType<typeof createTestConvex>) {
+  for (let i = 0; i < 5; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await t.finishInProgressScheduledFunctions()
+  }
+}
+
+describe('checkout.session.completed charges un-mirrored drafts', () => {
+  const WEBHOOK_SECRET = 'whsec_checkout_test'
+  const PLATFORM_ADMIN = { subject: 'platform_admin_1' }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    delete process.env.STRIPE_WEBHOOK_SECRET
+    delete process.env.STRIPE_SECRET_KEY
+  })
+
+  function signEvent(body: string) {
+    const timestamp = Math.floor(Date.now() / 1000)
+    const v1 = createHmac('sha256', WEBHOOK_SECRET)
+      .update(`${timestamp}.${body}`)
+      .digest('hex')
+    return `t=${timestamp},v1=${v1}`
+  }
+
+  async function postWebhook(
+    t: ReturnType<typeof createTestConvex>,
+    event: { id: string; type: string; object: Record<string, unknown> },
+  ) {
+    const body = JSON.stringify({
+      id: event.id,
+      type: event.type,
+      data: { object: event.object },
+    })
+    return await t.fetch('/stripe-webhook', {
+      method: 'POST',
+      headers: {
+        'Stripe-Signature': signEvent(body),
+        'Content-Type': 'application/json',
+      },
+      body,
+    })
+  }
+
+  /** Tenant with Stripe customer cus_ga; drafts: $249 un-mirrored, $0, and already-mirrored. */
+  async function seedTenantWithDrafts(t: ReturnType<typeof createTestConvex>) {
+    return await t.run(async (ctx) => {
+      const now = new Date().toISOString()
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId: 'org_ga',
+        name: 'Golden Ages',
+        slug: 'golden-ages',
+        createdAt: now,
+      })
+      await ctx.db.insert('tenantSubscriptions', {
+        tenantId,
+        planKey: 'growth',
+        status: 'active',
+        billingEmails: ['billing@ga.test'],
+        currentPeriodStart: '2026-10-01',
+        currentPeriodEnd: '2026-10-31',
+        stripeCustomerId: 'cus_ga',
+        createdAt: now,
+        updatedAt: now,
+      })
+      const base = {
+        tenantId,
+        periodStart: '2026-10-01',
+        periodEnd: '2026-10-31',
+        dueDate: '2026-11-14',
+        createdBy: PLATFORM_ADMIN.subject,
+        createdAt: now,
+        updatedAt: now,
+      }
+      const pending = await ctx.db.insert('platformInvoices', {
+        ...base,
+        invoiceNumber: 'PLAT-2026-0009',
+        lineItems: [
+          {
+            description: 'October subscription',
+            quantity: 1,
+            unitPrice: 249,
+            amount: 249,
+            source: 'manual',
+          },
+        ],
+        subtotal: 249,
+        total: 249,
+        status: 'draft',
+      })
+      const zero = await ctx.db.insert('platformInvoices', {
+        ...base,
+        invoiceNumber: 'PLAT-2026-0010',
+        lineItems: [],
+        subtotal: 0,
+        total: 0,
+        status: 'draft',
+      })
+      const mirrored = await ctx.db.insert('platformInvoices', {
+        ...base,
+        invoiceNumber: 'PLAT-2026-0005',
+        lineItems: [
+          {
+            description: 'September subscription',
+            quantity: 1,
+            unitPrice: 100,
+            amount: 100,
+            source: 'manual',
+          },
+        ],
+        subtotal: 100,
+        total: 100,
+        status: 'draft',
+        stripeInvoiceId: 'in_existing',
+      })
+      return { pending, zero, mirrored }
+    })
+  }
+
+  /** Fake Stripe: checkout session + customer update + one mirror (create/finalize). */
+  function stubStripeApi(calls: string[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        calls.push(url)
+        if (url.includes('/v1/checkout/sessions/')) {
+          return new Response(
+            JSON.stringify({
+              id: 'cs_ga',
+              customer: 'cus_ga',
+              setup_intent: { payment_method: 'pm_card' },
+            }),
+            { status: 200 },
+          )
+        }
+        if (url.includes('/v1/customers/')) {
+          return new Response(JSON.stringify({ id: 'cus_ga' }), {
+            status: 200,
+          })
+        }
+        if (url.endsWith('/v1/invoices')) {
+          return new Response(JSON.stringify({ id: 'in_mirrored_1' }), {
+            status: 200,
+          })
+        }
+        if (url.includes('/v1/invoiceitems')) {
+          return new Response(JSON.stringify({ id: 'ii_1' }), { status: 200 })
+        }
+        if (url.includes('/finalize')) {
+          return new Response(
+            JSON.stringify({
+              id: 'in_mirrored_1',
+              status: 'open',
+              hosted_invoice_url: 'https://pay.stripe.com/x',
+            }),
+            { status: 200 },
+          )
+        }
+        throw new Error(`Unexpected fetch: ${url}`)
+      }),
+    )
+  }
+
+  it('mirrors the $249 un-mirrored draft and skips $0 and already-mirrored ones', async () => {
+    const t = createTestConvex()
+    process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET
+    process.env.STRIPE_SECRET_KEY = 'sk_test_key'
+    const { pending, zero, mirrored } = await seedTenantWithDrafts(t)
+    const calls: string[] = []
+    stubStripeApi(calls)
+
+    const response = await postWebhook(t, {
+      id: 'evt_checkout_ga',
+      type: 'checkout.session.completed',
+      object: { id: 'cs_ga', mode: 'setup' },
+    })
+    expect(response.status).toBe(200)
+
+    // The scheduled chargeUnmirroredDraftsForCustomer runs after the webhook.
+    await drainScheduled(t)
+
+    // Default PM persisted from the setup session.
+    const subscription = await t.run(async (ctx) => {
+      const tenant = await ctx.db
+        .query('tenants')
+        .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', 'org_ga'))
+        .unique()
+      return ctx.db
+        .query('tenantSubscriptions')
+        .withIndex('by_tenant', (q) => q.eq('tenantId', tenant!._id))
+        .unique()
+    })
+    expect(subscription?.stripeDefaultPaymentMethod).toBe('pm_card')
+
+    // The $249 draft was mirrored (auto-charge on finalize — no /send call).
+    const pendingInvoice = await t.run(async (ctx) => ctx.db.get(pending))
+    expect(pendingInvoice?.stripeInvoiceId).toBe('in_mirrored_1')
+    expect(pendingInvoice?.stripeHostedInvoiceUrl).toBe('https://pay.stripe.com/x')
+
+    // Exactly one Stripe invoice was created.
+    const invoiceCreates = calls.filter((url) => url.endsWith('/v1/invoices'))
+    expect(invoiceCreates).toHaveLength(1)
+    expect(calls.some((url) => url.includes('/finalize'))).toBe(true)
+    expect(calls.some((url) => url.includes('/v1/invoices/in_mirrored_1/send'))).toBe(
+      false,
+    )
+
+    // The $0 draft and the already-mirrored draft were left alone.
+    const zeroInvoice = await t.run(async (ctx) => ctx.db.get(zero))
+    expect(zeroInvoice?.stripeInvoiceId).toBeUndefined()
+    const mirroredInvoice = await t.run(async (ctx) => ctx.db.get(mirrored))
+    expect(mirroredInvoice?.stripeInvoiceId).toBe('in_existing')
+  })
+
+  it('no-ops for a checkout session belonging to an unknown customer', async () => {
+    const t = createTestConvex()
+    process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET
+    process.env.STRIPE_SECRET_KEY = 'sk_test_key'
+    const { pending } = await seedTenantWithDrafts(t)
+    const calls: string[] = []
+    stubStripeApi(calls)
+
+    // Session reports a customer no subscription carries.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        calls.push(url)
+        if (url.includes('/v1/checkout/sessions/')) {
+          return new Response(
+            JSON.stringify({
+              id: 'cs_unknown',
+              customer: 'cus_unknown',
+              setup_intent: { payment_method: 'pm_card' },
+            }),
+            { status: 200 },
+          )
+        }
+        if (url.includes('/v1/customers/')) {
+          return new Response(JSON.stringify({ id: 'cus_unknown' }), {
+            status: 200,
+          })
+        }
+        throw new Error(`Unexpected fetch: ${url}`)
+      }),
+    )
+
+    const response = await postWebhook(t, {
+      id: 'evt_checkout_unknown',
+      type: 'checkout.session.completed',
+      object: { id: 'cs_unknown', mode: 'setup' },
+    })
+    expect(response.status).toBe(200)
+    await drainScheduled(t)
+
+    // Golden Ages' draft is untouched — only the session/customer calls ran.
+    const pendingInvoice = await t.run(async (ctx) => ctx.db.get(pending))
+    expect(pendingInvoice?.stripeInvoiceId).toBeUndefined()
+    expect(calls.some((url) => url.endsWith('/v1/invoices'))).toBe(false)
+
+    // The action itself is a no-op for unknown customers.
+    const result = await t.action(
+      internal.platformStripe.chargeUnmirroredDraftsForCustomer,
+      { stripeCustomerId: 'cus_unknown' },
+    )
+    expect(result).toEqual({ charged: 0, skipped: 0, failed: 0 })
+  })
+})
+
+describe('createAndSendStripeInvoice zero-total guard', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    delete process.env.STRIPE_SECRET_KEY
+  })
+
+  async function seedDraft(
+    t: ReturnType<typeof createTestConvex>,
+    total: number,
+  ) {
+    return await t.run(async (ctx) => {
+      const now = new Date().toISOString()
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId: 'org_zero',
+        name: total === 0 ? 'Zero Care' : 'Paid Care',
+        slug: total === 0 ? 'zero-care' : 'paid-care',
+        createdAt: now,
+      })
+      await ctx.db.insert('tenantSubscriptions', {
+        tenantId,
+        planKey: 'internal_test',
+        status: 'active',
+        billingEmails: ['billing@zero.test'],
+        currentPeriodStart: '2026-10-01',
+        currentPeriodEnd: '2026-10-31',
+        stripeCustomerId: 'cus_zero',
+        stripeDefaultPaymentMethod: 'pm_card',
+        createdAt: now,
+        updatedAt: now,
+      })
+      return await ctx.db.insert('platformInvoices', {
+        tenantId,
+        invoiceNumber: 'PLAT-2026-0011',
+        periodStart: '2026-10-01',
+        periodEnd: '2026-10-31',
+        dueDate: '2026-11-14',
+        lineItems: [],
+        subtotal: total,
+        total,
+        status: 'draft',
+        createdBy: 'admin_1',
+        createdAt: now,
+        updatedAt: now,
+      })
+    })
+  }
+
+  it('settles a $0 invoice as paid without calling Stripe', async () => {
+    const t = createTestConvex()
+    const invoiceId = await seedDraft(t, 0)
+    const fetchMock = vi.fn(async () => {
+      throw new Error('fetch must not be called for a zero-total invoice')
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await t.action(
+      internal.platformStripe.createAndSendStripeInvoice,
+      { invoiceId },
+    )
+    expect(result).toEqual({ skipped: true, stripeInvoiceId: '' })
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId))
+    expect(invoice?.status).toBe('paid')
+    expect(invoice?.paidAt).toBeTruthy()
+
+    const audit = await t.run(async (ctx) =>
+      ctx.db
+        .query('auditEvents')
+        .filter((q) => q.eq(q.field('action'), 'stripe_invoice_zero_auto_settled'))
+        .first(),
+    )
+    expect(audit).not.toBeNull()
+  })
+
+  it('non-zero invoices still mirror to Stripe', async () => {
+    const t = createTestConvex()
+    process.env.STRIPE_SECRET_KEY = 'sk_test_key'
+    const invoiceId = await seedDraft(t, 199)
+    const calls: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        calls.push(url)
+        if (url.endsWith('/v1/invoices')) {
+          return new Response(JSON.stringify({ id: 'in_nonzero' }), {
+            status: 200,
+          })
+        }
+        if (url.includes('/v1/invoiceitems')) {
+          return new Response(JSON.stringify({ id: 'ii_1' }), { status: 200 })
+        }
+        if (url.includes('/finalize')) {
+          return new Response(
+            JSON.stringify({ id: 'in_nonzero', status: 'open' }),
+            { status: 200 },
+          )
+        }
+        throw new Error(`Unexpected fetch: ${url}`)
+      }),
+    )
+
+    const result = await t.action(
+      internal.platformStripe.createAndSendStripeInvoice,
+      { invoiceId },
+    )
+    expect(result).toEqual({ skipped: false, stripeInvoiceId: 'in_nonzero' })
+
+    const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId))
+    expect(invoice?.stripeInvoiceId).toBe('in_nonzero')
+    expect(invoice?.status).toBe('draft')
+  })
+})

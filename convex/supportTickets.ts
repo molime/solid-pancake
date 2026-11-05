@@ -6,6 +6,7 @@ import type { UserIdentity } from 'convex/server'
 import { internal } from './_generated/api'
 import { requireIdentity, requireTenantRole } from './authHelpers'
 import { categoryForAction } from './_utils/auditCategories'
+import { notifyStaff } from './_utils/notifications'
 
 const ticketCategory = v.union(
   v.literal('billing'),
@@ -83,6 +84,30 @@ export function buildTicketCreatedEmail(args: {
     `</ul>`,
     `<p><strong>Description:</strong></p>`,
     `<p>${escapeHtml(args.description).replace(/\n/g, '<br>')}</p>`,
+  ].join('')
+  return { subject, html }
+}
+
+/**
+ * Subject + HTML body for the resolution notice sent to the agency when a
+ * ticket enters a resolved/closed state. The resolution text is the latest
+ * platform note, or a generic line when the platform team left none.
+ */
+export function buildTicketClosedEmail(args: {
+  subject: string
+  status: string
+  resolution: string
+  tenantName: string
+  ticketId: string
+}): { subject: string; html: string } {
+  const subject = `Your support request has been resolved — ${args.subject}`
+  const html = [
+    `<p>Hi ${escapeHtml(args.tenantName)},</p>`,
+    `<p>Your support request <strong>${escapeHtml(args.subject)}</strong> has been ${escapeHtml(args.status)}.</p>`,
+    `<p><strong>Resolution:</strong></p>`,
+    `<p>${escapeHtml(args.resolution).replace(/\n/g, '<br>')}</p>`,
+    `<p>If anything is still unclear, just reply to this email or open a new support request from your dashboard.</p>`,
+    `<p>— ATRIA-X Support</p>`,
   ].join('')
   return { subject, html }
 }
@@ -297,6 +322,84 @@ export const setStatus = mutation({
         to: args.status,
       },
     )
+
+    // Notify the agency on the FIRST entry into a resolved/closed state —
+    // exactly once per ticket (a resolved ticket can reopen and resolve
+    // again; the flag prevents a second notice).
+    const RESOLVED_FALLBACK = 'Your request has been resolved.'
+    if (
+      (args.status === 'resolved' || args.status === 'closed') &&
+      !ticket.resolutionNotifiedAt
+    ) {
+      const resolution = ticket.platformNotes?.trim() || RESOLVED_FALLBACK
+      const tenant = await ctx.db.get(ticket.tenantId)
+      const tenantName = tenant?.name ?? 'there'
+      const admins = await ctx.db
+        .query('tenantMembers')
+        .withIndex('by_tenant_role', (q) =>
+          q.eq('tenantId', ticket.tenantId).eq('role', 'org:admin'),
+        )
+        .collect()
+
+      // (a) In-app notification for every org admin. No email here — the
+      // single tenant-facing email below is the email channel.
+      const message = `Your support request "${ticket.subject}" has been ${args.status}. Resolution: ${resolution}`
+      for (const admin of admins) {
+        await notifyStaff(ctx, {
+          tenantId: ticket.tenantId,
+          clerkUserId: admin.clerkUserId,
+          type: 'support_ticket_resolved',
+          message,
+          metadata: {
+            ticketId: args.ticketId as string,
+            subject: ticket.subject,
+            status: args.status,
+          },
+        })
+      }
+
+      // (b) One email to the tenant's billing/contact emails. sendEmail
+      // gates on EMAIL_ENABLED; a scheduling failure must never fail the
+      // status change.
+      const subscription = await ctx.db
+        .query('tenantSubscriptions')
+        .withIndex('by_tenant', (q) => q.eq('tenantId', ticket.tenantId))
+        .unique()
+      const recipients = Array.from(
+        new Set(
+          subscription?.billingEmails?.length
+            ? subscription.billingEmails
+            : admins.map((admin) => admin.email),
+        ),
+      )
+      if (recipients.length > 0) {
+        const email = buildTicketClosedEmail({
+          subject: ticket.subject,
+          status: args.status,
+          resolution,
+          tenantName,
+          ticketId: args.ticketId as string,
+        })
+        for (const to of recipients) {
+          try {
+            await ctx.scheduler.runAfter(0, internal._utils.resend.sendEmail, {
+              to,
+              subject: email.subject,
+              html: email.html,
+            })
+          } catch (err) {
+            console.warn(
+              `Failed to schedule ticket-closed email to ${to}:`,
+              err,
+            )
+          }
+        }
+      }
+
+      await ctx.db.patch(args.ticketId, {
+        resolutionNotifiedAt: new Date().toISOString(),
+      })
+    }
     return args.ticketId
   },
 })

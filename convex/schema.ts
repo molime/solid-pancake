@@ -1228,6 +1228,9 @@ export default defineSchema({
       v.literal('closed'),
     ),
     platformNotes: v.optional(v.string()),
+    // Set when the first resolved/closed notice went out — the agency is
+    // notified exactly once per ticket even across reopen → re-resolve.
+    resolutionNotifiedAt: v.optional(v.string()),
     createdAt: v.string(),
     updatedAt: v.string(),
   })

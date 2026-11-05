@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi, beforeAll, beforeEach, afterAll } from 'vitest'
 import { convexTest } from 'convex-test'
 import schema from './schema'
 import { api } from './_generated/api'
@@ -485,5 +485,253 @@ describe('supportTickets platform side', () => {
     expect(
       audits.filter((event) => event.action === 'support_ticket_note_added'),
     ).toHaveLength(2)
+  })
+})
+
+
+describe('supportTickets close notifications', () => {
+  // A dedicated tenant so tenant-facing emails are distinguishable from the
+  // ones other tests in this file schedule (existing tests close tickets too
+  // and never drain their scheduled sends — those laggers fire during later
+  // tests and are filtered out by recipient below).
+  const ORG = 'org_close'
+  const ORG_ADMIN = 'user_close_admin'
+  const BILLING_EMAIL = 'billing@close.test'
+  const TICKET_SUBJECT = 'Wrong total on October invoice'
+
+  type EmailJob = { to: string; subject: string; html: string }
+
+  // One fetch mock for the whole describe: repeated vi.stubGlobal calls do
+  // not reliably re-bind fetch inside the convex-test runtime, so captures
+  // route through a per-test pointer instead.
+  let currentCalls: EmailJob[]
+  let resendStatus: number
+
+  beforeAll(() => {
+    process.env.EMAIL_ENABLED = 'true'
+    process.env.RESEND_API_KEY = 're_test'
+    process.env.RESEND_FROM_EMAIL = 'platform@atriax.test'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.includes('api.resend.com')) {
+          currentCalls.push(JSON.parse(String(init?.body)) as EmailJob)
+          if (resendStatus !== 200) {
+            return new Response(JSON.stringify({ error: 'boom' }), {
+              status: resendStatus,
+            })
+          }
+          return new Response(JSON.stringify({ id: 'email_1' }), { status: 200 })
+        }
+        throw new Error(`Unexpected fetch: ${url}`)
+      }),
+    )
+  })
+
+  beforeEach(() => {
+    currentCalls = []
+    resendStatus = 200
+  })
+
+  afterAll(() => {
+    vi.unstubAllGlobals()
+    delete process.env.EMAIL_ENABLED
+    delete process.env.RESEND_API_KEY
+    delete process.env.RESEND_FROM_EMAIL
+  })
+
+  /** Let queued runAfter(0, ...) callbacks fire and drain scheduled functions. */
+  async function drain(t: ReturnType<typeof createTestConvex>) {
+    for (let i = 0; i < 5; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      await t.finishInProgressScheduledFunctions()
+    }
+  }
+
+  /** Emails to THIS describe's recipients (laggers from other tests are to other addresses). */
+  function myEmails(): EmailJob[] {
+    const mine = new Set([BILLING_EMAIL, `${ORG_ADMIN}@example.com`])
+    return currentCalls.filter((email) => mine.has(email.to))
+  }
+
+  async function seed(
+    t: ReturnType<typeof createTestConvex>,
+    options: { billingEmails?: string[] } = {},
+  ) {
+    await seedPlatformAdmin(t)
+    await seedTenantWithMember(t, ORG, ORG_ADMIN, 'org:admin')
+    if (options.billingEmails) {
+      await t.run(async (ctx) => {
+        const tenant = await ctx.db
+          .query('tenants')
+          .withIndex('by_clerk_org_id', (q) => q.eq('clerkOrgId', ORG))
+          .unique()
+        const now = new Date().toISOString()
+        await ctx.db.insert('tenantSubscriptions', {
+          tenantId: tenant!._id,
+          planKey: 'growth',
+          status: 'active',
+          billingEmails: options.billingEmails!,
+          currentPeriodStart: '2026-10-01',
+          currentPeriodEnd: '2026-10-31',
+          createdAt: now,
+          updatedAt: now,
+        })
+      })
+    }
+    return await t
+      .withIdentity(asOrgUser(ORG_ADMIN, ORG, 'org:admin'))
+      .mutation(api.supportTickets.create, {
+        clerkOrgId: ORG,
+        ...createArgs,
+        subject: TICKET_SUBJECT,
+      })
+  }
+
+  async function notificationsFor(t: ReturnType<typeof createTestConvex>) {
+    return await t.run(async (ctx) => ctx.db.query('notifications').collect())
+  }
+
+  it('notifies org:admins in-app and emails the billing contacts on close', async () => {
+    const t = createTestConvex()
+    const ticketId = await seed(t, { billingEmails: [BILLING_EMAIL] })
+    const asAdmin = t.withIdentity(PLATFORM_ADMIN)
+
+    await asAdmin.mutation(api.supportTickets.addNote, {
+      ticketId,
+      note: 'Fixed the billing configuration.',
+    })
+    await asAdmin.mutation(api.supportTickets.setStatus, {
+      ticketId,
+      status: 'in_progress',
+    })
+    await asAdmin.mutation(api.supportTickets.setStatus, {
+      ticketId,
+      status: 'closed',
+    })
+    await drain(t)
+
+    // One in-app notification for the org admin, with subject + resolution.
+    const notifications = await notificationsFor(t)
+    expect(notifications).toHaveLength(1)
+    expect(notifications[0].clerkUserId).toBe(ORG_ADMIN)
+    expect(notifications[0].type).toBe('support_ticket_resolved')
+    expect(notifications[0].message).toContain(TICKET_SUBJECT)
+    expect(notifications[0].message).toContain('Fixed the billing configuration.')
+
+    // ONE email to the tenant's billing contacts with the resolution text.
+    const emails = myEmails()
+    expect(emails).toHaveLength(1)
+    expect(emails[0].to).toBe(BILLING_EMAIL)
+    expect(emails[0].subject).toBe(
+      `Your support request has been resolved — ${TICKET_SUBJECT}`,
+    )
+    expect(emails[0].html).toContain('Fixed the billing configuration.')
+
+    const ticket = await t.run(async (ctx) => ctx.db.get(ticketId))
+    expect(ticket?.resolutionNotifiedAt).toBeTruthy()
+  })
+
+  it('notifies exactly once per ticket across resolve → close', async () => {
+    const t = createTestConvex()
+    const ticketId = await seed(t, { billingEmails: [BILLING_EMAIL] })
+    const asAdmin = t.withIdentity(PLATFORM_ADMIN)
+
+    await asAdmin.mutation(api.supportTickets.setStatus, {
+      ticketId,
+      status: 'in_progress',
+    })
+    await asAdmin.mutation(api.supportTickets.setStatus, {
+      ticketId,
+      status: 'resolved',
+    })
+    await asAdmin.mutation(api.supportTickets.setStatus, {
+      ticketId,
+      status: 'closed',
+    })
+    await drain(t)
+
+    // resolved notified once; the later closed transition did not re-notify.
+    expect(await notificationsFor(t)).toHaveLength(1)
+    expect(myEmails()).toHaveLength(1)
+
+    // Same-status close is an idempotent no-op too.
+    await asAdmin.mutation(api.supportTickets.setStatus, {
+      ticketId,
+      status: 'closed',
+    })
+    await drain(t)
+    expect(await notificationsFor(t)).toHaveLength(1)
+    expect(myEmails()).toHaveLength(1)
+  })
+
+  it('adding a note alone does not notify the agency', async () => {
+    const t = createTestConvex()
+    const ticketId = await seed(t, { billingEmails: [BILLING_EMAIL] })
+
+    await t
+      .withIdentity(PLATFORM_ADMIN)
+      .mutation(api.supportTickets.addNote, { ticketId, note: 'Investigating.' })
+    await drain(t)
+
+    expect(await notificationsFor(t)).toHaveLength(0)
+    expect(myEmails()).toHaveLength(0)
+  })
+
+  it('uses a generic resolution line and admin emails when no notes/subscription exist', async () => {
+    const t = createTestConvex()
+    const ticketId = await seed(t)
+    const asAdmin = t.withIdentity(PLATFORM_ADMIN)
+
+    await asAdmin.mutation(api.supportTickets.setStatus, {
+      ticketId,
+      status: 'in_progress',
+    })
+    await asAdmin.mutation(api.supportTickets.setStatus, {
+      ticketId,
+      status: 'resolved',
+    })
+    await drain(t)
+
+    const emails = myEmails()
+    expect(emails).toHaveLength(1)
+    expect(emails[0].to).toBe(`${ORG_ADMIN}@example.com`)
+    expect(emails[0].html).toContain('Your request has been resolved.')
+    expect(await notificationsFor(t)).toHaveLength(1)
+  })
+
+  it('an email failure still closes the ticket', async () => {
+    const t = createTestConvex()
+    const ticketId = await seed(t, { billingEmails: [BILLING_EMAIL] })
+    resendStatus = 500
+    const asAdmin = t.withIdentity(PLATFORM_ADMIN)
+
+    await asAdmin.mutation(api.supportTickets.setStatus, {
+      ticketId,
+      status: 'in_progress',
+    })
+    // The status change resolves normally; the failing email only breaks the
+    // scheduled send, never the mutation.
+    await expect(
+      asAdmin.mutation(api.supportTickets.setStatus, {
+        ticketId,
+        status: 'closed',
+      }),
+    ).resolves.toBe(ticketId)
+
+    // Let the scheduled send run (its failure is caught inside the
+    // convex-test scheduler and never propagates to the mutation).
+    await drain(t)
+
+    // The close email was still attempted for the billing contact.
+    const emails = myEmails()
+    expect(emails).toHaveLength(1)
+    expect(emails[0].to).toBe(BILLING_EMAIL)
+
+    const ticket = await t.run(async (ctx) => ctx.db.get(ticketId))
+    expect(ticket?.status).toBe('closed')
+    // The in-app notification was still recorded.
+    expect(await notificationsFor(t)).toHaveLength(1)
   })
 })

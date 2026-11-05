@@ -208,13 +208,30 @@ http.route({
               paymentMethodId: session.paymentMethodId,
             },
           )
-          await ctx.runMutation(
+          const saved = await ctx.runMutation(
             internal.platformStripe.saveStripeDefaultPaymentMethod,
             {
               stripeCustomerId: session.customerId,
               paymentMethodId: session.paymentMethodId,
             },
           )
+          if (saved) {
+            // The default PM just went on file — mirror any drafts that were
+            // never sent to Stripe so they auto-charge. Fire-and-forget: a
+            // failure here must not fail the webhook.
+            try {
+              await ctx.scheduler.runAfter(
+                0,
+                internal.platformStripe.chargeUnmirroredDraftsForCustomer,
+                { stripeCustomerId: session.customerId },
+              )
+            } catch (err) {
+              console.warn(
+                'Failed to schedule un-mirrored draft charging:',
+                err,
+              )
+            }
+          }
         }
       }
     } else if (event.type === 'invoice.finalized') {
