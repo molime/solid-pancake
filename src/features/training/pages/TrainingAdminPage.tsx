@@ -485,10 +485,16 @@ export function TrainingAdminPage() {
                 </Button>
               </div>
             </CardContent>
-            <CompletionsPanel
-              members={members}
-              completionsByUser={completionLookup.get(course._id)}
-            />
+            {/* Completions track only active courses: a deactivated (superseded)
+                course has no assignable work, and a roster of "Not started"
+                rows for it reads as a compliance gap (GA's deprecated 33-step
+                course alarmed their admin in Nov 2026). */}
+            {course.active && (
+              <CompletionsPanel
+                members={members}
+                completionsByUser={completionLookup.get(course._id)}
+              />
+            )}
             {assigningFor === course._id && clerkOrgId && (
               <AssignPanel
                 clerkOrgId={clerkOrgId}
