@@ -833,6 +833,53 @@ describe('checkOverdueSubscriptionInvoices (daily cron)', () => {
     const subscription = await t.run(async (ctx) => ctx.db.get(subscriptionId))
     expect(subscription?.status).toBe('active')
   })
+
+  it('marks a past-due un-mirrored draft as overdue and duns its subscription', async () => {
+    const t = createTestConvex()
+    const { subscriptionId, invoiceId } = await seedSentInvoice(
+      t,
+      '2020-01-01',
+      'draft',
+    )
+
+    await t.mutation(internal.platformStripe.checkOverdueSubscriptionInvoices, {})
+
+    const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId))
+    expect(invoice?.status).toBe('overdue')
+
+    const audits = await t.run(async (ctx) =>
+      ctx.db.query('auditEvents').collect(),
+    )
+    expect(audits.some((event) => event.action === 'invoice_overdue')).toBe(
+      true,
+    )
+    const subscription = await t.run(async (ctx) => ctx.db.get(subscriptionId))
+    expect(subscription?.status).toBe('past_due')
+    expect(subscription?.pastDueSince).toBe(
+      new Date('2020-01-01T00:00:00Z').getTime(),
+    )
+    expect(subscription?.graceUntil).toBe(
+      new Date('2020-01-01T23:59:59Z').getTime() + FIVE_DAYS_MS,
+    )
+  })
+
+  it('skips $0 drafts (no overdue, no past_due)', async () => {
+    const t = createTestConvex()
+    const { invoiceId } = await seedSentInvoice(t, '2020-01-01', 'draft')
+    // Zero total: only the total>0 filter can exclude it.
+    await t.run(async (ctx) => {
+      await ctx.db.patch(invoiceId, { total: 0, subtotal: 0 })
+    })
+
+    const result = await t.mutation(
+      internal.platformStripe.checkOverdueSubscriptionInvoices,
+      {},
+    )
+    expect(result.processed).toBe(0)
+
+    const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId))
+    expect(invoice?.status).toBe('draft')
+  })
 })
 
 describe('suspendPastDueTenants (daily cron)', () => {
@@ -1522,5 +1569,51 @@ describe('createAndSendStripeInvoice zero-total guard', () => {
     const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId))
     expect(invoice?.stripeInvoiceId).toBe('in_nonzero')
     expect(invoice?.status).toBe('draft')
+  })
+})
+
+describe('createStripeInvoice parameter hygiene (GA mirror 400)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('never sends payment_settings[save_default_payment_method] (invalid on Invoices)', async () => {
+    const fetchMock = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >(
+      async () =>
+        new Response(JSON.stringify({ id: 'in_1' }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const original = process.env.STRIPE_SECRET_KEY
+    process.env.STRIPE_SECRET_KEY = 'sk_test_key'
+
+    try {
+      const t = createTestConvex()
+      await t.action(internal._utils.stripe.createStripeInvoice, {
+        customerId: 'cus_1',
+        dueDate: '2026-08-15',
+        lineItems: [
+          { description: 'Base price', quantity: 1, unitAmountCents: 24900, currency: 'usd' },
+        ],
+      })
+    } finally {
+      if (original === undefined) {
+        delete process.env.STRIPE_SECRET_KEY
+      } else {
+        process.env.STRIPE_SECRET_KEY = original
+      }
+    }
+
+    const invoiceCall = fetchMock.mock.calls.find((call) =>
+      String(call[0]).endsWith('/invoices'),
+    )
+    expect(invoiceCall).toBeDefined()
+    const params = new URLSearchParams(
+      (invoiceCall as unknown as [string, { body: string }])[1].body,
+    )
+    expect(params.has('payment_settings[save_default_payment_method]')).toBe(
+      false,
+    )
   })
 })

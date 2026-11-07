@@ -135,11 +135,11 @@ export const createStripeInvoice = internalAction({
       due_date:
         collectionMethod === 'send_invoice' ? dueDateSeconds : undefined,
       default_payment_method: args.defaultPaymentMethod,
-      // Stripe attaches the payment method used on the hosted page to the
-      // customer ('always' because our invoices are standalone, not Stripe
-      // Subscription invoices) — that is what makes recurring auto-charge
-      // possible.
-      'payment_settings[save_default_payment_method]': 'always',
+      // NOTE: do NOT send payment_settings[save_default_payment_method] here.
+      // It belongs on Checkout Sessions, not Invoices; Stripe rejects it with
+      // 400 "Received unknown parameter" (this exact error silently blocked
+      // every GA invoice mirror, leaving drafts forever). Auto-charge on
+      // finalize uses collection_method + default_payment_method (valid).
       'payment_settings[payment_method_types][0]': paymentMethodTypes[0],
       'payment_settings[payment_method_types][1]': paymentMethodTypes[1],
     })

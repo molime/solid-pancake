@@ -506,8 +506,12 @@ export const checkOverdueSubscriptionInvoices = internalMutation({
     const today = new Date().toISOString().slice(0, 10)
     const overdueInvoices = await ctx.db
       .query('platformInvoices')
-      .withIndex('by_status', (q) => q.eq('status', 'sent'))
+      // Include un-mirrored drafts: a cron-created draft with no Stripe link
+      // used to be invisible to dunning (its invoice never reached 'sent', so
+      // past_due never fired, and the payment banner never showed). GA's $249
+      // is the canonical case. Paid/void/$0 rows are excluded in JS below.
       .filter((q) => q.lt(q.field('dueDate'), today))
+      .filter((q) => q.gt(q.field('total'), 0))
       .collect()
     const now = Date.now()
     const nowIso = new Date(now).toISOString()
