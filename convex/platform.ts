@@ -1699,10 +1699,10 @@ export const runMonthlyBilling = internalAction({
   ): Promise<{ processed: number; created: number; skipped: number }> => {
     const subscriptions: Array<Doc<'tenantSubscriptions'>> =
       await ctx.runQuery(internal.platform.listBillableSubscriptions, {})
-    // Net-14: collection falls due two weeks after invoicing.
-    const dueDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 10)
+    // Due = the 1st of the month after the billed period ends (Maria's spec:
+    // due on the 1st, suspension only after the 5th), not "Net-14 after
+    // invoicing" (which produced the 14-day reminders Samira kept getting).
+    const dueDateFor = (periodEnd: string) => periodEnd
     let created = 0
     let skipped = 0
     for (const subscription of subscriptions) {
@@ -1716,7 +1716,7 @@ export const runMonthlyBilling = internalAction({
             tenantId: subscription.tenantId,
             periodStart: subscription.currentPeriodStart,
             periodEnd: subscription.currentPeriodEnd,
-            dueDate,
+            dueDate: dueDateFor(subscription.currentPeriodEnd),
           },
         )
         if (!invoice) {

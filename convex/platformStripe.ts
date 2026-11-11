@@ -15,8 +15,9 @@ import { requireEnv } from './_utils/env'
 import { categoryForAction } from './_utils/auditCategories'
 
 // Grace window between a missed subscription payment and service suspension
-// (Maria, 2026-10-04 review: 5 days, default for every agency).
-export const GRACE_PERIOD_MS = 5 * 24 * 60 * 60 * 1000
+// (Maria, 2026-11-10 review: due on the 1st, suspension only after the 5th,
+// i.e. 4 full days of grace, default for every agency).
+export const GRACE_PERIOD_MS = 4 * 24 * 60 * 60 * 1000
 
 function escapeHtml(value: string): string {
   return value
@@ -526,7 +527,7 @@ export const checkOverdueSubscriptionInvoices = internalMutation({
         .withIndex('by_tenant', (q) => q.eq('tenantId', invoice.tenantId))
         .unique()
       const alreadyPastDue = subscription?.status === 'past_due'
-      // Grace ends 5 days after the due date (end of day, UTC).
+      // Grace: due on the 1st, suspension only after the 5th (end of day UTC).
       const graceUntil =
         new Date(`${invoice.dueDate}T23:59:59Z`).getTime() + GRACE_PERIOD_MS
       if (

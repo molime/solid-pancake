@@ -576,7 +576,7 @@ describe('applyStripeInvoicePaid', () => {
 })
 
 describe('applyStripeInvoiceFailed (dunning)', () => {
-  const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000
+  const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000
 
   async function seedPastDuable(t: ReturnType<typeof createTestConvex>) {
     return await t.run(async (ctx) => {
@@ -641,7 +641,7 @@ describe('applyStripeInvoiceFailed (dunning)', () => {
     expect(subscription?.graceUntil).toBeTypeOf('number')
     // Grace window is exactly 5 days from the failure.
     expect(subscription!.graceUntil! - subscription!.pastDueSince!).toBe(
-      FIVE_DAYS_MS,
+      FOUR_DAYS_MS,
     )
 
     const audits = await t.run(async (ctx) =>
@@ -669,7 +669,7 @@ describe('applyStripeInvoiceFailed (dunning)', () => {
 
     expect(second?.status).toBe('past_due')
     // Recomputed, never stacked: still exactly one 5-day window wide.
-    expect(second!.graceUntil! - second!.pastDueSince!).toBe(FIVE_DAYS_MS)
+    expect(second!.graceUntil! - second!.pastDueSince!).toBe(FOUR_DAYS_MS)
     expect(second!.graceUntil!).toBeGreaterThanOrEqual(first!.graceUntil!)
   })
 
@@ -734,12 +734,12 @@ describe('applyStripeInvoiceFailed (dunning)', () => {
 })
 
 describe('checkOverdueSubscriptionInvoices (daily cron)', () => {
-  const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000
+  const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000
 
   async function seedSentInvoice(
     t: ReturnType<typeof createTestConvex>,
     dueDate: string,
-    status: 'sent' | 'paid' | 'void' = 'sent',
+    status: 'sent' | 'paid' | 'void' | 'draft' = 'sent',
   ) {
     return await t.run(async (ctx) => {
       const now = new Date().toISOString()
@@ -804,7 +804,7 @@ describe('checkOverdueSubscriptionInvoices (daily cron)', () => {
       new Date('2020-01-01T00:00:00Z').getTime(),
     )
     expect(subscription?.graceUntil).toBe(
-      new Date('2020-01-01T23:59:59Z').getTime() + FIVE_DAYS_MS,
+      new Date('2020-01-01T23:59:59Z').getTime() + FOUR_DAYS_MS,
     )
 
     const audits = await t.run(async (ctx) =>
@@ -859,7 +859,7 @@ describe('checkOverdueSubscriptionInvoices (daily cron)', () => {
       new Date('2020-01-01T00:00:00Z').getTime(),
     )
     expect(subscription?.graceUntil).toBe(
-      new Date('2020-01-01T23:59:59Z').getTime() + FIVE_DAYS_MS,
+      new Date('2020-01-01T23:59:59Z').getTime() + FOUR_DAYS_MS,
     )
   })
 
