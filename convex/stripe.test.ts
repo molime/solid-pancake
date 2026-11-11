@@ -637,11 +637,11 @@ describe('applyStripeInvoiceFailed (dunning)', () => {
 
     const subscription = await t.run(async (ctx) => ctx.db.get(subscriptionId))
     expect(subscription?.status).toBe('past_due')
-    expect(subscription?.pastDueSince).toBeTypeOf('number')
-    expect(subscription?.graceUntil).toBeTypeOf('number')
-    // Grace window is exactly 5 days from the failure.
-    expect(subscription!.graceUntil! - subscription!.pastDueSince!).toBe(
-      FOUR_DAYS_MS,
+    expect(subscription?.pastDueSince).toBe(
+      new Date('2026-08-15T00:00:00Z').getTime(),
+    )
+    expect(subscription?.graceUntil).toBe(
+      new Date('2026-08-15T23:59:59Z').getTime() + FOUR_DAYS_MS,
     )
 
     const audits = await t.run(async (ctx) =>
@@ -652,7 +652,7 @@ describe('applyStripeInvoiceFailed (dunning)', () => {
     ).toBe(true)
   })
 
-  it('recomputes grace dates on repeat failures without stacking', async () => {
+  it('keeps grace dates anchored to the invoice due date on repeat failures', async () => {
     const t = createTestConvex()
     const { subscriptionId } = await seedPastDuable(t)
 
@@ -668,9 +668,8 @@ describe('applyStripeInvoiceFailed (dunning)', () => {
     const second = await t.run(async (ctx) => ctx.db.get(subscriptionId))
 
     expect(second?.status).toBe('past_due')
-    // Recomputed, never stacked: still exactly one 5-day window wide.
-    expect(second!.graceUntil! - second!.pastDueSince!).toBe(FOUR_DAYS_MS)
-    expect(second!.graceUntil!).toBeGreaterThanOrEqual(first!.graceUntil!)
+    expect(second?.pastDueSince).toBe(first?.pastDueSince)
+    expect(second?.graceUntil).toBe(first?.graceUntil)
   })
 
   it('no-ops for unknown Stripe invoice ids', async () => {
@@ -723,6 +722,32 @@ describe('applyStripeInvoiceFailed (dunning)', () => {
     expect(subscription?.status).toBe('active')
     expect(subscription?.pastDueSince).toBeUndefined()
     expect(subscription?.graceUntil).toBeUndefined()
+
+    const audits = await t.run(async (ctx) =>
+      ctx.db.query('auditEvents').collect(),
+    )
+    expect(
+      audits.some((event) => event.action === 'invoice_payment_failed'),
+    ).toBe(false)
+  })
+
+  it('no-ops on a failure event for a void invoice', async () => {
+    const t = createTestConvex()
+    const { subscriptionId, invoiceId } = await seedPastDuable(t)
+    await t.run(async (ctx) => {
+      await ctx.db.patch(invoiceId, { status: 'void' })
+    })
+
+    const result = await t.mutation(
+      internal.platformStripe.applyStripeInvoiceFailed,
+      { stripeInvoiceId: 'in_fail' },
+    )
+    expect(result).toBeNull()
+
+    const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId))
+    expect(invoice?.status).toBe('void')
+    const subscription = await t.run(async (ctx) => ctx.db.get(subscriptionId))
+    expect(subscription?.status).toBe('active')
 
     const audits = await t.run(async (ctx) =>
       ctx.db.query('auditEvents').collect(),
@@ -799,7 +824,7 @@ describe('checkOverdueSubscriptionInvoices (daily cron)', () => {
 
     const subscription = await t.run(async (ctx) => ctx.db.get(subscriptionId))
     expect(subscription?.status).toBe('past_due')
-    // Grace is anchored to the due date: due end-of-day + 5 days.
+    // Grace is anchored to the due date: due end-of-day + 4 days.
     expect(subscription?.pastDueSince).toBe(
       new Date('2020-01-01T00:00:00Z').getTime(),
     )
@@ -879,6 +904,69 @@ describe('checkOverdueSubscriptionInvoices (daily cron)', () => {
 
     const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId))
     expect(invoice?.status).toBe('draft')
+  })
+
+  it('never revives past-due paid or void invoices', async () => {
+    for (const status of ['paid', 'void'] as const) {
+      const t = createTestConvex()
+      const { subscriptionId, invoiceId } = await seedSentInvoice(
+        t,
+        '2020-01-01',
+        status,
+      )
+
+      const result = await t.mutation(
+        internal.platformStripe.checkOverdueSubscriptionInvoices,
+        {},
+      )
+      expect(result.processed).toBe(0)
+
+      const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId))
+      expect(invoice?.status).toBe(status)
+      const subscription = await t.run(async (ctx) =>
+        ctx.db.get(subscriptionId),
+      )
+      expect(subscription?.status).toBe('active')
+    }
+  })
+
+  it('does not resend overdue notices while the tenant is suspended', async () => {
+    const t = createTestConvex()
+    const { subscriptionId } = await seedSentInvoice(t, '2020-01-01')
+    await t.run(async (ctx) => {
+      await ctx.db.patch(subscriptionId, {
+        status: 'suspended',
+        billingEmails: ['suspended-overdue@overdue.test'],
+      })
+    })
+
+    process.env.EMAIL_ENABLED = 'true'
+    process.env.RESEND_API_KEY = 're_test_key'
+    process.env.RESEND_FROM_EMAIL = 'billing@atriax.test'
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        void input
+        void init
+        return new Response(JSON.stringify({ id: 'email_test' }), { status: 200 })
+      },
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await t.mutation(internal.platformStripe.checkOverdueSubscriptionInvoices, {})
+      await drainScheduled(t)
+
+      const noticesForSuspendedTenant = fetchMock.mock.calls.filter(([, init]) =>
+        String(init?.body ?? '').includes('suspended-overdue@overdue.test'),
+      )
+      expect(noticesForSuspendedTenant).toHaveLength(0)
+      const subscription = await t.run(async (ctx) => ctx.db.get(subscriptionId))
+      expect(subscription?.status).toBe('suspended')
+    } finally {
+      vi.unstubAllGlobals()
+      delete process.env.EMAIL_ENABLED
+      delete process.env.RESEND_API_KEY
+      delete process.env.RESEND_FROM_EMAIL
+    }
   })
 })
 
@@ -1065,6 +1153,60 @@ describe('saveStripeDefaultPaymentMethod', () => {
       { stripeCustomerId: 'cus_unknown', paymentMethodId: 'pm_abc' },
     )
     expect(result).toBeNull()
+  })
+
+  it('clears only the expected stale default payment method', async () => {
+    const t = createTestConvex()
+    const subscriptionId = await t.run(async (ctx) => {
+      const now = new Date().toISOString()
+      const tenantId = await ctx.db.insert('tenants', {
+        clerkOrgId: 'org_stale_pm',
+        name: 'Stale PM Care',
+        slug: 'stale-pm-care',
+        createdAt: now,
+      })
+      return await ctx.db.insert('tenantSubscriptions', {
+        tenantId,
+        planKey: 'starter',
+        status: 'active',
+        billingEmails: ['billing@stale-pm.test'],
+        currentPeriodStart: '2026-11-01',
+        currentPeriodEnd: '2026-12-01',
+        stripeCustomerId: 'cus_stale_pm',
+        stripeDefaultPaymentMethod: 'pm_stale',
+        createdAt: now,
+        updatedAt: now,
+      })
+    })
+
+    const skipped = await t.mutation(
+      internal.platformStripe.clearStripeDefaultPaymentMethodIfMatches,
+      {
+        stripeCustomerId: 'cus_stale_pm',
+        expectedPaymentMethodId: 'pm_new_setup',
+      },
+    )
+    expect(skipped).toBe(false)
+    let subscription = await t.run(async (ctx) => ctx.db.get(subscriptionId))
+    expect(subscription?.stripeDefaultPaymentMethod).toBe('pm_stale')
+
+    const cleared = await t.mutation(
+      internal.platformStripe.clearStripeDefaultPaymentMethodIfMatches,
+      {
+        stripeCustomerId: 'cus_stale_pm',
+        expectedPaymentMethodId: 'pm_stale',
+      },
+    )
+    expect(cleared).toBe(true)
+    subscription = await t.run(async (ctx) => ctx.db.get(subscriptionId))
+    expect(subscription?.stripeDefaultPaymentMethod).toBeUndefined()
+
+    const audits = await t.run(async (ctx) =>
+      ctx.db.query('auditEvents').collect(),
+    )
+    expect(
+      audits.filter((event) => event.action === 'payment_method_cleared'),
+    ).toHaveLength(1)
   })
 })
 

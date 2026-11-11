@@ -34,8 +34,9 @@ export function BillingNoticeBanner() {
           </h1>
           <p className="text-sm text-atria-text-secondary">
             Your agency&apos;s access to Atria is suspended because a past-due
-            subscription invoice was not paid within the 5-day grace period.
-            Access is restored automatically as soon as the balance is paid.
+            subscription invoice was not paid by the end of the payment window
+            on the 5th. Access is restored automatically as soon as the balance
+            is paid.
           </p>
           {notice.isAdmin && notice.hostedInvoiceUrl ? (
             <a

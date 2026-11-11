@@ -365,8 +365,8 @@ export const capturePaymentMethodFromPaidInvoice = internalAction({
 
 /**
  * Webhook: invoice.payment_failed — enter the dunning state. The platform
- * invoice goes 'overdue'; the subscription goes 'past_due' with a 5-day
- * grace window. Repeated failures recompute the dates (never stack). A
+ * invoice goes 'overdue'; the subscription goes 'past_due' with suspension
+ * only after the 5th. Repeated failures recompute the dates (never stack). A
  * failure notice email is scheduled for the tenant's billing contacts.
  */
 export const applyStripeInvoiceFailed = internalMutation({
@@ -381,27 +381,26 @@ export const applyStripeInvoiceFailed = internalMutation({
     if (!invoice) {
       return null
     }
-    // Out-of-order webhook guard: a redelivered invoice.payment_failed that
-    // arrives after invoice.paid must not re-dun the already-paid invoice —
-    // no overdue flip, no past_due regression, no spurious failure email.
-    if (invoice.status === 'paid') {
+    // Terminal invoices must stay terminal. A late payment_failed event for a
+    // paid or void invoice must not re-dun the tenant or send a failure email.
+    if (invoice.status === 'paid' || invoice.status === 'void') {
       return null
     }
     const now = Date.now()
     const nowIso = new Date(now).toISOString()
-    if (invoice.status !== 'void') {
-      await ctx.db.patch(invoice._id, {
-        status: 'overdue',
-        updatedAt: nowIso,
-      })
-    }
-    // past_due is entered from active/trialing; repeat failures while already
-    // past_due recompute the grace window (never stack on top of it).
+    await ctx.db.patch(invoice._id, {
+      status: 'overdue',
+      updatedAt: nowIso,
+    })
+    // past_due is entered from active/trialing. Repeat failures keep the same
+    // due-anchored window instead of extending the maximum payment date.
     const subscription = await ctx.db
       .query('tenantSubscriptions')
       .withIndex('by_tenant', (q) => q.eq('tenantId', invoice.tenantId))
       .unique()
     const alreadyPastDue = subscription?.status === 'past_due'
+    const graceUntil =
+      new Date(`${invoice.dueDate}T23:59:59Z`).getTime() + GRACE_PERIOD_MS
     if (
       subscription &&
       (subscription.status === 'active' ||
@@ -410,8 +409,8 @@ export const applyStripeInvoiceFailed = internalMutation({
     ) {
       await ctx.db.patch(subscription._id, {
         status: 'past_due',
-        pastDueSince: now,
-        graceUntil: now + GRACE_PERIOD_MS,
+        pastDueSince: new Date(`${invoice.dueDate}T00:00:00Z`).getTime(),
+        graceUntil,
         updatedAt: nowIso,
       })
     }
@@ -496,8 +495,8 @@ export const sendPaymentFailedEmail = internalAction({
 /**
  * Daily cron: flip sent invoices whose dueDate has passed to 'overdue' and
  * move the tenant's subscription into 'past_due'. The grace window is
- * anchored to the invoice due date (dueDate end-of-day + 5 days), not to the
- * cron run time, so "pay by the 5th" means the same thing no matter when the
+ * anchored to the invoice due date plus GRACE_PERIOD_MS, not to the cron
+ * run time, so "pay by the 5th" means the same thing no matter when the
  * cron fires. The overdue notice email goes out once per past_due entry —
  * repeat runs while already past_due only recompute the dates.
  */
@@ -518,6 +517,12 @@ export const checkOverdueSubscriptionInvoices = internalMutation({
     const nowIso = new Date(now).toISOString()
     let processed = 0
     for (const invoice of overdueInvoices) {
+      // Terminal invoices must stay terminal. In particular, voiding a stale
+      // invoice must permanently stop it from re-dunning and re-suspending
+      // the tenant on the next daily run.
+      if (invoice.status === 'paid' || invoice.status === 'void') {
+        continue
+      }
       await ctx.db.patch(invoice._id, {
         status: 'overdue',
         updatedAt: nowIso,
@@ -526,7 +531,9 @@ export const checkOverdueSubscriptionInvoices = internalMutation({
         .query('tenantSubscriptions')
         .withIndex('by_tenant', (q) => q.eq('tenantId', invoice.tenantId))
         .unique()
-      const alreadyPastDue = subscription?.status === 'past_due'
+      const alreadyInDunning =
+        subscription?.status === 'past_due' ||
+        subscription?.status === 'suspended'
       // Grace: due on the 1st, suspension only after the 5th (end of day UTC).
       const graceUntil =
         new Date(`${invoice.dueDate}T23:59:59Z`).getTime() + GRACE_PERIOD_MS
@@ -557,7 +564,7 @@ export const checkOverdueSubscriptionInvoices = internalMutation({
         },
         createdAt: nowIso,
       })
-      if (subscription && !alreadyPastDue) {
+      if (subscription && !alreadyInDunning) {
         try {
           await ctx.scheduler.runAfter(
             0,
@@ -706,7 +713,7 @@ export const sendSuspensionEmail = internalAction({
     const html =
       `<p>Hi ${escapeHtml(billing.tenantName)},</p>` +
       `<p>Your agency's access to Atria has been suspended because a past-due ` +
-      `invoice was not paid within the 5-day grace period. Access is restored ` +
+      `invoice was not paid by the end of the payment window on the 5th. Access is restored ` +
       `automatically as soon as the outstanding balance is paid. You can pay ` +
       `from the Subscription page in your dashboard.</p>` +
       `<p>— ATRIA-X Platform Billing</p>`
@@ -770,6 +777,50 @@ export const saveStripeDefaultPaymentMethod = internalMutation({
       createdAt: now,
     })
     return subscription._id
+  },
+})
+
+/**
+ * Clear a stale local default only when it still matches the value observed in
+ * Stripe. The compare-and-clear guard prevents a reconciliation run from
+ * erasing a new payment method if the setup webhook completes first.
+ */
+export const clearStripeDefaultPaymentMethodIfMatches = internalMutation({
+  args: {
+    stripeCustomerId: v.string(),
+    expectedPaymentMethodId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const subscriptions = await ctx.db.query('tenantSubscriptions').collect()
+    const subscription = subscriptions.find(
+      (sub) => sub.stripeCustomerId === args.stripeCustomerId,
+    )
+    if (
+      !subscription ||
+      subscription.stripeDefaultPaymentMethod !== args.expectedPaymentMethodId
+    ) {
+      return false
+    }
+    const now = new Date().toISOString()
+    await ctx.db.patch(subscription._id, {
+      stripeDefaultPaymentMethod: undefined,
+      updatedAt: now,
+    })
+    await ctx.db.insert('auditEvents', {
+      tenantId: subscription.tenantId,
+      actorId: 'platform_admin_reconciliation',
+      actorRole: 'platform_admin',
+      action: 'payment_method_cleared',
+      category: categoryForAction('payment_method_cleared'),
+      kind: 'platform',
+      metadata: {
+        stripeCustomerId: args.stripeCustomerId,
+        paymentMethodId: args.expectedPaymentMethodId,
+        source: 'stripe_reconciliation',
+      },
+      createdAt: now,
+    })
+    return true
   },
 })
 

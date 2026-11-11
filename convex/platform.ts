@@ -1702,7 +1702,7 @@ export const runMonthlyBilling = internalAction({
     // Due = the 1st of the month after the billed period ends (Maria's spec:
     // due on the 1st, suspension only after the 5th), not "Net-14 after
     // invoicing" (which produced the 14-day reminders Samira kept getting).
-    const dueDateFor = (periodEnd: string) => periodEnd
+    const dueDateFor = (periodEnd: string) => periodEnd.slice(0, 10)
     let created = 0
     let skipped = 0
     for (const subscription of subscriptions) {

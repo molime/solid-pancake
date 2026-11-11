@@ -30,7 +30,7 @@ export const faqEntries: FaqEntry[] = [
   {
     question: 'What happens if a payment fails?',
     answer:
-      'The agency owner is notified by email and the subscription enters a past-due state with a 7-day grace period while the payment is retried. Updating the payment method restores the account automatically once a payment succeeds.',
+      'The agency owner is notified by email and the subscription enters a past-due state. Access can be suspended after the payment window ending on the 5th. Paying the outstanding balance restores access automatically.',
     category: 'Billing',
   },
   {

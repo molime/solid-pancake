@@ -180,8 +180,8 @@ http.route({
       }
     } else if (event.type === 'invoice.payment_failed') {
       if (stripeInvoiceId) {
-        // Dunning: platform invoice → overdue, subscription → past_due with
-        // a 7-day grace window, plus a failure notice email to the agency.
+        // Dunning: platform invoice → overdue, subscription → past_due through
+        // the payment window ending on the 5th, plus a failure notice email.
         await ctx.runMutation(
           internal.platformStripe.applyStripeInvoiceFailed,
           { stripeInvoiceId },

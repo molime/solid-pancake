@@ -104,7 +104,7 @@ crons.monthly(
 )
 
 // Daily dunning: sent invoices past their due date go 'overdue' and the
-// tenant enters past_due with a 5-day grace window (anchored to due date).
+// tenant enters past_due through the payment window ending on the 5th.
 crons.daily(
   'checkOverdueSubscriptionInvoices',
   { hourUTC: 6, minuteUTC: 15 },

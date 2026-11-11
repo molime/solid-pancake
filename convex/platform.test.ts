@@ -1422,6 +1422,21 @@ describe('monthly recurring billing (period advancement)', () => {
     expect(subscription?.renewsAt).toBe(next.end)
   })
 
+  it('uses date-only due dates when the cron runs with ISO period timestamps', async () => {
+    const t = createTestConvex()
+    const period = endedMonthRange()
+    await seedBillableSubscription(t, period)
+
+    const result = await t.action(internal.platform.runMonthlyBilling, {})
+    expect(result.created).toBe(1)
+
+    const invoices = await t.run(async (ctx) =>
+      ctx.db.query('platformInvoices').collect(),
+    )
+    expect(invoices).toHaveLength(1)
+    expect(invoices[0]?.dueDate).toBe(period.end.slice(0, 10))
+  })
+
   it('same-day re-run skips the subscription (period advanced, duplicate guard)', async () => {
     const t = createTestConvex()
     const period = endedMonthRange()

@@ -71,7 +71,9 @@ describe('BillingNoticeBanner', () => {
     })
     render(<BillingNoticeBanner />)
     expect(screen.getByText('Access suspended')).toBeInTheDocument()
-    expect(screen.getByText(/5-day grace period/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/payment window on the 5th/),
+    ).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: /Pay \$199\.00/i }),
     ).toHaveAttribute('href', 'https://invoice.stripe.com/i/test')
